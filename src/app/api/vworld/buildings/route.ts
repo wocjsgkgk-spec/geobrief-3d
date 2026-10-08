@@ -145,16 +145,13 @@ export async function GET(request: NextRequest) {
 
   // 3. V-World Data 2.0 API 호출 (서버 사이드)
   // LT_C_SPBD: 건축물일반공간정보 (V-World Data 2.0 규격: geomFilter=BOX(minX,minY,maxX,maxY))
-  const rawHost =
-    request.headers.get('x-forwarded-host') ||
-    request.headers.get('host') ||
-    'localhost';
-  const domain = rawHost.split(':')[0] || 'localhost';
+  // 발급된 인증키의 도메인(localhost 기본값)을 최우선으로 사용하여 Vercel 클라우드에서도 도메인 불일치 에러 방지
+  const preferredDomain = process.env.VWORLD_DOMAIN || 'localhost';
 
   const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
   const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
     cleanKey
-  )}&domain=${encodeURIComponent(domain)}&geomFilter=${encodeURIComponent(
+  )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
     geomFilter
   )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
 
