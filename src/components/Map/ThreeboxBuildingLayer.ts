@@ -1,0 +1,639 @@
+import maplibregl from 'maplibre-gl';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { BuildingMassPresetId, BUILDING_MASS_PRESETS } from '@/types/map';
+
+/**
+ * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
+ * - terrain: true & map.queryTerrainElevation 기반 실시간 지형 밀착(Terrain Clamping)
+ * - units: 'meters' 기반 5,000평 부지 맞춤 실측 스케일 (가로 60m, 세로 35m, 높이 22m)
+ * - DirectionalLight(강도 0.8) & AmbientLight(강도 0.5) 건축 셰이딩 튜닝
+ * - glTF/GLB 파일 비동기 로드 및 부재 시 정밀 절차적 3D 건축물(커튼월, 지붕난간, 헬리패드 H) 폴백 생성기
+ * - preserveDrawingBuffer: true 기반 4K 슬라이드 캡처 안정성 보장
+ */
+export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
+  id = 'threebox-building-layer';
+  type = 'custom' as const;
+  renderingMode = '3d' as const;
+
+  // Threebox 옵션 규격
+  public readonly options = {
+    terrain: true,
+    units: 'meters',
+    defaultLights: false,
+  };
+
+  private map: maplibregl.Map | null = null;
+  private camera: THREE.Camera = new THREE.Camera();
+  private scene: THREE.Scene = new THREE.Scene();
+  private renderer: THREE.WebGLRenderer | null = null;
+  private buildingGroup: THREE.Group = new THREE.Group();
+
+  // 조명 객체
+  private directionalLight: THREE.DirectionalLight | null = null;
+  private ambientLight: THREE.AmbientLight | null = null;
+  private fillLight: THREE.DirectionalLight | null = null;
+
+  // 상태 관리
+  private isVisible = true;
+  private currentPreset: BuildingMassPresetId = 'defense_rd';
+  private originLngLat: [number, number] | null = null;
+  private clampedAltitude = 0;
+  private scaleRatio = 1;
+  private rotationDeg = 0;
+  private customGltfUrl: string | null = null;
+
+  // 재질 캐시
+  private materials = {
+    glassCurtain: new THREE.MeshStandardMaterial({
+      color: 0x0ea5e9,
+      metalness: 0.85,
+      roughness: 0.15,
+      transparent: true,
+      opacity: 0.82,
+    }),
+    mullionMetal: new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      metalness: 0.9,
+      roughness: 0.25,
+    }),
+    slabDark: new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.7,
+    }),
+    railingParapet: new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      metalness: 0.7,
+      roughness: 0.35,
+    }),
+    helipadDeck: new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.85,
+    }),
+    helipadYellow: new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      roughness: 0.4,
+    }),
+    warningRed: new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+    }),
+    warehouseWall: new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      metalness: 0.4,
+      roughness: 0.5,
+    }),
+    gabledRoof: new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      metalness: 0.6,
+      roughness: 0.4,
+    }),
+    dockShutter: new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      metalness: 0.5,
+      roughness: 0.4,
+    }),
+    dockHazard: new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      roughness: 0.5,
+    }),
+    solarCellNavy: new THREE.MeshStandardMaterial({
+      color: 0x0c2340,
+      metalness: 0.9,
+      roughness: 0.1,
+    }),
+    solarFrame: new THREE.MeshStandardMaterial({
+      color: 0xcbd5e1,
+      metalness: 0.8,
+      roughness: 0.2,
+    }),
+    terraceLimestone: new THREE.MeshStandardMaterial({
+      color: 0xf1f5f9,
+      roughness: 0.85,
+    }),
+    terraceWood: new THREE.MeshStandardMaterial({
+      color: 0xb45309,
+      roughness: 0.7,
+    }),
+    treeTrunk: new THREE.MeshStandardMaterial({
+      color: 0x78350f,
+      roughness: 0.9,
+    }),
+    treeFoliage: new THREE.MeshStandardMaterial({
+      color: 0x16a34a,
+      roughness: 0.8,
+    }),
+    waterPool: new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      metalness: 0.95,
+      roughness: 0.05,
+      transparent: true,
+      opacity: 0.8,
+    }),
+  };
+
+  constructor() {
+    this.scene.add(this.buildingGroup);
+  }
+
+  onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
+    this.map = map;
+
+    // 1. Threebox 전용 조명 파이프라인 구성 (요구사항: DirectionalLight 0.8, AmbientLight 0.5)
+    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 0.8);
+    this.directionalLight.position.set(120, -140, 160).normalize();
+    this.scene.add(this.directionalLight);
+
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    this.scene.add(this.ambientLight);
+
+    // 건축물 음영 보조광 (반대편 엣지 음영 디테일 보강)
+    this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
+    this.fillLight.position.set(-100, 120, 80).normalize();
+    this.scene.add(this.fillLight);
+
+    // 2. WebGLRenderer 초기화 (4K 슬라이드 캡처를 위한 preserveDrawingBuffer: true)
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: map.getCanvas(),
+        context: gl,
+        antialias: true,
+        alpha: true,
+        preserveDrawingBuffer: true,
+      });
+      this.renderer.autoClear = false;
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } catch (err) {
+      console.warn('[ThreeboxBuildingLayer] WebGLRenderer setup warning:', err);
+    }
+  }
+
+  render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
+    if (!this.isVisible || !this.originLngLat || !this.renderer) {
+      return;
+    }
+
+    try {
+      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      if (!rawMatrix) return;
+
+      // 1. [지형 밀착 (Terrain Clamping)] 3D DEM 지형 표고 실시간 조회
+      if (this.map && this.map.queryTerrainElevation) {
+        const elev = this.map.queryTerrainElevation(this.originLngLat);
+        if (elev !== null && elev !== undefined) {
+          this.clampedAltitude = elev;
+        }
+      }
+
+      // 2. Mercator 좌표계 투영 (지형 표고 상에 정확히 안착)
+      const mercator = maplibregl.MercatorCoordinate.fromLngLat(
+        this.originLngLat,
+        this.clampedAltitude
+      );
+
+      // 3. units: 'meters' 스케일 환산 (부지 면적 연동 스케일 비율)
+      const meterScale = mercator.meterInMercatorCoordinateUnits() * this.scaleRatio;
+
+      // 4. 좌표계 회전 변환 (Three.js Y-Up -> MapLibre Z-Up, 방위각 회전)
+      const rotationX = new THREE.Matrix4().makeRotationAxis(
+        new THREE.Vector3(1, 0, 0),
+        Math.PI / 2
+      );
+
+      const rotationZ = new THREE.Matrix4().makeRotationAxis(
+        new THREE.Vector3(0, 0, 1),
+        (this.rotationDeg * Math.PI) / 180
+      );
+
+      // 5. 복합 변환 행렬 구성
+      const m = new THREE.Matrix4().fromArray(rawMatrix);
+      const l = new THREE.Matrix4()
+        .makeTranslation(mercator.x, mercator.y, mercator.z)
+        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
+        .multiply(rotationX)
+        .multiply(rotationZ);
+
+      this.camera.projectionMatrix = m.multiply(l);
+
+      // 6. WebGL 상태 보존 및 렌더링
+      this.renderer.resetState();
+      this.renderer.render(this.scene, this.camera);
+    } catch (renderErr) {
+      console.warn('[ThreeboxBuildingLayer] render error suppressed:', renderErr);
+    }
+  }
+
+  /**
+   * 부지 중심 좌표 및 프리셋 변경 시 실시간 모델 갱신
+   */
+  async updateBuilding(
+    presetId: BuildingMassPresetId,
+    center: [number, number],
+    scaleRatio = 1,
+    rotationDeg = 0,
+    customUrl?: string | null
+  ): Promise<void> {
+    this.originLngLat = center;
+    this.currentPreset = presetId;
+    this.scaleRatio = scaleRatio;
+    this.rotationDeg = rotationDeg;
+    this.customGltfUrl = customUrl || null;
+
+    // 지형 표고 즉시 쿼리
+    if (this.map && this.map.queryTerrainElevation) {
+      const elev = this.map.queryTerrainElevation(center);
+      this.clampedAltitude = elev !== null && elev !== undefined ? Math.max(0, elev) : 0;
+    }
+
+    // 기존 3D 모델 클리어
+    this.clearBuildingGroup();
+
+    // 1. 외부 GLB 또는 /models/ 에셋 로드 시도
+    let loadedSuccess = false;
+    const targetModelUrl = customUrl || `/models/${presetId}.glb`;
+
+    try {
+      const gltf = await this.tryLoadGLTF(targetModelUrl);
+      if (gltf) {
+        this.buildingGroup.add(gltf);
+        loadedSuccess = true;
+      }
+    } catch {
+      // GLB 파일이 아직 다운로드되지 않았거나 없을 경우 자연스러운 폴백
+      loadedSuccess = false;
+    }
+
+    // 2. GLB 부재 시 정밀 절차적 3D 건축물 폴백 생성기 가동
+    if (!loadedSuccess) {
+      const fallbackGroup = this.createProceduralBuildingFallback(presetId);
+      this.buildingGroup.add(fallbackGroup);
+    }
+
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  /**
+   * GLB/GLTF 파일 비동기 로더 (404/미존재 시 즉시 폴백으로 전달)
+   */
+  private tryLoadGLTF(url: string): Promise<THREE.Group | null> {
+    const loader = new GLTFLoader();
+
+    return new Promise((resolve) => {
+      loader.load(
+        url,
+        (gltf) => {
+          const scene = gltf.scene;
+          const bbox = new THREE.Box3().setFromObject(scene);
+          const center = new THREE.Vector3();
+          bbox.getCenter(center);
+          const size = new THREE.Vector3();
+          bbox.getSize(size);
+
+          // 바닥을 y=0에 정렬하고 원점 중앙 배치
+          scene.position.x = -center.x;
+          scene.position.y = -bbox.min.y;
+          scene.position.z = -center.z;
+
+          // 실측 스케일 기준(60m)으로 자동 정규화
+          const maxDim = Math.max(size.x, size.z, 1);
+          const s = 60 / maxDim;
+          const wrapper = new THREE.Group();
+          wrapper.scale.set(s, s, s);
+          wrapper.add(scene);
+
+          scene.traverse((obj) => {
+            if ((obj as THREE.Mesh).isMesh) {
+              const m = obj as THREE.Mesh;
+              m.castShadow = true;
+              m.receiveShadow = true;
+            }
+          });
+
+          resolve(wrapper);
+        },
+        undefined,
+        () => {
+          // GLB 로드 실패 시 null 반환 -> 폴백 생성기 가동
+          resolve(null);
+        }
+      );
+    });
+  }
+
+  /**
+   * [Three.js 기반 정밀 절차적 3D 건축물 폴백 생성기]
+   * - 실측 규격: 가로 60m x 세로 35m x 높이 22m (약 5,000평 부지 맞춤)
+   * - 구성: 지붕 난간, 커튼월 창문 패턴, 옥상 헬리패드(H), 기계실 옥탑, 지상 캐노피
+   */
+  private createProceduralBuildingFallback(presetId: BuildingMassPresetId): THREE.Group {
+    const root = new THREE.Group();
+
+    if (presetId === 'smart_logistics') {
+      // -----------------------------------------------------------------------
+      // [프리셋 2: 군수 물류센터] 실측 65m x 38m x 16m
+      // -----------------------------------------------------------------------
+      const w = 65;
+      const d = 38;
+      const wallH = 12;
+      const roofApex = 4.2;
+
+      // 메인 창고 벽체
+      const wallGeo = new THREE.BoxGeometry(w, wallH, d);
+      const wallMesh = new THREE.Mesh(wallGeo, this.materials.warehouseWall);
+      wallMesh.position.set(0, wallH / 2, 0);
+      root.add(wallMesh);
+
+      // 트러스 박공지붕 (Gabled Roof)
+      const roofShape = new THREE.Shape();
+      roofShape.moveTo(-d / 2, 0);
+      roofShape.lineTo(0, roofApex);
+      roofShape.lineTo(d / 2, 0);
+      roofShape.closePath();
+
+      const roofGeo = new THREE.ExtrudeGeometry(roofShape, {
+        depth: w + 1.2,
+        bevelEnabled: false,
+      });
+      const roofMesh = new THREE.Mesh(roofGeo, this.materials.gabledRoof);
+      roofMesh.rotation.y = Math.PI / 2;
+      roofMesh.position.set(-w / 2 - 0.6, wallH, 0);
+      root.add(roofMesh);
+
+      // 6베이 화물 하역 도크 (Loading Dock)
+      const dockCount = 6;
+      const dockW = 4.2;
+      const dockH = 4.5;
+      const spacing = 7.5;
+      const startX = -((dockCount - 1) * spacing) / 2;
+      const doorGeo = new THREE.BoxGeometry(dockW, dockH, 0.3);
+      const bumperGeo = new THREE.BoxGeometry(dockW + 0.6, 0.4, 0.5);
+
+      for (let i = 0; i < dockCount; i++) {
+        const dx = startX + i * spacing;
+        const dz = d / 2 + 0.15;
+        const door = new THREE.Mesh(doorGeo, this.materials.dockShutter);
+        door.position.set(dx, dockH / 2 + 0.4, dz);
+        root.add(door);
+
+        const bumper = new THREE.Mesh(bumperGeo, this.materials.dockHazard);
+        bumper.position.set(dx, 0.25, dz + 0.25);
+        root.add(bumper);
+      }
+
+      // 옥상 태양광 패널 그리드 (Solar Array: 3행 x 7열 = 21모듈, 남향 22도 경사)
+      const sPanelGeo = new THREE.BoxGeometry(5.2, 0.12, 2.5);
+      const tilt = THREE.MathUtils.degToRad(-22);
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 7; c++) {
+          const px = -22 + c * 7.2;
+          const pz = -8 + r * 5.0;
+          const py = wallH + roofApex * (1 - Math.abs(pz) / (d / 2)) + 0.4;
+          const panel = new THREE.Mesh(sPanelGeo, this.materials.solarCellNavy);
+          panel.rotation.x = tilt;
+          panel.position.set(px, py, pz);
+          root.add(panel);
+        }
+      }
+
+      return root;
+    } else if (presetId === 'civil_military') {
+      // -----------------------------------------------------------------------
+      // [프리셋 3: 복합 커뮤니티] 실측 55m x 32m x 14m (3단 단차형 테라스)
+      // -----------------------------------------------------------------------
+      const t1W = 55;
+      const t1D = 32;
+      const t1H = 4.8;
+      const t1 = new THREE.Mesh(
+        new THREE.BoxGeometry(t1W, t1H, t1D),
+        this.materials.terraceLimestone
+      );
+      t1.position.set(0, t1H / 2, 0);
+      root.add(t1);
+
+      const t2W = 42;
+      const t2D = 23;
+      const t2H = 4.6;
+      const t2 = new THREE.Mesh(
+        new THREE.BoxGeometry(t2W, t2H, t2D),
+        this.materials.terraceLimestone
+      );
+      t2.position.set(-3, t1H + t2H / 2, -2);
+      root.add(t2);
+
+      const t3W = 28;
+      const t3D = 15;
+      const t3H = 4.8;
+      const t3 = new THREE.Mesh(
+        new THREE.BoxGeometry(t3W, t3H, t3D),
+        this.materials.terraceLimestone
+      );
+      t3.position.set(-6, t1H + t2H + t3H / 2, -4);
+      root.add(t3);
+
+      // 오픈 테라스 우든 데크
+      const deck1 = new THREE.Mesh(
+        new THREE.BoxGeometry(14, 0.25, 24),
+        this.materials.terraceWood
+      );
+      deck1.position.set(18, t1H + 0.15, 0);
+      root.add(deck1);
+
+      // 중정 수변 분수 광장
+      const pool = new THREE.Mesh(
+        new THREE.CylinderGeometry(7, 7, 0.3, 32),
+        this.materials.waterPool
+      );
+      pool.position.set(10, 0.2, 11);
+      root.add(pool);
+
+      // 중정 조경 수목 6그루
+      const treePos = [
+        [20, 9],
+        [17, 18],
+        [-10, 15],
+        [-18, 12],
+        [-20, 2],
+        [4, 20],
+      ];
+      const trunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 3, 6);
+      const foliageGeo = new THREE.ConeGeometry(2.2, 4.5, 7);
+      treePos.forEach(([tx, tz]) => {
+        const tg = new THREE.Group();
+        tg.position.set(tx, 0, tz);
+        const trunk = new THREE.Mesh(trunkGeo, this.materials.treeTrunk);
+        trunk.position.y = 1.5;
+        tg.add(trunk);
+        const fol = new THREE.Mesh(foliageGeo, this.materials.treeFoliage);
+        fol.position.y = 4.2;
+        tg.add(fol);
+        root.add(tg);
+      });
+
+      return root;
+    } else {
+      // -----------------------------------------------------------------------
+      // [프리셋 1: 국방 R&D 센터] 실측 가로 60m x 세로 35m x 높이 22m (표준 복합 빌딩)
+      // -----------------------------------------------------------------------
+      const w = 60;
+      const d = 35;
+      const h = 22;
+
+      // 1. 메인 커튼월 타워 본체
+      const towerGeo = new THREE.BoxGeometry(w, h, d);
+      const towerMesh = new THREE.Mesh(towerGeo, this.materials.glassCurtain);
+      towerMesh.position.set(0, h / 2, 0);
+      root.add(towerMesh);
+
+      // 2. 층간 슬래브 라인 (Floor Slabs: 5개 층 슬래브)
+      const floorCount = 5;
+      const slabH = 0.45;
+      const slabGeo = new THREE.BoxGeometry(w * 0.98, slabH, d * 0.98);
+      for (let i = 1; i <= floorCount; i++) {
+        const slab = new THREE.Mesh(slabGeo, this.materials.slabDark);
+        slab.position.set(0, i * (h / (floorCount + 1)), 0);
+        root.add(slab);
+      }
+
+      // 3. 커튼월 수직 멀리언 창문 프레임 (Mullion Grid: 4m 간격 수직 프레임)
+      const mullionGeoX = new THREE.BoxGeometry(0.3, h, 0.4);
+      for (let mx = -w / 2 + 3; mx <= w / 2 - 3; mx += 4.5) {
+        // 전면 및 후면 멀리언
+        const mFront = new THREE.Mesh(mullionGeoX, this.materials.mullionMetal);
+        mFront.position.set(mx, h / 2, d / 2 + 0.1);
+        root.add(mFront);
+
+        const mBack = new THREE.Mesh(mullionGeoX, this.materials.mullionMetal);
+        mBack.position.set(mx, h / 2, -d / 2 - 0.1);
+        root.add(mBack);
+      }
+
+      // 4. [지붕 난간 (Rooftop Parapet / Railing)] 외곽 테두리 1.2m 난간
+      const parapetH = 1.2;
+      const parapetThick = 0.35;
+      // 북/남 난간
+      const pNorthSouthGeo = new THREE.BoxGeometry(w, parapetH, parapetThick);
+      const pNorth = new THREE.Mesh(pNorthSouthGeo, this.materials.railingParapet);
+      pNorth.position.set(0, h + parapetH / 2, -d / 2 + parapetThick / 2);
+      root.add(pNorth);
+
+      const pSouth = new THREE.Mesh(pNorthSouthGeo, this.materials.railingParapet);
+      pSouth.position.set(0, h + parapetH / 2, d / 2 - parapetThick / 2);
+      root.add(pSouth);
+
+      // 동/서 난간
+      const pEastWestGeo = new THREE.BoxGeometry(parapetThick, parapetH, d - parapetThick * 2);
+      const pWest = new THREE.Mesh(pEastWestGeo, this.materials.railingParapet);
+      pWest.position.set(-w / 2 + parapetThick / 2, h + parapetH / 2, 0);
+      root.add(pWest);
+
+      const pEast = new THREE.Mesh(pEastWestGeo, this.materials.railingParapet);
+      pEast.position.set(w / 2 - parapetThick / 2, h + parapetH / 2, 0);
+      root.add(pEast);
+
+      // 5. 옥탑 기계실 / 코어 펜트하우스 (가로 18m x 세로 14m x 높이 3.8m)
+      const phW = 18;
+      const phD = 14;
+      const phH = 3.8;
+      const ph = new THREE.Mesh(
+        new THREE.BoxGeometry(phW, phH, phD),
+        this.materials.mullionMetal
+      );
+      ph.position.set(-10, h + phH / 2, 0);
+      root.add(ph);
+
+      // 6. [옥상 헬리패드 (Helipad H)] 반경 9.5m 원형 데크 및 H 마크
+      const padRadius = 9.5;
+      const padH = 0.35;
+      const padCenter = new THREE.Vector3(12, h + padH / 2, 0);
+
+      // 원형 헬리패드 플레이트
+      const padBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(padRadius, padRadius, padH, 32),
+        this.materials.helipadDeck
+      );
+      padBase.position.copy(padCenter);
+      root.add(padBase);
+
+      // 옐로우 서클 링
+      const padRing = new THREE.Mesh(
+        new THREE.RingGeometry(padRadius * 0.82, padRadius * 0.92, 32),
+        this.materials.helipadYellow
+      );
+      padRing.rotation.x = -Math.PI / 2;
+      padRing.position.set(padCenter.x, padCenter.y + 0.2, padCenter.z);
+      root.add(padRing);
+
+      // 헬리패드 'H' 마크
+      const barW = 0.9;
+      const barL = 5.6;
+      const barThick = 0.06;
+      const barGeo = new THREE.BoxGeometry(barW, barThick, barL);
+      const crossGeo = new THREE.BoxGeometry(3.2, barThick, barW);
+
+      const barL1 = new THREE.Mesh(barGeo, this.materials.helipadYellow);
+      barL1.position.set(padCenter.x - 1.6, padCenter.y + 0.22, padCenter.z);
+      root.add(barL1);
+
+      const barL2 = new THREE.Mesh(barGeo, this.materials.helipadYellow);
+      barL2.position.set(padCenter.x + 1.6, padCenter.y + 0.22, padCenter.z);
+      root.add(barL2);
+
+      const barC = new THREE.Mesh(crossGeo, this.materials.helipadYellow);
+      barC.position.set(padCenter.x, padCenter.y + 0.22, padCenter.z);
+      root.add(barC);
+
+      // 항공 장애 표시등 (적색 비콘 4개 모서리)
+      const beaconGeo = new THREE.SphereGeometry(0.5, 8, 8);
+      [
+        [-w / 2 + 1, h + parapetH + 0.5, -d / 2 + 1],
+        [w / 2 - 1, h + parapetH + 0.5, -d / 2 + 1],
+        [-w / 2 + 1, h + parapetH + 0.5, d / 2 - 1],
+        [w / 2 - 1, h + parapetH + 0.5, d / 2 - 1],
+      ].forEach(([bx, by, bz]) => {
+        const beacon = new THREE.Mesh(beaconGeo, this.materials.warningRed);
+        beacon.position.set(bx, by, bz);
+        root.add(beacon);
+      });
+
+      // 7. 지상 진입 캐노피 (Entrance Canopy)
+      const canopy = new THREE.Mesh(
+        new THREE.BoxGeometry(16, 0.4, 7),
+        this.materials.mullionMetal
+      );
+      canopy.position.set(0, 4.2, d / 2 + 3.5);
+      root.add(canopy);
+
+      return root;
+    }
+  }
+
+  /**
+   * 가시성 제어
+   */
+  setVisible(visible: boolean): void {
+    this.isVisible = visible;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  private clearBuildingGroup(): void {
+    while (this.buildingGroup.children.length > 0) {
+      const child = this.buildingGroup.children[0];
+      this.buildingGroup.remove(child);
+      if ((child as THREE.Mesh).geometry) {
+        (child as THREE.Mesh).geometry.dispose();
+      }
+    }
+  }
+
+  onRemove(): void {
+    this.clearBuildingGroup();
+    if (this.renderer) {
+      this.renderer.dispose();
+      this.renderer = null;
+    }
+    this.map = null;
+  }
+}
