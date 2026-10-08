@@ -977,10 +977,12 @@ export const MapViewer: React.FC = () => {
       },
       attributionControl: false,
       doubleClickZoom: false,
-      // 한반도 및 전국 전역 자유 팬/줌 보장
+      // 한반도 및 전국 전역 자유 팬/줌 및 모바일 터치 제스처 보장
       dragPan: true,
       dragRotate: true,
       scrollZoom: true,
+      touchZoomRotate: true,
+      touchPitch: true,
     });
 
     const handleMove = () => {
@@ -1675,16 +1677,19 @@ export const MapViewer: React.FC = () => {
           featureCount: result.featureCount,
           errorCode: result.errorCode,
           errorDetail: result.errorDetail,
-          maskedKey: result.maskedKey,
         });
 
-        const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
-        if (vworldSource) {
-          if (result.success && result.features && result.features.features.length > 0) {
-            vworldSource.setData(result.features);
-          } else {
-            vworldSource.setData({ type: 'FeatureCollection', features: [] });
+        try {
+          const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
+          if (vworldSource && typeof vworldSource.setData === 'function') {
+            if (result.success && result.features && result.features.features.length > 0) {
+              vworldSource.setData(result.features);
+            } else {
+              vworldSource.setData({ type: 'FeatureCollection', features: [] });
+            }
           }
+        } catch (sourceErr) {
+          console.warn('[MapViewer] Failed to update vworld-buildings-source:', sourceErr);
         }
       } catch (err: any) {
         console.warn('[V-World API] Unexpected exception in fetchBoundsBuildings:', err);
@@ -2190,21 +2195,42 @@ export const MapViewer: React.FC = () => {
     };
   }, [isMapLoaded, isDrawingMode, stampMode]);
 
-  // 지도 이동 시 건물 팝업 화면 좌표 동기화
+  // 지도 이동 시 건물 팝업 화면 좌표 동기화 (원시 좌표 기반 안정화)
+  const selectedBuildingCenterLng = selectedBuilding?.center[0];
+  const selectedBuildingCenterLat = selectedBuilding?.center[1];
+
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isMapLoaded || !selectedBuilding) return;
+    if (
+      !map ||
+      !isMapLoaded ||
+      selectedBuildingCenterLng === undefined ||
+      selectedBuildingCenterLat === undefined
+    ) {
+      return;
+    }
+
+    const targetCoords: [number, number] = [
+      selectedBuildingCenterLng,
+      selectedBuildingCenterLat,
+    ];
 
     const updateScreenPos = () => {
-      const p = map.project(selectedBuilding.center);
-      setSelectedBuilding((prev) => (prev ? { ...prev, screenPos: { x: p.x, y: p.y } } : null));
+      try {
+        const p = map.project(targetCoords);
+        setSelectedBuilding((prev) =>
+          prev ? { ...prev, screenPos: { x: p.x, y: p.y } } : null
+        );
+      } catch {
+        // ignore during map disposal
+      }
     };
 
     map.on('move', updateScreenPos);
     return () => {
       map.off('move', updateScreenPos);
     };
-  }, [selectedBuilding?.center, isMapLoaded]);
+  }, [selectedBuildingCenterLng, selectedBuildingCenterLat, isMapLoaded]);
 
   // 건물 팝업 닫기 및 하이라이트 해제
   const handleCloseBuildingPopup = useCallback(() => {

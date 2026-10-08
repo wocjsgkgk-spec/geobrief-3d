@@ -42,8 +42,6 @@ import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import { AddressSearch } from '@/components/Search/AddressSearch';
 import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
-import { VworldKeyModal } from '@/components/Modal/VworldKeyModal';
-import { getMaskedVworldKey, isVworldConfigured } from '@/services/vworldService';
 import { useMapStore } from '@/store/useMapStore';
 import {
   Bookmark as BookmarkItem,
@@ -133,19 +131,6 @@ export const ControlPanel: React.FC = () => {
   const [copiedDraft, setCopiedDraft] = useState(false);
   const [gltfInput, setGltfInput] = useState('');
   const [showGltfDrawer, setShowGltfDrawer] = useState(false);
-  const [isVworldModalOpen, setIsVworldModalOpen] = useState(false);
-
-  // V-World API 키 존재 여부 초기 검사 및 마스킹된 키 자동 주입
-  useEffect(() => {
-    const masked = getMaskedVworldKey();
-    if (masked) {
-      setVworldDiagnostic({
-        status: 'connected',
-        message: '🟢 V-World 정밀 공간정보 연동 완료',
-        maskedKey: masked,
-      });
-    }
-  }, [setVworldDiagnostic]);
 
   const handleCopyOpinionDraft = async () => {
     if (!defenseAnalysisResult?.officialOpinionDraft) return;
@@ -168,7 +153,7 @@ export const ControlPanel: React.FC = () => {
   };
 
   return (
-    <aside className="w-[360px] min-w-[360px] h-[calc(100vh-3.5rem)] bg-[#141a16] border-r border-[#242f27] flex flex-col text-slate-200 overflow-y-auto">
+    <aside className="w-full md:w-[360px] md:min-w-[360px] h-full md:h-[calc(100vh-3.5rem)] bg-[#141a16] border-r border-[#242f27] flex flex-col text-slate-200 overflow-y-auto">
       {/* 1. [신규] 동적 주소/지번 검색창 */}
       <section className="p-4 border-b border-[#242f27] space-y-2 bg-[#101712]">
         <div className="flex items-center justify-between">
@@ -177,28 +162,20 @@ export const ControlPanel: React.FC = () => {
             전국·강원 공간 주소 검색
           </h2>
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setIsVworldModalOpen(true)}
-              className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border transition-all cursor-pointer hover:opacity-90 flex items-center gap-1 ${
+            <span
+              className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
                 vworldDiagnostic.status === 'connected'
                   ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
-                  : vworldDiagnostic.status === 'error'
-                  ? 'bg-rose-950/80 border-rose-600/80 text-rose-300'
-                  : 'bg-amber-950/80 border-amber-600/80 text-amber-300'
+                  : 'bg-slate-800/80 border-slate-700 text-slate-300'
               }`}
-              title="클릭하여 V-World API 인증키 확인 또는 직접 설정"
             >
               <span>
                 {vworldDiagnostic.status === 'connected'
-                  ? '🟢 V-World 정상'
-                  : vworldDiagnostic.status === 'error'
-                  ? '🔴 V-World 폴백'
-                  : '🟡 V-World 미설정'}
+                  ? '🟢 실시간 공간정보'
+                  : '⚪ 3D 지형 모드'}
               </span>
-              <Settings className="w-2.5 h-2.5 opacity-80" />
-            </button>
-            <span className="text-[10px] text-emerald-400 font-mono">Geocoding</span>
+            </span>
+            <span className="text-[10px] text-emerald-400 font-mono">GIS</span>
           </div>
         </div>
         <AddressSearch />
@@ -1515,81 +1492,24 @@ export const ControlPanel: React.FC = () => {
                         : '#F59E0B',
                   }}
                 />
-                V-World API 상태
+                3D 건축물 공간정보 소스
               </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setIsVworldModalOpen(true)}
-                  className="px-2 py-0.5 rounded bg-[#19271e] hover:bg-[#23382a] border border-emerald-600/70 text-emerald-300 text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm"
-                  title="V-World API 인증키 직접 등록 및 변경"
-                >
-                  <Settings className="w-3 h-3 text-emerald-400" />
-                  <span>⚙️ 키 설정</span>
-                </button>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                    vworldDiagnostic.status === 'connected'
-                      ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
-                      : vworldDiagnostic.status === 'error'
-                      ? 'bg-rose-950/80 border-rose-600/80 text-rose-300'
-                      : 'bg-amber-950/80 border-amber-600/80 text-amber-300'
-                  }`}
-                  title={vworldDiagnostic.errorDetail || vworldDiagnostic.message}
-                >
-                  {vworldDiagnostic.status === 'connected'
-                    ? '🟢 정상 연동'
-                    : vworldDiagnostic.status === 'error'
-                    ? '🔴 연동 실패'
-                    : '🟡 미설정'}
-                </span>
-              </div>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  vworldDiagnostic.status === 'connected'
+                    ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                }`}
+              >
+                {vworldDiagnostic.status === 'connected' ? '정밀 공간정보' : '오픈 벡터 타일'}
+              </span>
             </div>
 
-            {/* 마스킹된 인증키 표출 카드 */}
-            {vworldDiagnostic.maskedKey && (
-              <div className="px-2 py-1 rounded bg-[#0d140f] border border-[#1d2d20] flex items-center justify-between text-[10px] font-mono">
-                <span className="text-slate-400">인증키:</span>
-                <span className="text-emerald-300 font-bold tracking-wider">
-                  {vworldDiagnostic.maskedKey}
-                </span>
-                <span className="text-[9px] text-emerald-400/90 font-sans px-1 py-0.2 rounded bg-emerald-950/80 border border-emerald-800">
-                  활성화됨
-                </span>
-              </div>
-            )}
-
             <p className="text-[10px] text-slate-400 leading-tight">
-              {vworldDiagnostic.message}
+              {vworldDiagnostic.status === 'connected'
+                ? `실시간 정밀 건축물 데이터 연동 가동 중 (${vworldDiagnostic.featureCount}건 로드)`
+                : '국토부 브이월드 또는 오픈 벡터 타일을 통해 3D 건물이 렌더링됩니다.'}
             </p>
-
-            {vworldDiagnostic.status === 'connected' && (
-              <div className="text-[9.5px] font-mono text-emerald-400">
-                • 실시간 수신 건축물: {vworldDiagnostic.featureCount}건
-              </div>
-            )}
-
-            {vworldDiagnostic.status === 'error' && vworldDiagnostic.errorDetail && (
-              <div
-                className="text-[9.5px] font-mono text-rose-400 bg-rose-950/40 p-1 rounded border border-rose-900/60 break-all"
-                title="API 키 또는 활용 도메인 등록 상태를 확인하세요"
-              >
-                사유: {vworldDiagnostic.errorDetail}
-              </div>
-            )}
-
-            {vworldDiagnostic.status === 'unconfigured' && (
-              <div className="flex items-center justify-between pt-0.5 text-[9.5px] text-slate-400">
-                <span>※ 키 미등록 시 오픈 벡터 대체</span>
-                <button
-                  type="button"
-                  onClick={() => setIsVworldModalOpen(true)}
-                  className="text-emerald-400 hover:underline font-bold"
-                >
-                  지금 키 입력하기 &rarr;
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
@@ -1739,12 +1659,6 @@ export const ControlPanel: React.FC = () => {
       <CoordinateInputModal
         isOpen={isCoordModalOpen}
         onClose={() => setIsCoordModalOpen(false)}
-      />
-
-      {/* V-World API 인증키 직접 설정 모달 */}
-      <VworldKeyModal
-        isOpen={isVworldModalOpen}
-        onClose={() => setIsVworldModalOpen(false)}
       />
     </aside>
   );

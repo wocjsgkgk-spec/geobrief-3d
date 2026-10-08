@@ -167,10 +167,35 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     }
   };
 
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(SUPABASE_PROJECTS_TABLE_SQL);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2000);
+  const handleCopySql = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(SUPABASE_PROJECTS_TABLE_SQL);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = SUPABASE_PROJECTS_TABLE_SQL;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedSql(true);
+      setTimeout(() => setCopiedSql(false), 2000);
+    } catch (err) {
+      console.warn('[Clipboard] Copy failed, attempting textarea fallback:', err);
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = SUPABASE_PROJECTS_TABLE_SQL;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setCopiedSql(true);
+        setTimeout(() => setCopiedSql(false), 2000);
+      } catch {
+        alert('클립보드 접근이 제한되었습니다. 아래 코드 블록의 SQL을 직접 복사해주세요.');
+      }
+    }
   };
 
   if (!isOpen) return null;

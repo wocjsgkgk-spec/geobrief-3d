@@ -251,7 +251,6 @@ export async function fetchVworldBuildings(
         errorCode: res.status,
         errorDetail: errDetail,
         message: `프록시 통신 오류 (HTTP ${res.status})`,
-        maskedKey: getMaskedVworldKey() || undefined,
       };
     }
 
@@ -263,7 +262,6 @@ export async function fetchVworldBuildings(
       status: data.status,
       featureCount: data.featureCount || 0,
       message: data.message || (data.success ? '정상 연동' : '연동 실패'),
-      maskedKey: data.maskedKey || getMaskedVworldKey() || undefined,
       features: data.features,
       errorCode: data.errorCode,
       errorDetail: data.errorDetail,
@@ -282,7 +280,6 @@ export async function fetchVworldBuildings(
       errorCode: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
       errorDetail: errText,
       message: `${errText} (오픈 무료 벡터로 자동 대체)`,
-      maskedKey: getMaskedVworldKey() || undefined,
     };
   }
 }

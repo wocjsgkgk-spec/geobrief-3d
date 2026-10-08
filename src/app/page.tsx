@@ -24,7 +24,14 @@ const MapViewer = dynamic(
 );
 
 export default function Home() {
-  const { isPresentationMode, togglePresentationMode, setIsPresentationMode } = useMapStore();
+  const {
+    isPresentationMode,
+    togglePresentationMode,
+    setIsPresentationMode,
+    isMobilePanelOpen,
+    toggleMobilePanel,
+    setIsMobilePanelOpen,
+  } = useMapStore();
 
   // 브라우저 전체화면(Fullscreen) API 동기화 및 ESC 감지
   useEffect(() => {
@@ -71,16 +78,17 @@ export default function Home() {
     };
   }, [isPresentationMode]);
 
-  // ESC 키 입력 시 프레젠테이션 모드 해제
+  // ESC 키 입력 시 프레젠테이션 모드 또는 모바일 패널 해제
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPresentationMode) {
-        togglePresentationMode();
+      if (e.key === 'Escape') {
+        if (isPresentationMode) togglePresentationMode();
+        if (isMobilePanelOpen) setIsMobilePanelOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPresentationMode, togglePresentationMode]);
+  }, [isPresentationMode, togglePresentationMode, isMobilePanelOpen, setIsMobilePanelOpen]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0e0c]">
@@ -89,18 +97,56 @@ export default function Home() {
 
       {/* 메인 작업 영역: 좌측 패널 + 우측 메인 맵 뷰포트 */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* 좌측 컨트롤 패널 (프레젠테이션 모드 시 부드럽게 숨김) */}
+        {/* [데스크톱] 좌측 컨트롤 패널 */}
         <div
-          className={`transition-all duration-300 ease-in-out h-full overflow-hidden ${
+          className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden ${
             isPresentationMode ? 'w-0 opacity-0 pointer-events-none' : 'w-[360px] opacity-100'
           }`}
         >
           <ControlPanel />
         </div>
 
-        {/* 우측 16:9 슬라이드 프레임 뷰어 */}
-        <main className="flex-1 h-full overflow-hidden relative">
+        {/* [모바일 전용] 슬라이드 오버레이 서랍 (Drawer) */}
+        {isMobilePanelOpen && (
+          <div className="md:hidden fixed inset-0 z-40 flex">
+            {/* 배경 어두운 백드롭 */}
+            <div
+              className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsMobilePanelOpen(false)}
+            />
+            {/* 모바일 서랍 본문 */}
+            <div className="relative z-50 w-[88vw] max-w-sm h-full bg-[#141a16] shadow-2xl flex flex-col border-r border-[#242f27] animate-slide-in-left">
+              <div className="flex items-center justify-between p-3 border-b border-[#242f27] bg-[#101712]">
+                <span className="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
+                  GeoBrief 3D 분석 제어
+                </span>
+                <button
+                  onClick={() => setIsMobilePanelOpen(false)}
+                  className="px-2 py-1 text-xs font-semibold rounded bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  닫기 ✕
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <ControlPanel />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 우측 메인 맵 뷰포트 (모바일에서는 전체 화면 100%) */}
+        <main className="flex-1 h-full w-full overflow-hidden relative">
           <MapViewer />
+
+          {/* 모바일 전용 플로팅 토글 퀵 버튼 */}
+          <div className="md:hidden absolute bottom-5 right-4 z-30">
+            <button
+              onClick={toggleMobilePanel}
+              className="px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xl flex items-center gap-1.5 border border-emerald-400/50 ring-2 ring-black/60 transition-all active:scale-95"
+            >
+              <span>{isMobilePanelOpen ? '🗺️ 지도 전체화면' : '📋 제어 패널 열기'}</span>
+            </button>
+          </div>
 
           {/* 프레젠테이션 모드 오버레이 안내 뱃지 */}
           {isPresentationMode && (

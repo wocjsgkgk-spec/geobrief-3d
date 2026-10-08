@@ -145,10 +145,16 @@ export async function GET(request: NextRequest) {
 
   // 3. V-World Data 2.0 API 호출 (서버 사이드)
   // LT_C_SPBD: 건축물일반공간정보 (V-World Data 2.0 규격: geomFilter=BOX(minX,minY,maxX,maxY))
+  const rawHost =
+    request.headers.get('x-forwarded-host') ||
+    request.headers.get('host') ||
+    'localhost';
+  const domain = rawHost.split(':')[0] || 'localhost';
+
   const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
   const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
     cleanKey
-  )}&domain=localhost&geomFilter=${encodeURIComponent(
+  )}&domain=${encodeURIComponent(domain)}&geomFilter=${encodeURIComponent(
     geomFilter
   )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
 
@@ -251,18 +257,11 @@ export async function GET(request: NextRequest) {
       })
       .filter(Boolean);
 
-    // 마스킹된 키 생성 (예: 9897****CBF2)
-    const maskedKey =
-      cleanKey.length >= 8
-        ? `${cleanKey.slice(0, 4)}****${cleanKey.slice(-4)}`
-        : '****';
-
     return NextResponse.json({
       success: true,
       status: 'connected',
       featureCount: features.length,
       message: `정상 연동 (실시간 건물 ${features.length}건 수신)`,
-      maskedKey,
       features: {
         type: 'FeatureCollection',
         features,

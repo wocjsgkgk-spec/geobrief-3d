@@ -267,6 +267,11 @@ interface MapStoreState {
   togglePresentationMode: () => void;
   setIsPresentationMode: (val: boolean) => void;
 
+  // 모바일 반응형 제어 패널 서랍 토글
+  isMobilePanelOpen: boolean;
+  toggleMobilePanel: () => void;
+  setIsMobilePanelOpen: (val: boolean) => void;
+
   // 프로젝트 전체 초기화 및 저장본 불러오기
   resetProject: () => void;
   loadSavedProject: (project: CloudProject) => void;
@@ -807,6 +812,11 @@ export const useMapStore = create<MapStoreState>()(
       isPresentationMode: false,
       togglePresentationMode: () => set((state) => ({ isPresentationMode: !state.isPresentationMode })),
       setIsPresentationMode: (isPresentationMode) => set({ isPresentationMode }),
+
+      // 모바일 반응형 제어 패널 서랍 토글
+      isMobilePanelOpen: false,
+      toggleMobilePanel: () => set((state) => ({ isMobilePanelOpen: !state.isMobilePanelOpen })),
+      setIsMobilePanelOpen: (isMobilePanelOpen) => set({ isMobilePanelOpen }),
 
       resetProject: () => {
         const defaultRegion = GANGWON_REGIONS.find((r) => r.id === 'wonju') || GANGWON_REGIONS[0];
