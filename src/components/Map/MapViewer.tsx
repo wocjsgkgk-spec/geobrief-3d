@@ -580,13 +580,13 @@ export const MapViewer: React.FC = () => {
                 'match',
                 ['get', 'bld_category'],
                 'apartment',
-                '#e2e8f0',
+                '#E2E8F0',
                 'commercial',
-                '#93c5fd',
-                '#cbd5e1',
+                '#93C5FD',
+                '#CBD5E1',
               ],
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
-              'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+              'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.92,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -640,13 +640,13 @@ export const MapViewer: React.FC = () => {
                 'match',
                 ['get', 'type'],
                 'residential',
-                '#e2e8f0',
+                '#E2E8F0',
                 'commercial_tower',
-                '#93c5fd',
-                '#cbd5e1',
+                '#93C5FD',
+                '#CBD5E1',
               ],
               'fill-extrusion-height': ['get', 'height'],
-              'fill-extrusion-base': ['get', 'min_height'],
+              'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.92,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1378,7 +1378,7 @@ export const MapViewer: React.FC = () => {
           ? 'drawing-polygon-fill'
           : undefined;
 
-        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - LOD 1: 줌 14+ 고정밀 외벽 파사드 패턴 매핑]
+        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - 정돈된 PBR 건축 톤 및 수직 음영 그라데이션]
         if (!map.getLayer('3d-buildings')) {
           map.addLayer(
             {
@@ -1386,54 +1386,18 @@ export const MapViewer: React.FC = () => {
               type: 'fill-extrusion',
               source: 'openmaptiles-vector',
               'source-layer': 'building',
-              minzoom: 14,
-              paint: {
-                'fill-extrusion-pattern': [
-                  'match',
-                  ['coalesce', ['get', 'type'], ['get', 'class'], 'residential'],
-                  ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket', 'mall'],
-                  'facade-commercial-pattern',
-                  ['military', 'government', 'public', 'civic', 'police', 'fire_station', 'barracks'],
-                  'facade-military-pattern',
-                  // 기본 주거/아파트 및 기타 건물
-                  'facade-residential-pattern',
-                ],
-                'fill-extrusion-height': [
-                  'coalesce',
-                  ['get', 'render_height'],
-                  ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                  ['get', 'height'],
-                  12,
-                ],
-                'fill-extrusion-base': 0,
-                'fill-extrusion-opacity': 0.95,
-                'fill-extrusion-vertical-gradient': true,
-              },
-              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
-            },
-            beforeBldg
-          );
-        }
-
-        // [3D 건축물 원경 LOD 0 - 줌 12 ~ 14 경량 단색 렌더링 (메모리 보호)]
-        if (!map.getLayer('3d-buildings-lod0')) {
-          map.addLayer(
-            {
-              id: '3d-buildings-lod0',
-              type: 'fill-extrusion',
-              source: 'openmaptiles-vector',
-              'source-layer': 'building',
               minzoom: 12,
-              maxzoom: 14,
               paint: {
                 'fill-extrusion-color': [
                   'match',
-                  ['get', 'type'],
+                  ['coalesce', ['get', 'type'], ['get', 'class'], 'residential'],
+                  ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket', 'mall'],
+                  '#93C5FD',
+                  ['military', 'government', 'public', 'civic', 'police', 'fire_station', 'barracks'],
+                  '#CBD5E1',
                   'residential',
-                  '#e2e8f0',
-                  'commercial',
-                  '#93c5fd',
-                  '#cbd5e1',
+                  '#E2E8F0',
+                  '#CBD5E1',
                 ],
                 'fill-extrusion-height': [
                   'coalesce',
@@ -2136,9 +2100,6 @@ export const MapViewer: React.FC = () => {
     if (map.getLayer('3d-buildings')) {
       map.setLayoutProperty('3d-buildings', 'visibility', visibility);
     }
-    if (map.getLayer('3d-buildings-lod0')) {
-      map.setLayoutProperty('3d-buildings-lod0', 'visibility', visibility);
-    }
     if (map.getLayer('3d-buildings-roof')) {
       map.setLayoutProperty('3d-buildings-roof', 'visibility', visibility);
     }
@@ -2197,20 +2158,14 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (map && isMapLoaded) {
       const isVisible = layers.buildings3D;
-      if (detail3DMode === 'lod1') {
-        if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', 'none');
-        }
-        if (map.getLayer('3d-buildings-lod0')) {
-          map.setLayoutProperty('3d-buildings-lod0', 'visibility', isVisible ? 'visible' : 'none');
-        }
-      } else {
-        if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', isVisible ? 'visible' : 'none');
-        }
-        if (map.getLayer('3d-buildings-lod0')) {
-          map.setLayoutProperty('3d-buildings-lod0', 'visibility', isVisible ? 'visible' : 'none');
-        }
+      if (map.getLayer('3d-buildings')) {
+        map.setLayoutProperty('3d-buildings', 'visibility', isVisible ? 'visible' : 'none');
+      }
+      if (map.getLayer('3d-buildings-roof')) {
+        map.setLayoutProperty('3d-buildings-roof', 'visibility', isVisible ? 'visible' : 'none');
+      }
+      if (map.getLayer('3d-buildings-edge')) {
+        map.setLayoutProperty('3d-buildings-edge', 'visibility', isVisible ? 'visible' : 'none');
       }
     }
   }, [detail3DMode, layers.buildings3D, isMapLoaded]);
@@ -2704,7 +2659,6 @@ export const MapViewer: React.FC = () => {
       'sample-buildings',
       'sample-buildings-roof',
       '3d-buildings',
-      '3d-buildings-lod0',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
     if (buildingLayers.length === 0) return;
@@ -3880,9 +3834,6 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
         }
-        if (map.getLayer('3d-buildings-lod0')) {
-          map.setLayoutProperty('3d-buildings-lod0', 'visibility', 'visible');
-        }
         if (map.getLayer('3d-buildings-roof')) {
           map.setLayoutProperty('3d-buildings-roof', 'visibility', 'visible');
         }
@@ -4024,9 +3975,6 @@ export const MapViewer: React.FC = () => {
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', bldgVis);
-        }
-        if (map.getLayer('3d-buildings-lod0')) {
-          map.setLayoutProperty('3d-buildings-lod0', 'visibility', bldgVis);
         }
         if (map.getLayer('3d-buildings-roof')) {
           map.setLayoutProperty('3d-buildings-roof', 'visibility', bldgVis);
