@@ -200,6 +200,51 @@ export interface UavFlightState {
   currentElevation?: number;
 }
 
+// [3D 토공량(절토·성토 Cut & Fill) 산출 엔진 타입]
+export interface CutFillCell {
+  id: number;
+  coords: [number, number]; // [lng, lat]
+  elevation: number; // 원지반 해발고도 (EL. m)
+  diff: number; // 지형고도 - 계획표고 (+: 절토(Cut), -: 성토(Fill))
+  type: 'cut' | 'fill' | 'balanced'; // cut: diff > 0.5, fill: diff < -0.5, balanced: |diff| <= 0.5
+  volumeM3: number; // |diff| * 셀면적
+  color: string;
+  borderColor: string;
+}
+
+export interface CutFillResult {
+  gridSizeMeters: 5 | 10;
+  cellAreaSqm: number;
+  totalCellCount: number;
+  sampledAreaSqm: number;
+  minElevation: number;
+  maxElevation: number;
+  avgElevation: number;
+  targetElevation: number;
+  totalCutVolumeM3: number;
+  totalFillVolumeM3: number;
+  netVolumeM3: number; // cut - fill (+: 토사 잉여/반출, -: 토사 부족/반입)
+  dumpTruck15tCutCount: number; // 15톤 덤프트럭(약 10m3) 기준 절토 반출 대수
+  dumpTruck15tFillCount: number; // 성토 반입 대수
+  dumpTruck15tNetCount: number; // 순 토공 환산 대수
+  cutCellCount: number;
+  fillCellCount: number;
+  balancedCellCount: number;
+  cutAreaPercent: number;
+  fillAreaPercent: number;
+  balancedAreaPercent: number;
+  zeroBalanceElevation: number; // 절토와 성토가 균형을 이루는 최적 계획고
+  geojson: GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+}
+
+export interface CutFillState {
+  enabled: boolean;
+  gridSizeMeters: 5 | 10;
+  targetElevation: number | null; // null이면 계산 시 avgElevation으로 초기화
+  result: CutFillResult | null;
+  isCalculating: boolean;
+}
+
 // [.geobrief 브리핑 프로젝트 파일 규격]
 export interface GeoBriefProjectFile {
   version: '1.0';
@@ -220,6 +265,12 @@ export interface GeoBriefProjectFile {
   sunHour: number;
   sensors?: SurveillanceSensor[];
   uavFlight?: UavFlightState;
+  cutFill?: {
+    enabled: boolean;
+    gridSizeMeters: 5 | 10;
+    targetElevation: number | null;
+  };
 }
+
 
 

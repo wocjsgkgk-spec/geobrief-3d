@@ -45,6 +45,11 @@ import {
   Radio,
   Eye,
   X,
+  Boxes,
+  Truck,
+  ArrowDown,
+  ArrowUp,
+  Scale,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -152,6 +157,12 @@ export const ControlPanel: React.FC = () => {
     setUavCameraMode,
     setUavFlightSpeed,
     setUavFlightAltitude,
+    // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
+    cutFill,
+    toggleCutFill,
+    setCutFillEnabled,
+    setCutFillGridSize,
+    setCutFillTargetElevation,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -1878,6 +1889,141 @@ export const ControlPanel: React.FC = () => {
               <div className="text-[9.5px] text-sky-200/80 bg-sky-950/40 p-2 rounded border border-sky-800/30 leading-relaxed">
                 💡 실시간 3D 심도 테스트로 표고 이하의 저지대 지형에 반투명 에메랄드 블루(#0284C7) 수면 메쉬가 실시간 렌더링됩니다.
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* [신규] 3D 토공량(절토·성토 Cut & Fill) 계산기 */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#14231b] to-[#0d1812] border border-emerald-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-400">
+                <Boxes className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 토공량(Cut & Fill) 계산기
+                </span>
+                <span className="text-[10px] text-emerald-300/80 block">
+                  정밀 격자 표고 샘플링 & 덤프트럭 환산
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cutFill.enabled}
+                onChange={toggleCutFill}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {cutFill.enabled && (
+            <div className="space-y-2.5 pt-1 border-t border-emerald-900/50 animate-fade-in">
+              {/* 정밀 격자 크기 선택 (5m vs 10m) */}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-medium text-[11px]">샘플링 격자 해상도</span>
+                <div className="flex items-center gap-1">
+                  {([10, 5] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setCutFillGridSize(sz)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                        cutFill.gridSizeMeters === sz
+                          ? 'bg-emerald-600 border-emerald-400 text-white shadow-sm'
+                          : 'bg-[#0f1d15] border-emerald-800/40 text-emerald-300 hover:bg-[#152a1e]'
+                      }`}
+                    >
+                      {sz}m x {sz}m {sz === 5 ? '(초정밀)' : '(표준)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 계획 정지 표고 슬라이더 및 수치 */}
+              {cutFill.result && (
+                <div className="space-y-2 bg-[#09150e] p-2.5 rounded-lg border border-[#1a3324]">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-semibold text-[11px]">
+                      계획 정지 표고 (Target EL.)
+                    </span>
+                    <span className="font-extrabold font-mono text-emerald-300 text-sm bg-emerald-950/90 px-2 py-0.5 rounded border border-emerald-700/60">
+                      EL. {cutFill.result.targetElevation} m
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min={Math.floor(cutFill.result.minElevation - 10)}
+                    max={Math.ceil(cutFill.result.maxElevation + 10)}
+                    step={1}
+                    value={cutFill.result.targetElevation}
+                    onChange={(e) => setCutFillTargetElevation(parseInt(e.target.value, 10))}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                  />
+
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>최저 EL. {cutFill.result.minElevation}m</span>
+                    <span>평균 EL. {cutFill.result.avgElevation}m</span>
+                    <span>최고 EL. {cutFill.result.maxElevation}m</span>
+                  </div>
+
+                  {/* 제로 밸런스 버튼 */}
+                  <button
+                    type="button"
+                    onClick={() => setCutFillTargetElevation(Math.round(cutFill.result!.zeroBalanceElevation))}
+                    className="w-full py-1.5 px-2 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 font-bold text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-sm group"
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-400 group-hover:rotate-12 transition-transform" />
+                    <span>⚡ 토량 평형고(Zero Balance: EL. {Math.round(cutFill.result.zeroBalanceElevation)}m) 자동 맞춤</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 실시간 절토/성토 요약 및 덤프트럭 지표 */}
+              {cutFill.result && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                    <div className="p-2 rounded bg-rose-950/40 border border-rose-800/40 space-y-0.5">
+                      <div className="text-rose-300 font-bold flex items-center gap-1">
+                        <ArrowDown className="w-3 h-3 text-rose-400" />
+                        <span>절토 {cutFill.result.totalCutVolumeM3.toLocaleString()}㎥</span>
+                      </div>
+                      <div className="text-[9.5px] text-rose-200/80 font-mono flex items-center gap-1">
+                        <Truck className="w-2.5 h-2.5 text-rose-400" />
+                        <span>15t 덤프 {cutFill.result.dumpTruck15tCutCount.toLocaleString()}대 반출</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded bg-blue-950/40 border border-blue-800/40 space-y-0.5">
+                      <div className="text-blue-300 font-bold flex items-center gap-1">
+                        <ArrowUp className="w-3 h-3 text-blue-400" />
+                        <span>성토 {cutFill.result.totalFillVolumeM3.toLocaleString()}㎥</span>
+                      </div>
+                      <div className="text-[9.5px] text-blue-200/80 font-mono flex items-center gap-1">
+                        <Truck className="w-2.5 h-2.5 text-blue-400" />
+                        <span>15t 덤프 {cutFill.result.dumpTruck15tFillCount.toLocaleString()}대 반입</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2 rounded bg-[#0b1610] border border-emerald-800/40 flex items-center justify-between text-[10.5px]">
+                    <span className="text-slate-300 font-semibold flex items-center gap-1">
+                      <Scale className="w-3 h-3 text-amber-400" />
+                      순 토공량
+                    </span>
+                    <span className="font-mono font-extrabold text-slate-100">
+                      {Math.abs(cutFill.result.netVolumeM3).toLocaleString()} ㎥{' '}
+                      <span className="text-[9.5px] font-normal text-emerald-400">
+                        ({cutFill.result.netVolumeM3 >= 0 ? '반출' : '반입'} {cutFill.result.dumpTruck15tNetCount.toLocaleString()}대)
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

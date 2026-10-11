@@ -23,6 +23,8 @@ import {
   GeoBriefProjectFile,
   SurveillanceSensor,
   UavFlightState,
+  CutFillResult,
+  CutFillState,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -349,6 +351,16 @@ interface MapStoreState {
   setUavFlightSpeed: (speedKmh: number) => void;
   setUavFlightAltitude: (altitudeMeters: number) => void;
   updateUavTelemetry: (lngLat: [number, number], bearing: number, elevation: number) => void;
+
+  // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
+  cutFill: CutFillState;
+  toggleCutFill: () => void;
+  setCutFillEnabled: (enabled: boolean) => void;
+  setCutFillGridSize: (gridSizeMeters: 5 | 10) => void;
+  setCutFillTargetElevation: (targetElevation: number) => void;
+  setCutFillResult: (result: CutFillResult | null) => void;
+  setCutFillCalculating: (isCalculating: boolean) => void;
+  resetCutFill: () => void;
 
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
@@ -1115,6 +1127,68 @@ export const useMapStore = create<MapStoreState>()(
           },
         })),
 
+      // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
+      cutFill: {
+        enabled: false,
+        gridSizeMeters: 10,
+        targetElevation: null,
+        result: null,
+        isCalculating: false,
+      },
+      toggleCutFill: () =>
+        set((state) => ({
+          cutFill: {
+            ...state.cutFill,
+            enabled: !state.cutFill.enabled,
+          },
+        })),
+      setCutFillEnabled: (enabled) =>
+        set((state) => ({
+          cutFill: {
+            ...state.cutFill,
+            enabled,
+          },
+        })),
+      setCutFillGridSize: (gridSizeMeters) =>
+        set((state) => ({
+          cutFill: {
+            ...state.cutFill,
+            gridSizeMeters,
+          },
+        })),
+      setCutFillTargetElevation: (targetElevation) =>
+        set((state) => ({
+          cutFill: {
+            ...state.cutFill,
+            targetElevation,
+          },
+        })),
+      setCutFillResult: (result) =>
+        set((state) => ({
+          cutFill: {
+            ...state.cutFill,
+            result,
+            isCalculating: false,
+          },
+        })),
+      setCutFillCalculating: (isCalculating) =>
+        set((state) => ({
+          cutFill: {
+            ...state.cutFill,
+            isCalculating,
+          },
+        })),
+      resetCutFill: () =>
+        set((state) => ({
+          cutFill: {
+            enabled: false,
+            gridSizeMeters: 10,
+            targetElevation: null,
+            result: null,
+            isCalculating: false,
+          },
+        })),
+
       // [.geobrief 브리핑 프로젝트 파일 입출력]
       exportProjectFile: () => {
         const state = get();
@@ -1137,6 +1211,11 @@ export const useMapStore = create<MapStoreState>()(
           sunHour: state.sunHour,
           sensors: state.surveillanceSensors,
           uavFlight: state.uavFlight,
+          cutFill: {
+            enabled: state.cutFill.enabled,
+            gridSizeMeters: state.cutFill.gridSizeMeters,
+            targetElevation: state.cutFill.targetElevation,
+          },
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
         try {
@@ -1186,6 +1265,15 @@ export const useMapStore = create<MapStoreState>()(
               speedKmh: 40,
               altitudeMeters: 80,
             },
+            cutFill: data.cutFill
+              ? {
+                  enabled: data.cutFill.enabled,
+                  gridSizeMeters: data.cutFill.gridSizeMeters,
+                  targetElevation: data.cutFill.targetElevation,
+                  result: null,
+                  isCalculating: false,
+                }
+              : get().cutFill,
             viewport: targetVp,
             defenseAnalysisResult:
               data.completedPolygon && data.polygonCenter
@@ -1262,6 +1350,13 @@ export const useMapStore = create<MapStoreState>()(
             cameraMode: 'orbit',
             speedKmh: 40,
             altitudeMeters: 80,
+          },
+          cutFill: {
+            enabled: false,
+            gridSizeMeters: 10,
+            targetElevation: null,
+            result: null,
+            isCalculating: false,
           },
           viewport: {
             longitude: defaultRegion.center[0],
@@ -1388,6 +1483,11 @@ export const useMapStore = create<MapStoreState>()(
         waterLevel: state.waterLevel,
         showTitleBlock: state.showTitleBlock,
         surveillanceSensors: state.surveillanceSensors,
+        cutFill: {
+          enabled: state.cutFill.enabled,
+          gridSizeMeters: state.cutFill.gridSizeMeters,
+          targetElevation: state.cutFill.targetElevation,
+        },
       }),
     }
   )

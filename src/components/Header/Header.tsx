@@ -24,6 +24,7 @@ import {
   Radio,
   ShieldCheck,
   Plane,
+  Boxes,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -64,6 +65,9 @@ export const Header: React.FC = () => {
     toggleSensorPlacementMode,
     uavFlight,
     toggleUavFlight,
+    // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
+    cutFill,
+    toggleCutFill,
   } = useMapStore();
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -284,6 +288,25 @@ export const Header: React.FC = () => {
           {surveillanceSensors.length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-teal-900 border border-teal-600 text-teal-200 text-[9.5px] font-mono">
               {surveillanceSensors.length}
+            </span>
+          )}
+        </button>
+
+        {/* [신규] 3D 토공량(절토·성토 Cut & Fill) 계산기 버튼 */}
+        <button
+          onClick={toggleCutFill}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            cutFill.enabled
+              ? 'bg-emerald-600/50 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/70 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 토공량(Cut & Fill) 계산기: 부지 내부 정밀 DEM 격자 표고 샘플링 및 절토/성토 체적·덤프트럭 환산"
+        >
+          <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="hidden sm:inline">토공량</span>
+          {cutFill.result && (
+            <span className="px-1.5 py-0.2 rounded-full bg-emerald-950 border border-emerald-600 text-emerald-300 text-[9.5px] font-mono">
+              EL.{cutFill.result.targetElevation}m
             </span>
           )}
         </button>

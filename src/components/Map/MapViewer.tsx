@@ -40,15 +40,20 @@ import {
   Waves,
   FileCheck,
   Edit3,
+  Truck,
+  Boxes,
+  Layers,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { calculateViewshed } from '@/utils/viewshedAnalysis';
 import { calculate3DMeasurement } from '@/utils/measure3D';
+import { calculateCutFill } from '@/utils/cutFillAnalysis';
 import { WaterLevelLayer } from './WaterLevelLayer';
 import { TitleBlock, drawCadTitleBlockOnCanvas } from './TitleBlock';
 import { buildTacticalArrowsFeatureCollection } from '@/utils/tacticalArrowGenerator';
 import { UavSensorLayer } from './UavSensorLayer';
 import { UavHudOverlay } from './UavHudOverlay';
+import { CutFillSummaryCard } from './CutFillSummaryCard';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -179,7 +184,27 @@ export const MapViewer: React.FC = () => {
     toggleUavFlight,
     setUavCameraMode,
     updateUavTelemetry,
+    // [3D 토공량(Cut & Fill) 산출 엔진]
+    cutFill,
+    toggleCutFill,
+    setCutFillEnabled,
+    setCutFillGridSize,
+    setCutFillTargetElevation,
+    setCutFillResult,
+    resetCutFill,
   } = useMapStore();
+
+  // 토공량 격자 셀 호버 툴팁 상태
+  const [hoveredCutFillCell, setHoveredCutFillCell] = useState<{
+    x: number;
+    y: number;
+    elevation: number;
+    targetElevation: number;
+    diff: number;
+    type: 'cut' | 'fill' | 'balanced';
+    volumeM3: number;
+    cellAreaSqm: number;
+  } | null>(null);
 
   // 3D 주석 핀 인라인 편집 및 화면 투영 좌표 상태
   const [editingPinId, setEditingPinId] = useState<string | null>(null);
@@ -355,6 +380,11 @@ export const MapViewer: React.FC = () => {
           },
           // [3D 계획·접근 축선 전술 화살표 (Tactical Arrow) 소스]
           'tactical-arrows-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          // [3D 토공량(절토·성토 Cut & Fill) 격자 소스]
+          'cut-fill-grid-source': {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
@@ -985,6 +1015,29 @@ export const MapViewer: React.FC = () => {
               'line-color': '#FFFFFF',
               'line-width': 1.8,
               'line-opacity': 0.95,
+            },
+            layout: { visibility: 'visible' },
+          },
+
+          // [3D 토공량(절토·성토 Cut & Fill) 지형 표면 히트맵 레이어]
+          {
+            id: 'cut-fill-grid-fill',
+            type: 'fill',
+            source: 'cut-fill-grid-source',
+            paint: {
+              'fill-color': ['coalesce', ['get', 'color'], '#10B981'],
+              'fill-opacity': 0.62,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'cut-fill-grid-line',
+            type: 'line',
+            source: 'cut-fill-grid-source',
+            paint: {
+              'line-color': ['coalesce', ['get', 'borderColor'], '#059669'],
+              'line-width': 0.8,
+              'line-opacity': 0.85,
             },
             layout: { visibility: 'visible' },
           },
@@ -2923,7 +2976,102 @@ export const MapViewer: React.FC = () => {
     };
   }, [spatialPins, isMapLoaded]);
 
-  // 26. [국방·보안 브리핑] 3D 감시 센서 콘 & 정찰 드론(UAV) 상태 동기화
+  // 26. [3D 토공량(절토·성토 Cut & Fill) 산출 엔진 & 지형 히트맵 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const source = map.getSource('cut-fill-grid-source') as maplibregl.GeoJSONSource;
+    if (!source) return;
+
+    if (!cutFill.enabled) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      setHoveredCutFillCell(null);
+      return;
+    }
+
+    const poly = completedPolygon;
+    if (!poly) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      setCutFillResult(null);
+      return;
+    }
+
+    // 연산 수행
+    const res = calculateCutFill(map, poly, {
+      gridSizeMeters: cutFill.gridSizeMeters,
+      targetElevation: cutFill.targetElevation,
+    });
+
+    if (res) {
+      source.setData(res.geojson);
+      setCutFillResult(res);
+      if (cutFill.targetElevation === null || cutFill.targetElevation === undefined) {
+        setCutFillTargetElevation(res.targetElevation);
+      }
+    } else {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      setCutFillResult(null);
+    }
+  }, [
+    cutFill.enabled,
+    cutFill.gridSizeMeters,
+    cutFill.targetElevation,
+    completedPolygon,
+    isMapLoaded,
+    setCutFillResult,
+    setCutFillTargetElevation,
+  ]);
+
+  // 27. [토공량 격자 셀 마우스 호버 툴팁]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (!cutFill.enabled) {
+      setHoveredCutFillCell(null);
+      return;
+    }
+
+    const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['cut-fill-grid-fill'] });
+      if (features && features.length > 0) {
+        const feat = features[0];
+        const props = feat.properties as any;
+        if (props && props.elevation !== undefined) {
+          map.getCanvas().style.cursor = 'pointer';
+          setHoveredCutFillCell({
+            x: e.point.x,
+            y: e.point.y,
+            elevation: Number(props.elevation),
+            targetElevation: Number(props.targetElevation),
+            diff: Number(props.diff),
+            type: props.type,
+            volumeM3: Number(props.volumeM3),
+            cellAreaSqm: Number(props.cellAreaSqm || 100),
+          });
+          return;
+        }
+      }
+      map.getCanvas().style.cursor = '';
+      setHoveredCutFillCell(null);
+    };
+
+    const handleMouseLeave = () => {
+      map.getCanvas().style.cursor = '';
+      setHoveredCutFillCell(null);
+    };
+
+    map.on('mousemove', 'cut-fill-grid-fill', handleMouseMove);
+    map.on('mouseleave', 'cut-fill-grid-fill', handleMouseLeave);
+
+    return () => {
+      map.off('mousemove', 'cut-fill-grid-fill', handleMouseMove);
+      map.off('mouseleave', 'cut-fill-grid-fill', handleMouseLeave);
+    };
+  }, [cutFill.enabled, isMapLoaded]);
+
+  // 28. [국방·보안 브리핑] 3D 감시 센서 콘 & 정찰 드론(UAV) 상태 동기화
   useEffect(() => {
     if (!uavSensorLayerRef.current) return;
     uavSensorLayerRef.current.updateSensors(surveillanceSensors);
@@ -4072,6 +4220,57 @@ export const MapViewer: React.FC = () => {
 
         {/* [국방·보안] UAV 정찰 드론 비행 HUD 오버레이 */}
         <UavHudOverlay />
+
+        {/* [3D 토공량(절토·성토 Cut & Fill) 산출 종합 결과 카드] */}
+        <CutFillSummaryCard />
+
+        {/* 토공량 격자 셀 마우스 호버 인터랙티브 툴팁 */}
+        {hoveredCutFillCell && (
+          <div
+            className="absolute z-40 pointer-events-none select-none -translate-x-1/2 -translate-y-full mb-3 animate-fade-in"
+            style={{
+              left: hoveredCutFillCell.x,
+              top: hoveredCutFillCell.y,
+            }}
+          >
+            <div className="bg-[#08150f]/95 backdrop-blur-md border border-emerald-500/80 px-2.5 py-1.5 rounded-lg shadow-2xl text-[10px] font-mono text-slate-100 ring-1 ring-emerald-500/40 space-y-0.5">
+              <div className="flex items-center gap-1.5 font-bold">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    hoveredCutFillCell.type === 'cut'
+                      ? 'bg-rose-500'
+                      : hoveredCutFillCell.type === 'fill'
+                      ? 'bg-blue-500'
+                      : 'bg-emerald-500'
+                  }`}
+                />
+                <span
+                  className={
+                    hoveredCutFillCell.type === 'cut'
+                      ? 'text-rose-400'
+                      : hoveredCutFillCell.type === 'fill'
+                      ? 'text-blue-400'
+                      : 'text-emerald-400'
+                  }
+                >
+                  {hoveredCutFillCell.type === 'cut'
+                    ? `[절토 Cut] +${hoveredCutFillCell.diff}m`
+                    : hoveredCutFillCell.type === 'fill'
+                    ? `[성토 Fill] ${hoveredCutFillCell.diff}m`
+                    : `[균형 지반] ±0.5m 이내`}
+                </span>
+              </div>
+              <div className="text-slate-300">
+                원지반 EL. {hoveredCutFillCell.elevation}m → 계획 EL. {hoveredCutFillCell.targetElevation}m
+              </div>
+              {hoveredCutFillCell.type !== 'balanced' && (
+                <div className="text-emerald-300/90 font-bold">
+                  체적: {hoveredCutFillCell.volumeM3} ㎥ ({hoveredCutFillCell.cellAreaSqm}㎡ 기준)
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 도정·국방 표준 도면 표제란 (CAD Title Block) */}
         <TitleBlock siteName={metadata?.title || '강원 전략 군 유휴지'} />
