@@ -42,6 +42,9 @@ import {
   Sunset,
   Clock,
   Waves,
+  Radio,
+  Eye,
+  X,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -134,6 +137,21 @@ export const ControlPanel: React.FC = () => {
     // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
     waterLevel,
     setWaterLevel,
+    // [신규] 국방·보안 감시 센서 콘 & UAV 정찰 비행
+    surveillanceSensors,
+    isSensorPlacementMode,
+    selectedSensorFov,
+    selectedSensorRange,
+    toggleSensorPlacementMode,
+    setSelectedSensorFov,
+    setSelectedSensorRange,
+    removeSurveillanceSensor,
+    clearSurveillanceSensors,
+    uavFlight,
+    toggleUavFlight,
+    setUavCameraMode,
+    setUavFlightSpeed,
+    setUavFlightAltitude,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -1340,6 +1358,231 @@ export const ControlPanel: React.FC = () => {
             </div>
           </div>
         )}
+      </section>
+
+      {/* 5-2. [신규] 국방·보안 브리핑: 3D 감시 센서 콘(Sensor FOV) & UAV 정찰 비행 */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0d1612]/75">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-teal-400" />
+            국방 경계 센서 & UAV 정찰 시뮬레이터
+          </h2>
+          <span className="text-[10px] text-teal-300 font-mono bg-teal-950/80 px-2 py-0.5 rounded border border-teal-700/60 font-semibold">
+            DEFENSE 3D
+          </span>
+        </div>
+
+        {/* 1) 3D 감시 초소/CCTV 센서 콘 (Sensor FOV Frustum) 카드 */}
+        <div className="p-3 rounded-xl bg-[#12231b] border border-teal-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-teal-950 border border-teal-700/60 text-teal-300">
+                <Eye className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 레이더 센서 콘 (Sensor FOV)
+                </span>
+                <span className="text-[10px] text-teal-300/80 block">
+                  초소/CCTV 시계 Frustum & 펄스 스캔
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSensorPlacementMode}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                isSensorPlacementMode
+                  ? 'bg-teal-600 border-teal-400 text-white animate-pulse shadow-md'
+                  : 'bg-[#183628] border-teal-700/60 text-teal-200 hover:bg-[#1f4533]'
+              }`}
+            >
+              {isSensorPlacementMode ? '배치 중...' : '+ 센서 배치'}
+            </button>
+          </div>
+
+          {/* 화각 및 반경 설정 옵션 */}
+          <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-teal-900/50">
+            <div>
+              <span className="text-[10px] text-slate-400 block mb-1">수평 감시 화각 (FOV)</span>
+              <div className="flex gap-1">
+                {[60, 90, 120].map((deg) => (
+                  <button
+                    key={deg}
+                    type="button"
+                    onClick={() => setSelectedSensorFov(deg as 60 | 90 | 120)}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold border transition-all ${
+                      selectedSensorFov === deg
+                        ? 'bg-teal-600 border-teal-400 text-white'
+                        : 'bg-[#183024] border-teal-900/60 text-teal-300 hover:bg-[#204030]'
+                    }`}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 block mb-1">감시 유효 반경 (RNG)</span>
+              <div className="flex gap-1">
+                {[200, 300, 500].map((rng) => (
+                  <button
+                    key={rng}
+                    type="button"
+                    onClick={() => setSelectedSensorRange(rng)}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold border transition-all ${
+                      selectedSensorRange === rng
+                        ? 'bg-teal-600 border-teal-400 text-white'
+                        : 'bg-[#183024] border-teal-900/60 text-teal-300 hover:bg-[#204030]'
+                    }`}
+                  >
+                    {rng}m
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 등록된 센서 목록 */}
+          {surveillanceSensors.length > 0 && (
+            <div className="space-y-1.5 pt-1.5 border-t border-teal-900/50">
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>배치된 감시 센서 ({surveillanceSensors.length}기)</span>
+                <button
+                  type="button"
+                  onClick={clearSurveillanceSensors}
+                  className="text-rose-400 hover:text-rose-300 text-[9.5px] hover:underline"
+                >
+                  전체 삭제
+                </button>
+              </div>
+              <div className="max-h-28 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                {surveillanceSensors.map((sensor, idx) => (
+                  <div
+                    key={sensor.id}
+                    className="p-1.5 rounded bg-[#0b1712] border border-teal-900/60 flex items-center justify-between text-[10px]"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                      <span className="font-bold text-slate-200">
+                        {sensor.name || `센서 ${idx + 1}`}
+                      </span>
+                      <span className="text-teal-300/80 font-mono">
+                        (FOV {sensor.fovDegrees}°, {sensor.rangeMeters}m)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeSurveillanceSensor(sensor.id)}
+                      className="text-slate-400 hover:text-rose-400 p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2) 정찰 드론(UAV) 3D 순찰 비행선 제어 카드 */}
+        <div className="p-3 rounded-xl bg-[#12231b] border border-emerald-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-300">
+                <Radio className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  UAV 3D 정찰 비행 시뮬레이터
+                </span>
+                <span className="text-[10px] text-emerald-300/80 block">
+                  부지 외곽 순찰 비행 & FPV 관측 시점
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={uavFlight.isActive}
+                onChange={toggleUavFlight}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {uavFlight.isActive && (
+            <div className="space-y-2 pt-1 border-t border-emerald-900/50 animate-fade-in text-xs">
+              {/* 관측 뷰포트 전환 */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10.5px] text-slate-300 font-medium">카메라 관측 시점</span>
+                <div className="flex gap-1 bg-[#091711] p-0.5 rounded-lg border border-emerald-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setUavCameraMode('orbit')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                      uavFlight.cameraMode === 'orbit'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300 hover:text-white'
+                    }`}
+                  >
+                    3인칭 궤도
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUavCameraMode('fpv')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                      uavFlight.cameraMode === 'fpv'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300 hover:text-white'
+                    }`}
+                  >
+                    1인칭 FPV 관측
+                  </button>
+                </div>
+              </div>
+
+              {/* 속도 및 고도 조절 */}
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-slate-300 font-mono">
+                    <span>비행 속도</span>
+                    <span className="font-bold text-cyan-300">{uavFlight.speedKmh} km/h</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={20}
+                    max={80}
+                    step={5}
+                    value={uavFlight.speedKmh}
+                    onChange={(e) => setUavFlightSpeed(parseInt(e.target.value, 10))}
+                    className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-400"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-slate-300 font-mono">
+                    <span>대지 고도 (AGL)</span>
+                    <span className="font-bold text-amber-300">{uavFlight.altitudeMeters} m</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={40}
+                    max={150}
+                    step={10}
+                    value={uavFlight.altitudeMeters}
+                    onChange={(e) => setUavFlightAltitude(parseInt(e.target.value, 10))}
+                    className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-emerald-200/80 bg-emerald-950/40 p-2 rounded border border-emerald-800/30 leading-relaxed">
+                💡 베지에 순찰 궤도를 따라 고속 회전 프로펠러와 Bank Turn 선회가 적용된 드론이 비행하며, 1인칭 FPV 모드 시 밀리터리 HUD 조준경이 활성화됩니다.
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* 6. 정량 거리 분석 버퍼 링 */}

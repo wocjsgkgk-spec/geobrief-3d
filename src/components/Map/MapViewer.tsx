@@ -47,6 +47,8 @@ import { calculate3DMeasurement } from '@/utils/measure3D';
 import { WaterLevelLayer } from './WaterLevelLayer';
 import { TitleBlock, drawCadTitleBlockOnCanvas } from './TitleBlock';
 import { buildTacticalArrowsFeatureCollection } from '@/utils/tacticalArrowGenerator';
+import { UavSensorLayer } from './UavSensorLayer';
+import { UavHudOverlay } from './UavHudOverlay';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -65,6 +67,7 @@ export const MapViewer: React.FC = () => {
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
+  const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
 
   const {
     viewport,
@@ -161,6 +164,21 @@ export const MapViewer: React.FC = () => {
     // [신규] .geobrief 프로젝트 입출력
     exportProjectFile,
     importProjectFile,
+    // [신규] 국방·보안 브리핑 3D 감시 센서 콘 & 정찰 드론(UAV)
+    surveillanceSensors,
+    isSensorPlacementMode,
+    selectedSensorFov,
+    selectedSensorRange,
+    toggleSensorPlacementMode,
+    setSelectedSensorFov,
+    setSelectedSensorRange,
+    addSurveillanceSensor,
+    removeSurveillanceSensor,
+    clearSurveillanceSensors,
+    uavFlight,
+    toggleUavFlight,
+    setUavCameraMode,
+    updateUavTelemetry,
   } = useMapStore();
 
   // 3D 주석 핀 인라인 편집 및 화면 투영 좌표 상태
@@ -1410,6 +1428,18 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] WaterLevelLayer registration warning:', wlErr);
       }
 
+      // [국방·보안 브리핑] 3D 감시 센서 콘 & UAV 정찰 드론 커스텀 레이어 등록
+      try {
+        const uavLayer = new UavSensorLayer();
+        uavLayer.onTelemetryUpdate = (telemetry) => {
+          updateUavTelemetry(telemetry.coords, telemetry.bearing, telemetry.elevation);
+        };
+        map.addLayer(uavLayer);
+        uavSensorLayerRef.current = uavLayer;
+      } catch (uavErr) {
+        console.warn('[MapViewer] UavSensorLayer registration warning:', uavErr);
+      }
+
       map.addControl(
         new maplibregl.NavigationControl({
           visualizePitch: true,
@@ -2377,14 +2407,14 @@ export const MapViewer: React.FC = () => {
 
     // 마우스 호버 커서 처리
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode) return;
+      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode || isSensorPlacementMode) return;
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
     };
 
     // 건물 클릭 처리
     const onMapClick = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode) return;
+      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode || isSensorPlacementMode) return;
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
@@ -2893,7 +2923,64 @@ export const MapViewer: React.FC = () => {
     };
   }, [spatialPins, isMapLoaded]);
 
-  // 26. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
+  // 26. [국방·보안 브리핑] 3D 감시 센서 콘 & 정찰 드론(UAV) 상태 동기화
+  useEffect(() => {
+    if (!uavSensorLayerRef.current) return;
+    uavSensorLayerRef.current.updateSensors(surveillanceSensors);
+  }, [surveillanceSensors]);
+
+  useEffect(() => {
+    if (!uavSensorLayerRef.current) return;
+    uavSensorLayerRef.current.updateUavState(uavFlight);
+  }, [uavFlight]);
+
+  useEffect(() => {
+    if (!uavSensorLayerRef.current) return;
+    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+    uavSensorLayerRef.current.updateSitePolygon(completedPolygon, center);
+  }, [completedPolygon, polygonCenter, viewport.longitude, viewport.latitude]);
+
+  // 27. [3D 감시 센서 콘 배치 모드] 인터랙션 리스너
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (isSensorPlacementMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+
+      const handleSensorClick = (e: maplibregl.MapMouseEvent) => {
+        const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const rawElev = map.queryTerrainElevation ? map.queryTerrainElevation(coords) : null;
+        const elevation = rawElev !== null && rawElev !== undefined ? Math.round(rawElev) : 120;
+
+        addSurveillanceSensor({
+          coords,
+          elevation,
+          mastHeightMeters: 15,
+          rangeMeters: selectedSensorRange || 300,
+          fovDegrees: selectedSensorFov || 90,
+          pitchDeg: 30,
+          yawDeg: Math.round(map.getBearing()),
+          name: `감시 초소 ${surveillanceSensors.length + 1}호기`,
+        });
+      };
+
+      map.on('click', handleSensorClick);
+      return () => {
+        map.getCanvas().style.cursor = '';
+        map.off('click', handleSensorClick);
+      };
+    }
+  }, [
+    isSensorPlacementMode,
+    isMapLoaded,
+    selectedSensorFov,
+    selectedSensorRange,
+    surveillanceSensors.length,
+    addSurveillanceSensor,
+  ]);
+
+  // 28. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
@@ -3922,6 +4009,69 @@ export const MapViewer: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* [3D 감시 센서 콘 배치 모드] 상단 인터랙티브 컨트롤 배너 */}
+        {isSensorPlacementMode && (
+          <div className="absolute top-20 right-16 z-30 pointer-events-auto animate-fade-in">
+            <div className="bg-[#06180f]/95 backdrop-blur-md border border-emerald-400 text-white px-4 py-2 rounded-2xl shadow-2xl text-xs flex items-center gap-3 ring-1 ring-emerald-500/50">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="font-extrabold text-emerald-300">
+                  [감시 센서 배치] 지도 위 설치 지점 클릭
+                </span>
+              </div>
+
+              {/* 수평 화각(FOV) 선택 칩 */}
+              <div className="flex items-center gap-1 bg-[#0f2d1e] px-2 py-1 rounded-lg border border-emerald-600/50">
+                <span className="text-[10px] text-slate-300 font-semibold">화각:</span>
+                {[60, 90, 120].map((deg) => (
+                  <button
+                    key={deg}
+                    type="button"
+                    onClick={() => setSelectedSensorFov(deg as 60 | 90 | 120)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                      selectedSensorFov === deg
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300 hover:text-white'
+                    }`}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+
+              {/* 유효 반경 선택 칩 */}
+              <div className="flex items-center gap-1 bg-[#0f2d1e] px-2 py-1 rounded-lg border border-emerald-600/50">
+                <span className="text-[10px] text-slate-300 font-semibold">반경:</span>
+                {[200, 300, 500].map((rng) => (
+                  <button
+                    key={rng}
+                    type="button"
+                    onClick={() => setSelectedSensorRange(rng)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                      selectedSensorRange === rng
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300 hover:text-white'
+                    }`}
+                  >
+                    {rng}m
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleSensorPlacementMode}
+                className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-200 text-[10px] font-bold transition-colors"
+              >
+                배치 종료
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* [국방·보안] UAV 정찰 드론 비행 HUD 오버레이 */}
+        <UavHudOverlay />
 
         {/* 도정·국방 표준 도면 표제란 (CAD Title Block) */}
         <TitleBlock siteName={metadata?.title || '강원 전략 군 유휴지'} />

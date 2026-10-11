@@ -176,6 +176,30 @@ export interface WaterLevelState {
   elevation: number; // EL. 50m ~ 300m
 }
 
+// [감시 초소/CCTV 3D 레이더 센서 콘 (Sensor FOV)]
+export interface SurveillanceSensor {
+  id: string;
+  coords: [number, number]; // [lng, lat]
+  elevation: number; // 지표면 표고 (EL. m)
+  mastHeightMeters: number; // 초소/감시탑 기둥 높이 (기본 15m)
+  rangeMeters: number; // 감시 유효 반경 (기본 300m)
+  fovDegrees: 60 | 90 | 120; // 수평 화각
+  pitchDeg: number; // 아래로 조준하는 틸트각 (기본 30도)
+  yawDeg: number; // 감시 방위각 (기본 0도)
+  name?: string;
+}
+
+// [정찰 드론(UAV) 3D 경로 비행 시뮬레이터 상태]
+export interface UavFlightState {
+  isActive: boolean;
+  cameraMode: 'orbit' | 'fpv'; // 3인칭 궤도 뷰 vs 1인칭 관측 뷰 (HUD)
+  speedKmh: number; // 비행 속도 (기본 40km/h)
+  altitudeMeters: number; // 대지 비행 고도 (기본 80m AGL)
+  currentLngLat?: [number, number];
+  currentBearing?: number;
+  currentElevation?: number;
+}
+
 // [.geobrief 브리핑 프로젝트 파일 규격]
 export interface GeoBriefProjectFile {
   version: '1.0';
@@ -194,5 +218,8 @@ export interface GeoBriefProjectFile {
   tacticalArrows: TacticalArrow[];
   waterLevel: WaterLevelState;
   sunHour: number;
+  sensors?: SurveillanceSensor[];
+  uavFlight?: UavFlightState;
 }
+
 

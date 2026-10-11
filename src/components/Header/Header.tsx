@@ -21,6 +21,9 @@ import {
   FileCheck,
   FileDown,
   FileUp,
+  Radio,
+  ShieldCheck,
+  Plane,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -55,6 +58,12 @@ export const Header: React.FC = () => {
     toggleTitleBlock,
     exportProjectFile,
     importProjectFile,
+    // [신규] 국방·보안 감시 센서 콘 & 정찰 드론(UAV)
+    surveillanceSensors,
+    isSensorPlacementMode,
+    toggleSensorPlacementMode,
+    uavFlight,
+    toggleUavFlight,
   } = useMapStore();
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -236,6 +245,45 @@ export const Header: React.FC = () => {
           {tacticalArrows.length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-amber-900 border border-amber-600 text-amber-200 text-[9.5px] font-mono">
               {tacticalArrows.length}
+            </span>
+          )}
+        </button>
+
+        {/* [신규] UAV 정찰 비행 시뮬레이터 버튼 */}
+        <button
+          onClick={toggleUavFlight}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            uavFlight.isActive
+              ? 'bg-emerald-600/50 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/70 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="UAV 3D 정찰 비행 시뮬레이터: 부지 외곽 순찰 비행 및 FPV 1인칭 HUD 관측 뷰 전환"
+        >
+          <Radio
+            className={`w-3.5 h-3.5 ${
+              uavFlight.isActive ? 'text-emerald-300 animate-spin' : 'text-emerald-400'
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {uavFlight.isActive ? 'UAV 정찰 중' : 'UAV 정찰'}
+          </span>
+        </button>
+
+        {/* [신규] 3D 감시 센서 콘 (Sensor FOV) 버튼 */}
+        <button
+          onClick={toggleSensorPlacementMode}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            isSensorPlacementMode
+              ? 'bg-teal-600/40 border-teal-400 text-teal-200 ring-1 ring-teal-400/60 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 감시 센서 콘(Sensor FOV): 초소/카메라 위치 클릭 시 반투명 3D 레이더 스캔 콘 배치"
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+          <span className="hidden sm:inline">센서 콘</span>
+          {surveillanceSensors.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-teal-900 border border-teal-600 text-teal-200 text-[9.5px] font-mono">
+              {surveillanceSensors.length}
             </span>
           )}
         </button>

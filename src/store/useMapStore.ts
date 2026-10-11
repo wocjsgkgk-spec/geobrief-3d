@@ -21,6 +21,8 @@ import {
   TacticalArrow,
   WaterLevelState,
   GeoBriefProjectFile,
+  SurveillanceSensor,
+  UavFlightState,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -326,6 +328,27 @@ interface MapStoreState {
   // [도정·국방 표준 도면 타이틀 블록]
   showTitleBlock: boolean;
   toggleTitleBlock: () => void;
+
+  // [국방·보안 브리핑] 3D 감시 센서 콘 (Sensor FOV Frustum)
+  surveillanceSensors: SurveillanceSensor[];
+  isSensorPlacementMode: boolean;
+  selectedSensorFov: 60 | 90 | 120;
+  selectedSensorRange: number;
+  toggleSensorPlacementMode: () => void;
+  setSelectedSensorFov: (fov: 60 | 90 | 120) => void;
+  setSelectedSensorRange: (range: number) => void;
+  addSurveillanceSensor: (sensor: Omit<SurveillanceSensor, 'id'>) => void;
+  updateSurveillanceSensor: (id: string, updates: Partial<SurveillanceSensor>) => void;
+  removeSurveillanceSensor: (id: string) => void;
+  clearSurveillanceSensors: () => void;
+
+  // [국방·보안 브리핑] 정찰 드론(UAV) 3D 경로 비행 시뮬레이터
+  uavFlight: UavFlightState;
+  toggleUavFlight: () => void;
+  setUavCameraMode: (mode: 'orbit' | 'fpv') => void;
+  setUavFlightSpeed: (speedKmh: number) => void;
+  setUavFlightAltitude: (altitudeMeters: number) => void;
+  updateUavTelemetry: (lngLat: [number, number], bearing: number, elevation: number) => void;
 
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
@@ -1027,6 +1050,71 @@ export const useMapStore = create<MapStoreState>()(
       showTitleBlock: true,
       toggleTitleBlock: () => set((state) => ({ showTitleBlock: !state.showTitleBlock })),
 
+      // [국방·보안 브리핑] 3D 감시 센서 콘 (Sensor FOV Frustum)
+      surveillanceSensors: [],
+      isSensorPlacementMode: false,
+      selectedSensorFov: 90,
+      selectedSensorRange: 300,
+      toggleSensorPlacementMode: () =>
+        set((state) => ({ isSensorPlacementMode: !state.isSensorPlacementMode })),
+      setSelectedSensorFov: (fov) => set({ selectedSensorFov: fov }),
+      setSelectedSensorRange: (range) => set({ selectedSensorRange: range }),
+      addSurveillanceSensor: (sensor) => {
+        const id = `sensor-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        set((state) => ({
+          surveillanceSensors: [...state.surveillanceSensors, { ...sensor, id }],
+          isSensorPlacementMode: false,
+        }));
+      },
+      updateSurveillanceSensor: (id, updates) =>
+        set((state) => ({
+          surveillanceSensors: state.surveillanceSensors.map((s) =>
+            s.id === id ? { ...s, ...updates } : s
+          ),
+        })),
+      removeSurveillanceSensor: (id) =>
+        set((state) => ({
+          surveillanceSensors: state.surveillanceSensors.filter((s) => s.id !== id),
+        })),
+      clearSurveillanceSensors: () => set({ surveillanceSensors: [] }),
+
+      // [국방·보안 브리핑] 정찰 드론(UAV) 3D 경로 비행 시뮬레이터
+      uavFlight: {
+        isActive: false,
+        cameraMode: 'orbit',
+        speedKmh: 40,
+        altitudeMeters: 80,
+      },
+      toggleUavFlight: () =>
+        set((state) => ({
+          uavFlight: {
+            ...state.uavFlight,
+            isActive: !state.uavFlight.isActive,
+            cameraMode: state.uavFlight.isActive ? 'orbit' : state.uavFlight.cameraMode,
+          },
+        })),
+      setUavCameraMode: (cameraMode) =>
+        set((state) => ({
+          uavFlight: { ...state.uavFlight, cameraMode },
+        })),
+      setUavFlightSpeed: (speedKmh) =>
+        set((state) => ({
+          uavFlight: { ...state.uavFlight, speedKmh },
+        })),
+      setUavFlightAltitude: (altitudeMeters) =>
+        set((state) => ({
+          uavFlight: { ...state.uavFlight, altitudeMeters },
+        })),
+      updateUavTelemetry: (currentLngLat, currentBearing, currentElevation) =>
+        set((state) => ({
+          uavFlight: {
+            ...state.uavFlight,
+            currentLngLat,
+            currentBearing,
+            currentElevation,
+          },
+        })),
+
       // [.geobrief 브리핑 프로젝트 파일 입출력]
       exportProjectFile: () => {
         const state = get();
@@ -1047,6 +1135,8 @@ export const useMapStore = create<MapStoreState>()(
           tacticalArrows: state.tacticalArrows,
           waterLevel: state.waterLevel,
           sunHour: state.sunHour,
+          sensors: state.surveillanceSensors,
+          uavFlight: state.uavFlight,
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
         try {
@@ -1089,6 +1179,13 @@ export const useMapStore = create<MapStoreState>()(
             tacticalArrows: data.tacticalArrows || [],
             waterLevel: data.waterLevel || { enabled: false, elevation: 100 },
             sunHour: data.sunHour ?? 14,
+            surveillanceSensors: data.sensors || [],
+            uavFlight: data.uavFlight || {
+              isActive: false,
+              cameraMode: 'orbit',
+              speedKmh: 40,
+              altitudeMeters: 80,
+            },
             viewport: targetVp,
             defenseAnalysisResult:
               data.completedPolygon && data.polygonCenter
@@ -1158,6 +1255,14 @@ export const useMapStore = create<MapStoreState>()(
           arrowDraftPoints: [],
           waterLevel: { enabled: false, elevation: 100 },
           showTitleBlock: true,
+          surveillanceSensors: [],
+          isSensorPlacementMode: false,
+          uavFlight: {
+            isActive: false,
+            cameraMode: 'orbit',
+            speedKmh: 40,
+            altitudeMeters: 80,
+          },
           viewport: {
             longitude: defaultRegion.center[0],
             latitude: defaultRegion.center[1],
@@ -1282,6 +1387,7 @@ export const useMapStore = create<MapStoreState>()(
         tacticalArrows: state.tacticalArrows,
         waterLevel: state.waterLevel,
         showTitleBlock: state.showTitleBlock,
+        surveillanceSensors: state.surveillanceSensors,
       }),
     }
   )
