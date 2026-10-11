@@ -12,6 +12,7 @@ import {
   Detail3DMode,
 } from '@/types/map';
 import { generateBuildingRoofsGroup } from '@/utils/proceduralRoofs';
+import { generateBuildingFacadesGroup } from '@/utils/proceduralFacades';
 
 /**
  * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
@@ -19,7 +20,7 @@ import { generateBuildingRoofsGroup } from '@/utils/proceduralRoofs';
  * - Directional Shadow Cascades (2048x2048, bias -0.0001, 동적 뷰포트 추적)
  * - terrain: true & map.queryTerrainElevation 기반 실시간 지형 밀착(Terrain Clamping)
  * - glTF/GLB 파일 비동기 로드 및 부재 시 정밀 절차적 3D 건축물 폴백 생성기
- * - [2단계 신규] Three.js 기반 LOD2 입체 경사 지붕 및 옥상 난간/권상기실 메쉬 렌더링
+ * - [2단계/3단계] Three.js 기반 LOD2 입체 지붕 및 실측 층고(3.0m)/창문(2.5m) UV 외벽 셰이더
  */
 export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   id = 'threebox-building-layer';
@@ -41,6 +42,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   // [2단계 신규: LOD2 입체 지붕 및 옥상 구조물]
   private roofsGroup: THREE.Group = new THREE.Group();
   private currentRoofsFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+
+  // [3단계 신규: LOD2 실측 층고 기준 UV 매핑 외벽 파사드]
+  private facadesGroup: THREE.Group = new THREE.Group();
 
   // [2단계 신규: 다중 3D 시설물 배치 및 인터랙티브 기즈모]
   private facilitiesGroup: THREE.Group = new THREE.Group();
@@ -217,6 +221,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.scene.add(this.buildingGroup);
     this.scene.add(this.facilitiesGroup);
     this.scene.add(this.roofsGroup);
+    this.scene.add(this.facadesGroup);
   }
 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
@@ -363,7 +368,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
 
       // 6. [Directional Shadow Cascades 동적 뷰포트 추적]
       if (this.directionalLight) {
-        const halfBound = Math.max(80, 80 * this.scaleRatio);
+        const halfBound = Math.max(250, 80 * this.scaleRatio);
         const cam = this.directionalLight.shadow.camera;
         cam.left = -halfBound;
         cam.right = halfBound;
@@ -454,8 +459,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     if (this.lodMode === mode) return;
     this.lodMode = mode;
 
-    // LOD2 경사 지붕 및 옥상 구조물 가시성 연동
+    // LOD2 경사 지붕 및 실측 UV 건축 외벽 가시성 연동
     this.roofsGroup.visible = mode === 'lod2';
+    this.facadesGroup.visible = mode === 'lod2';
     if (mode === 'lod2' && this.currentRoofsFeatures.length > 0 && this.roofsGroup.children.length === 0) {
       this.syncRoofs(this.currentRoofsFeatures);
     }
@@ -475,7 +481,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   }
 
   /**
-   * [2단계 신규] GeoJSON 건축물 외곽선 기반 LOD2 입체 지붕 및 옥상 구조물(Parapet & Elevator Core) 동기화
+   * [2단계 & 3단계] GeoJSON 건축물 외곽선 기반 LOD2 실측 외벽(1F로비/기준층) 및 입체 지붕 동기화
    */
   public syncRoofs(
     features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
@@ -490,29 +496,53 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     }
 
     this.clearRoofsGroup();
+    this.clearFacadesGroup();
 
     if (this.lodMode === 'lod2' && features && features.length > 0 && this.originLngLat) {
-      const group = generateBuildingRoofsGroup(
+      const elevFn = (coord: [number, number]) => {
+        if (this.map && this.map.queryTerrainElevation) {
+          const elev = this.map.queryTerrainElevation(coord);
+          if (elev !== null && elev !== undefined) {
+            return elev - this.clampedAltitude;
+          }
+        }
+        return 0;
+      };
+
+      // 1. [3단계 신규] 실측 층고(3.0m) 및 창문(2.5m) UV 매핑 절차적 건축 외벽 메쉬 생성
+      const facades = generateBuildingFacadesGroup(
         features,
         this.originLngLat,
-        (coord) => {
-          if (this.map && this.map.queryTerrainElevation) {
-            const elev = this.map.queryTerrainElevation(coord);
-            if (elev !== null && elev !== undefined) {
-              return elev - this.clampedAltitude;
-            }
-          }
-          return 0;
-        }
+        elevFn
       );
-      this.roofsGroup.add(group);
+      this.facadesGroup.add(facades);
+
+      // 2. [2단계] LOD2 입체 지붕 및 옥상 구조물 생성
+      const roofs = generateBuildingRoofsGroup(
+        features,
+        this.originLngLat,
+        elevFn
+      );
+      this.roofsGroup.add(roofs);
     }
 
     this.roofsGroup.visible = this.lodMode === 'lod2';
+    this.facadesGroup.visible = this.lodMode === 'lod2';
     this.isVisible = true;
 
     if (this.map) {
       this.map.triggerRepaint();
+    }
+  }
+
+  /**
+   * 외벽 메쉬 그룹 메모리 해제 및 클리어
+   */
+  public clearFacadesGroup(): void {
+    while (this.facadesGroup.children.length > 0) {
+      const child = this.facadesGroup.children[0];
+      this.facadesGroup.remove(child);
+      this.disposeObject(child);
     }
   }
 
@@ -941,7 +971,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   setVisible(visible: boolean): void {
     this.buildingGroup.visible = visible;
     this.roofsGroup.visible = visible && this.lodMode === 'lod2';
-    this.isVisible = visible || this.facilityMeshes.size > 0 || (this.roofsGroup.visible && this.roofsGroup.children.length > 0);
+    this.facadesGroup.visible = visible && this.lodMode === 'lod2';
+    this.isVisible = visible || this.facilityMeshes.size > 0 ||
+      (this.roofsGroup.visible && this.roofsGroup.children.length > 0) ||
+      (this.facadesGroup.visible && this.facadesGroup.children.length > 0);
     if (this.map) {
       this.map.triggerRepaint();
     }
@@ -1973,6 +2006,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.clearBuildingGroup();
     this.clearFacilitiesGroup();
     this.clearRoofsGroup();
+    this.clearFacadesGroup();
     if (this.transformControls) {
       this.transformControls.dispose();
       this.transformControls = null;
