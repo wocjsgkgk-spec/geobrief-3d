@@ -64,6 +64,7 @@ import {
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
+import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { AddressSearch } from '@/components/Search/AddressSearch';
 import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
 import { useMapStore } from '@/store/useMapStore';
@@ -459,6 +460,24 @@ export const ControlPanel: React.FC = () => {
                     </span>
                   ))}
                 </div>
+
+                {/* 3D 거점 모델 연동 상태 */}
+                {STRATEGIC_SITES_3D[currentSite.id] && (
+                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-800/40 text-[10.5px] text-cyan-200/90 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-cyan-400 text-[9.5px] uppercase tracking-wider flex items-center gap-1">
+                        <Box className="w-3 h-3 text-cyan-400" />
+                        강원 거점 정밀 3D 건축 모델 자동 안착
+                      </span>
+                      <span className="text-[9px] font-mono bg-cyan-900/60 px-1.5 py-0.5 rounded text-cyan-300 border border-cyan-700/60 font-semibold">
+                        {STRATEGIC_SITES_3D[currentSite.id].facilities.length}개동 연동
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-300">
+                      {STRATEGIC_SITES_3D[currentSite.id].description}
+                    </p>
+                  </div>
+                )}
 
                 {/* 원클릭 카메라 비행 버튼 */}
                 <button

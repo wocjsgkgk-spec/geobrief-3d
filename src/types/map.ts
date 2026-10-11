@@ -206,6 +206,9 @@ export interface PlacedFacility3D {
 // 3D 변환 기즈모 조작 모드
 export type TransformGizmoMode = 'translate' | 'rotate' | 'scale';
 
+// [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+)]
+export type Detail3DMode = 'lod1' | 'lod2';
+
 export * from './defense';
 export * from './infrastructure';
 
@@ -408,6 +411,7 @@ export interface GeoBriefProjectFile {
     loop: boolean;
     showOsd: boolean;
   };
+  detail3DMode?: Detail3DMode;
 }
 
 // [3단계 신규: 반구형 3D 레이더/방공 센서 탐지 돔]

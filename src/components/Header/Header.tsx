@@ -27,6 +27,7 @@ import {
   Boxes,
   Film,
   Video,
+  Sparkles,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -73,6 +74,9 @@ export const Header: React.FC = () => {
     // [4단계 신규: 3D 시네마틱 카메라 패스 및 녹화 엔진]
     cinematicFlight,
     setCinematicBuilderOpen,
+    // [3D 디테일 LOD 토글 스위치: 일반(LOD1) / 실감(LOD2+)]
+    detail3DMode,
+    toggleDetail3DMode,
   } = useMapStore();
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -328,6 +332,29 @@ export const Header: React.FC = () => {
         >
           <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span className="hidden sm:inline">도면 표제란</span>
+        </button>
+
+        {/* [신규 2단계] 3D 디테일: 일반(LOD1) / 실감(LOD2+) 토글 스위치 */}
+        <button
+          onClick={toggleDetail3DMode}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            detail3DMode === 'lod2'
+              ? 'bg-amber-600/35 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 그래픽 디테일 전환: 일반(LOD1 - 경량 단색/절차적 기본) ⇄ 실감(LOD2+ - 외벽 파사드 텍스처, 정밀 박공지붕, 헬리패드, 트러스, 격자감시탑)"
+        >
+          <Sparkles className={`w-3.5 h-3.5 ${detail3DMode === 'lod2' ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
+          <span className="hidden sm:inline">3D 디테일:</span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              detail3DMode === 'lod2'
+                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
+                : 'bg-slate-800 text-slate-300 border border-slate-700'
+            }`}
+          >
+            {detail3DMode === 'lod2' ? '실감(LOD2+)' : '일반(LOD1)'}
+          </span>
         </button>
 
         {/* [신규] 4단계: 3D 시네마틱 카메라 경로 빌더 버튼 */}

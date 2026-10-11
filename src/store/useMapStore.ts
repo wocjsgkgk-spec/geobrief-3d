@@ -38,12 +38,14 @@ import {
   LosAnalysisState,
   CinematicWaypoint,
   CinematicFlightState,
+  Detail3DMode,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
 import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
 import { BORDER_DISTRICT_IDS } from '@/constants/borderSecurityZones';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
+import { generateStrategicFacilities, STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { generateSpiralPreset, generateApproachPreset } from '@/utils/cinematicPathInterpolator';
 import type { CloudProject } from '@/lib/supabase';
 
@@ -438,6 +440,11 @@ interface MapStoreState {
     updates: Partial<Pick<PlacedFacility3D, 'coords' | 'elevation' | 'rotationY' | 'scale' | 'heightMeters' | 'name'>>
   ) => void;
   setTransformGizmoMode: (mode: TransformGizmoMode) => void;
+
+  // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+) 토글 스위치]
+  detail3DMode: Detail3DMode;
+  setDetail3DMode: (mode: Detail3DMode) => void;
+  toggleDetail3DMode: () => void;
 
   // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
   threatDome: ThreatDomeState;
@@ -969,13 +976,17 @@ export const useMapStore = create<MapStoreState>()(
         const defResult = analyzeDefenseRegulations(poly, center);
         const accessResult = analyzeAccessibility(center, get().accessibilityResult?.rows);
 
+        const strategicCfg = STRATEGIC_SITES_3D[siteId];
+        const cam = strategicCfg?.recommendedCamera || found.recommendedCamera;
         const targetVp: ViewportState = {
           longitude: center[0],
           latitude: center[1],
-          zoom: found.recommendedCamera.zoom,
-          pitch: found.recommendedCamera.pitch,
-          bearing: found.recommendedCamera.bearing,
+          zoom: cam.zoom,
+          pitch: cam.pitch,
+          bearing: cam.bearing,
         };
+
+        const strategicFacilities = generateStrategicFacilities(siteId, 100);
 
         set({
           selectedIdleSiteId: siteId,
@@ -990,6 +1001,10 @@ export const useMapStore = create<MapStoreState>()(
           defenseAnalysisResult: defResult,
           accessibilityResult: accessResult,
           viewMode: '3D',
+          placedFacilities:
+            strategicFacilities.length > 0 ? strategicFacilities : get().placedFacilities,
+          selectedFacilityId:
+            strategicFacilities.length > 0 ? strategicFacilities[0].id : null,
           metadata: {
             ...get().metadata,
             title: `${found.name} 공간 분석 보고서`,
@@ -1372,9 +1387,15 @@ export const useMapStore = create<MapStoreState>()(
         })),
 
       // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls 관리]
-      placedFacilities: [],
+      placedFacilities: generateStrategicFacilities('camp-long-wonju', 100),
       selectedFacilityId: null,
       transformGizmoMode: 'translate',
+
+      // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+) 토글 관리]
+      detail3DMode: 'lod2',
+      setDetail3DMode: (mode) => set({ detail3DMode: mode }),
+      toggleDetail3DMode: () =>
+        set((s) => ({ detail3DMode: s.detail3DMode === 'lod2' ? 'lod1' : 'lod2' })),
 
       addPlacedFacility: (presetId, customCoords, customElevation) => {
         const state = get();
@@ -1664,6 +1685,7 @@ export const useMapStore = create<MapStoreState>()(
             loop: state.cinematicFlight.loop,
             showOsd: state.cinematicFlight.showOsd,
           },
+          detail3DMode: state.detail3DMode,
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
         try {
@@ -1706,6 +1728,7 @@ export const useMapStore = create<MapStoreState>()(
             tacticalArrows: data.tacticalArrows || [],
             waterLevel: data.waterLevel || { enabled: false, elevation: 100 },
             sunHour: data.sunHour ?? 14,
+            detail3DMode: data.detail3DMode || get().detail3DMode,
             surveillanceSensors: data.sensors || [],
             uavFlight: data.uavFlight || {
               isActive: false,

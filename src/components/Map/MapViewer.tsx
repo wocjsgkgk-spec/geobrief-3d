@@ -218,6 +218,7 @@ export const MapViewer: React.FC = () => {
     updateFacilityTransform,
     removePlacedFacility,
     setTransformGizmoMode,
+    detail3DMode,
     // [3단계 신규: 3D 전술 탐지 돔, 3D 보안 펜스, 입체 LOS 가시선]
     threatDome,
     securityWall,
@@ -2187,6 +2188,32 @@ export const MapViewer: React.FC = () => {
       threeboxLayerRef.current.setGizmoMode(transformGizmoMode);
     }
   }, [transformGizmoMode]);
+
+  // 8-0-2-1. [3D 디테일 LOD (LOD1 일반 / LOD2+ 실감) 모드 실시간 동기화]
+  useEffect(() => {
+    if (threeboxLayerRef.current) {
+      threeboxLayerRef.current.setLodMode(detail3DMode);
+    }
+    const map = mapRef.current;
+    if (map && isMapLoaded) {
+      const isVisible = layers.buildings3D;
+      if (detail3DMode === 'lod1') {
+        if (map.getLayer('3d-buildings')) {
+          map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+        }
+        if (map.getLayer('3d-buildings-lod0')) {
+          map.setLayoutProperty('3d-buildings-lod0', 'visibility', isVisible ? 'visible' : 'none');
+        }
+      } else {
+        if (map.getLayer('3d-buildings')) {
+          map.setLayoutProperty('3d-buildings', 'visibility', isVisible ? 'visible' : 'none');
+        }
+        if (map.getLayer('3d-buildings-lod0')) {
+          map.setLayoutProperty('3d-buildings-lod0', 'visibility', isVisible ? 'visible' : 'none');
+        }
+      }
+    }
+  }, [detail3DMode, layers.buildings3D, isMapLoaded]);
 
   // 8-0-3. [기즈모 조작 핫키 지원: W(이동) / E(회전) / R(크기) / Esc(해제) / Del(삭제)]
   useEffect(() => {
