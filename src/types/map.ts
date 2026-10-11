@@ -402,6 +402,12 @@ export interface GeoBriefProjectFile {
     pointB: LosPoint | null;
     result: LosAnalysisResult | null;
   };
+  cinematicFlight?: {
+    waypoints: CinematicWaypoint[];
+    durationSec: number;
+    loop: boolean;
+    showOsd: boolean;
+  };
 }
 
 // [3단계 신규: 반구형 3D 레이더/방공 센서 탐지 돔]
@@ -455,6 +461,33 @@ export interface LosAnalysisState {
   pointB: LosPoint | null;
   result: LosAnalysisResult | null;
 }
+
+// =========================================================================
+// [4단계 신규: 웨이포인트 기반 3D 시네마틱 카메라 패스 및 녹화 엔진]
+// =========================================================================
+
+export interface CinematicWaypoint {
+  id: string;
+  name: string;
+  longitude: number;
+  latitude: number;
+  zoom: number;
+  pitch: number;
+  bearing: number;
+}
+
+export interface CinematicFlightState {
+  waypoints: CinematicWaypoint[];
+  durationSec: number; // 기본: 30초 (15, 30, 60 등)
+  isPlaying: boolean;
+  isRecording: boolean;
+  progress: number; // 0.0 ~ 1.0
+  currentTimeSec: number;
+  loop: boolean;
+  showOsd: boolean;
+  isBuilderOpen: boolean;
+}
+
 
 
 

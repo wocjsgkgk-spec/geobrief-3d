@@ -25,6 +25,8 @@ import {
   ShieldCheck,
   Plane,
   Boxes,
+  Film,
+  Video,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -68,6 +70,9 @@ export const Header: React.FC = () => {
     // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
     cutFill,
     toggleCutFill,
+    // [4단계 신규: 3D 시네마틱 카메라 패스 및 녹화 엔진]
+    cinematicFlight,
+    setCinematicBuilderOpen,
   } = useMapStore();
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -325,7 +330,40 @@ export const Header: React.FC = () => {
           <span className="hidden sm:inline">도면 표제란</span>
         </button>
 
-        {/* [신규] .geobrief 단일 프로젝트 파일 내보내기/가져오기 */}
+        {/* [신규] 4단계: 3D 시네마틱 카메라 경로 빌더 버튼 */}
+        <button
+          onClick={() => setCinematicBuilderOpen(true)}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            cinematicFlight.isPlaying || cinematicFlight.isBuilderOpen
+              ? 'bg-cyan-600/50 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/70 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="웨이포인트 기반 3D 시네마틱 카메라 비행 경로 빌더 & 1080p 동영상 녹화기"
+        >
+          <Film className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden sm:inline">시네마틱 경로</span>
+          {cinematicFlight.waypoints.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-cyan-950 border border-cyan-600 text-cyan-300 text-[9.5px] font-mono">
+              {cinematicFlight.waypoints.length} WP
+            </span>
+          )}
+        </button>
+
+        {/* [신규] 4단계: 🔴 브리핑 영상 녹화 버튼 */}
+        <button
+          onClick={() => setCinematicBuilderOpen(true)}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-bold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            cinematicFlight.isRecording
+              ? 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-950 ring-1 ring-rose-400 animate-pulse'
+              : 'bg-[#1b221e] border-[#3d2729] text-rose-300 hover:text-white hover:bg-rose-950/60'
+          }`}
+          title="Canvas Stream 기반 1080p 60fps 고해상도 브리핑 영상 실시간 녹화 & 자동 다운로드"
+        >
+          <Video className="w-3.5 h-3.5 text-rose-400" />
+          <span className="hidden sm:inline">
+            {cinematicFlight.isRecording ? '🔴 녹화 중' : '영상 녹화'}
+          </span>
+        </button>
         <div className="flex items-center space-x-1 border-l border-r border-[#242f27] px-1 sm:px-1.5">
           <button
             onClick={handleExportGeobrief}

@@ -36,12 +36,15 @@ import {
   LosPoint,
   LosAnalysisResult,
   LosAnalysisState,
+  CinematicWaypoint,
+  CinematicFlightState,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
 import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
 import { BORDER_DISTRICT_IDS } from '@/constants/borderSecurityZones';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
+import { generateSpiralPreset, generateApproachPreset } from '@/utils/cinematicPathInterpolator';
 import type { CloudProject } from '@/lib/supabase';
 
 export const SAMPLE_3D_TILES_PRESETS: Record<
@@ -171,6 +174,18 @@ export function createStampPolygon(
 export const WONJU_DEFAULT_CENTER: [number, number] = [127.925, 37.342];
 export const WONJU_DEFAULT_POLYGON = createStampPolygon(WONJU_DEFAULT_CENTER, 16529, 'rectangle');
 export const WONJU_DEFAULT_AREA: PolygonArea = { sqm: 16529, pyeong: 5000 };
+
+export const INITIAL_CINEMATIC_FLIGHT: CinematicFlightState = {
+  waypoints: [],
+  durationSec: 30,
+  isPlaying: false,
+  isRecording: false,
+  progress: 0,
+  currentTimeSec: 0,
+  loop: false,
+  showOsd: true,
+  isBuilderOpen: false,
+};
 
 interface MapStoreState {
   // 뷰포트 상태
@@ -438,6 +453,22 @@ interface MapStoreState {
   setLosPointB: (point: LosPoint) => void;
   setLosResult: (result: LosAnalysisResult | null) => void;
   resetLosAnalysis: () => void;
+
+  // [4단계 신규: 웨이포인트 3D 시네마틱 카메라 패스 및 녹화 엔진]
+  cinematicFlight: CinematicFlightState;
+  setCinematicWaypoints: (waypoints: CinematicWaypoint[]) => void;
+  addCinematicWaypoint: (wp: CinematicWaypoint) => void;
+  removeCinematicWaypoint: (id: string) => void;
+  updateCinematicWaypoint: (id: string, updates: Partial<CinematicWaypoint>) => void;
+  setCinematicDuration: (durationSec: number) => void;
+  setCinematicPlaying: (isPlaying: boolean) => void;
+  setCinematicRecording: (isRecording: boolean) => void;
+  setCinematicProgress: (progress: number, currentTimeSec: number) => void;
+  toggleCinematicLoop: () => void;
+  toggleCinematicOsd: () => void;
+  setCinematicBuilderOpen: (isOpen: boolean) => void;
+  loadCinematicPreset: (preset: 'spiral' | 'approach', center?: [number, number]) => void;
+  resetCinematicFlight: () => void;
 
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
@@ -1492,6 +1523,98 @@ export const useMapStore = create<MapStoreState>()(
           },
         }),
 
+      // [4단계 신규: 웨이포인트 3D 시네마틱 카메라 패스 및 녹화 엔진]
+      cinematicFlight: INITIAL_CINEMATIC_FLIGHT,
+
+      setCinematicWaypoints: (waypoints) =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, waypoints },
+        })),
+
+      addCinematicWaypoint: (wp) =>
+        set((s) => ({
+          cinematicFlight: {
+            ...s.cinematicFlight,
+            waypoints: [...s.cinematicFlight.waypoints, wp],
+          },
+        })),
+
+      removeCinematicWaypoint: (id) =>
+        set((s) => ({
+          cinematicFlight: {
+            ...s.cinematicFlight,
+            waypoints: s.cinematicFlight.waypoints.filter((w) => w.id !== id),
+          },
+        })),
+
+      updateCinematicWaypoint: (id, updates) =>
+        set((s) => ({
+          cinematicFlight: {
+            ...s.cinematicFlight,
+            waypoints: s.cinematicFlight.waypoints.map((w) =>
+              w.id === id ? { ...w, ...updates } : w
+            ),
+          },
+        })),
+
+      setCinematicDuration: (durationSec) =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, durationSec },
+        })),
+
+      setCinematicPlaying: (isPlaying) =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, isPlaying },
+        })),
+
+      setCinematicRecording: (isRecording) =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, isRecording },
+        })),
+
+      setCinematicProgress: (progress, currentTimeSec) =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, progress, currentTimeSec },
+        })),
+
+      toggleCinematicLoop: () =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, loop: !s.cinematicFlight.loop },
+        })),
+
+      toggleCinematicOsd: () =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, showOsd: !s.cinematicFlight.showOsd },
+        })),
+
+      setCinematicBuilderOpen: (isBuilderOpen) =>
+        set((s) => ({
+          cinematicFlight: { ...s.cinematicFlight, isBuilderOpen },
+        })),
+
+      loadCinematicPreset: (preset, customCenter) => {
+        const center =
+          customCenter ||
+          get().polygonCenter ||
+          [get().viewport.longitude, get().viewport.latitude];
+        const waypoints =
+          preset === 'spiral'
+            ? generateSpiralPreset(center)
+            : generateApproachPreset(center);
+        set((s) => ({
+          cinematicFlight: {
+            ...s.cinematicFlight,
+            waypoints,
+            progress: 0,
+            currentTimeSec: 0,
+            isPlaying: false,
+          },
+        }));
+      },
+
+      resetCinematicFlight: () =>
+        set({ cinematicFlight: INITIAL_CINEMATIC_FLIGHT }),
+
       // [.geobrief 브리핑 프로젝트 파일 입출력]
       exportProjectFile: () => {
         const state = get();
@@ -1534,6 +1657,12 @@ export const useMapStore = create<MapStoreState>()(
             pointA: state.losAnalysis.pointA,
             pointB: state.losAnalysis.pointB,
             result: state.losAnalysis.result,
+          },
+          cinematicFlight: {
+            waypoints: state.cinematicFlight.waypoints,
+            durationSec: state.cinematicFlight.durationSec,
+            loop: state.cinematicFlight.loop,
+            showOsd: state.cinematicFlight.showOsd,
           },
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
@@ -1620,6 +1749,15 @@ export const useMapStore = create<MapStoreState>()(
                   result: data.losAnalysis.result,
                 }
               : get().losAnalysis,
+            cinematicFlight: data.cinematicFlight
+              ? {
+                  ...INITIAL_CINEMATIC_FLIGHT,
+                  waypoints: data.cinematicFlight.waypoints || [],
+                  durationSec: data.cinematicFlight.durationSec || 30,
+                  loop: !!data.cinematicFlight.loop,
+                  showOsd: data.cinematicFlight.showOsd ?? true,
+                }
+              : get().cinematicFlight,
             defenseAnalysisResult:
               data.completedPolygon && data.polygonCenter
                 ? analyzeDefenseRegulations(data.completedPolygon, data.polygonCenter)
@@ -1737,6 +1875,7 @@ export const useMapStore = create<MapStoreState>()(
             pointB: null,
             result: null,
           },
+          cinematicFlight: INITIAL_CINEMATIC_FLIGHT,
           viewport: {
             longitude: defaultRegion.center[0],
             latitude: defaultRegion.center[1],
@@ -1874,6 +2013,12 @@ export const useMapStore = create<MapStoreState>()(
           opacity: state.tile3DStream.opacity,
           maximumScreenSpaceError: state.tile3DStream.maximumScreenSpaceError,
           pointSize: state.tile3DStream.pointSize,
+        },
+        cinematicFlight: {
+          waypoints: state.cinematicFlight.waypoints,
+          durationSec: state.cinematicFlight.durationSec,
+          loop: state.cinematicFlight.loop,
+          showOsd: state.cinematicFlight.showOsd,
         },
       }),
     }

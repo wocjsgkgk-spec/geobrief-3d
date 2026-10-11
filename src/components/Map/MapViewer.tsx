@@ -58,6 +58,11 @@ import { UavHudOverlay } from './UavHudOverlay';
 import { CutFillSummaryCard } from './CutFillSummaryCard';
 import { Deck3DTilesManager } from './Deck3DTilesOverlay';
 import { TacticalDefenseLayer } from './TacticalDefenseLayer';
+import { CinematicBuilderModal } from '@/components/Cinematic/CinematicBuilderModal';
+import { CinematicOsdOverlay } from '@/components/Cinematic/CinematicOsdOverlay';
+import { CanvasVideoRecorder } from '@/utils/canvasVideoRecorder';
+import { interpolateCinematicCamera } from '@/utils/cinematicPathInterpolator';
+import { CinematicWaypoint } from '@/types/map';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -79,6 +84,9 @@ export const MapViewer: React.FC = () => {
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
   const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
   const tacticalDefenseLayerRef = useRef<TacticalDefenseLayer | null>(null);
+  const videoRecorderRef = useRef<CanvasVideoRecorder | null>(null);
+  const cinematicAnimRef = useRef<number | null>(null);
+  const cinematicStartTimeRef = useRef<number>(0);
 
   const {
     viewport,
@@ -222,6 +230,12 @@ export const MapViewer: React.FC = () => {
     setLosPointB,
     setLosResult,
     resetLosAnalysis,
+    // [4단계 신규: 3D 시네마틱 카메라 패스 및 녹화 엔진]
+    cinematicFlight,
+    setCinematicProgress,
+    setCinematicPlaying,
+    setCinematicRecording,
+    setCinematicBuilderOpen,
   } = useMapStore();
 
   // 토공량 격자 셀 호버 툴팁 상태
@@ -3353,6 +3367,162 @@ export const MapViewer: React.FC = () => {
     setLosPointB,
   ]);
 
+  // =========================================================================
+  // 31. [4단계 신규: 웨이포인트 기반 3D 시네마틱 카메라 패스 및 녹화 엔진]
+  // =========================================================================
+
+  // 특정 웨이포인트로 카메라 비행
+  const handleFlyToWaypoint = useCallback((wp: CinematicWaypoint) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({
+      center: [wp.longitude, wp.latitude],
+      zoom: wp.zoom,
+      pitch: wp.pitch,
+      bearing: wp.bearing,
+      duration: 1500,
+      essential: true,
+    });
+  }, []);
+
+  // 비디오 녹화 종료 및 WebM/MP4 자동 다운로드
+  const handleStopRecording = useCallback(async () => {
+    setCinematicRecording(false);
+    if (videoRecorderRef.current) {
+      const blob = await videoRecorderRef.current.stop();
+      videoRecorderRef.current = null;
+      if (blob) {
+        const safeTitle = (metadata.title || 'GeoBrief_3D').replace(/[\\/:*?"<>|]/g, '_');
+        CanvasVideoRecorder.download(blob, `${safeTitle}_3D시네마틱_브리핑`);
+      }
+    }
+  }, [metadata.title, setCinematicRecording]);
+
+  // 비행 시작
+  const handleStartFlight = useCallback(() => {
+    if (cinematicFlight.waypoints.length < 2) return;
+    cinematicStartTimeRef.current =
+      performance.now() - cinematicFlight.currentTimeSec * 1000;
+    setCinematicPlaying(true);
+  }, [cinematicFlight.waypoints.length, cinematicFlight.currentTimeSec, setCinematicPlaying]);
+
+  // 비행 일시정지
+  const handlePauseFlight = useCallback(() => {
+    setCinematicPlaying(false);
+    if (cinematicAnimRef.current) {
+      cancelAnimationFrame(cinematicAnimRef.current);
+      cinematicAnimRef.current = null;
+    }
+  }, [setCinematicPlaying]);
+
+  // 비행 완전 정지
+  const handleStopFlight = useCallback(() => {
+    setCinematicPlaying(false);
+    setCinematicProgress(0, 0);
+    if (cinematicAnimRef.current) {
+      cancelAnimationFrame(cinematicAnimRef.current);
+      cinematicAnimRef.current = null;
+    }
+    if (cinematicFlight.isRecording) {
+      handleStopRecording();
+    }
+  }, [cinematicFlight.isRecording, handleStopRecording, setCinematicPlaying, setCinematicProgress]);
+
+  // 🔴 캔버스 녹화와 함께 시네마틱 비행 시작
+  const handleStartRecordingWithFlight = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || cinematicFlight.waypoints.length < 2) return;
+
+    const canvas = map.getCanvas();
+    if (!canvas) return;
+
+    const recorder = new CanvasVideoRecorder();
+    const ok = recorder.start(canvas, { fps: 60, videoBitrate: 8000000 });
+    if (!ok) {
+      alert('브라우저에서 비디오 녹화(MediaRecorder)를 시작하지 못했습니다.');
+      return;
+    }
+
+    videoRecorderRef.current = recorder;
+    setCinematicRecording(true);
+    setCinematicProgress(0, 0);
+    cinematicStartTimeRef.current = performance.now();
+    setCinematicPlaying(true);
+  }, [cinematicFlight.waypoints.length, setCinematicRecording, setCinematicProgress, setCinematicPlaying]);
+
+  // Catmull-Rom 스플라인 카메라 비행 애니메이션 루프
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !cinematicFlight.isPlaying || cinematicFlight.waypoints.length < 2) {
+      if (cinematicAnimRef.current) {
+        cancelAnimationFrame(cinematicAnimRef.current);
+        cinematicAnimRef.current = null;
+      }
+      return;
+    }
+
+    let active = true;
+
+    const animateStep = () => {
+      if (!active) return;
+
+      const now = performance.now();
+      const elapsedSec = Math.max(0, (now - cinematicStartTimeRef.current) / 1000);
+      let progress = elapsedSec / cinematicFlight.durationSec;
+
+      if (progress >= 1.0) {
+        if (cinematicFlight.loop) {
+          cinematicStartTimeRef.current = performance.now();
+          progress = 0;
+        } else {
+          // 비행 완료
+          setCinematicProgress(1.0, cinematicFlight.durationSec);
+          setCinematicPlaying(false);
+          if (cinematicFlight.isRecording) {
+            handleStopRecording();
+          }
+          return;
+        }
+      }
+
+      const cam = interpolateCinematicCamera(
+        cinematicFlight.waypoints,
+        progress,
+        cinematicFlight.loop
+      );
+
+      map.jumpTo({
+        center: [cam.longitude, cam.latitude],
+        zoom: cam.zoom,
+        pitch: cam.pitch,
+        bearing: cam.bearing,
+      });
+
+      setCinematicProgress(progress, Math.min(elapsedSec, cinematicFlight.durationSec));
+
+      cinematicAnimRef.current = requestAnimationFrame(animateStep);
+    };
+
+    cinematicAnimRef.current = requestAnimationFrame(animateStep);
+
+    return () => {
+      active = false;
+      if (cinematicAnimRef.current) {
+        cancelAnimationFrame(cinematicAnimRef.current);
+        cinematicAnimRef.current = null;
+      }
+    };
+  }, [
+    cinematicFlight.isPlaying,
+    cinematicFlight.waypoints,
+    cinematicFlight.durationSec,
+    cinematicFlight.loop,
+    cinematicFlight.isRecording,
+    handleStopRecording,
+    setCinematicPlaying,
+    setCinematicProgress,
+  ]);
+
   // 30. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -4668,6 +4838,22 @@ export const MapViewer: React.FC = () => {
           </div>
         )}
 
+        {/* [4단계 신규] 3D 시네마틱 방송용 OSD 레터박스 및 비행 계기판 오버레이 */}
+        <CinematicOsdOverlay
+          currentBearing={currentBearing}
+          currentPitch={currentPitch}
+          currentZoom={currentZoom}
+          currentLng={viewport.longitude}
+          currentLat={viewport.latitude}
+          currentElevation={
+            mapRef.current?.queryTerrainElevation
+              ? (mapRef.current.queryTerrainElevation([viewport.longitude, viewport.latitude]) || 180)
+              : 180
+          }
+          onStopFlight={handleStopFlight}
+          onStopRecording={handleStopRecording}
+        />
+
         {/* 16:9 규격 워터마크 태그 */}
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-10">
           <span className="text-[10px] tracking-wider text-slate-400/60 font-mono uppercase bg-black/40 px-2 py-0.5 rounded backdrop-blur-sm border border-white/5">
@@ -4685,6 +4871,24 @@ export const MapViewer: React.FC = () => {
         onClose={() => setShowTerrainProfile(false)}
         slopeResult={slopeAnalysisResult}
         profileResult={elevationProfileResult}
+      />
+
+      {/* [4단계 신규] 3D 시네마틱 카메라 비행 경로 빌더 & 동영상 녹화 모달 */}
+      <CinematicBuilderModal
+        isOpen={cinematicFlight.isBuilderOpen}
+        onClose={() => setCinematicBuilderOpen(false)}
+        currentViewport={{
+          longitude: viewport.longitude,
+          latitude: viewport.latitude,
+          zoom: viewport.zoom,
+          pitch: viewport.pitch,
+          bearing: viewport.bearing,
+        }}
+        onFlyToWaypoint={handleFlyToWaypoint}
+        onStartFlight={handleStartFlight}
+        onPauseFlight={handlePauseFlight}
+        onStopFlight={handleStopFlight}
+        onStartRecordingWithFlight={handleStartRecordingWithFlight}
       />
     </div>
   );
