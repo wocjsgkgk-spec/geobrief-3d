@@ -25,6 +25,8 @@ import {
   UavFlightState,
   CutFillResult,
   CutFillState,
+  Tile3DStreamState,
+  Tile3DPresetId,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -32,6 +34,30 @@ import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
 import { BORDER_DISTRICT_IDS } from '@/constants/borderSecurityZones';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import type { CloudProject } from '@/lib/supabase';
+
+export const SAMPLE_3D_TILES_PRESETS: Record<
+  Tile3DPresetId,
+  { name: string; url: string; type: 'b3dm' | 'pnts' | 'custom'; description: string }
+> = {
+  custom: {
+    name: '사용자 지정 URL',
+    url: '',
+    type: 'custom',
+    description: '직접 입력한 3D Tiles (tileset.json) 스트리밍 엔드포인트',
+  },
+  sample_city: {
+    name: 'Cesium 도시 건축물 (b3dm)',
+    url: 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/tileset.json',
+    type: 'b3dm',
+    description: '오픈 3D 건물 모델 타일셋 (텍스처 및 정밀 메쉬 포함)',
+  },
+  sample_pointcloud: {
+    name: '라이다 포인트 클라우드 (LiDAR pnts)',
+    url: 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudRGB/tileset.json',
+    type: 'pnts',
+    description: '항공 라이다 RGB 3D 정밀 점군 데이터셋',
+  },
+};
 
 export interface BufferRingsState {
   r500m: boolean;
@@ -361,6 +387,17 @@ interface MapStoreState {
   setCutFillResult: (result: CutFillResult | null) => void;
   setCutFillCalculating: (isCalculating: boolean) => void;
   resetCutFill: () => void;
+
+  // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
+  tile3DStream: Tile3DStreamState;
+  toggleTile3DStream: () => void;
+  setTile3DStreamEnabled: (enabled: boolean) => void;
+  setTile3DStreamUrl: (url: string) => void;
+  setTile3DStreamPreset: (presetId: Tile3DPresetId) => void;
+  setTile3DStreamOpacity: (opacity: number) => void;
+  setTile3DStreamSse: (maximumScreenSpaceError: number) => void;
+  setTile3DStreamPointSize: (pointSize: number) => void;
+  setTile3DStreamStatus: (statusText?: string, isLoading?: boolean, tilesLoadedCount?: number) => void;
 
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
@@ -1189,6 +1226,79 @@ export const useMapStore = create<MapStoreState>()(
           },
         })),
 
+      // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
+      tile3DStream: {
+        enabled: false,
+        url: SAMPLE_3D_TILES_PRESETS.sample_city.url,
+        presetId: 'sample_city',
+        opacity: 1.0,
+        maximumScreenSpaceError: 16,
+        pointSize: 2.0,
+        isLoading: false,
+        statusText: '대기 중',
+        tilesLoadedCount: 0,
+      },
+      toggleTile3DStream: () =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            enabled: !state.tile3DStream.enabled,
+          },
+        })),
+      setTile3DStreamEnabled: (enabled) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            enabled,
+          },
+        })),
+      setTile3DStreamUrl: (url) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            url,
+            presetId: 'custom',
+          },
+        })),
+      setTile3DStreamPreset: (presetId) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            presetId,
+            url: SAMPLE_3D_TILES_PRESETS[presetId].url || state.tile3DStream.url,
+          },
+        })),
+      setTile3DStreamOpacity: (opacity) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            opacity,
+          },
+        })),
+      setTile3DStreamSse: (maximumScreenSpaceError) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            maximumScreenSpaceError,
+          },
+        })),
+      setTile3DStreamPointSize: (pointSize) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            pointSize,
+          },
+        })),
+      setTile3DStreamStatus: (statusText, isLoading, tilesLoadedCount) =>
+        set((state) => ({
+          tile3DStream: {
+            ...state.tile3DStream,
+            ...(statusText !== undefined ? { statusText } : {}),
+            ...(isLoading !== undefined ? { isLoading } : {}),
+            ...(tilesLoadedCount !== undefined ? { tilesLoadedCount } : {}),
+          },
+        })),
+
       // [.geobrief 브리핑 프로젝트 파일 입출력]
       exportProjectFile: () => {
         const state = get();
@@ -1215,6 +1325,14 @@ export const useMapStore = create<MapStoreState>()(
             enabled: state.cutFill.enabled,
             gridSizeMeters: state.cutFill.gridSizeMeters,
             targetElevation: state.cutFill.targetElevation,
+          },
+          tile3DStream: {
+            enabled: state.tile3DStream.enabled,
+            url: state.tile3DStream.url,
+            presetId: state.tile3DStream.presetId,
+            opacity: state.tile3DStream.opacity,
+            maximumScreenSpaceError: state.tile3DStream.maximumScreenSpaceError,
+            pointSize: state.tile3DStream.pointSize,
           },
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
@@ -1274,6 +1392,19 @@ export const useMapStore = create<MapStoreState>()(
                   isCalculating: false,
                 }
               : get().cutFill,
+            tile3DStream: data.tile3DStream
+              ? {
+                  enabled: data.tile3DStream.enabled,
+                  url: data.tile3DStream.url,
+                  presetId: data.tile3DStream.presetId,
+                  opacity: data.tile3DStream.opacity,
+                  maximumScreenSpaceError: data.tile3DStream.maximumScreenSpaceError,
+                  pointSize: data.tile3DStream.pointSize,
+                  isLoading: false,
+                  statusText: '대기 중',
+                  tilesLoadedCount: 0,
+                }
+              : get().tile3DStream,
             viewport: targetVp,
             defenseAnalysisResult:
               data.completedPolygon && data.polygonCenter
@@ -1357,6 +1488,17 @@ export const useMapStore = create<MapStoreState>()(
             targetElevation: null,
             result: null,
             isCalculating: false,
+          },
+          tile3DStream: {
+            enabled: false,
+            url: SAMPLE_3D_TILES_PRESETS.sample_city.url,
+            presetId: 'sample_city',
+            opacity: 1.0,
+            maximumScreenSpaceError: 16,
+            pointSize: 2.0,
+            isLoading: false,
+            statusText: '대기 중',
+            tilesLoadedCount: 0,
           },
           viewport: {
             longitude: defaultRegion.center[0],
@@ -1487,6 +1629,14 @@ export const useMapStore = create<MapStoreState>()(
           enabled: state.cutFill.enabled,
           gridSizeMeters: state.cutFill.gridSizeMeters,
           targetElevation: state.cutFill.targetElevation,
+        },
+        tile3DStream: {
+          enabled: state.tile3DStream.enabled,
+          url: state.tile3DStream.url,
+          presetId: state.tile3DStream.presetId,
+          opacity: state.tile3DStream.opacity,
+          maximumScreenSpaceError: state.tile3DStream.maximumScreenSpaceError,
+          pointSize: state.tile3DStream.pointSize,
         },
       }),
     }

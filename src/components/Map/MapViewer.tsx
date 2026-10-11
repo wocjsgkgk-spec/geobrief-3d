@@ -54,6 +54,7 @@ import { buildTacticalArrowsFeatureCollection } from '@/utils/tacticalArrowGener
 import { UavSensorLayer } from './UavSensorLayer';
 import { UavHudOverlay } from './UavHudOverlay';
 import { CutFillSummaryCard } from './CutFillSummaryCard';
+import { Deck3DTilesManager } from './Deck3DTilesOverlay';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -73,6 +74,7 @@ export const MapViewer: React.FC = () => {
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
+  const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
 
   const {
     viewport,
@@ -192,6 +194,9 @@ export const MapViewer: React.FC = () => {
     setCutFillTargetElevation,
     setCutFillResult,
     resetCutFill,
+    // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
+    tile3DStream,
+    setTile3DStreamStatus,
   } = useMapStore();
 
   // 토공량 격자 셀 호버 툴팁 상태
@@ -1501,6 +1506,24 @@ export const MapViewer: React.FC = () => {
         }),
         'top-right'
       );
+
+      // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 컨트롤 부착]
+      try {
+        const deckManager = new Deck3DTilesManager({
+          onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
+            useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
+          },
+        });
+        deckManager.attachToMap(map);
+        deck3DTilesManagerRef.current = deckManager;
+
+        const initTileState = useMapStore.getState().tile3DStream;
+        if (initTileState.enabled) {
+          deckManager.update(initTileState);
+        }
+      } catch (deckErr) {
+        console.warn('[MapViewer] Deck3DTilesManager initialization warning:', deckErr);
+      }
     });
 
     // WebGL 컨텍스트 손실(webglcontextlost) 자동 감지 및 복구 리스너
@@ -1557,6 +1580,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         waterLevelLayerRef.current = null;
+      }
+      if (deck3DTilesManagerRef.current) {
+        try {
+          deck3DTilesManagerRef.current.destroy();
+        } catch {
+          // ignore
+        }
+        deck3DTilesManagerRef.current = null;
       }
       if (canvas) {
         canvas.removeEventListener('webglcontextlost', handleContextLost);
@@ -3128,7 +3159,13 @@ export const MapViewer: React.FC = () => {
     addSurveillanceSensor,
   ]);
 
-  // 28. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
+  // 29. [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 상태 동기화]
+  useEffect(() => {
+    if (!deck3DTilesManagerRef.current) return;
+    deck3DTilesManagerRef.current.update(tile3DStream);
+  }, [tile3DStream]);
+
+  // 30. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);

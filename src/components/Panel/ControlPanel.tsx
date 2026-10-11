@@ -50,6 +50,7 @@ import {
   ArrowDown,
   ArrowUp,
   Scale,
+  Box,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -163,6 +164,14 @@ export const ControlPanel: React.FC = () => {
     setCutFillEnabled,
     setCutFillGridSize,
     setCutFillTargetElevation,
+    // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
+    tile3DStream,
+    toggleTile3DStream,
+    setTile3DStreamUrl,
+    setTile3DStreamPreset,
+    setTile3DStreamOpacity,
+    setTile3DStreamSse,
+    setTile3DStreamPointSize,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -2178,6 +2187,180 @@ export const ControlPanel: React.FC = () => {
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
             </label>
+          </div>
+
+          {/* [4단계 신규] Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 */}
+          <div className="p-3 rounded-xl bg-gradient-to-b from-[#10202a] to-[#0a151d] border border-cyan-500/50 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-400">
+                  <Box className="w-3.5 h-3.5" />
+                </span>
+                <div>
+                  <span className="text-xs font-bold text-slate-100 block">
+                    고정밀 3D 타일셋(3D Tiles) 스트리밍
+                  </span>
+                  <span className="text-[10px] text-cyan-300/80 block">
+                    Deck.gl Tile3DLayer · b3dm & LiDAR 점군
+                  </span>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tile3DStream.enabled}
+                  onChange={toggleTile3DStream}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+              </label>
+            </div>
+
+            {tile3DStream.enabled && (
+              <div className="space-y-2.5 pt-1.5 border-t border-cyan-900/50 animate-fade-in text-[11px]">
+                {/* 스트리밍 상태 표시 */}
+                <div className="flex items-center justify-between bg-[#081219] p-2 rounded-lg border border-[#142837]">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        tile3DStream.isLoading
+                          ? 'bg-amber-400 animate-ping'
+                          : 'bg-emerald-400'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-300 font-mono">
+                      {tile3DStream.statusText || '정상 스트리밍 중'}
+                    </span>
+                  </div>
+                  {tile3DStream.tilesLoadedCount ? (
+                    <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60">
+                      {tile3DStream.tilesLoadedCount}개 타일
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* 3D 타일셋 프리셋 선택 */}
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1 font-semibold">
+                    타일셋 소스 선택
+                  </label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(
+                      [
+                        { id: 'sample_city', label: '도시 모델 (b3dm)' },
+                        { id: 'sample_pointcloud', label: 'LiDAR 점군 (pnts)' },
+                        { id: 'custom', label: '사용자 URL' },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setTile3DStreamPreset(item.id)}
+                        className={`py-1 px-1 rounded text-[9.5px] font-bold transition-all border text-center ${
+                          tile3DStream.presetId === item.id
+                            ? 'bg-cyan-600 border-cyan-400 text-white shadow-sm'
+                            : 'bg-[#0a1620] border-cyan-900/50 text-cyan-300 hover:bg-[#112332]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 사용자 정의 URL 입력기 */}
+                {tile3DStream.presetId === 'custom' && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 block">
+                      3D Tiles 엔드포인트 URL (tileset.json)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://.../tileset.json"
+                      value={tile3DStream.url}
+                      onChange={(e) => setTile3DStreamUrl(e.target.value)}
+                      className="w-full bg-[#081219] border border-cyan-800/60 rounded px-2 py-1 text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+                )}
+
+                {/* LOD 프러스텀 컬링 세밀도 (Screen Space Error: 8/16/24) */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-300">LOD 렌더링 품질 (SSE)</span>
+                    <span className="font-mono text-cyan-300 font-bold">
+                      {tile3DStream.maximumScreenSpaceError === 8
+                        ? '8 (초정밀)'
+                        : tile3DStream.maximumScreenSpaceError === 16
+                        ? '16 (균형/권장)'
+                        : '24 (고성능)'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      { sse: 8, label: '초정밀 (SSE 8)' },
+                      { sse: 16, label: '균형 (SSE 16)' },
+                      { sse: 24, label: '고성능 (SSE 24)' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.sse}
+                        type="button"
+                        onClick={() => setTile3DStreamSse(opt.sse)}
+                        className={`py-0.5 px-1 rounded text-[9px] font-semibold border ${
+                          tile3DStream.maximumScreenSpaceError === opt.sse
+                            ? 'bg-cyan-600 border-cyan-400 text-white'
+                            : 'bg-[#08141d] border-cyan-900/40 text-slate-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[8.5px] text-slate-400 leading-tight">
+                    💡 뷰포트 내 타일만 화면 크기 오차에 따라 동적 로드하여 프레임 드랍을 원천 차단합니다.
+                  </p>
+                </div>
+
+                {/* 불투명도 및 점 크기 조절 */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-cyan-900/40">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[9.5px]">
+                      <span className="text-slate-400">투명도</span>
+                      <span className="font-mono text-cyan-300 font-bold">
+                        {Math.round(tile3DStream.opacity * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={1.0}
+                      step={0.05}
+                      value={tile3DStream.opacity}
+                      onChange={(e) => setTile3DStreamOpacity(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[9.5px]">
+                      <span className="text-slate-400">점군 크기</span>
+                      <span className="font-mono text-cyan-300 font-bold">
+                        {tile3DStream.pointSize}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={5}
+                      step={0.5}
+                      value={tile3DStream.pointSize}
+                      onChange={(e) => setTile3DStreamPointSize(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>

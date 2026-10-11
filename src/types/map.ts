@@ -245,6 +245,21 @@ export interface CutFillState {
   isCalculating: boolean;
 }
 
+// [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 상태]
+export type Tile3DPresetId = 'custom' | 'sample_city' | 'sample_pointcloud';
+
+export interface Tile3DStreamState {
+  enabled: boolean;
+  url: string;
+  presetId: Tile3DPresetId;
+  opacity: number; // 0.1 ~ 1.0
+  maximumScreenSpaceError: number; // 8 (정밀) ~ 32 (고속)
+  pointSize: number; // 1 ~ 5
+  isLoading: boolean;
+  statusText?: string;
+  tilesLoadedCount?: number;
+}
+
 // [.geobrief 브리핑 프로젝트 파일 규격]
 export interface GeoBriefProjectFile {
   version: '1.0';
@@ -269,6 +284,14 @@ export interface GeoBriefProjectFile {
     enabled: boolean;
     gridSizeMeters: 5 | 10;
     targetElevation: number | null;
+  };
+  tile3DStream?: {
+    enabled: boolean;
+    url: string;
+    presetId: Tile3DPresetId;
+    opacity: number;
+    maximumScreenSpaceError: number;
+    pointSize: number;
   };
 }
 
