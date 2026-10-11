@@ -35,10 +35,18 @@ import {
   Check,
   RotateCcw,
   AlertTriangle,
+  Pin,
+  MoveUpRight,
+  Waves,
+  FileCheck,
+  Edit3,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { calculateViewshed } from '@/utils/viewshedAnalysis';
 import { calculate3DMeasurement } from '@/utils/measure3D';
+import { WaterLevelLayer } from './WaterLevelLayer';
+import { TitleBlock, drawCadTitleBlockOnCanvas } from './TitleBlock';
+import { buildTacticalArrowsFeatureCollection } from '@/utils/tacticalArrowGenerator';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -56,6 +64,7 @@ export const MapViewer: React.FC = () => {
   const orbitAnimRef = useRef<number | null>(null);
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
+  const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
 
   const {
     viewport,
@@ -127,7 +136,37 @@ export const MapViewer: React.FC = () => {
     addMeasurePoint,
     setMeasureResult,
     clearMeasure,
+    // [신규] 3D 공간 주석 핀
+    spatialPins,
+    isPinMode,
+    togglePinMode,
+    addSpatialPin,
+    updateSpatialPin,
+    removeSpatialPin,
+    clearSpatialPins,
+    // [신규] 3D 계획·접근 축선 전술 화살표
+    tacticalArrows,
+    isArrowMode,
+    arrowDraftPoints,
+    toggleArrowMode,
+    addArrowDraftPoint,
+    removeTacticalArrow,
+    clearTacticalArrows,
+    // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
+    waterLevel,
+    setWaterLevel,
+    // [신규] 도정·국방 표준 도면 타이틀 블록
+    showTitleBlock,
+    toggleTitleBlock,
+    // [신규] .geobrief 프로젝트 입출력
+    exportProjectFile,
+    importProjectFile,
   } = useMapStore();
+
+  // 3D 주석 핀 인라인 편집 및 화면 투영 좌표 상태
+  const [editingPinId, setEditingPinId] = useState<string | null>(null);
+  const [pinScreenPositions, setPinScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
   // 오버레이 실시간 렌더링용 로컬 상태
   const [currentBearing, setCurrentBearing] = useState<number>(viewport.bearing);
@@ -293,6 +332,11 @@ export const MapViewer: React.FC = () => {
             data: { type: 'FeatureCollection', features: [] },
           },
           'measure-points-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          // [3D 계획·접근 축선 전술 화살표 (Tactical Arrow) 소스]
+          'tactical-arrows-source': {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
@@ -904,6 +948,29 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
+          // [3D 계획·접근 축선 전술 화살표 (Tactical Arrow) 3D 지형 표면 밀착 레이어]
+          {
+            id: 'tactical-arrows-fill',
+            type: 'fill',
+            source: 'tactical-arrows-source',
+            paint: {
+              'fill-color': ['coalesce', ['get', 'color'], '#06B6D4'],
+              'fill-opacity': 0.85,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'tactical-arrows-line',
+            type: 'line',
+            source: 'tactical-arrows-source',
+            paint: {
+              'line-color': '#FFFFFF',
+              'line-width': 1.8,
+              'line-opacity': 0.95,
+            },
+            layout: { visibility: 'visible' },
+          },
+
           // [국방 규제 및 비행안전] 3D 비행안전 허용 개발 볼륨 (Envelope)
           {
             id: 'flight-envelope-volume',
@@ -1313,6 +1380,15 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] ThreeboxBuildingLayer registration warning:', tbErr);
       }
 
+      // [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어 등록]
+      try {
+        const wlLayer = new WaterLevelLayer();
+        map.addLayer(wlLayer);
+        waterLevelLayerRef.current = wlLayer;
+      } catch (wlErr) {
+        console.warn('[MapViewer] WaterLevelLayer registration warning:', wlErr);
+      }
+
       map.addControl(
         new maplibregl.NavigationControl({
           visualizePitch: true,
@@ -1369,6 +1445,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         threeDLayerRef.current = null;
+      }
+      if (waterLevelLayerRef.current && map.getLayer('custom-water-level-layer')) {
+        try {
+          map.removeLayer('custom-water-level-layer');
+        } catch {
+          // ignore
+        }
+        waterLevelLayerRef.current = null;
       }
       if (canvas) {
         canvas.removeEventListener('webglcontextlost', handleContextLost);
@@ -2272,14 +2356,14 @@ export const MapViewer: React.FC = () => {
 
     // 마우스 호버 커서 처리
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode) return;
+      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode) return;
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
     };
 
     // 건물 클릭 처리
     const onMapClick = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode) return;
+      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode) return;
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
@@ -2357,7 +2441,15 @@ export const MapViewer: React.FC = () => {
       map.off('mousemove', onMouseMove);
       map.off('click', onMapClick);
     };
-  }, [isMapLoaded, isDrawingMode, stampMode, isViewshedMode, isMeasureMode]);
+  }, [
+    isMapLoaded,
+    isDrawingMode,
+    stampMode,
+    isViewshedMode,
+    isMeasureMode,
+    isPinMode,
+    isArrowMode,
+  ]);
 
   // 지도 이동 시 건물 팝업 화면 좌표 동기화 (원시 좌표 기반 안정화)
   const selectedBuildingCenterLng = selectedBuilding?.center[0];
@@ -2601,6 +2693,12 @@ export const MapViewer: React.FC = () => {
         if (isMeasureMode || measureResult || measurePoints.length > 0) {
           clearMeasure();
         }
+        if (isPinMode) {
+          togglePinMode();
+        }
+        if (isArrowMode || arrowDraftPoints.length > 0) {
+          clearTacticalArrows();
+        }
       }
     };
 
@@ -2614,9 +2712,149 @@ export const MapViewer: React.FC = () => {
     isMeasureMode,
     measureResult,
     measurePoints.length,
+    isPinMode,
+    isArrowMode,
+    arrowDraftPoints.length,
     clearViewshed,
     clearMeasure,
+    togglePinMode,
+    clearTacticalArrows,
   ]);
+
+  // 23. [강원 지형 저류·침수 수위(Water Level) 시뮬레이션 동기화]
+  useEffect(() => {
+    if (!waterLevelLayerRef.current) return;
+    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+    waterLevelLayerRef.current.setVisible(waterLevel.enabled);
+    waterLevelLayerRef.current.setElevation(waterLevel.elevation);
+    waterLevelLayerRef.current.setCenter(center);
+  }, [
+    waterLevel.enabled,
+    waterLevel.elevation,
+    polygonCenter,
+    viewport.longitude,
+    viewport.latitude,
+  ]);
+
+  // 24. [3D 계획·접근 축선 전술 화살표 (Tactical Arrow) 인터랙션 & GeoJSON 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (isArrowMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+
+      const handleArrowClick = (e: maplibregl.MapMouseEvent) => {
+        addArrowDraftPoint([e.lngLat.lng, e.lngLat.lat]);
+      };
+
+      map.on('click', handleArrowClick);
+      return () => {
+        map.getCanvas().style.cursor = '';
+        map.off('click', handleArrowClick);
+      };
+    }
+  }, [isArrowMode, isMapLoaded, addArrowDraftPoint]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const source = map.getSource('tactical-arrows-source') as maplibregl.GeoJSONSource;
+    if (source) {
+      const fc = buildTacticalArrowsFeatureCollection(tacticalArrows);
+      source.setData(fc);
+    }
+  }, [tacticalArrows, isMapLoaded]);
+
+  // 25. [3D 공간 주석 핀 (Billboard Pin) 인터랙션 & 화면 투영 좌표 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (isPinMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+
+      const handlePinClick = (e: maplibregl.MapMouseEvent) => {
+        const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const rawElev = map.queryTerrainElevation ? map.queryTerrainElevation(coords) : null;
+        const elevation = rawElev !== null && rawElev !== undefined ? Math.round(rawElev * 10) / 10 : 120;
+        addSpatialPin({
+          coords,
+          elevation,
+          title: '주 진입로 (기동로)',
+          category: 'access',
+          stemHeightMeters: 15,
+        });
+      };
+
+      map.on('click', handlePinClick);
+      return () => {
+        map.getCanvas().style.cursor = '';
+        map.off('click', handlePinClick);
+      };
+    }
+  }, [isPinMode, isMapLoaded, addSpatialPin]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const updatePinPositions = () => {
+      const positions: Record<string, { x: number; y: number }> = {};
+      for (const pin of spatialPins) {
+        try {
+          const pt = map.project(pin.coords);
+          positions[pin.id] = { x: pt.x, y: pt.y };
+        } catch {
+          // ignore
+        }
+      }
+      setPinScreenPositions(positions);
+    };
+
+    updatePinPositions();
+    map.on('move', updatePinPositions);
+    map.on('render', updatePinPositions);
+
+    return () => {
+      map.off('move', updatePinPositions);
+      map.off('render', updatePinPositions);
+    };
+  }, [spatialPins, isMapLoaded]);
+
+  // 26. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.name.endsWith('.geobrief') || file.name.endsWith('.json')) {
+        try {
+          const text = await file.text();
+          const ok = importProjectFile(text);
+          if (ok) {
+            alert(`'${file.name}' 브리핑 프로젝트가 성공적으로 복원되었습니다.`);
+          } else {
+            alert('프로젝트 파일 형식을 복원하지 못했습니다.');
+          }
+        } catch {
+          alert('파일을 읽는 중 오류가 발생했습니다.');
+        }
+      }
+    }
+  };
 
   // [3단 보고서 슬라이드 팩 및 PPTX 자동 생성 엔진]
   const isExportingRef = useRef(false);
@@ -2704,10 +2942,30 @@ export const MapViewer: React.FC = () => {
           statusText: '컷 1/3 고해상도 렌더링 안정화 중 (1.5초 대기)...',
         });
 
-        // 캔버스 Tainted/CORS 안전 방어 캡처 헬퍼
+        // 캔버스 Tainted/CORS 안전 방어 캡처 헬퍼 (CAD Title Block 합성 탑재)
         const safelyCaptureCanvas = (mapInstance: maplibregl.Map, label: string): string => {
           try {
             const canvas = mapInstance.getCanvas();
+            const outCanvas = document.createElement('canvas');
+            outCanvas.width = canvas.width;
+            outCanvas.height = canvas.height;
+            const outCtx = outCanvas.getContext('2d');
+            if (outCtx) {
+              outCtx.drawImage(canvas, 0, 0);
+              if (showTitleBlock) {
+                drawCadTitleBlockOnCanvas(outCtx, outCanvas.width, outCanvas.height, {
+                  title: metadata.title || `${label} 공간분석도`,
+                  department: metadata.department,
+                  author: metadata.author,
+                  date: metadata.date,
+                  securityLevel: metadata.securityLevel,
+                });
+              }
+              const compUrl = outCanvas.toDataURL('image/png');
+              if (compUrl && compUrl.length > 100) {
+                return compUrl;
+              }
+            }
             const dataUrl = canvas.toDataURL('image/png');
             if (!dataUrl || dataUrl.length < 100) {
               throw new Error('Empty canvas dataUrl');
@@ -2728,6 +2986,15 @@ export const MapViewer: React.FC = () => {
               ctx.fillStyle = '#94A3B8';
               ctx.font = '22px "Malgun Gothic", sans-serif';
               ctx.fillText(`${label} - 고해상도 브리핑 캡처 동기화`, 80, 560);
+              if (showTitleBlock) {
+                drawCadTitleBlockOnCanvas(ctx, 1920, 1080, {
+                  title: metadata.title || `${label} 공간분석도`,
+                  department: metadata.department,
+                  author: metadata.author,
+                  date: metadata.date,
+                  securityLevel: metadata.securityLevel,
+                });
+              }
             }
             return fallbackCanvas.toDataURL('image/png');
           }
@@ -2988,7 +3255,12 @@ export const MapViewer: React.FC = () => {
   }, [slidePackSignal]);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center bg-[#090c0a] p-4 overflow-hidden">
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="relative w-full h-full flex items-center justify-center bg-[#090c0a] p-4 overflow-hidden"
+    >
       {/* 16:9 슬라이드 프레임 가이드 박스 */}
       <div className="relative w-full max-w-full aspect-[16/9] max-h-[calc(100vh-5.5rem)] rounded-xl overflow-hidden border-2 border-[#2b3a2f] shadow-2xl shadow-black/80 bg-black">
         {/* MapLibre WebGL Canvas Container */}
@@ -3444,6 +3716,160 @@ export const MapViewer: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* [신규] 3D 공간 주석 핀 (Billboard Pin) 렌더링 */}
+        {spatialPins.map((pin) => {
+          const pos = pinScreenPositions[pin.id];
+          if (!pos) return null;
+          const isEditing = editingPinId === pin.id;
+
+          return (
+            <div
+              key={pin.id}
+              className="absolute pointer-events-auto z-30 transition-transform duration-75 select-none"
+              style={{
+                left: `${pos.x}px`,
+                top: `${pos.y}px`,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <div className="flex flex-col items-center group">
+                {/* 콜아웃 다크 글래스 카드 */}
+                <div className="bg-[#0b1219]/95 backdrop-blur-md border border-cyan-400/80 rounded-lg shadow-2xl p-2 min-w-[130px] max-w-[210px] ring-1 ring-cyan-400/30 transition-all hover:scale-105">
+                  {/* 상단 메타 바 */}
+                  <div className="flex items-center justify-between gap-1 mb-1 border-b border-cyan-900/50 pb-1">
+                    <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                      {pin.category === 'access'
+                        ? '기동로/진입축'
+                        : pin.category === 'elevation'
+                        ? '관측고지'
+                        : pin.category === 'demolish'
+                        ? '철거대상 막사'
+                        : '군 유휴시설'}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-mono text-cyan-200">
+                        EL.{pin.elevation}m
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeSpatialPin(pin.id);
+                        }}
+                        className="text-slate-400 hover:text-rose-400 p-0.5 rounded transition-colors"
+                        title="주석 핀 삭제"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 텍스트 내용 (인라인 더블클릭 수정) */}
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      defaultValue={pin.title}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val) updateSpatialPin(pin.id, { title: val });
+                        setEditingPinId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = (e.target as HTMLInputElement).value.trim();
+                          if (val) updateSpatialPin(pin.id, { title: val });
+                          setEditingPinId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingPinId(null);
+                        }
+                      }}
+                      className="w-full bg-[#162230] text-white text-xs font-bold px-1.5 py-0.5 rounded border border-cyan-400 focus:outline-none"
+                    />
+                  ) : (
+                    <div
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingPinId(pin.id);
+                      }}
+                      className="text-xs font-bold text-white cursor-pointer hover:text-cyan-300 flex items-center justify-between gap-1"
+                      title="더블클릭하여 명칭 수정"
+                    >
+                      <span className="truncate">{pin.title}</span>
+                      <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    </div>
+                  )}
+
+                  <div className="text-[8.5px] text-slate-400/80 mt-0.5">
+                    더블클릭으로 명칭 수정
+                  </div>
+                </div>
+
+                {/* 지면으로 뻗어 내려가는 수직 기둥 (Stem Line) */}
+                <div className="w-0.5 h-7 bg-gradient-to-b from-cyan-400 to-cyan-500/30" />
+                {/* 지표면 안착 앵커 점 */}
+                <div className="w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-cyan-400/50 shadow-md shadow-cyan-400/80" />
+              </div>
+            </div>
+          );
+        })}
+
+        {/* [3D 공간 주석 핀 모드] 상단 안내 배너 */}
+        {isPinMode && (
+          <div className="absolute top-20 right-16 z-30 pointer-events-auto">
+            <div className="bg-cyan-900/90 backdrop-blur-md border border-cyan-400 text-white px-3.5 py-1.5 rounded-full shadow-lg text-xs font-bold flex items-center space-x-2 animate-bounce">
+              <span className="w-2 h-2 rounded-full bg-cyan-300 animate-ping" />
+              <span>[3D 공간 주석 핀] 지도 위 원하는 위치를 클릭하여 핀을 꽂으세요</span>
+              <button
+                onClick={togglePinMode}
+                className="ml-2 px-2 py-0.5 rounded bg-cyan-950 hover:bg-cyan-800 text-cyan-200 text-[10px] border border-cyan-700 transition-colors"
+              >
+                종료
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* [3D 계획·접근 축선 화살표 모드] 상단 안내 배너 */}
+        {isArrowMode && (
+          <div className="absolute top-20 right-16 z-30 pointer-events-auto">
+            <div className="bg-amber-900/90 backdrop-blur-md border border-amber-400 text-white px-3.5 py-1.5 rounded-full shadow-lg text-xs font-bold flex items-center space-x-2 animate-bounce">
+              <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping" />
+              <span>
+                {arrowDraftPoints.length === 0
+                  ? '[전술 화살표 1단계] 시작점(기동 출발지)을 클릭하세요'
+                  : '[전술 화살표 2단계] 목표점(도착지)을 클릭하여 축선을 완성하세요'}
+              </span>
+              <button
+                onClick={toggleArrowMode}
+                className="ml-2 px-2 py-0.5 rounded bg-amber-950 hover:bg-amber-800 text-amber-200 text-[10px] border border-amber-700 transition-colors"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 도정·국방 표준 도면 표제란 (CAD Title Block) */}
+        <TitleBlock siteName={metadata?.title || '강원 전략 군 유휴지'} />
+
+        {/* .geobrief 드래그 앤 드롭 오버레이 */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-50 bg-[#051119]/85 backdrop-blur-md flex flex-col items-center justify-center border-4 border-dashed border-cyan-400 pointer-events-none transition-all">
+            <div className="p-6 rounded-2xl bg-[#091824] border border-cyan-400/80 shadow-2xl flex flex-col items-center text-center space-y-3 max-w-md">
+              <div className="w-14 h-14 rounded-full bg-cyan-950 border border-cyan-400 flex items-center justify-center text-cyan-300">
+                <Pin className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-extrabold text-white">
+                .geobrief 프로젝트 파일 불러오기
+              </h3>
+              <p className="text-xs text-cyan-200 leading-relaxed">
+                파일을 여기에 드롭하면 카메라 뷰포트, 부지 경계, 3D 매스, 공간 주석 핀, 전술 화살표, 수위 설정이 즉시 복원됩니다.
+              </p>
+            </div>
           </div>
         )}
 

@@ -147,3 +147,52 @@ export interface Measure3DResult {
   slopeDegrees: number;
 }
 
+// [3D 공간 주석 핀 (Billboard Pin)]
+export type SpatialPinCategory = 'access' | 'elevation' | 'demolish' | 'facility' | 'custom';
+
+export interface SpatialPin {
+  id: string;
+  coords: [number, number]; // [lng, lat]
+  elevation: number; // 지표면 표고 (EL. m)
+  title: string;
+  category: SpatialPinCategory;
+  color?: string;
+  stemHeightMeters?: number; // 지면에서 올라오는 기둥 높이 (m, 기본 15m)
+}
+
+// [3D 계획·접근 축선 화살표 (Tactical Arrow)]
+export interface TacticalArrow {
+  id: string;
+  points: [number, number][]; // [start, end]
+  label?: string;
+  color?: string; // 기본: #06B6D4 (네온 시안) 또는 #F59E0B (네온 앰버)
+  widthMeters?: number; // 시작 너비 (기본 8m)
+  headWidthMeters?: number; // 화살촉 너비 (기본 16m)
+}
+
+// [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 상태]
+export interface WaterLevelState {
+  enabled: boolean;
+  elevation: number; // EL. 50m ~ 300m
+}
+
+// [.geobrief 브리핑 프로젝트 파일 규격]
+export interface GeoBriefProjectFile {
+  version: '1.0';
+  format: 'geobrief';
+  exportedAt: string;
+  metadata: BriefingMetadata;
+  viewport: ViewportState;
+  completedPolygon: GeoJSON.Feature<GeoJSON.Polygon> | null;
+  polygonCenter: [number, number] | null;
+  polygonArea: PolygonArea | null;
+  selectedRegionId: string;
+  selectedIdleSiteId: string | null;
+  buildingMassPreset: BuildingMassPresetId;
+  showBuildingMass3D: boolean;
+  spatialPins: SpatialPin[];
+  tacticalArrows: TacticalArrow[];
+  waterLevel: WaterLevelState;
+  sunHour: number;
+}
+

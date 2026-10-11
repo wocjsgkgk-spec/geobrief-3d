@@ -41,6 +41,7 @@ import {
   Sunrise,
   Sunset,
   Clock,
+  Waves,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -130,6 +131,9 @@ export const ControlPanel: React.FC = () => {
     polygonCenter,
     sunHour,
     setSunHour,
+    // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
+    waterLevel,
+    setWaterLevel,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -1544,6 +1548,95 @@ export const ControlPanel: React.FC = () => {
             <div className="font-bold">25° 초과</div>
             <div className="text-[8.5px] opacity-80">급경사 보전 (적색)</div>
           </div>
+        </div>
+
+        {/* [신규] 강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이터 */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#0e1f2b] to-[#0c1720] border border-sky-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-sky-950 border border-sky-700/60 text-sky-400">
+                <Waves className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  가상 수위·침수 시뮬레이터
+                </span>
+                <span className="text-[10px] text-sky-300/80 block">
+                  저류지 계획 & 홍수 취약구간 3D 분석
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={waterLevel.enabled}
+                onChange={(e) =>
+                  setWaterLevel({ enabled: e.target.checked })
+                }
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
+            </label>
+          </div>
+
+          {waterLevel.enabled && (
+            <div className="space-y-2 pt-1 border-t border-sky-900/50 animate-fade-in">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-medium">
+                  수면 해발고도 (Water Surface EL.)
+                </span>
+                <span className="font-extrabold font-mono text-sky-300 text-sm bg-sky-950/80 px-2 py-0.5 rounded border border-sky-700/60">
+                  EL. {waterLevel.elevation} m
+                </span>
+              </div>
+
+              {/* 고도 조절 슬라이더 (50m ~ 300m, 1m 단위) */}
+              <input
+                type="range"
+                min={50}
+                max={300}
+                step={1}
+                value={waterLevel.elevation}
+                onChange={(e) =>
+                  setWaterLevel({ elevation: parseInt(e.target.value, 10) })
+                }
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+              />
+
+              <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                <span>EL. 50m (저지대)</span>
+                <span>EL. 175m</span>
+                <span>EL. 300m (고지대)</span>
+              </div>
+
+              {/* 수위 퀵 프리셋 버튼 */}
+              <div className="grid grid-cols-4 gap-1 pt-0.5">
+                {[
+                  { label: '하천 70m', el: 70 },
+                  { label: '평지 120m', el: 120 },
+                  { label: '만수 180m', el: 180 },
+                  { label: '홍수 240m', el: 240 },
+                ].map((item) => (
+                  <button
+                    key={item.el}
+                    type="button"
+                    onClick={() => setWaterLevel({ elevation: item.el })}
+                    className={`py-1 px-1 rounded text-[9.5px] font-semibold transition-all border ${
+                      waterLevel.elevation === item.el
+                        ? 'bg-sky-600 border-sky-400 text-white shadow-sm'
+                        : 'bg-[#13222d] border-sky-800/40 text-sky-300 hover:bg-[#1a2d3b]'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-[9.5px] text-sky-200/80 bg-sky-950/40 p-2 rounded border border-sky-800/30 leading-relaxed">
+                💡 실시간 3D 심도 테스트로 표고 이하의 저지대 지형에 반투명 에메랄드 블루(#0284C7) 수면 메쉬가 실시간 렌더링됩니다.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 지형 고도 단면 프로파일 모달 열기 버튼 */}

@@ -17,6 +17,10 @@ import {
   VworldDiagnosticState,
   ViewshedResult,
   Measure3DResult,
+  SpatialPin,
+  TacticalArrow,
+  WaterLevelState,
+  GeoBriefProjectFile,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -294,6 +298,38 @@ interface MapStoreState {
   addMeasurePoint: (point: [number, number]) => void;
   setMeasureResult: (result: Measure3DResult | null) => void;
   clearMeasure: () => void;
+
+  // [3D 공간 주석 핀 (Billboard Pin)]
+  spatialPins: SpatialPin[];
+  isPinMode: boolean;
+  togglePinMode: () => void;
+  addSpatialPin: (pin: Omit<SpatialPin, 'id'>) => void;
+  updateSpatialPin: (id: string, updates: Partial<SpatialPin>) => void;
+  removeSpatialPin: (id: string) => void;
+  clearSpatialPins: () => void;
+
+  // [3D 계획·접근 축선 전술 화살표 (Tactical Arrow)]
+  tacticalArrows: TacticalArrow[];
+  isArrowMode: boolean;
+  arrowDraftPoints: [number, number][];
+  toggleArrowMode: () => void;
+  addArrowDraftPoint: (point: [number, number]) => void;
+  completeArrow: (label?: string, color?: string) => void;
+  removeTacticalArrow: (id: string) => void;
+  clearTacticalArrows: () => void;
+
+  // [강원 지형 특화 저류·침수 수위 시뮬레이터]
+  waterLevel: WaterLevelState;
+  setWaterLevel: (val: number | Partial<WaterLevelState>) => void;
+  toggleWaterLevel: () => void;
+
+  // [도정·국방 표준 도면 타이틀 블록]
+  showTitleBlock: boolean;
+  toggleTitleBlock: () => void;
+
+  // [.geobrief 브리핑 프로젝트 파일 입출력]
+  exportProjectFile: () => string;
+  importProjectFile: (fileContent: string) => boolean;
 
   // 프로젝트 전체 초기화 및 저장본 불러오기
   resetProject: () => void;
@@ -883,6 +919,193 @@ export const useMapStore = create<MapStoreState>()(
       setMeasureResult: (measureResult) => set({ measureResult }),
       clearMeasure: () => set({ measurePoints: [], measureResult: null, isMeasureMode: false }),
 
+      // [3D 공간 주석 핀 (Billboard Pin)]
+      spatialPins: [],
+      isPinMode: false,
+      togglePinMode: () =>
+        set((state) => ({
+          isPinMode: !state.isPinMode,
+          isArrowMode: false,
+          isDrawingMode: false,
+          stampMode: false,
+          isViewshedMode: false,
+          isMeasureMode: false,
+        })),
+      addSpatialPin: (pin) => {
+        const newPin: SpatialPin = {
+          ...pin,
+          id: 'pin-' + Date.now(),
+        };
+        set({ spatialPins: [...get().spatialPins, newPin] });
+      },
+      updateSpatialPin: (id, updates) => {
+        set({
+          spatialPins: get().spatialPins.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        });
+      },
+      removeSpatialPin: (id) => {
+        set({ spatialPins: get().spatialPins.filter((p) => p.id !== id) });
+      },
+      clearSpatialPins: () => set({ spatialPins: [] }),
+
+      // [3D 계획·접근 축선 전술 화살표 (Tactical Arrow)]
+      tacticalArrows: [],
+      isArrowMode: false,
+      arrowDraftPoints: [],
+      toggleArrowMode: () =>
+        set((state) => ({
+          isArrowMode: !state.isArrowMode,
+          isPinMode: false,
+          isDrawingMode: false,
+          stampMode: false,
+          isViewshedMode: false,
+          isMeasureMode: false,
+          arrowDraftPoints: [],
+        })),
+      addArrowDraftPoint: (point) => {
+        const current = get().arrowDraftPoints;
+        if (current.length === 0) {
+          set({ arrowDraftPoints: [point] });
+        } else {
+          const start = current[0];
+          const newArrow: TacticalArrow = {
+            id: 'arrow-' + Date.now(),
+            points: [start, point],
+            label: '계획 접근축선',
+            color: '#06B6D4',
+            widthMeters: 8,
+            headWidthMeters: 16,
+          };
+          set({
+            tacticalArrows: [...get().tacticalArrows, newArrow],
+            arrowDraftPoints: [],
+          });
+        }
+      },
+      completeArrow: (label = '계획 접근축선', color = '#06B6D4') => {
+        const pts = get().arrowDraftPoints;
+        if (pts.length >= 2) {
+          const newArrow: TacticalArrow = {
+            id: 'arrow-' + Date.now(),
+            points: pts,
+            label,
+            color,
+            widthMeters: 8,
+            headWidthMeters: 16,
+          };
+          set({
+            tacticalArrows: [...get().tacticalArrows, newArrow],
+            arrowDraftPoints: [],
+          });
+        }
+      },
+      removeTacticalArrow: (id) => {
+        set({ tacticalArrows: get().tacticalArrows.filter((a) => a.id !== id) });
+      },
+      clearTacticalArrows: () => set({ tacticalArrows: [], arrowDraftPoints: [] }),
+
+      // [강원 지형 특화 저류·침수 수위 시뮬레이터]
+      waterLevel: {
+        enabled: false,
+        elevation: 100,
+      },
+      setWaterLevel: (val) =>
+        set((state) => ({
+          waterLevel:
+            typeof val === 'number'
+              ? { ...state.waterLevel, elevation: val }
+              : { ...state.waterLevel, ...val },
+        })),
+      toggleWaterLevel: () =>
+        set((state) => ({
+          waterLevel: { ...state.waterLevel, enabled: !state.waterLevel.enabled },
+        })),
+
+      // [도정·국방 표준 도면 타이틀 블록]
+      showTitleBlock: true,
+      toggleTitleBlock: () => set((state) => ({ showTitleBlock: !state.showTitleBlock })),
+
+      // [.geobrief 브리핑 프로젝트 파일 입출력]
+      exportProjectFile: () => {
+        const state = get();
+        const projectData: GeoBriefProjectFile = {
+          version: '1.0',
+          format: 'geobrief',
+          exportedAt: new Date().toISOString(),
+          metadata: state.metadata,
+          viewport: state.viewport,
+          completedPolygon: state.completedPolygon,
+          polygonCenter: state.polygonCenter,
+          polygonArea: state.polygonArea,
+          selectedRegionId: state.selectedRegionId,
+          selectedIdleSiteId: state.selectedIdleSiteId,
+          buildingMassPreset: state.buildingMassPreset,
+          showBuildingMass3D: state.showBuildingMass3D,
+          spatialPins: state.spatialPins,
+          tacticalArrows: state.tacticalArrows,
+          waterLevel: state.waterLevel,
+          sunHour: state.sunHour,
+        };
+        const jsonStr = JSON.stringify(projectData, null, 2);
+        try {
+          const blob = new Blob([jsonStr], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const safeTitle = (state.metadata.title || 'GeoBrief_3D_Project').replace(
+            /[\\/:*?"<>|]/g,
+            '_'
+          );
+          a.href = url;
+          a.download = `${safeTitle}.geobrief`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error('[Store] Failed to export .geobrief project:', e);
+        }
+        return jsonStr;
+      },
+
+      importProjectFile: (fileContent: string) => {
+        try {
+          const data = JSON.parse(fileContent) as GeoBriefProjectFile;
+          if (data.format !== 'geobrief' && !data.completedPolygon && !data.viewport) {
+            throw new Error('유효한 .geobrief 프로젝트 파일이 아닙니다.');
+          }
+          const targetVp = data.viewport || get().viewport;
+          set({
+            metadata: data.metadata || get().metadata,
+            completedPolygon: data.completedPolygon || null,
+            polygonCenter: data.polygonCenter || null,
+            polygonArea: data.polygonArea || null,
+            selectedRegionId: data.selectedRegionId || get().selectedRegionId,
+            selectedIdleSiteId: data.selectedIdleSiteId || null,
+            buildingMassPreset: data.buildingMassPreset || get().buildingMassPreset,
+            showBuildingMass3D: data.showBuildingMass3D ?? get().showBuildingMass3D,
+            spatialPins: data.spatialPins || [],
+            tacticalArrows: data.tacticalArrows || [],
+            waterLevel: data.waterLevel || { enabled: false, elevation: 100 },
+            sunHour: data.sunHour ?? 14,
+            viewport: targetVp,
+            defenseAnalysisResult:
+              data.completedPolygon && data.polygonCenter
+                ? analyzeDefenseRegulations(data.completedPolygon, data.polygonCenter)
+                : null,
+            accessibilityResult: data.polygonCenter
+              ? analyzeAccessibility(data.polygonCenter)
+              : null,
+          });
+          get().flyToLocation(targetVp, 1500);
+          return true;
+        } catch (err) {
+          console.error('[Store] Failed to import .geobrief project:', err);
+          return false;
+        }
+      },
+
       resetProject: () => {
         const defaultRegion = GANGWON_REGIONS.find((r) => r.id === 'wonju') || GANGWON_REGIONS[0];
         set({
@@ -928,6 +1151,13 @@ export const useMapStore = create<MapStoreState>()(
           isMeasureMode: false,
           measurePoints: [],
           measureResult: null,
+          spatialPins: [],
+          isPinMode: false,
+          tacticalArrows: [],
+          isArrowMode: false,
+          arrowDraftPoints: [],
+          waterLevel: { enabled: false, elevation: 100 },
+          showTitleBlock: true,
           viewport: {
             longitude: defaultRegion.center[0],
             latitude: defaultRegion.center[1],
@@ -1048,6 +1278,10 @@ export const useMapStore = create<MapStoreState>()(
         bookmarks: state.bookmarks,
         viewport: state.viewport,
         sunHour: state.sunHour,
+        spatialPins: state.spatialPins,
+        tacticalArrows: state.tacticalArrows,
+        waterLevel: state.waterLevel,
+        showTitleBlock: state.showTitleBlock,
       }),
     }
   )

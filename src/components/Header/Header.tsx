@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Download,
   Save,
@@ -16,6 +16,11 @@ import {
   Menu,
   Eye,
   Ruler,
+  Pin,
+  MoveUpRight,
+  FileCheck,
+  FileDown,
+  FileUp,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -40,9 +45,46 @@ export const Header: React.FC = () => {
     isMeasureMode,
     measureResult,
     toggleMeasureMode,
+    isPinMode,
+    togglePinMode,
+    spatialPins,
+    isArrowMode,
+    toggleArrowMode,
+    tacticalArrows,
+    showTitleBlock,
+    toggleTitleBlock,
+    exportProjectFile,
+    importProjectFile,
   } = useMapStore();
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportGeobrief = () => {
+    try {
+      exportProjectFile();
+    } catch (err) {
+      alert('프로젝트 파일 내보내기 실패: ' + (err as Error).message);
+    }
+  };
+
+  const handleImportGeobrief = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const ok = importProjectFile(text);
+      if (ok) {
+        alert(`'${file.name}' 브리핑 프로젝트가 복원되었습니다.`);
+      } else {
+        alert('올바른 .geobrief 프로젝트 파일 형식이 아닙니다.');
+      }
+    } catch (err) {
+      alert('파일 읽기 오류: ' + (err as Error).message);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
 
   const handleNewProject = () => {
     if (
@@ -159,6 +201,85 @@ export const Header: React.FC = () => {
           <Ruler className="w-3.5 h-3.5 text-amber-400" />
           <span className="hidden sm:inline">3D 줄자</span>
         </button>
+
+        {/* [신규] 3D 공간 주석 핀 (Billboard Pin) 버튼 */}
+        <button
+          onClick={togglePinMode}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            isPinMode
+              ? 'bg-cyan-600/40 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/60 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 공간 주석 핀: 클릭 지점 지표 표고 안착 콜아웃 핀 추가 (더블클릭 수정)"
+        >
+          <Pin className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden sm:inline">주석 핀</span>
+          {spatialPins.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-cyan-900 border border-cyan-600 text-cyan-200 text-[9.5px] font-mono">
+              {spatialPins.length}
+            </span>
+          )}
+        </button>
+
+        {/* [신규] 3D 계획·접근 축선 화살표 버튼 */}
+        <button
+          onClick={toggleArrowMode}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            isArrowMode
+              ? 'bg-amber-600/40 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 계획·접근 축선 화살표 작도 (시작점/끝점 클릭으로 지형 표면 밀착 화살표 생성)"
+        >
+          <MoveUpRight className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden sm:inline">전술 화살표</span>
+          {tacticalArrows.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-900 border border-amber-600 text-amber-200 text-[9.5px] font-mono">
+              {tacticalArrows.length}
+            </span>
+          )}
+        </button>
+
+        {/* [신규] 도정·국방 표준 도면 표제란 (Title Block) 토글 버튼 */}
+        <button
+          onClick={toggleTitleBlock}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            showTitleBlock
+              ? 'bg-emerald-600/40 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/60 shadow-md'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="도정·국방 표준 도면 표제란(Title Block) 16:9 슬라이드 및 캡처 합성 토글"
+        >
+          <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="hidden sm:inline">도면 표제란</span>
+        </button>
+
+        {/* [신규] .geobrief 단일 프로젝트 파일 내보내기/가져오기 */}
+        <div className="flex items-center space-x-1 border-l border-r border-[#242f27] px-1 sm:px-1.5">
+          <button
+            onClick={handleExportGeobrief}
+            className="px-2 py-1.5 text-xs font-medium rounded-lg bg-[#1b221e] border border-[#2f3b33] text-cyan-300 hover:bg-[#253029] hover:border-cyan-500/60 flex items-center space-x-1 transition-all whitespace-nowrap"
+            title="현재 프로젝트 전체 상태를 .geobrief 단일 파일로 내보내기"
+          >
+            <FileDown className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">.geobrief 내보내기</span>
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-2 py-1.5 text-xs font-medium rounded-lg bg-[#1b221e] border border-[#2f3b33] text-cyan-300 hover:bg-[#253029] hover:border-cyan-500/60 flex items-center space-x-1 transition-all whitespace-nowrap"
+            title=".geobrief 단일 프로젝트 파일 가져오기"
+          >
+            <FileUp className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">가져오기</span>
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImportGeobrief}
+            accept=".geobrief,.json"
+            className="hidden"
+          />
+        </div>
 
         {/* 대형 스크린 브리핑 전용 프레젠테이션 모드 */}
         <button
