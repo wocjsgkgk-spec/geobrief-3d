@@ -63,6 +63,7 @@ import { CinematicOsdOverlay } from '@/components/Cinematic/CinematicOsdOverlay'
 import { CanvasVideoRecorder } from '@/utils/canvasVideoRecorder';
 import { interpolateCinematicCamera } from '@/utils/cinematicPathInterpolator';
 import { CinematicWaypoint } from '@/types/map';
+import { registerBuildingTextures } from '@/utils/buildingTextures';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -1170,13 +1171,13 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] map.setFog skipped:', fogErr);
       }
 
-      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용]
+      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (남동향 입사각 & 깊은 그림자)]
       try {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.75,
-          position: [1.3, 110, 40],
+          intensity: 0.8,
+          position: [1.2, 120, 45],
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1203,73 +1204,9 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] sky layer setup note:', skyErr);
       }
 
-      // [절차적 외벽 텍스처 (Procedural Facade) 캔버스 패턴 등록]
+      // [절차적 외벽 텍스처 (Procedural Facade) 256x256 패턴 스프라이트 등록]
       try {
-        const createFacadePattern = (
-          id: string,
-          theme: 'commercial' | 'residential' | 'general'
-        ) => {
-          const pSize = 64;
-          const pCvs = document.createElement('canvas');
-          pCvs.width = pSize;
-          pCvs.height = pSize;
-          const pCtx = pCvs.getContext('2d');
-          if (!pCtx) return;
-
-          // 배경 외벽 컬러
-          pCtx.fillStyle =
-            theme === 'commercial'
-              ? '#0F172A'
-              : theme === 'residential'
-              ? '#F1F5F9'
-              : '#CBD5E1';
-          pCtx.fillRect(0, 0, pSize, pSize);
-
-          // 4개 층 층간 슬래브 및 창문 라인
-          const floors = 4;
-          const fH = pSize / floors;
-          for (let f = 0; f < floors; f++) {
-            const y = f * fH;
-            // 층간 슬래브 짙은 음영
-            pCtx.fillStyle = theme === 'commercial' ? '#020617' : '#94A3B8';
-            pCtx.fillRect(0, y, pSize, 3.5);
-
-            // 창문 구역 (고대비 틴트 글래스)
-            pCtx.fillStyle =
-              theme === 'commercial'
-                ? '#38BDF8'
-                : theme === 'residential'
-                ? '#64748B'
-                : '#475569';
-            pCtx.globalAlpha = theme === 'commercial' ? 0.75 : 0.55;
-            pCtx.fillRect(3, y + 4.5, pSize - 6, fH - 6);
-            pCtx.globalAlpha = 1.0;
-
-            // 창틀 프레임 멀리언 (수직 분할)
-            pCtx.strokeStyle =
-              theme === 'commercial'
-                ? '#0284C7'
-                : theme === 'residential'
-                ? '#E2E8F0'
-                : '#94A3B8';
-            pCtx.lineWidth = 1;
-            for (let m = 10; m < pSize; m += 12) {
-              pCtx.beginPath();
-              pCtx.moveTo(m, y + 4);
-              pCtx.lineTo(m, y + fH - 1.5);
-              pCtx.stroke();
-            }
-          }
-
-          const imgData = pCtx.getImageData(0, 0, pSize, pSize);
-          if (!map.hasImage(id)) {
-            map.addImage(id, imgData);
-          }
-        };
-
-        createFacadePattern('facade-commercial-pattern', 'commercial');
-        createFacadePattern('facade-residential-pattern', 'residential');
-        createFacadePattern('facade-general-pattern', 'general');
+        registerBuildingTextures(map, 256);
       } catch (patternErr) {
         console.warn('[MapLibre] Failed to create facade patterns:', patternErr);
       }
@@ -1440,7 +1377,7 @@ export const MapViewer: React.FC = () => {
           ? 'drawing-polygon-fill'
           : undefined;
 
-        // [3D 건축물 입체 돌출(3D Extrusion) 레이어]
+        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - LOD 1: 줌 14+ 고정밀 외벽 파사드 패턴 매핑]
         if (!map.getLayer('3d-buildings')) {
           map.addLayer(
             {
@@ -1448,7 +1385,45 @@ export const MapViewer: React.FC = () => {
               type: 'fill-extrusion',
               source: 'openmaptiles-vector',
               'source-layer': 'building',
+              minzoom: 14,
+              paint: {
+                'fill-extrusion-pattern': [
+                  'match',
+                  ['coalesce', ['get', 'type'], ['get', 'class'], 'residential'],
+                  ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket', 'mall'],
+                  'facade-commercial-pattern',
+                  ['military', 'government', 'public', 'civic', 'police', 'fire_station', 'barracks'],
+                  'facade-military-pattern',
+                  // 기본 주거/아파트 및 기타 건물
+                  'facade-residential-pattern',
+                ],
+                'fill-extrusion-height': [
+                  'coalesce',
+                  ['get', 'render_height'],
+                  ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
+                  ['get', 'height'],
+                  12,
+                ],
+                'fill-extrusion-base': 0,
+                'fill-extrusion-opacity': 0.95,
+                'fill-extrusion-vertical-gradient': true,
+              },
+              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            },
+            beforeBldg
+          );
+        }
+
+        // [3D 건축물 원경 LOD 0 - 줌 12 ~ 14 경량 단색 렌더링 (메모리 보호)]
+        if (!map.getLayer('3d-buildings-lod0')) {
+          map.addLayer(
+            {
+              id: '3d-buildings-lod0',
+              type: 'fill-extrusion',
+              source: 'openmaptiles-vector',
+              'source-layer': 'building',
               minzoom: 12,
+              maxzoom: 14,
               paint: {
                 'fill-extrusion-color': [
                   'match',
@@ -2160,6 +2135,9 @@ export const MapViewer: React.FC = () => {
     if (map.getLayer('3d-buildings')) {
       map.setLayoutProperty('3d-buildings', 'visibility', visibility);
     }
+    if (map.getLayer('3d-buildings-lod0')) {
+      map.setLayoutProperty('3d-buildings-lod0', 'visibility', visibility);
+    }
     if (map.getLayer('3d-buildings-roof')) {
       map.setLayoutProperty('3d-buildings-roof', 'visibility', visibility);
     }
@@ -2699,6 +2677,7 @@ export const MapViewer: React.FC = () => {
       'sample-buildings',
       'sample-buildings-roof',
       '3d-buildings',
+      '3d-buildings-lod0',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
     if (buildingLayers.length === 0) return;
@@ -3874,6 +3853,9 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
         }
+        if (map.getLayer('3d-buildings-lod0')) {
+          map.setLayoutProperty('3d-buildings-lod0', 'visibility', 'visible');
+        }
         if (map.getLayer('3d-buildings-roof')) {
           map.setLayoutProperty('3d-buildings-roof', 'visibility', 'visible');
         }
@@ -4015,6 +3997,9 @@ export const MapViewer: React.FC = () => {
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', bldgVis);
+        }
+        if (map.getLayer('3d-buildings-lod0')) {
+          map.setLayoutProperty('3d-buildings-lod0', 'visibility', bldgVis);
         }
         if (map.getLayer('3d-buildings-roof')) {
           map.setLayoutProperty('3d-buildings-roof', 'visibility', bldgVis);
