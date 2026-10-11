@@ -106,47 +106,51 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.map || !this.renderer) return;
 
-    const rawMatrix = options?.modelViewProjectionMatrix || options;
-    if (!rawMatrix) return;
+    try {
+      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      if (!rawMatrix) return;
 
-    this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);
+      this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);
 
-    const now = performance.now();
-    const deltaSec = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) : 0.016;
-    this.lastTime = now;
-    this.animTimer += deltaSec;
+      const now = performance.now();
+      const deltaSec = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) : 0.016;
+      this.lastTime = now;
+      this.animTimer += deltaSec;
 
-    // 1. 레이더 스위프 빔 360도 회전 및 중심 펄스 애니메이션
-    if (this.threatDomeState.enabled && this.radarSweepMesh) {
-      this.radarSweepMesh.rotation.y += deltaSec * 1.5;
+      // 1. 레이더 스위프 빔 360도 회전 및 중심 펄스 애니메이션
+      if (this.threatDomeState.enabled && this.radarSweepMesh) {
+        this.radarSweepMesh.rotation.y += deltaSec * 1.5;
 
-      if (this.radarPulseMesh) {
-        const pulseScale = 1 + 0.35 * Math.sin(this.animTimer * 4);
-        this.radarPulseMesh.scale.set(pulseScale, pulseScale, pulseScale);
+        if (this.radarPulseMesh) {
+          const pulseScale = 1 + 0.35 * Math.sin(this.animTimer * 4);
+          this.radarPulseMesh.scale.set(pulseScale, pulseScale, pulseScale);
+        }
       }
-    }
 
-    // 2. 3D 보안벽 상향 네온 펄스 텍스처 스크롤
-    if (this.securityWallState.enabled && this.wallTexture) {
-      this.wallTexture.offset.y += deltaSec * this.securityWallState.pulseSpeed;
-    }
+      // 2. 3D 보안벽 상향 네온 펄스 텍스처 스크롤
+      if (this.securityWallState.enabled && this.wallTexture) {
+        this.wallTexture.offset.y += deltaSec * this.securityWallState.pulseSpeed;
+      }
 
-    // 3. LOS 시계 차단 지점 펄스 애니메이션
-    if (this.losBlockedPulseMesh) {
-      const s = 1 + 0.4 * Math.sin(this.animTimer * 5);
-      this.losBlockedPulseMesh.scale.set(s, s, s);
-    }
+      // 3. LOS 시계 차단 지점 펄스 애니메이션
+      if (this.losBlockedPulseMesh) {
+        const s = 1 + 0.4 * Math.sin(this.animTimer * 5);
+        this.losBlockedPulseMesh.scale.set(s, s, s);
+      }
 
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+      this.renderer.render(this.scene, this.camera);
 
-    // 연속 애니메이션이 필요한 경우 지속 리페인트 요청
-    if (
-      this.threatDomeState.enabled ||
-      this.securityWallState.enabled ||
-      this.losBlockedPulseMesh
-    ) {
-      this.map.triggerRepaint();
+      // 연속 애니메이션이 필요한 경우 지속 리페인트 요청
+      if (
+        this.threatDomeState.enabled ||
+        this.securityWallState.enabled ||
+        this.losBlockedPulseMesh
+      ) {
+        this.map.triggerRepaint();
+      }
+    } catch (renderErr) {
+      console.warn('[TacticalDefenseLayer] render error suppressed:', renderErr);
     }
   }
 

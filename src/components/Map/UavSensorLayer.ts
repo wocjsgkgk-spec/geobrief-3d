@@ -98,94 +98,98 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.map || !this.renderer) return;
 
-    const rawMatrix = options?.modelViewProjectionMatrix || options;
-    if (!rawMatrix) return;
+    try {
+      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      if (!rawMatrix) return;
 
-    // 1. MapLibre 뷰 행렬 바인딩
-    this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);
+      // 1. MapLibre 뷰 행렬 바인딩
+      this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);
 
-    const now = performance.now();
-    const deltaSec = this.lastTimestamp ? Math.min((now - this.lastTimestamp) / 1000, 0.1) : 0.016;
-    this.lastTimestamp = now;
+      const now = performance.now();
+      const deltaSec = this.lastTimestamp ? Math.min((now - this.lastTimestamp) / 1000, 0.1) : 0.016;
+      this.lastTimestamp = now;
 
-    // TWEEN 갱신
-    TWEEN.update();
+      // TWEEN 갱신
+      TWEEN.update();
 
-    // 2. 센서 콘 펄스 애니메이션 (네온 그린 펄스 밝기 왕복)
-    this.pulseTime += deltaSec * 2.5;
-    const pulseIntensity = 0.25 + 0.18 * Math.sin(this.pulseTime);
-    for (const mat of this.sensorMaterials) {
-      mat.opacity = pulseIntensity;
+      // 2. 센서 콘 펄스 애니메이션 (네온 그린 펄스 밝기 왕복)
+      this.pulseTime += deltaSec * 2.5;
+      const pulseIntensity = 0.25 + 0.18 * Math.sin(this.pulseTime);
+      for (const mat of this.sensorMaterials) {
+        mat.opacity = pulseIntensity;
+      }
+
+      // 3. 드론 비행 시뮬레이션 애니메이션
+      if (this.uavState.isActive && this.flightCurve) {
+        // 프로펠러 고속 회전 (분당 수천 회전)
+        for (const prop of this.propellers) {
+          prop.rotation.y += deltaSec * 35;
+        }
+
+        // 비행 속도 (km/h -> 진행률 t 증가)
+        // 곡선 대략적인 둘레 3000m 기준
+        const speedMps = (this.uavState.speedKmh * 1000) / 3600;
+        const curveLengthMeters = 2500;
+        const step = (speedMps * deltaSec) / curveLengthMeters;
+        this.flightT = (this.flightT + step) % 1;
+
+        // 현재 및 다음 지점 샘플링
+        const ptCurrent = this.flightCurve.getPointAt(this.flightT);
+        const tangent = this.flightCurve.getTangentAt(this.flightT).normalize();
+
+        // 드론 위치 이동 (Mercator 좌표계)
+        this.uavGroup.position.copy(ptCurrent);
+
+        // 드론 방향 회전 (진행 방향을 정면으로 정렬)
+        const lookTarget = ptCurrent.clone().add(tangent);
+        this.uavGroup.lookAt(lookTarget);
+
+        // 선회 시 Bank Turn (기울기 Roll) 연출
+        const nextT = (this.flightT + 0.02) % 1;
+        const nextTangent = this.flightCurve.getTangentAt(nextT).normalize();
+        const crossZ = tangent.x * nextTangent.y - tangent.y * nextTangent.x;
+        const targetBank = THREE.MathUtils.clamp(crossZ * 450, -0.4, 0.4);
+        this.currentBankAngle += (targetBank - this.currentBankAngle) * 0.1;
+        this.droneBody.rotation.z = -this.currentBankAngle;
+
+        // 텔레메트리 계산
+        const lngLat = this.mercatorToLngLat(ptCurrent.x, ptCurrent.y);
+        let terrainElev = 120;
+        if (this.map && this.map.queryTerrainElevation) {
+          const e = this.map.queryTerrainElevation(lngLat);
+          if (e !== null && e !== undefined) terrainElev = Math.round(e);
+        }
+        const headingDeg = (Math.atan2(tangent.x, -tangent.y) * 180) / Math.PI;
+        const normalizedBearing = (headingDeg + 360) % 360;
+
+        if (this.onTelemetryUpdate) {
+          this.onTelemetryUpdate({
+            coords: lngLat,
+            elevation: terrainElev + this.uavState.altitudeMeters,
+            altitudeAgl: this.uavState.altitudeMeters,
+            bearing: Math.round(normalizedBearing),
+            speedKmh: this.uavState.speedKmh,
+            bankAngleDeg: Math.round(THREE.MathUtils.radToDeg(this.currentBankAngle)),
+          });
+        }
+
+        // 1인칭 FPV 관측 시점 카메라 동기화
+        if (this.uavState.cameraMode === 'fpv') {
+          this.map.jumpTo({
+            center: lngLat,
+            bearing: normalizedBearing,
+            pitch: 65,
+          });
+        }
+      }
+
+      // 4. WebGL 상태 복원 및 렌더링
+      this.renderer.resetState();
+      this.renderer.render(this.scene, this.camera);
+      this.map.triggerRepaint();
+    } catch (renderErr) {
+      console.warn('[UavSensorLayer] render error suppressed:', renderErr);
     }
-
-    // 3. 드론 비행 시뮬레이션 애니메이션
-    if (this.uavState.isActive && this.flightCurve) {
-      // 프로펠러 고속 회전 (분당 수천 회전)
-      for (const prop of this.propellers) {
-        prop.rotation.y += deltaSec * 35;
-      }
-
-      // 비행 속도 (km/h -> 진행률 t 증가)
-      // 곡선 대략적인 둘레 3000m 기준
-      const speedMps = (this.uavState.speedKmh * 1000) / 3600;
-      const curveLengthMeters = 2500;
-      const step = (speedMps * deltaSec) / curveLengthMeters;
-      this.flightT = (this.flightT + step) % 1;
-
-      // 현재 및 다음 지점 샘플링
-      const ptCurrent = this.flightCurve.getPointAt(this.flightT);
-      const tangent = this.flightCurve.getTangentAt(this.flightT).normalize();
-
-      // 드론 위치 이동 (Mercator 좌표계)
-      this.uavGroup.position.copy(ptCurrent);
-
-      // 드론 방향 회전 (진행 방향을 정면으로 정렬)
-      const lookTarget = ptCurrent.clone().add(tangent);
-      this.uavGroup.lookAt(lookTarget);
-
-      // 선회 시 Bank Turn (기울기 Roll) 연출
-      const nextT = (this.flightT + 0.02) % 1;
-      const nextTangent = this.flightCurve.getTangentAt(nextT).normalize();
-      const crossZ = tangent.x * nextTangent.y - tangent.y * nextTangent.x;
-      const targetBank = THREE.MathUtils.clamp(crossZ * 450, -0.4, 0.4);
-      this.currentBankAngle += (targetBank - this.currentBankAngle) * 0.1;
-      this.droneBody.rotation.z = -this.currentBankAngle;
-
-      // 텔레메트리 계산
-      const lngLat = this.mercatorToLngLat(ptCurrent.x, ptCurrent.y);
-      let terrainElev = 120;
-      if (this.map && this.map.queryTerrainElevation) {
-        const e = this.map.queryTerrainElevation(lngLat);
-        if (e !== null && e !== undefined) terrainElev = Math.round(e);
-      }
-      const headingDeg = (Math.atan2(tangent.x, -tangent.y) * 180) / Math.PI;
-      const normalizedBearing = (headingDeg + 360) % 360;
-
-      if (this.onTelemetryUpdate) {
-        this.onTelemetryUpdate({
-          coords: lngLat,
-          elevation: terrainElev + this.uavState.altitudeMeters,
-          altitudeAgl: this.uavState.altitudeMeters,
-          bearing: Math.round(normalizedBearing),
-          speedKmh: this.uavState.speedKmh,
-          bankAngleDeg: Math.round(THREE.MathUtils.radToDeg(this.currentBankAngle)),
-        });
-      }
-
-      // 1인칭 FPV 관측 시점 카메라 동기화
-      if (this.uavState.cameraMode === 'fpv') {
-        this.map.jumpTo({
-          center: lngLat,
-          bearing: normalizedBearing,
-          pitch: 65,
-        });
-      }
-    }
-
-    // 4. WebGL 상태 복원 및 렌더링
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
-    this.map.triggerRepaint();
   }
 
   /**

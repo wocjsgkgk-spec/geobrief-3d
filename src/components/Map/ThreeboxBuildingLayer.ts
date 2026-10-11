@@ -2,11 +2,6 @@ import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import {
   BuildingMassPresetId,
   BUILDING_MASS_PRESETS,
@@ -56,15 +51,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   ) => void;
   private onFacilitySelect?: (id: string | null) => void;
 
-  // 후처리 파이프라인
-  private composer: EffectComposer | null = null;
-  private renderPass: RenderPass | null = null;
-  private ssaoPass: SSAOPass | null = null;
-  private bloomPass: UnrealBloomPass | null = null;
-  private outputPass: OutputPass | null = null;
-  private isPostProcessingEnabled = true;
-  private lastWidth = 0;
-  private lastHeight = 0;
+  // 후처리 파이프라인 (MapLibre WebGL 컨텍스트 보호를 위해 비활성화)
+  private isPostProcessingEnabled = false;
 
   // 조명 객체
   private directionalLight: THREE.DirectionalLight | null = null;
@@ -267,10 +255,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-      // 3. Three.js EffectComposer 기반 후처리 파이프라인 결합 (SSAO & UnrealBloom)
-      this.initPostProcessing(map);
-
-      // 4. [2단계 신규] TransformControls 인터랙티브 3D 변환 기즈모 마운트
+      // 3. [2단계 신규] TransformControls 인터랙티브 3D 변환 기즈모 마운트
       try {
         this.transformControls = new TransformControls(this.camera, map.getCanvas());
         this.transformControls.size = 0.85;
@@ -302,72 +287,6 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       }
     } catch (err) {
       console.warn('[ThreeboxBuildingLayer] WebGLRenderer setup warning:', err);
-    }
-  }
-
-  /**
-   * Three.js EffectComposer 기반 SSAO 및 UnrealBloom 후처리 패스 결합
-   */
-  private initPostProcessing(map: maplibregl.Map): void {
-    if (!this.renderer) return;
-
-    try {
-      const canvas = map.getCanvas();
-      const width = canvas.clientWidth || 800;
-      const height = canvas.clientHeight || 600;
-      const pixelRatio = window.devicePixelRatio || 1;
-
-      // 알파 투명도를 보존하는 렌더 타깃 (MapLibre 하부 지도 투과)
-      const renderTarget = new THREE.WebGLRenderTarget(
-        Math.floor(width * pixelRatio),
-        Math.floor(height * pixelRatio),
-        {
-          minFilter: THREE.LinearFilter,
-          magFilter: THREE.LinearFilter,
-          format: THREE.RGBAFormat,
-          stencilBuffer: false,
-          depthBuffer: true,
-        }
-      );
-
-      this.composer = new EffectComposer(this.renderer, renderTarget);
-      this.composer.setPixelRatio(pixelRatio);
-      this.composer.setSize(width, height);
-
-      // (1) RenderPass (하부 캔버스 투과를 위해 clearAlpha: 0)
-      this.renderPass = new RenderPass(this.scene, this.camera);
-      this.renderPass.clearAlpha = 0;
-      this.renderPass.clear = true;
-      this.composer.addPass(this.renderPass);
-
-      // (2) SSAOPass (Screen Space Ambient Occlusion)
-      // - 건물 하단, 모서리 틈새, 산악 계곡의 굴곡진 틈에 자연스러운 소프트 음영을 생성해 지형 밀착감 극대화
-      // - kernelRadius: 0.8, minDistance: 0.005, maxDistance: 0.1
-      this.ssaoPass = new SSAOPass(this.scene, this.camera, width, height);
-      this.ssaoPass.kernelRadius = 0.8;
-      this.ssaoPass.minDistance = 0.005;
-      this.ssaoPass.maxDistance = 0.1;
-      this.composer.addPass(this.ssaoPass);
-
-      // (3) UnrealBloomPass (은은한 야간/하이라이트 블룸)
-      // - 도로망 및 네온 지시선에 은은한 발광 효과 (strength: 0.35, radius: 0.4, threshold: 0.85)
-      this.bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(width, height),
-        0.35,
-        0.4,
-        0.85
-      );
-      this.composer.addPass(this.bloomPass);
-
-      // (4) OutputPass (sRGB 색공간 톤매핑 & 감마 보정)
-      this.outputPass = new OutputPass();
-      this.composer.addPass(this.outputPass);
-
-      this.lastWidth = width;
-      this.lastHeight = height;
-    } catch (postErr) {
-      console.warn('[ThreeboxBuildingLayer] Failed to initialize post-processing pipeline:', postErr);
-      this.composer = null;
     }
   }
 
@@ -431,28 +350,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         cam.updateProjectionMatrix();
       }
 
-      // 7. 뷰포트 리사이즈 감지 시 후처리 패스 버퍼 동기화
-      if (this.map && this.composer) {
-        const canvas = this.map.getCanvas();
-        const curW = canvas.clientWidth;
-        const curH = canvas.clientHeight;
-        if (curW > 0 && curH > 0 && (curW !== this.lastWidth || curH !== this.lastHeight)) {
-          this.lastWidth = curW;
-          this.lastHeight = curH;
-          this.composer.setSize(curW, curH);
-          this.ssaoPass?.setSize(curW, curH);
-          this.bloomPass?.setSize(curW, curH);
-        }
-      }
-
-      // 8. WebGL 상태 보존 및 렌더링 (SSAO 후처리 파이프라인 또는 기본 렌더)
+      // 7. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출
       this.renderer.resetState();
-
-      if (this.isPostProcessingEnabled && this.composer) {
-        this.composer.render();
-      } else {
-        this.renderer.render(this.scene, this.camera);
-      }
+      this.renderer.render(this.scene, this.camera);
     } catch (renderErr) {
       console.warn('[ThreeboxBuildingLayer] render error suppressed:', renderErr);
       // 에러 시 안전하게 기본 렌더러로 폴백
@@ -1575,10 +1475,6 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     if (this.transformControls) {
       this.transformControls.dispose();
       this.transformControls = null;
-    }
-    if (this.composer) {
-      this.composer.dispose();
-      this.composer = null;
     }
     if (this.renderer) {
       this.renderer.dispose();

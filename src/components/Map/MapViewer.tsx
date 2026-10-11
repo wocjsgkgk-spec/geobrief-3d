@@ -314,13 +314,6 @@ export const MapViewer: React.FC = () => {
             tileSize: 256,
             maxzoom: 15,
           },
-          // 3D 건물 및 도로망 오픈 벡터 타일
-          'openmaptiles-vector': {
-            type: 'vector',
-            url: 'https://tiles.openfreemap.org/planet',
-            tiles: ['https://tiles.openfreemap.org/planet/20261004_113936_pt/{z}/{x}/{y}.pbf'],
-            maxzoom: 14,
-          },
           // 전략 대상지 인근 주요 거점 3D 건물 GeoJSON 소스
           'sample-buildings-source': {
             type: 'geojson',
@@ -353,17 +346,6 @@ export const MapViewer: React.FC = () => {
           'border-security-source': {
             type: 'geojson',
             data: BORDER_SECURITY_GEOJSON,
-          },
-          // [Phase 2 고도화] 브이월드 연속지적도(필지선) WMS 소스
-          'vworld-cadastral-wms': {
-            type: 'raster',
-            tiles: [
-              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=LP_PA_CBND_BUBUN,LP_PA_CBND_BONBUN&STYLES=LP_PA_CBND_BUBUN,LP_PA_CBND_BONBUN&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&BGCOLOR=0xFFFFFF&EXCEPTIONS=text/xml&KEY=${
-                process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
-              }`,
-            ],
-            tileSize: 256,
-            maxzoom: 20,
           },
           // 부지 중심 이동 및 회전 조작 핸들러 소스
           'transform-handlers-source': {
@@ -458,76 +440,6 @@ export const MapViewer: React.FC = () => {
               'hillshade-highlight-color': '#f8fafc',
               'hillshade-accent-color': '#1e293b',
               'hillshade-illumination-direction': 315,
-            },
-            layout: { visibility: 'visible' },
-          },
-
-          // [Phase 2 고도화] 브이월드 연속지적도(필지선) WMS 레이어
-          {
-            id: 'vworld-cadastral-layer',
-            type: 'raster',
-            source: 'vworld-cadastral-wms',
-            minzoom: 12,
-            paint: {
-              'raster-opacity': 0.85,
-            },
-            layout: { visibility: 'none' },
-          },
-          // [지적 필지선 오버레이 (얇은 오렌지/옐로우 #F59E0B, 1px)]
-          {
-            id: 'cadastral-parcels-line',
-            type: 'line',
-            source: 'openmaptiles-vector',
-            'source-layer': 'landuse',
-            minzoom: 12,
-            paint: {
-              'line-color': '#F59E0B',
-              'line-width': 1.0,
-              'line-opacity': 0.85,
-            },
-            layout: { visibility: 'none' },
-          },
-
-          // [Phase 3] 도로망 위계화 레이어
-          {
-            id: 'roads-local',
-            type: 'line',
-            source: 'openmaptiles-vector',
-            'source-layer': 'transportation',
-            minzoom: 12,
-            filter: ['in', 'class', 'minor', 'service', 'track'],
-            paint: {
-              'line-color': '#94A3B8',
-              'line-width': 1.2,
-              'line-opacity': 0.7,
-            },
-            layout: { visibility: 'visible' },
-          },
-          {
-            id: 'roads-secondary',
-            type: 'line',
-            source: 'openmaptiles-vector',
-            'source-layer': 'transportation',
-            minzoom: 10,
-            filter: ['in', 'class', 'secondary', 'tertiary'],
-            paint: {
-              'line-color': '#FBBF24',
-              'line-width': 2.2,
-              'line-opacity': 0.85,
-            },
-            layout: { visibility: 'visible' },
-          },
-          {
-            id: 'roads-highways',
-            type: 'line',
-            source: 'openmaptiles-vector',
-            'source-layer': 'transportation',
-            minzoom: 8,
-            filter: ['in', 'class', 'motorway', 'trunk', 'primary'],
-            paint: {
-              'line-color': '#F97316',
-              'line-width': 3.5,
-              'line-opacity': 0.95,
             },
             layout: { visibility: 'visible' },
           },
@@ -651,127 +563,6 @@ export const MapViewer: React.FC = () => {
               'line-color': '#DC2626',
               'line-width': 3.5,
               'line-dasharray': [4, 2],
-            },
-            layout: { visibility: 'visible' },
-          },
-
-          // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - 절차적 건축 셰이딩 및 실전 도시 톤 LOD 1.5+]
-          {
-            id: '3d-buildings',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 12,
-            paint: {
-              'fill-extrusion-color': [
-                'case',
-                // 일반 주거/아파트: 모던 베이지 / 라이트 그레이 (#E2E8F0, #CBD5E1)
-                [
-                  'in',
-                  ['get', 'type'],
-                  ['literal', ['apartments', 'residential', 'house', 'terrace', 'dormitory']]
-                ],
-                '#E2E8F0',
-                // 공공/군사 시설: 차분한 슬레이트 블루 / 무광 메탈 (#64748B, #475569)
-                [
-                  'in',
-                  ['get', 'type'],
-                  ['literal', ['government', 'public', 'military', 'civic', 'police', 'fire_station', 'post_office']]
-                ],
-                '#64748B',
-                // 상업/업무: 글래스 커튼월 블루/에메랄드 틴트 (#93C5FD, #6EE7B7)
-                [
-                  'in',
-                  ['get', 'type'],
-                  ['literal', ['commercial', 'office', 'hotel', 'bank']]
-                ],
-                '#93C5FD',
-                [
-                  'in',
-                  ['get', 'type'],
-                  ['literal', ['retail', 'supermarket']]
-                ],
-                '#6EE7B7',
-                // 기본 연회색
-                '#CBD5E1',
-              ],
-              'fill-extrusion-height': [
-                'coalesce',
-                ['get', 'render_height'],
-                ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                ['get', 'height'],
-                12,
-              ],
-              'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.88,
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: 'visible' },
-          },
-          // [3D 건축물 옥상 슬래브(Roof Cap) 레이어 - 우레탄 방수 녹색 / 모던 다크 그레이 분리]
-          {
-            id: '3d-buildings-roof',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 12,
-            paint: {
-              'fill-extrusion-color': [
-                'case',
-                // 아파트/주거: 한국 도시의 상징 옥상 우레탄 방수 녹색 (#15803D)
-                [
-                  'in',
-                  ['get', 'type'],
-                  ['literal', ['apartments', 'residential', 'house', 'terrace', 'dormitory']]
-                ],
-                '#15803D',
-                // 상업/업무: 모던 다크 그레이 옥상 마감 (#334155)
-                [
-                  'in',
-                  ['get', 'type'],
-                  ['literal', ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket']]
-                ],
-                '#334155',
-                // 공공/군사/기타: 무광 슬레이트 (#475569)
-                '#475569',
-              ],
-              'fill-extrusion-height': [
-                'coalesce',
-                ['get', 'render_height'],
-                ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                ['get', 'height'],
-                12,
-              ],
-              'fill-extrusion-base': [
-                'max',
-                0,
-                [
-                  '-',
-                  [
-                    'coalesce',
-                    ['get', 'render_height'],
-                    ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                    ['get', 'height'],
-                    12,
-                  ],
-                  0.4,
-                ],
-              ],
-              'fill-extrusion-opacity': 0.95,
-            },
-            layout: { visibility: 'visible' },
-          },
-          // [모서리 엣지(Edge Wireframe) 라인 레이어 - 건축 도면 및 CAD 조감도 특유의 선명한 엣지]
-          {
-            id: '3d-buildings-edge',
-            type: 'line',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 12,
-            paint: {
-              'line-color': '#1E293B',
-              'line-width': 0.8,
-              'line-opacity': 0.85,
             },
             layout: { visibility: 'visible' },
           },
@@ -1507,6 +1298,264 @@ export const MapViewer: React.FC = () => {
         }
       }
 
+      // ---------------------------------------------------------------------
+      // [외부 데이터 독립 분리 1] 브이월드 연속지적도(필지선) WMS 안전 주입
+      // ---------------------------------------------------------------------
+      try {
+        if (!map.getSource('vworld-cadastral-wms')) {
+          map.addSource('vworld-cadastral-wms', {
+            type: 'raster',
+            tiles: [
+              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=LP_PA_CBND_BUBUN,LP_PA_CBND_BONBUN&STYLES=LP_PA_CBND_BUBUN,LP_PA_CBND_BONBUN&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&BGCOLOR=0xFFFFFF&EXCEPTIONS=text/xml&KEY=${
+                process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
+              }`,
+            ],
+            tileSize: 256,
+            maxzoom: 20,
+          });
+        }
+        if (!map.getLayer('vworld-cadastral-layer')) {
+          const beforeBuffer = map.getLayer('buffer-2km-fill') ? 'buffer-2km-fill' : undefined;
+          map.addLayer(
+            {
+              id: 'vworld-cadastral-layer',
+              type: 'raster',
+              source: 'vworld-cadastral-wms',
+              minzoom: 12,
+              paint: {
+                'raster-opacity': 0.85,
+              },
+              layout: { visibility: 'none' },
+            },
+            beforeBuffer
+          );
+        }
+      } catch (wmsErr) {
+        console.error(
+          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 브이월드 연속지적도 WMS 주입 오류!\n` +
+          ` • 소스 ID: vworld-cadastral-wms | 레이어 ID: vworld-cadastral-layer\n` +
+          ` • 오류 원인: ${(wmsErr as Error)?.message || wmsErr}`,
+          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+          'color: #EF4444; font-weight: bold;'
+        );
+      }
+
+      // ---------------------------------------------------------------------
+      // [외부 데이터 독립 분리 2] 오픈 벡터 타일 (도로망 및 3D 건축물) 안전 주입
+      // ---------------------------------------------------------------------
+      try {
+        if (!map.getSource('openmaptiles-vector')) {
+          map.addSource('openmaptiles-vector', {
+            type: 'vector',
+            url: 'https://tiles.openfreemap.org/planet',
+            tiles: ['https://tiles.openfreemap.org/planet/20261004_113936_pt/{z}/{x}/{y}.pbf'],
+            maxzoom: 14,
+          });
+        }
+
+        const beforeRoads = map.getLayer('buffer-2km-fill') ? 'buffer-2km-fill' : undefined;
+
+        // 지적 필지선 오버레이
+        if (!map.getLayer('cadastral-parcels-line')) {
+          map.addLayer(
+            {
+              id: 'cadastral-parcels-line',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'landuse',
+              minzoom: 12,
+              paint: {
+                'line-color': '#F59E0B',
+                'line-width': 1.0,
+                'line-opacity': 0.85,
+              },
+              layout: { visibility: 'none' },
+            },
+            beforeRoads
+          );
+        }
+
+        // 도로망 위계화 레이어 (지방도, 2차로, 고속화도로)
+        if (!map.getLayer('roads-local')) {
+          map.addLayer(
+            {
+              id: 'roads-local',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 12,
+              filter: ['in', 'class', 'minor', 'service', 'track'],
+              paint: {
+                'line-color': '#94A3B8',
+                'line-width': 1.2,
+                'line-opacity': 0.7,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+        if (!map.getLayer('roads-secondary')) {
+          map.addLayer(
+            {
+              id: 'roads-secondary',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 10,
+              filter: ['in', 'class', 'secondary', 'tertiary'],
+              paint: {
+                'line-color': '#FBBF24',
+                'line-width': 2.2,
+                'line-opacity': 0.85,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+        if (!map.getLayer('roads-highways')) {
+          map.addLayer(
+            {
+              id: 'roads-highways',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 8,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary'],
+              paint: {
+                'line-color': '#F97316',
+                'line-width': 3.5,
+                'line-opacity': 0.95,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+
+        const beforeBldg = map.getLayer('vworld-buildings-3d')
+          ? 'vworld-buildings-3d'
+          : map.getLayer('drawing-polygon-fill')
+          ? 'drawing-polygon-fill'
+          : undefined;
+
+        // [3D 건축물 입체 돌출(3D Extrusion) 레이어]
+        if (!map.getLayer('3d-buildings')) {
+          map.addLayer(
+            {
+              id: '3d-buildings',
+              type: 'fill-extrusion',
+              source: 'openmaptiles-vector',
+              'source-layer': 'building',
+              minzoom: 12,
+              paint: {
+                'fill-extrusion-color': [
+                  'case',
+                  ['in', ['get', 'type'], ['literal', ['apartments', 'residential', 'house', 'terrace', 'dormitory']]],
+                  '#E2E8F0',
+                  ['in', ['get', 'type'], ['literal', ['government', 'public', 'military', 'civic', 'police', 'fire_station', 'post_office']]],
+                  '#64748B',
+                  ['in', ['get', 'type'], ['literal', ['commercial', 'office', 'hotel', 'bank']]],
+                  '#93C5FD',
+                  ['in', ['get', 'type'], ['literal', ['retail', 'supermarket']]],
+                  '#6EE7B7',
+                  '#CBD5E1',
+                ],
+                'fill-extrusion-height': [
+                  'coalesce',
+                  ['get', 'render_height'],
+                  ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
+                  ['get', 'height'],
+                  12,
+                ],
+                'fill-extrusion-base': 0,
+                'fill-extrusion-opacity': 0.88,
+                'fill-extrusion-vertical-gradient': true,
+              },
+              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            },
+            beforeBldg
+          );
+        }
+
+        // [3D 건축물 옥상 슬래브(Roof Cap) 레이어]
+        if (!map.getLayer('3d-buildings-roof')) {
+          map.addLayer(
+            {
+              id: '3d-buildings-roof',
+              type: 'fill-extrusion',
+              source: 'openmaptiles-vector',
+              'source-layer': 'building',
+              minzoom: 12,
+              paint: {
+                'fill-extrusion-color': [
+                  'case',
+                  ['in', ['get', 'type'], ['literal', ['apartments', 'residential', 'house', 'terrace', 'dormitory']]],
+                  '#15803D',
+                  ['in', ['get', 'type'], ['literal', ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket']]],
+                  '#334155',
+                  '#475569',
+                ],
+                'fill-extrusion-height': [
+                  'coalesce',
+                  ['get', 'render_height'],
+                  ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
+                  ['get', 'height'],
+                  12,
+                ],
+                'fill-extrusion-base': [
+                  'max',
+                  0,
+                  [
+                    '-',
+                    [
+                      'coalesce',
+                      ['get', 'render_height'],
+                      ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
+                      ['get', 'height'],
+                      12,
+                    ],
+                    0.4,
+                  ],
+                ],
+                'fill-extrusion-opacity': 0.95,
+              },
+              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            },
+            beforeBldg
+          );
+        }
+
+        // [모서리 엣지(Edge Wireframe) 라인 레이어]
+        if (!map.getLayer('3d-buildings-edge')) {
+          map.addLayer(
+            {
+              id: '3d-buildings-edge',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'building',
+              minzoom: 12,
+              paint: {
+                'line-color': '#1E293B',
+                'line-width': 0.8,
+                'line-opacity': 0.85,
+              },
+              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            },
+            beforeBldg
+          );
+        }
+      } catch (vectorErr) {
+        console.error(
+          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 오픈 벡터 타일(openmaptiles-vector) 주입 오류!\n` +
+          ` • 소스 ID: openmaptiles-vector | 레이어: roads / 3d-buildings\n` +
+          ` • 오류 원인: ${(vectorErr as Error)?.message || vectorErr}`,
+          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+          'color: #EF4444; font-weight: bold;'
+        );
+      }
+
       // [Threebox-MapLibre 연동 정밀 3D 건축물 레이어 등록]
       try {
         const tbLayer = new ThreeboxBuildingLayer();
@@ -1522,7 +1571,13 @@ export const MapViewer: React.FC = () => {
         map.addLayer(tbLayer);
         threeboxLayerRef.current = tbLayer;
       } catch (tbErr) {
-        console.warn('[MapViewer] ThreeboxBuildingLayer registration warning:', tbErr);
+        console.error(
+          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 ThreeboxBuildingLayer 등록 실패!\n` +
+          ` • 레이어 ID: threebox-building-layer\n` +
+          ` • 오류 원인: ${(tbErr as Error)?.message || tbErr}`,
+          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+          'color: #EF4444; font-weight: bold;'
+        );
       }
 
       // [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어 등록]
@@ -1531,7 +1586,13 @@ export const MapViewer: React.FC = () => {
         map.addLayer(wlLayer);
         waterLevelLayerRef.current = wlLayer;
       } catch (wlErr) {
-        console.warn('[MapViewer] WaterLevelLayer registration warning:', wlErr);
+        console.error(
+          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 WaterLevelLayer 등록 실패!\n` +
+          ` • 레이어 ID: custom-water-level-layer\n` +
+          ` • 오류 원인: ${(wlErr as Error)?.message || wlErr}`,
+          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+          'color: #EF4444; font-weight: bold;'
+        );
       }
 
       // [국방·보안 브리핑] 3D 감시 센서 콘 & UAV 정찰 드론 커스텀 레이어 등록
@@ -1543,7 +1604,13 @@ export const MapViewer: React.FC = () => {
         map.addLayer(uavLayer);
         uavSensorLayerRef.current = uavLayer;
       } catch (uavErr) {
-        console.warn('[MapViewer] UavSensorLayer registration warning:', uavErr);
+        console.error(
+          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 UavSensorLayer 등록 실패!\n` +
+          ` • 레이어 ID: uav-sensor-layer\n` +
+          ` • 오류 원인: ${(uavErr as Error)?.message || uavErr}`,
+          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+          'color: #EF4444; font-weight: bold;'
+        );
       }
 
       // [지휘통제 및 보안 관제] 3D 레이더 탐지 돔, 3D 보안벽, 입체 LOS 가시선 커스텀 레이어 등록
@@ -1555,7 +1622,13 @@ export const MapViewer: React.FC = () => {
         map.addLayer(tdLayer);
         tacticalDefenseLayerRef.current = tdLayer;
       } catch (tdErr) {
-        console.warn('[MapViewer] TacticalDefenseLayer registration warning:', tdErr);
+        console.error(
+          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 TacticalDefenseLayer 등록 실패!\n` +
+          ` • 레이어 ID: tactical-defense-layer\n` +
+          ` • 오류 원인: ${(tdErr as Error)?.message || tdErr}`,
+          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+          'color: #EF4444; font-weight: bold;'
+        );
       }
 
       map.addControl(
@@ -1590,10 +1663,22 @@ export const MapViewer: React.FC = () => {
     const canvas = map.getCanvas();
     const handleContextLost = (e: Event) => {
       e.preventDefault();
-      console.warn('[WebGL] WebGL context lost event detected. Attempting auto recovery...');
+      const webglEvent = e as any;
+      const statusMessage = webglEvent?.statusMessage || 'Context lost by browser/GPU';
+      console.error(
+        `%c[GeoBrief 3D WebGL CRITICAL]%c 🚨 WebGL 컨텍스트 손실 감지 (webglcontextlost)!\n` +
+        ` • 상태 메시지: ${statusMessage}\n` +
+        ` • 조치: 자동 복구 대기 중 (webglcontextrestored 감지 시 자동 재렌더링 시도)`,
+        'background: #7F1D1D; color: #FCA5A5; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+        'color: #F87171; font-weight: bold;'
+      );
     };
     const handleContextRestored = () => {
-      console.log('[WebGL] WebGL context restored successfully. Re-rendering map canvas...');
+      console.info(
+        `%c[GeoBrief 3D WebGL RESTORED]%c ✅ WebGL 컨텍스트 복구 완료. 캔버스 뷰포트를 재초기화합니다.`,
+        'background: #065F46; color: #A7F3D0; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+        'color: #34D399; font-weight: bold;'
+      );
       map.triggerRepaint();
     };
     if (canvas) {
@@ -1601,9 +1686,33 @@ export const MapViewer: React.FC = () => {
       canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
     }
 
-    map.on('error', (e) => {
-      // 외부 리소스나 네트워크 401/403/CORS가 전체 맵 렌더링을 중단시키지 않도록 방어 로깅
-      console.warn('[MapLibre Handled Event/Warning]:', e.error?.message || e);
+    map.on('error', (e: any) => {
+      const sourceId = e?.sourceId || e?.source?.id || 'N/A';
+      const layerId = e?.layerId || e?.layer?.id || 'N/A';
+      const errObj = e?.error || e;
+      const message = errObj?.message || (typeof errObj === 'string' ? errObj : JSON.stringify(errObj));
+      const stack = errObj?.stack || '';
+
+      let fileInfo = 'Unknown Location';
+      if (stack) {
+        const lines = stack.split('\n');
+        const rel = lines.find((l: string) => l.includes('.ts') || l.includes('.js') || l.includes('http')) || lines[1];
+        if (rel) fileInfo = rel.trim();
+      }
+
+      console.error(
+        `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 렌더링 충돌/오류 감지!\n` +
+        ` • 레이어 ID: %c${layerId}%c\n` +
+        ` • 소스 ID: %c${sourceId}%c\n` +
+        ` • 위치/파일명: ${fileInfo}\n` +
+        ` • 오류 원인: ${message}`,
+        'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
+        'color: #EF4444; font-weight: bold;',
+        'color: #FBBF24; font-weight: bold;',
+        'color: #EF4444;',
+        'color: #60A5FA; font-weight: bold;',
+        'color: #EF4444;'
+      );
     });
 
     mapRef.current = map;
