@@ -435,9 +435,9 @@ export const MapViewer: React.FC = () => {
             type: 'hillshade',
             source: 'terrarium-dem',
             paint: {
-              'hillshade-exaggeration': 0.45,
+              'hillshade-exaggeration': 0.7,
               'hillshade-shadow-color': '#0f172a',
-              'hillshade-highlight-color': '#f8fafc',
+              'hillshade-highlight-color': '#ffffff',
               'hillshade-accent-color': '#1e293b',
               'hillshade-illumination-direction': 315,
             },
@@ -575,11 +575,13 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'fill-extrusion-color': [
-                'case',
-                ['==', ['get', 'bld_category'], 'apartment'], '#F1F5F9',
-                ['==', ['get', 'bld_category'], 'public_military'], '#64748B',
-                ['==', ['get', 'bld_category'], 'commercial'], '#BAE6FD',
-                ['coalesce', ['get', 'color'], '#E2E8F0'],
+                'match',
+                ['get', 'bld_category'],
+                'apartment',
+                '#e2e8f0',
+                'commercial',
+                '#93c5fd',
+                '#cbd5e1',
               ],
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
               'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
@@ -633,17 +635,17 @@ export const MapViewer: React.FC = () => {
             minzoom: 11,
             paint: {
               'fill-extrusion-color': [
-                'case',
-                ['==', ['get', 'type'], 'residential'], '#E2E8F0',
-                ['==', ['get', 'type'], 'public_office'], '#64748B',
-                ['==', ['get', 'type'], 'military_facility'], '#475569',
-                ['==', ['get', 'type'], 'commercial_tower'], '#93C5FD',
-                ['==', ['get', 'type'], 'research_center'], '#6EE7B7',
-                '#CBD5E1',
+                'match',
+                ['get', 'type'],
+                'residential',
+                '#e2e8f0',
+                'commercial_tower',
+                '#93c5fd',
+                '#cbd5e1',
               ],
               'fill-extrusion-height': ['get', 'height'],
               'fill-extrusion-base': ['get', 'min_height'],
-              'fill-extrusion-opacity': 0.88,
+              'fill-extrusion-opacity': 0.92,
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
@@ -1096,9 +1098,9 @@ export const MapViewer: React.FC = () => {
         sky: {
           'sky-color': '#0d151c',
           'sky-horizon-blend': 0.6,
-          'horizon-color': '#1f2937',
+          'horizon-color': '#0f172a',
           'horizon-fog-blend': 0.8,
-          'fog-color': '#111827',
+          'fog-color': '#0f172a',
           'fog-ground-blend': 0.75,
         },
       },
@@ -1159,24 +1161,22 @@ export const MapViewer: React.FC = () => {
       try {
         if (typeof (map as any).setFog === 'function') {
           (map as any).setFog({
-            range: [0.5, 9.5],
-            color: '#1e293b',
-            'horizon-blend': 0.25,
-            'high-color': '#0f172a',
-            'space-color': '#020617',
+            range: [0.5, 10],
+            color: '#0f172a',
+            'horizon-blend': 0.12,
           });
         }
       } catch (fogErr) {
         console.warn('[MapLibre] map.setFog skipped:', fogErr);
       }
 
-      // [브이월드 스타일 3D 셰이딩] 남동향 입사각 태양광 조명 설정 (명암 대비 극대화)
+      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용]
       try {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.62,
-          position: [1.5, 90, 60],
+          intensity: 0.75,
+          position: [1.3, 110, 40],
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1451,16 +1451,13 @@ export const MapViewer: React.FC = () => {
               minzoom: 12,
               paint: {
                 'fill-extrusion-color': [
-                  'case',
-                  ['in', ['get', 'type'], ['literal', ['apartments', 'residential', 'house', 'terrace', 'dormitory']]],
-                  '#E2E8F0',
-                  ['in', ['get', 'type'], ['literal', ['government', 'public', 'military', 'civic', 'police', 'fire_station', 'post_office']]],
-                  '#64748B',
-                  ['in', ['get', 'type'], ['literal', ['commercial', 'office', 'hotel', 'bank']]],
-                  '#93C5FD',
-                  ['in', ['get', 'type'], ['literal', ['retail', 'supermarket']]],
-                  '#6EE7B7',
-                  '#CBD5E1',
+                  'match',
+                  ['get', 'type'],
+                  'residential',
+                  '#e2e8f0',
+                  'commercial',
+                  '#93c5fd',
+                  '#cbd5e1',
                 ],
                 'fill-extrusion-height': [
                   'coalesce',
@@ -1470,7 +1467,7 @@ export const MapViewer: React.FC = () => {
                   12,
                 ],
                 'fill-extrusion-base': 0,
-                'fill-extrusion-opacity': 0.88,
+                'fill-extrusion-opacity': 0.92,
                 'fill-extrusion-vertical-gradient': true,
               },
               layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
@@ -1490,10 +1487,11 @@ export const MapViewer: React.FC = () => {
               minzoom: 12,
               paint: {
                 'fill-extrusion-color': [
-                  'case',
-                  ['in', ['get', 'type'], ['literal', ['apartments', 'residential', 'house', 'terrace', 'dormitory']]],
-                  '#15803D',
-                  ['in', ['get', 'type'], ['literal', ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket']]],
+                  'match',
+                  ['get', 'type'],
+                  'residential',
+                  '#15803d',
+                  'commercial',
                   '#334155',
                   '#475569',
                 ],
@@ -1520,6 +1518,7 @@ export const MapViewer: React.FC = () => {
                   ],
                 ],
                 'fill-extrusion-opacity': 0.95,
+                'fill-extrusion-vertical-gradient': true,
               },
               layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
             },
@@ -2923,11 +2922,9 @@ export const MapViewer: React.FC = () => {
     try {
       if (typeof (map as any).setFog === 'function') {
         (map as any).setFog({
-          range: [0.5, 9.5],
-          color: sunConfig.fogColor,
-          'horizon-blend': 0.25,
-          'high-color': '#0f172a',
-          'space-color': '#020617',
+          range: [0.5, 10],
+          color: sunConfig.fogColor || '#0f172a',
+          'horizon-blend': 0.12,
         });
       }
     } catch (e) {
