@@ -14,6 +14,8 @@ import {
   Maximize2,
   Minimize2,
   Menu,
+  Eye,
+  Ruler,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -32,6 +34,12 @@ export const Header: React.FC = () => {
     togglePresentationMode,
     isMobilePanelOpen,
     toggleMobilePanel,
+    isViewshedMode,
+    viewshedResult,
+    toggleViewshedMode,
+    isMeasureMode,
+    measureResult,
+    toggleMeasureMode,
   } = useMapStore();
 
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -122,6 +130,34 @@ export const Header: React.FC = () => {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isOrbiting ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline">{isOrbiting ? '회전 중' : '3D 투어'}</span>
+        </button>
+
+        {/* 3D 가시권(Viewshed/사계) 분석 모드 버튼 */}
+        <button
+          onClick={toggleViewshedMode}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            isViewshedMode || viewshedResult
+              ? 'bg-teal-600/40 border-teal-400 text-teal-200 ring-1 ring-teal-400/60 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 가시권(사계) 분석: 지도 클릭 지점 기준 반경 1.5km 360° 가시/차폐 영역 3D 계산"
+        >
+          <Eye className="w-3.5 h-3.5 text-teal-400" />
+          <span className="hidden sm:inline">사계 분석</span>
+        </button>
+
+        {/* 3D 실측 줄자 (3D Ruler) 버튼 */}
+        <button
+          onClick={toggleMeasureMode}
+          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
+            isMeasureMode || measureResult
+              ? 'bg-amber-600/40 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md animate-pulse'
+              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+          }`}
+          title="3D 실측 줄자: 두 점 클릭 시 지형 굴곡을 따라가는 실제 지표 거리 및 고저차·경사도 정밀 측정"
+        >
+          <Ruler className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden sm:inline">3D 줄자</span>
         </button>
 
         {/* 대형 스크린 브리핑 전용 프레젠테이션 모드 */}

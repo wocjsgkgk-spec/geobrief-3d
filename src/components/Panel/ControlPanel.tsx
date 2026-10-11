@@ -37,7 +37,12 @@ import {
   BarChart3,
   Crosshair,
   Settings,
+  Sun,
+  Sunrise,
+  Sunset,
+  Clock,
 } from 'lucide-react';
+import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import { AddressSearch } from '@/components/Search/AddressSearch';
@@ -122,6 +127,9 @@ export const ControlPanel: React.FC = () => {
     showTerrainProfile,
     setShowTerrainProfile,
     toggleTerrainProfile,
+    polygonCenter,
+    sunHour,
+    setSunHour,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -181,7 +189,103 @@ export const ControlPanel: React.FC = () => {
         <AddressSearch />
       </section>
 
-      {/* 2. [신규] 전략 군 유휴지 실증 데이터셋 카탈로그 (8개소+) */}
+      {/* 2. [시간대별 일조·태양광 시뮬레이션 (09:00 ~ 18:00)] */}
+      {(() => {
+        const centerLat = polygonCenter ? polygonCenter[1] : viewport.latitude;
+        const centerLng = polygonCenter ? polygonCenter[0] : viewport.longitude;
+        const sunInfo = calculateSunLight(sunHour, centerLat, centerLng);
+
+        return (
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111913]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <Sun className="w-4 h-4 text-amber-400" />
+                시간대별 일조·태양광 시뮬레이션
+              </h2>
+              <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-amber-400" />
+                {sunInfo.label}
+              </span>
+            </div>
+
+            {/* 태양광 시간 슬라이더 */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[11px] text-slate-300">
+                <span className="font-semibold flex items-center gap-1 text-[10.5px]">
+                  <Sunrise className="w-3 h-3 text-orange-400" /> 09:00
+                </span>
+                <span className="font-bold text-amber-300 font-mono text-xs">
+                  {Math.floor(sunHour).toString().padStart(2, '0')}:
+                  {Math.round((sunHour % 1) * 60).toString().padStart(2, '0')}
+                </span>
+                <span className="font-semibold flex items-center gap-1 text-[10.5px]">
+                  18:00 <Sunset className="w-3 h-3 text-rose-400" />
+                </span>
+              </div>
+              <input
+                type="range"
+                min="9"
+                max="18"
+                step="0.25"
+                value={sunHour}
+                onChange={(e) => setSunHour(parseFloat(e.target.value))}
+                className="w-full h-2 bg-[#1b261e] rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
+            </div>
+
+            {/* 원클릭 시간대 프리셋 버튼 */}
+            <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+              {[
+                { h: 9.5, label: '아침 사광', icon: '🌅' },
+                { h: 12.5, label: '정오 직사', icon: '☀️' },
+                { h: 15.0, label: '오후 일조', icon: '🌤️' },
+                { h: 17.5, label: '석양 노을', icon: '🌆' },
+              ].map((preset) => {
+                const isActive = Math.abs(sunHour - preset.h) < 0.8;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setSunHour(preset.h)}
+                    className={`py-1.5 px-1 rounded text-[10.5px] font-medium border flex flex-col items-center gap-0.5 transition-all ${
+                      isActive
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-bold ring-1 ring-amber-400/50'
+                        : 'bg-[#162019] border-[#293b2d] text-slate-300 hover:bg-[#1f2e23]'
+                    }`}
+                  >
+                    <span className="text-xs">{preset.icon}</span>
+                    <span className="whitespace-nowrap">{preset.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 실시간 태양 천문 궤적 지표 카드 */}
+            <div className="grid grid-cols-3 gap-1.5 text-[10px] bg-[#0c130e] p-2 rounded-lg border border-[#1f2f22]">
+              <div>
+                <span className="text-slate-400 block">태양 방위각</span>
+                <span className="font-bold text-slate-200 font-mono">
+                  {sunInfo.azimuthDeg}°
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">태양 고도각</span>
+                <span className="font-bold text-amber-300 font-mono">
+                  {sunInfo.altitudeDeg}°
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">조도 강도</span>
+                <span className="font-bold text-emerald-400 font-mono">
+                  {Math.round(sunInfo.intensity * 100)}%
+                </span>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* 3. [신규] 전략 군 유휴지 실증 데이터셋 카탈로그 (8개소+) */}
       {(() => {
         const currentSite =
           MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId) || MILITARY_IDLE_SITES[0];

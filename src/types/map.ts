@@ -121,3 +121,29 @@ export interface VworldDiagnosticState {
   maskedKey?: string;
 }
 
+// [3D 가시권(Viewshed) 분석 결과]
+export interface ViewshedResult {
+  origin: [number, number];
+  elevation: number;
+  observerHeight: number;
+  radiusMeters: number;
+  visibleAreaSqm: number;
+  hiddenAreaSqm: number;
+  coverageRatio: number;
+  visibleGeojson: GeoJSON.FeatureCollection;
+  hiddenGeojson: GeoJSON.FeatureCollection;
+  timestamp: number;
+}
+
+// [3D 실측 줄자 측정 결과]
+export interface Measure3DResult {
+  points: [number, number][];
+  elevations: [number, number];
+  horizontalDistanceMeters: number;
+  surfaceDistanceMeters: number;
+  directDistanceMeters: number;
+  elevationDeltaMeters: number;
+  slopePercent: number;
+  slopeDegrees: number;
+}
+

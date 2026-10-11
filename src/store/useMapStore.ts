@@ -15,6 +15,8 @@ import {
   AccessibilityRowData,
   BuildingMassPresetId,
   VworldDiagnosticState,
+  ViewshedResult,
+  Measure3DResult,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -271,6 +273,27 @@ interface MapStoreState {
   isMobilePanelOpen: boolean;
   toggleMobilePanel: () => void;
   setIsMobilePanelOpen: (val: boolean) => void;
+
+  // 실시간 일조/태양광 셰이딩 엔진 (09:00 ~ 18:00)
+  sunHour: number;
+  setSunHour: (hour: number) => void;
+
+  // 군사·입지 핵심 분석 도구: 3D 가시권(Viewshed/사계) 간이 분석기
+  isViewshedMode: boolean;
+  viewshedResult: ViewshedResult | null;
+  toggleViewshedMode: () => void;
+  setViewshedResult: (result: ViewshedResult | null) => void;
+  clearViewshed: () => void;
+
+  // 정밀 3D 거리 및 고저차 측정 도구 (3D Ruler)
+  isMeasureMode: boolean;
+  measurePoints: [number, number][];
+  measureResult: Measure3DResult | null;
+  toggleMeasureMode: () => void;
+  setMeasurePoints: (points: [number, number][]) => void;
+  addMeasurePoint: (point: [number, number]) => void;
+  setMeasureResult: (result: Measure3DResult | null) => void;
+  clearMeasure: () => void;
 
   // 프로젝트 전체 초기화 및 저장본 불러오기
   resetProject: () => void;
@@ -818,6 +841,48 @@ export const useMapStore = create<MapStoreState>()(
       toggleMobilePanel: () => set((state) => ({ isMobilePanelOpen: !state.isMobilePanelOpen })),
       setIsMobilePanelOpen: (isMobilePanelOpen) => set({ isMobilePanelOpen }),
 
+      // 실시간 일조/태양광 셰이딩 (09:00 ~ 18:00)
+      sunHour: 14,
+      setSunHour: (sunHour) => set({ sunHour }),
+
+      // 3D 가시권(Viewshed/사계) 간이 분석기
+      isViewshedMode: false,
+      viewshedResult: null,
+      toggleViewshedMode: () =>
+        set((state) => ({
+          isViewshedMode: !state.isViewshedMode,
+          isMeasureMode: false,
+          isDrawingMode: false,
+          stampMode: false,
+        })),
+      setViewshedResult: (viewshedResult) => set({ viewshedResult }),
+      clearViewshed: () => set({ viewshedResult: null, isViewshedMode: false }),
+
+      // 정밀 3D 거리 및 고저차 측정 도구 (3D Ruler)
+      isMeasureMode: false,
+      measurePoints: [],
+      measureResult: null,
+      toggleMeasureMode: () =>
+        set((state) => ({
+          isMeasureMode: !state.isMeasureMode,
+          isViewshedMode: false,
+          isDrawingMode: false,
+          stampMode: false,
+          measurePoints: [],
+          measureResult: null,
+        })),
+      setMeasurePoints: (measurePoints) => set({ measurePoints }),
+      addMeasurePoint: (point) => {
+        const current = get().measurePoints;
+        if (current.length >= 2) {
+          set({ measurePoints: [point], measureResult: null });
+        } else {
+          set({ measurePoints: [...current, point] });
+        }
+      },
+      setMeasureResult: (measureResult) => set({ measureResult }),
+      clearMeasure: () => set({ measurePoints: [], measureResult: null, isMeasureMode: false }),
+
       resetProject: () => {
         const defaultRegion = GANGWON_REGIONS.find((r) => r.id === 'wonju') || GANGWON_REGIONS[0];
         set({
@@ -857,6 +922,12 @@ export const useMapStore = create<MapStoreState>()(
           isPresentationMode: false,
           isBorderDistrict: false,
           borderSecurityVisible: false,
+          sunHour: 14,
+          isViewshedMode: false,
+          viewshedResult: null,
+          isMeasureMode: false,
+          measurePoints: [],
+          measureResult: null,
           viewport: {
             longitude: defaultRegion.center[0],
             latitude: defaultRegion.center[1],
@@ -976,6 +1047,7 @@ export const useMapStore = create<MapStoreState>()(
         borderSecurityVisible: state.borderSecurityVisible,
         bookmarks: state.bookmarks,
         viewport: state.viewport,
+        sunHour: state.sunHour,
       }),
     }
   )

@@ -21,7 +21,24 @@ import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
 import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
-import { Ruler, ShieldAlert, X } from 'lucide-react';
+import {
+  Ruler,
+  ShieldAlert,
+  X,
+  Eye,
+  EyeOff,
+  Sun,
+  Sunrise,
+  Sunset,
+  Clock,
+  Navigation2,
+  Check,
+  RotateCcw,
+  AlertTriangle,
+} from 'lucide-react';
+import { calculateSunLight } from '@/utils/sunLightCalculator';
+import { calculateViewshed } from '@/utils/viewshedAnalysis';
+import { calculate3DMeasurement } from '@/utils/measure3D';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -92,6 +109,24 @@ export const MapViewer: React.FC = () => {
     toggleSlopeAnalysis,
     showTerrainProfile,
     setShowTerrainProfile,
+    // [신규] 실시간 일조/태양광 시뮬레이션
+    sunHour,
+    setSunHour,
+    // [신규] 3D 가시권(Viewshed) 분석
+    isViewshedMode,
+    viewshedResult,
+    toggleViewshedMode,
+    setViewshedResult,
+    clearViewshed,
+    // [신규] 3D 실측 줄자
+    isMeasureMode,
+    measurePoints,
+    measureResult,
+    toggleMeasureMode,
+    setMeasurePoints,
+    addMeasurePoint,
+    setMeasureResult,
+    clearMeasure,
   } = useMapStore();
 
   // 오버레이 실시간 렌더링용 로컬 상태
@@ -239,6 +274,28 @@ export const MapViewer: React.FC = () => {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
+          // [3D 가시권(Viewshed/사계) 분석 소스]
+          'viewshed-visible-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          'viewshed-hidden-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          'viewshed-origin-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          // [정밀 3D 거리 및 고저차 측정 도구 (3D Ruler) 소스]
+          'measure-line-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          'measure-points-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
         },
         layers: [
           // 베이스맵 레이어
@@ -252,6 +309,20 @@ export const MapViewer: React.FC = () => {
             id: 'satellite-layer',
             type: 'raster',
             source: 'satellite-tiles',
+            layout: { visibility: 'visible' },
+          },
+          // [지형 힐셰이드(Hillshade) 입체 음영 합성 레이어 - 산맥 능선과 계곡의 그림자 굴곡을 입체적으로 블렌딩]
+          {
+            id: 'terrain-hillshade',
+            type: 'hillshade',
+            source: 'terrarium-dem',
+            paint: {
+              'hillshade-exaggeration': 0.45,
+              'hillshade-shadow-color': '#0f172a',
+              'hillshade-highlight-color': '#f8fafc',
+              'hillshade-accent-color': '#1e293b',
+              'hillshade-illumination-direction': 315,
+            },
             layout: { visibility: 'visible' },
           },
 
@@ -736,6 +807,99 @@ export const MapViewer: React.FC = () => {
               'line-color': ['coalesce', ['get', 'strokeColor'], '#059669'],
               'line-width': 1.2,
               'line-opacity': 0.85,
+            },
+            layout: { visibility: 'visible' },
+          },
+
+          // [3D 가시권(Viewshed/사계) 분석 레이어 - 에메랄드 가시 구역 & 적색 차폐 사각지대]
+          {
+            id: 'viewshed-visible-fill',
+            type: 'fill',
+            source: 'viewshed-visible-source',
+            paint: {
+              'fill-color': '#10B981',
+              'fill-opacity': 0.38,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'viewshed-visible-line',
+            type: 'line',
+            source: 'viewshed-visible-source',
+            paint: {
+              'line-color': '#34D399',
+              'line-width': 1.0,
+              'line-opacity': 0.6,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'viewshed-hidden-fill',
+            type: 'fill',
+            source: 'viewshed-hidden-source',
+            paint: {
+              'fill-color': '#EF4444',
+              'fill-opacity': 0.28,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'viewshed-hidden-line',
+            type: 'line',
+            source: 'viewshed-hidden-source',
+            paint: {
+              'line-color': '#F87171',
+              'line-width': 1.0,
+              'line-opacity': 0.5,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'viewshed-origin-circle',
+            type: 'circle',
+            source: 'viewshed-origin-source',
+            paint: {
+              'circle-radius': 8,
+              'circle-color': '#10B981',
+              'circle-stroke-width': 2.5,
+              'circle-stroke-color': '#ffffff',
+            },
+            layout: { visibility: 'visible' },
+          },
+
+          // [정밀 3D 거리 및 고저차 측정 도구 (3D Ruler) 레이어]
+          {
+            id: 'measure-line-glow',
+            type: 'line',
+            source: 'measure-line-source',
+            paint: {
+              'line-color': '#F59E0B',
+              'line-width': 8,
+              'line-blur': 4,
+              'line-opacity': 0.45,
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'measure-line-main',
+            type: 'line',
+            source: 'measure-line-source',
+            paint: {
+              'line-color': '#FBBF24',
+              'line-width': 3.5,
+              'line-dasharray': [3, 2],
+            },
+            layout: { visibility: 'visible' },
+          },
+          {
+            id: 'measure-points-circle',
+            type: 'circle',
+            source: 'measure-points-source',
+            paint: {
+              'circle-radius': 6,
+              'circle-color': '#F59E0B',
+              'circle-stroke-width': 2.5,
+              'circle-stroke-color': '#ffffff',
             },
             layout: { visibility: 'visible' },
           },
@@ -2108,14 +2272,14 @@ export const MapViewer: React.FC = () => {
 
     // 마우스 호버 커서 처리
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode) return;
+      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode) return;
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
     };
 
     // 건물 클릭 처리
     const onMapClick = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode) return;
+      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode) return;
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
@@ -2193,7 +2357,7 @@ export const MapViewer: React.FC = () => {
       map.off('mousemove', onMouseMove);
       map.off('click', onMapClick);
     };
-  }, [isMapLoaded, isDrawingMode, stampMode]);
+  }, [isMapLoaded, isDrawingMode, stampMode, isViewshedMode, isMeasureMode]);
 
   // 지도 이동 시 건물 팝업 화면 좌표 동기화 (원시 좌표 기반 안정화)
   const selectedBuildingCenterLng = selectedBuilding?.center[0];
@@ -2262,6 +2426,197 @@ export const MapViewer: React.FC = () => {
     }
     handleCloseBuildingPopup();
   }, [selectedBuilding, applyStampAt, handleCloseBuildingPopup]);
+
+  // 19. [실시간 일조/태양광 셰이딩 엔진 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const lat = polygonCenter ? polygonCenter[1] : viewport.latitude;
+    const lng = polygonCenter ? polygonCenter[0] : viewport.longitude;
+    const sunConfig = calculateSunLight(sunHour, lat, lng);
+
+    try {
+      map.setLight({
+        anchor: 'viewport',
+        color: sunConfig.color,
+        intensity: sunConfig.intensity,
+        position: sunConfig.position,
+      });
+    } catch (e) {
+      console.warn('[MapLibre] Failed to update light:', e);
+    }
+
+    try {
+      if (typeof (map as any).setFog === 'function') {
+        (map as any).setFog({
+          range: [0.8, 8],
+          color: sunConfig.fogColor,
+          'horizon-blend': 0.15,
+          'high-color': '#0f172a',
+          'space-color': '#020617',
+        });
+      }
+    } catch (e) {
+      console.warn('[MapLibre] Failed to update fog:', e);
+    }
+
+    try {
+      if (map.getLayer('terrain-hillshade')) {
+        map.setPaintProperty(
+          'terrain-hillshade',
+          'hillshade-illumination-direction',
+          sunConfig.azimuthDeg
+        );
+      }
+    } catch (e) {
+      console.warn('[MapLibre] Failed to update hillshade illumination direction:', e);
+    }
+  }, [sunHour, isMapLoaded, polygonCenter, viewport.latitude, viewport.longitude]);
+
+  // 20. [3D 가시권(Viewshed/사계) 분석 인터랙션 & GeoJSON 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (isViewshedMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+
+      const handleViewshedClick = (e: maplibregl.MapMouseEvent) => {
+        const origin: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const res = calculateViewshed(map, origin, {
+          observerHeightMeters: 10,
+          targetHeightMeters: 2,
+          radiusMeters: 1500,
+        });
+        if (res) {
+          setViewshedResult(res);
+        }
+      };
+
+      map.on('click', handleViewshedClick);
+      return () => {
+        map.getCanvas().style.cursor = '';
+        map.off('click', handleViewshedClick);
+      };
+    }
+  }, [isViewshedMode, isMapLoaded, setViewshedResult]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const visSource = map.getSource('viewshed-visible-source') as maplibregl.GeoJSONSource;
+    const hidSource = map.getSource('viewshed-hidden-source') as maplibregl.GeoJSONSource;
+    const originSource = map.getSource('viewshed-origin-source') as maplibregl.GeoJSONSource;
+
+    if (viewshedResult) {
+      visSource?.setData(viewshedResult.visibleGeojson);
+      hidSource?.setData(viewshedResult.hiddenGeojson);
+      originSource?.setData({
+        type: 'FeatureCollection',
+        features: [
+          turf.point(viewshedResult.origin, {
+            elevation: viewshedResult.elevation,
+            observerHeight: viewshedResult.observerHeight,
+          }),
+        ],
+      });
+    } else {
+      visSource?.setData({ type: 'FeatureCollection', features: [] });
+      hidSource?.setData({ type: 'FeatureCollection', features: [] });
+      originSource?.setData({ type: 'FeatureCollection', features: [] });
+    }
+  }, [viewshedResult, isMapLoaded]);
+
+  // 21. [3D 실측 줄자 (3D Ruler) 인터랙션 & GeoJSON 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (isMeasureMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+
+      const handleMeasureClick = (e: maplibregl.MapMouseEvent) => {
+        const pt: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const currentPts = useMapStore.getState().measurePoints;
+
+        if (currentPts.length === 0) {
+          addMeasurePoint(pt);
+        } else if (currentPts.length === 1) {
+          const pt1 = currentPts[0];
+          addMeasurePoint(pt);
+          const res = calculate3DMeasurement(map, pt1, pt);
+          setMeasureResult(res);
+        } else {
+          addMeasurePoint(pt);
+        }
+      };
+
+      map.on('click', handleMeasureClick);
+      return () => {
+        map.getCanvas().style.cursor = '';
+        map.off('click', handleMeasureClick);
+      };
+    }
+  }, [isMeasureMode, isMapLoaded, addMeasurePoint, setMeasureResult]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const lineSource = map.getSource('measure-line-source') as maplibregl.GeoJSONSource;
+    const pointsSource = map.getSource('measure-points-source') as maplibregl.GeoJSONSource;
+
+    if (measurePoints.length >= 2) {
+      lineSource?.setData({
+        type: 'FeatureCollection',
+        features: [turf.lineString(measurePoints)],
+      });
+      pointsSource?.setData({
+        type: 'FeatureCollection',
+        features: measurePoints.map((pt, idx) =>
+          turf.point(pt, { label: idx === 0 ? 'A' : 'B' })
+        ),
+      });
+    } else if (measurePoints.length === 1) {
+      lineSource?.setData({ type: 'FeatureCollection', features: [] });
+      pointsSource?.setData({
+        type: 'FeatureCollection',
+        features: [turf.point(measurePoints[0], { label: 'A' })],
+      });
+    } else {
+      lineSource?.setData({ type: 'FeatureCollection', features: [] });
+      pointsSource?.setData({ type: 'FeatureCollection', features: [] });
+    }
+  }, [measurePoints, isMapLoaded]);
+
+  // 22. [ESC 키 단축키로 사계 분석 또는 3D 줄자 해제]
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isViewshedMode || viewshedResult) {
+          clearViewshed();
+        }
+        if (isMeasureMode || measureResult || measurePoints.length > 0) {
+          clearMeasure();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    isViewshedMode,
+    viewshedResult,
+    isMeasureMode,
+    measureResult,
+    measurePoints.length,
+    clearViewshed,
+    clearMeasure,
+  ]);
 
   // [3단 보고서 슬라이드 팩 및 PPTX 자동 생성 엔진]
   const isExportingRef = useRef(false);
@@ -2856,6 +3211,239 @@ export const MapViewer: React.FC = () => {
               <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:animate-ping"></span>
               <span>지형 고도단면 & 경사도 분석</span>
             </button>
+          </div>
+        )}
+
+        {/* [군사·입지 분석] 3D 가시권(Viewshed/사계) 분석 플로팅 컨트롤 & 결과 카드 */}
+        {(isViewshedMode || viewshedResult) && (
+          <div className="absolute top-16 right-6 z-30 w-84 max-w-[calc(100vw-3rem)] bg-[#0d1612]/95 backdrop-blur-md border border-teal-500/80 rounded-xl shadow-2xl p-3.5 text-xs space-y-3 ring-1 ring-teal-500/30 animate-fade-in">
+            {/* 헤더 */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-teal-950/80 border border-teal-700/60 text-teal-400">
+                  <Eye className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-xs">
+                    3D 가시권(사계) 정밀 분석
+                  </h3>
+                  <p className="text-[10px] text-teal-300/80">
+                    반경 1.5km 360° 시선 차폐 시뮬레이션
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearViewshed}
+                className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
+                title="가시권 분석 종료 (ESC)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 상태 안내 및 수치 */}
+            {!viewshedResult ? (
+              <div className="p-2.5 rounded-lg bg-teal-950/40 border border-teal-800/40 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-teal-300 font-semibold text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-teal-400 animate-ping" />
+                  <span>지도 위 관측 지점(부지/고지대)을 클릭하세요</span>
+                </div>
+                <p className="text-[10px] text-slate-300 leading-relaxed">
+                  지표면 +10m 관측소 높이 기준 360도 전방위 4도 간격 Ray Marching으로 능선과 지형 표고 차폐를 실시간 분석합니다.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {/* 관측소 고도 및 좌표 */}
+                <div className="grid grid-cols-2 gap-2 text-[10.5px] bg-[#121f19] p-2 rounded-lg border border-[#23382d]">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">관측 지표 표고</span>
+                    <span className="font-bold text-slate-200 font-mono">
+                      EL. {viewshedResult.elevation} m
+                    </span>
+                    <span className="text-[9.5px] text-teal-300/80 block">
+                      (+관측탑 {viewshedResult.observerHeight}m)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">가시율 (Coverage)</span>
+                    <span className="font-extrabold text-teal-300 font-mono text-sm">
+                      {viewshedResult.coverageRatio}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* 가시 / 차폐 프로그레스 바 */}
+                <div className="space-y-1">
+                  <div className="h-2 w-full bg-rose-950/80 rounded-full overflow-hidden flex border border-slate-700/50">
+                    <div
+                      className="bg-emerald-500 h-full transition-all duration-500"
+                      style={{ width: `${viewshedResult.coverageRatio}%` }}
+                    />
+                    <div
+                      className="bg-rose-500 h-full transition-all duration-500"
+                      style={{ width: `${100 - viewshedResult.coverageRatio}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono px-0.5">
+                    <span className="text-emerald-400 font-semibold">
+                      가시: {(viewshedResult.visibleAreaSqm / 10000).toFixed(1)}만㎡
+                    </span>
+                    <span className="text-rose-400 font-semibold">
+                      차폐 사각: {(viewshedResult.hiddenAreaSqm / 10000).toFixed(1)}만㎡
+                    </span>
+                  </div>
+                </div>
+
+                {/* 범례 */}
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-[#1f3026]">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/80 border border-emerald-400" />
+                    가시 구역
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-rose-500/80 border border-rose-400" />
+                    능선 차폐 사각
+                  </span>
+                  <span className="text-[9.5px] font-mono text-slate-500">
+                    반경 1.5km
+                  </span>
+                </div>
+
+                {/* 재측정 가이드 */}
+                <p className="text-[9.5px] text-teal-300/80 text-center">
+                  💡 지도의 다른 지점을 클릭하면 즉시 재계산됩니다
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* [토목·실무 도구] 정밀 3D 거리 및 고저차 측정 도구 (3D Ruler) 플로팅 카드 */}
+        {(isMeasureMode || measureResult || measurePoints.length > 0) && (
+          <div className="absolute top-16 left-6 z-30 w-84 max-w-[calc(100vw-3rem)] bg-[#121722]/95 backdrop-blur-md border border-amber-500/80 rounded-xl shadow-2xl p-3.5 text-xs space-y-3 ring-1 ring-amber-500/30 animate-fade-in">
+            {/* 헤더 */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-amber-950/80 border border-amber-700/60 text-amber-400">
+                  <Ruler className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-xs">
+                    3D 실측 줄자 (3D Ruler)
+                  </h3>
+                  <p className="text-[10px] text-amber-300/80">
+                    지형 표고 굴곡 반영 3D 실측 거리 & 고저차
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearMeasure}
+                className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
+                title="줄자 측정 종료 (ESC)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 진행 단계 안내 */}
+            {measurePoints.length === 0 && (
+              <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-800/40 text-[11px] text-amber-200">
+                <span className="font-bold block mb-0.5">📍 1단계: 측정 시작점 (A) 클릭</span>
+                지도 상의 측정 출발 지점을 클릭해 주세요.
+              </div>
+            )}
+
+            {measurePoints.length === 1 && (
+              <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-800/40 text-[11px] text-amber-200">
+                <span className="font-bold block mb-0.5">🏁 2단계: 측정 끝점 (B) 클릭</span>
+                시작점: [{measurePoints[0][0].toFixed(4)}, {measurePoints[0][1].toFixed(4)}] 지정됨. 목표 지점을 클릭해 주세요.
+              </div>
+            )}
+
+            {/* 실측 완료 결과 수치 */}
+            {measureResult && (
+              <div className="space-y-2.5">
+                {/* 메인 하이라이트: 3D 실제 지표 거리 */}
+                <div className="p-2.5 rounded-lg bg-gradient-to-r from-amber-950/70 to-[#1f2333] border border-amber-500/50">
+                  <span className="text-[10px] text-amber-300 font-semibold block uppercase tracking-wider">
+                    3D 실제 지표 거리 (Surface Distance)
+                  </span>
+                  <div className="text-xl font-extrabold text-white font-mono mt-0.5 flex items-baseline gap-1">
+                    <span>{measureResult.surfaceDistanceMeters.toLocaleString()}</span>
+                    <span className="text-xs text-amber-300 font-sans font-bold">m</span>
+                  </div>
+                  <span className="text-[9.5px] text-slate-400 block mt-0.5">
+                    * 24개 세부 지표면 표고 굴곡 실시간 적분 반영
+                  </span>
+                </div>
+
+                {/* 상세 수치 그리드 */}
+                <div className="grid grid-cols-2 gap-2 text-[10.5px] bg-[#0d131f] p-2 rounded-lg border border-[#1e293b]">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">2D 수평 거리</span>
+                    <span className="font-bold text-slate-200 font-mono">
+                      {measureResult.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">표고차 (ΔH)</span>
+                    <span
+                      className={`font-bold font-mono ${
+                        measureResult.elevationDeltaMeters >= 0
+                          ? 'text-rose-400'
+                          : 'text-blue-400'
+                      }`}
+                    >
+                      {measureResult.elevationDeltaMeters > 0 ? '+' : ''}
+                      {measureResult.elevationDeltaMeters} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">평균 경사도</span>
+                    <span className="font-bold text-emerald-400 font-mono">
+                      {measureResult.slopePercent}% ({measureResult.slopeDegrees}°)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">공간 직선 거리</span>
+                    <span className="font-bold text-slate-300 font-mono">
+                      {measureResult.directDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                </div>
+
+                {/* 지점 표고 비교 */}
+                <div className="text-[10px] text-slate-400 bg-[#0d131f] px-2 py-1.5 rounded border border-[#1e293b] flex justify-between font-mono">
+                  <span>시점 (A): EL. {measureResult.elevations[0]}m</span>
+                  <span>→</span>
+                  <span>종점 (B): EL. {measureResult.elevations[1]}m</span>
+                </div>
+
+                {/* 액션 버튼 */}
+                <div className="pt-0.5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMeasurePoints([]);
+                      setMeasureResult(null);
+                    }}
+                    className="flex-1 py-1.5 px-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] transition-all shadow-md shadow-amber-950/60"
+                  >
+                    <span>새로운 구간 측정</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearMeasure}
+                    className="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-[11px] transition-colors"
+                  >
+                    종료
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
