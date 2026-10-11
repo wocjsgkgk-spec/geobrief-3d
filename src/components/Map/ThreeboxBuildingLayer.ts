@@ -43,29 +43,59 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   private rotationDeg = 0;
   private customGltfUrl: string | null = null;
 
-  // 재질 캐시
+  // [PBR 물리 기반 재질 캐시]
   private materials = {
-    glassCurtain: new THREE.MeshStandardMaterial({
-      color: 0x0ea5e9,
-      metalness: 0.85,
-      roughness: 0.15,
+    // 1. 벽면(Wall): 연회색 무광 콘크리트 질감 (roughness: 0.7, metalness: 0.1)
+    wallConcrete: new THREE.MeshStandardMaterial({
+      color: 0xd1d5db, // Slate 300 콘크리트 연회색
+      roughness: 0.7,
+      metalness: 0.1,
+    }),
+    // 2. 창문(Window): 반사 하이라이트가 맺히는 글래스 재질 (roughness: 0.2, metalness: 0.8)
+    windowGlass: new THREE.MeshStandardMaterial({
+      color: 0x38bdf8, // 맑은 스카이블루 글래스 틴트
+      roughness: 0.2,
+      metalness: 0.8,
       transparent: true,
       opacity: 0.82,
     }),
+    // 3. 옥상(Roof): 방수 우레탄 짙은 청회색 마감 (#1e293b, roughness: 0.9)
+    roofWaterproof: new THREE.MeshStandardMaterial({
+      color: 0x1e293b, // 방수 우레탄 짙은 청회색
+      roughness: 0.9,
+      metalness: 0.15,
+    }),
+    // 옥탑 기계실 / 코어 펜트하우스 외벽
+    penthouseCore: new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      roughness: 0.65,
+      metalness: 0.2,
+    }),
+    // 공조 설비 칠러 / 환기 루버 메탈릭
+    hvacMetal: new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      roughness: 0.35,
+      metalness: 0.75,
+    }),
+    // 옥상 난간 (Parapet / Railing)
+    railingParapet: new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      metalness: 0.4,
+      roughness: 0.5,
+    }),
+    // 창호 멀리언 금속 프레임
     mullionMetal: new THREE.MeshStandardMaterial({
       color: 0x1e293b,
       metalness: 0.9,
       roughness: 0.25,
     }),
+    // 층간 슬래브
     slabDark: new THREE.MeshStandardMaterial({
       color: 0x0f172a,
       roughness: 0.7,
+      metalness: 0.2,
     }),
-    railingParapet: new THREE.MeshStandardMaterial({
-      color: 0x475569,
-      metalness: 0.7,
-      roughness: 0.35,
-    }),
+    // 헬리패드 데크 & 마킹
     helipadDeck: new THREE.MeshStandardMaterial({
       color: 0x1e293b,
       roughness: 0.85,
@@ -77,20 +107,21 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     warningRed: new THREE.MeshBasicMaterial({
       color: 0xef4444,
     }),
+    // 물류센터 및 복합 커뮤니티 재질
     warehouseWall: new THREE.MeshStandardMaterial({
-      color: 0x64748b,
-      metalness: 0.4,
-      roughness: 0.5,
+      color: 0x94a3b8,
+      roughness: 0.7,
+      metalness: 0.1,
     }),
     gabledRoof: new THREE.MeshStandardMaterial({
-      color: 0x475569,
-      metalness: 0.6,
-      roughness: 0.4,
+      color: 0x1e293b,
+      roughness: 0.9,
+      metalness: 0.2,
     }),
     dockShutter: new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      metalness: 0.5,
-      roughness: 0.4,
+      color: 0x64748b,
+      roughness: 0.35,
+      metalness: 0.7,
     }),
     dockHazard: new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
@@ -99,7 +130,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     solarCellNavy: new THREE.MeshStandardMaterial({
       color: 0x0c2340,
       metalness: 0.9,
-      roughness: 0.1,
+      roughness: 0.15,
     }),
     solarFrame: new THREE.MeshStandardMaterial({
       color: 0xcbd5e1,
@@ -107,8 +138,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       roughness: 0.2,
     }),
     terraceLimestone: new THREE.MeshStandardMaterial({
-      color: 0xf1f5f9,
-      roughness: 0.85,
+      color: 0xd1d5db,
+      roughness: 0.7,
+      metalness: 0.1,
     }),
     terraceWood: new THREE.MeshStandardMaterial({
       color: 0xb45309,
@@ -138,20 +170,33 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     this.map = map;
 
-    // 1. Threebox 전용 조명 파이프라인 구성 (요구사항: DirectionalLight 0.8, AmbientLight 0.5)
-    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 0.8);
+    // 1. Directional Light 그림자 셰이딩 강화 (CastShadow 및 Shadow Bias 튜닝)
+    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.2);
     this.directionalLight.position.set(120, -140, 160).normalize();
+    this.directionalLight.castShadow = true;
+    this.directionalLight.shadow.mapSize.width = 2048;
+    this.directionalLight.shadow.mapSize.height = 2048;
+    this.directionalLight.shadow.camera.near = 1;
+    this.directionalLight.shadow.camera.far = 800;
+    this.directionalLight.shadow.camera.left = -100;
+    this.directionalLight.shadow.camera.right = 100;
+    this.directionalLight.shadow.camera.top = 100;
+    this.directionalLight.shadow.camera.bottom = -100;
+    // 아티팩트(Shadow Acne & Peter Panning) 방지 편향치
+    this.directionalLight.shadow.bias = -0.0005;
+    this.directionalLight.shadow.normalBias = 0.02;
     this.scene.add(this.directionalLight);
 
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // 환경광 (Ambient Light)
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
     this.scene.add(this.ambientLight);
 
-    // 건축물 음영 보조광 (반대편 엣지 음영 디테일 보강)
-    this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
+    // 대기 산란 반사 보조광 (Fill Light)
+    this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
     this.fillLight.position.set(-100, 120, 80).normalize();
     this.scene.add(this.fillLight);
 
-    // 2. WebGLRenderer 초기화 (4K 슬라이드 캡처를 위한 preserveDrawingBuffer: true)
+    // 2. WebGLRenderer 초기화 (소프트 섀도우 PCFSoftShadowMap & preserveDrawingBuffer)
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas: map.getCanvas(),
@@ -162,6 +207,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       });
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     } catch (err) {
       console.warn('[ThreeboxBuildingLayer] WebGLRenderer setup warning:', err);
     }
@@ -479,26 +526,37 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       const d = 35;
       const h = 22;
 
-      // 1. 메인 커튼월 타워 본체
+      // 1. [벽면(Wall)] 연회색 무광 콘크리트 구조체 코어 (roughness: 0.7, metalness: 0.1)
+      const coreGeo = new THREE.BoxGeometry(w * 0.96, h, d * 0.96);
+      const coreMesh = new THREE.Mesh(coreGeo, this.materials.wallConcrete);
+      coreMesh.position.set(0, h / 2, 0);
+      root.add(coreMesh);
+
+      // 2. [창문(Window)] 반사 하이라이트 글래스 커튼월 외피 (roughness: 0.2, metalness: 0.8)
       const towerGeo = new THREE.BoxGeometry(w, h, d);
-      const towerMesh = new THREE.Mesh(towerGeo, this.materials.glassCurtain);
+      const towerMesh = new THREE.Mesh(towerGeo, this.materials.windowGlass);
       towerMesh.position.set(0, h / 2, 0);
       root.add(towerMesh);
 
-      // 2. 층간 슬래브 라인 (Floor Slabs: 5개 층 슬래브)
+      // 3. 층간 슬래브 라인 (Floor Slabs: 5개 층 슬래브)
       const floorCount = 5;
       const slabH = 0.45;
-      const slabGeo = new THREE.BoxGeometry(w * 0.98, slabH, d * 0.98);
+      const slabGeo = new THREE.BoxGeometry(w * 0.99, slabH, d * 0.99);
       for (let i = 1; i <= floorCount; i++) {
         const slab = new THREE.Mesh(slabGeo, this.materials.slabDark);
         slab.position.set(0, i * (h / (floorCount + 1)), 0);
         root.add(slab);
       }
 
-      // 3. 커튼월 수직 멀리언 창문 프레임 (Mullion Grid: 4m 간격 수직 프레임)
+      // 4. [옥상(Roof)] 방수 우레탄 짙은 청회색 상단 마감 슬래브 (#1e293b, roughness: 0.9)
+      const roofDeckGeo = new THREE.BoxGeometry(w, 0.5, d);
+      const roofDeck = new THREE.Mesh(roofDeckGeo, this.materials.roofWaterproof);
+      roofDeck.position.set(0, h + 0.25, 0);
+      root.add(roofDeck);
+
+      // 5. 커튼월 수직 멀리언 창문 프레임 (Mullion Grid: 4.5m 간격 수직 프레임)
       const mullionGeoX = new THREE.BoxGeometry(0.3, h, 0.4);
       for (let mx = -w / 2 + 3; mx <= w / 2 - 3; mx += 4.5) {
-        // 전면 및 후면 멀리언
         const mFront = new THREE.Mesh(mullionGeoX, this.materials.mullionMetal);
         mFront.position.set(mx, h / 2, d / 2 + 0.1);
         root.add(mFront);
@@ -508,46 +566,53 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         root.add(mBack);
       }
 
-      // 4. [지붕 난간 (Rooftop Parapet / Railing)] 외곽 테두리 1.2m 난간
+      // 6. [지붕 난간 (Rooftop Parapet / Railing)] 외곽 테두리 1.2m 난간 구조물
       const parapetH = 1.2;
       const parapetThick = 0.35;
-      // 북/남 난간
       const pNorthSouthGeo = new THREE.BoxGeometry(w, parapetH, parapetThick);
       const pNorth = new THREE.Mesh(pNorthSouthGeo, this.materials.railingParapet);
-      pNorth.position.set(0, h + parapetH / 2, -d / 2 + parapetThick / 2);
+      pNorth.position.set(0, h + parapetH / 2 + 0.5, -d / 2 + parapetThick / 2);
       root.add(pNorth);
 
       const pSouth = new THREE.Mesh(pNorthSouthGeo, this.materials.railingParapet);
-      pSouth.position.set(0, h + parapetH / 2, d / 2 - parapetThick / 2);
+      pSouth.position.set(0, h + parapetH / 2 + 0.5, d / 2 - parapetThick / 2);
       root.add(pSouth);
 
-      // 동/서 난간
       const pEastWestGeo = new THREE.BoxGeometry(parapetThick, parapetH, d - parapetThick * 2);
       const pWest = new THREE.Mesh(pEastWestGeo, this.materials.railingParapet);
-      pWest.position.set(-w / 2 + parapetThick / 2, h + parapetH / 2, 0);
+      pWest.position.set(-w / 2 + parapetThick / 2, h + parapetH / 2 + 0.5, 0);
       root.add(pWest);
 
       const pEast = new THREE.Mesh(pEastWestGeo, this.materials.railingParapet);
-      pEast.position.set(w / 2 - parapetThick / 2, h + parapetH / 2, 0);
+      pEast.position.set(w / 2 - parapetThick / 2, h + parapetH / 2 + 0.5, 0);
       root.add(pEast);
 
-      // 5. 옥탑 기계실 / 코어 펜트하우스 (가로 18m x 세로 14m x 높이 3.8m)
-      const phW = 18;
-      const phD = 14;
-      const phH = 3.8;
+      // 7. [옥탑 기계실 / 엘리베이터 권상기실 (Penthouse Core)] (16m x 4.2m x 12m)
+      const phW = 16;
+      const phD = 12;
+      const phH = 4.2;
       const ph = new THREE.Mesh(
         new THREE.BoxGeometry(phW, phH, phD),
-        this.materials.mullionMetal
+        this.materials.penthouseCore
       );
-      ph.position.set(-10, h + phH / 2, 0);
+      ph.position.set(-11, h + phH / 2 + 0.5, 0);
       root.add(ph);
 
-      // 6. [옥상 헬리패드 (Helipad H)] 반경 9.5m 원형 데크 및 H 마크
+      // 8. [옥상 공조 냉각탑 / HVAC Chiller Units 메탈 설비 2기]
+      const hvacGeo = new THREE.BoxGeometry(4.6, 2.2, 3.2);
+      const hvac1 = new THREE.Mesh(hvacGeo, this.materials.hvacMetal);
+      hvac1.position.set(-12, h + phH + 1.1 + 0.5, -2.5);
+      root.add(hvac1);
+
+      const hvac2 = new THREE.Mesh(hvacGeo, this.materials.hvacMetal);
+      hvac2.position.set(-12, h + phH + 1.1 + 0.5, 2.5);
+      root.add(hvac2);
+
+      // 9. [옥상 헬리패드 (Helipad H)] 반경 9.5m 원형 데크 및 H 마크
       const padRadius = 9.5;
       const padH = 0.35;
-      const padCenter = new THREE.Vector3(12, h + padH / 2, 0);
+      const padCenter = new THREE.Vector3(12, h + padH / 2 + 0.5, 0);
 
-      // 원형 헬리패드 플레이트
       const padBase = new THREE.Mesh(
         new THREE.CylinderGeometry(padRadius, padRadius, padH, 32),
         this.materials.helipadDeck
@@ -555,7 +620,6 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       padBase.position.copy(padCenter);
       root.add(padBase);
 
-      // 옐로우 서클 링
       const padRing = new THREE.Mesh(
         new THREE.RingGeometry(padRadius * 0.82, padRadius * 0.92, 32),
         this.materials.helipadYellow
@@ -564,7 +628,6 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       padRing.position.set(padCenter.x, padCenter.y + 0.2, padCenter.z);
       root.add(padRing);
 
-      // 헬리패드 'H' 마크
       const barW = 0.9;
       const barL = 5.6;
       const barThick = 0.06;
@@ -586,17 +649,17 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       // 항공 장애 표시등 (적색 비콘 4개 모서리)
       const beaconGeo = new THREE.SphereGeometry(0.5, 8, 8);
       [
-        [-w / 2 + 1, h + parapetH + 0.5, -d / 2 + 1],
-        [w / 2 - 1, h + parapetH + 0.5, -d / 2 + 1],
-        [-w / 2 + 1, h + parapetH + 0.5, d / 2 - 1],
-        [w / 2 - 1, h + parapetH + 0.5, d / 2 - 1],
+        [-w / 2 + 1, h + parapetH + 1, -d / 2 + 1],
+        [w / 2 - 1, h + parapetH + 1, -d / 2 + 1],
+        [-w / 2 + 1, h + parapetH + 1, d / 2 - 1],
+        [w / 2 - 1, h + parapetH + 1, d / 2 - 1],
       ].forEach(([bx, by, bz]) => {
         const beacon = new THREE.Mesh(beaconGeo, this.materials.warningRed);
         beacon.position.set(bx, by, bz);
         root.add(beacon);
       });
 
-      // 7. 지상 진입 캐노피 (Entrance Canopy)
+      // 10. 지상 진입 캐노피 (Entrance Canopy)
       const canopy = new THREE.Mesh(
         new THREE.BoxGeometry(16, 0.4, 7),
         this.materials.mullionMetal
@@ -604,7 +667,42 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       canopy.position.set(0, 4.2, d / 2 + 3.5);
       root.add(canopy);
 
+      // 11. 지면 그림자 수신용 바닥 플레이트 (Ground Shadow Receiver Plane)
+      const shadowPlaneGeo = new THREE.PlaneGeometry(160, 160);
+      const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.38 });
+      const shadowPlane = new THREE.Mesh(shadowPlaneGeo, shadowPlaneMat);
+      shadowPlane.rotation.x = -Math.PI / 2;
+      shadowPlane.position.y = 0.05;
+      shadowPlane.receiveShadow = true;
+      root.add(shadowPlane);
+
+      // 12. 전체 서브메쉬에 CastShadow & ReceiveShadow 활성화
+      root.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh && obj !== shadowPlane) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
+      });
+
       return root;
+    }
+  }
+
+  /**
+   * 실시간 태양광 위치 및 조도/색온도 동기화 (그림자 회전 및 각도 갱신)
+   */
+  updateSunLight(directionalVector: [number, number, number], color: string, intensity: number): void {
+    if (this.directionalLight) {
+      this.directionalLight.position.set(
+        directionalVector[0],
+        directionalVector[1],
+        directionalVector[2]
+      ).normalize();
+      this.directionalLight.color.set(color);
+      this.directionalLight.intensity = Math.max(0.6, intensity * 1.6);
+    }
+    if (this.map) {
+      this.map.triggerRepaint();
     }
   }
 

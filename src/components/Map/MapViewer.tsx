@@ -1276,6 +1276,27 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
       }
 
+      // [물리 기반 대기 산란 (Sky Shader & Atmosphere)] 실시간 하늘 레이어 등록
+      try {
+        const initSun = calculateSunLight(13, viewport.latitude, viewport.longitude);
+        if (!map.getLayer('sky-atmosphere')) {
+          map.addLayer({
+            id: 'sky-atmosphere',
+            type: 'sky',
+            paint: {
+              'sky-type': 'atmosphere',
+              'sky-atmosphere-sun': [initSun.azimuthDeg, initSun.altitudeDeg],
+              'sky-atmosphere-sun-intensity': initSun.skySunIntensity,
+              'sky-atmosphere-halo-color': initSun.skyHaloColor,
+              'sky-atmosphere-color': initSun.skyAtmosphereColor,
+              'sky-opacity': 1,
+            },
+          } as any);
+        }
+      } catch (skyErr) {
+        console.warn('[MapLibre] sky layer setup note:', skyErr);
+      }
+
       // [절차적 외벽 텍스처 (Procedural Facade) 캔버스 패턴 등록]
       try {
         const createFacadePattern = (
@@ -2553,6 +2574,35 @@ export const MapViewer: React.FC = () => {
       console.warn('[MapLibre] Failed to update fog:', e);
     }
 
+    // 3. 물리 기반 대기 산란 (Sky Shader & Atmosphere) 실시간 바인딩
+    try {
+      if (map.getLayer('sky-atmosphere')) {
+        map.setPaintProperty(
+          'sky-atmosphere',
+          'sky-atmosphere-sun',
+          [sunConfig.azimuthDeg, sunConfig.altitudeDeg]
+        );
+        map.setPaintProperty(
+          'sky-atmosphere',
+          'sky-atmosphere-sun-intensity',
+          sunConfig.skySunIntensity
+        );
+        map.setPaintProperty(
+          'sky-atmosphere',
+          'sky-atmosphere-halo-color',
+          sunConfig.skyHaloColor
+        );
+        map.setPaintProperty(
+          'sky-atmosphere',
+          'sky-atmosphere-color',
+          sunConfig.skyAtmosphereColor
+        );
+      }
+    } catch (e) {
+      console.warn('[MapLibre] Failed to update sky-atmosphere paint properties:', e);
+    }
+
+    // 4. 지형 힐셰이드 광원 방향 갱신
     try {
       if (map.getLayer('terrain-hillshade')) {
         map.setPaintProperty(
@@ -2563,6 +2613,26 @@ export const MapViewer: React.FC = () => {
       }
     } catch (e) {
       console.warn('[MapLibre] Failed to update hillshade illumination direction:', e);
+    }
+
+    // 5. [PBR 3D 건축물] Threebox 및 Three.js Directional Light 위치 및 그림자 각도 실시간 회전
+    try {
+      if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.updateSunLight(
+          sunConfig.directionalVector,
+          sunConfig.color,
+          sunConfig.intensity
+        );
+      }
+      if (threeDLayerRef.current) {
+        threeDLayerRef.current.updateSunLight(
+          sunConfig.directionalVector,
+          sunConfig.color,
+          sunConfig.intensity
+        );
+      }
+    } catch (e) {
+      console.warn('[3D Building] Failed to update sun light and shadows:', e);
     }
   }, [sunHour, isMapLoaded, polygonCenter, viewport.latitude, viewport.longitude]);
 

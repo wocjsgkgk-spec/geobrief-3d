@@ -10,36 +10,76 @@ import { BuildingMassPresetId } from '@/types/map';
  */
 
 // -----------------------------------------------------------------------------
-// 공통 머티리얼 캐시 (GPU 메모리 및 렌더링 최적화)
+// 공통 머티리얼 캐시 (PBR 물리 기반 재질 튜닝)
 // -----------------------------------------------------------------------------
 const materials = {
-  // R&D 캠퍼스
+  // [벽면(Wall)] 연회색 무광 콘크리트 질감 (roughness: 0.7, metalness: 0.1)
+  wallConcrete: new THREE.MeshStandardMaterial({
+    color: 0xd1d5db,
+    roughness: 0.7,
+    metalness: 0.1,
+  }),
+  // [창문(Window)] 반사 하이라이트 글래스 재질 (roughness: 0.2, metalness: 0.8)
+  windowGlass: new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    roughness: 0.2,
+    metalness: 0.8,
+    transparent: true,
+    opacity: 0.82,
+  }),
+  // [옥상(Roof)] 방수 우레탄 짙은 청회색 마감 (#1e293b, roughness: 0.9)
+  roofWaterproof: new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.9,
+    metalness: 0.15,
+  }),
+  // 옥탑 기계실 / 엘리베이터 코어 외벽
+  penthouseCore: new THREE.MeshStandardMaterial({
+    color: 0x94a3b8,
+    roughness: 0.65,
+    metalness: 0.2,
+  }),
+  // 공조 설비 칠러 / 환기 루버 메탈릭
+  hvacMetal: new THREE.MeshStandardMaterial({
+    color: 0x64748b,
+    roughness: 0.35,
+    metalness: 0.75,
+  }),
+  // 옥상 난간 (Parapet / Railing)
+  railingParapet: new THREE.MeshStandardMaterial({
+    color: 0x475569,
+    metalness: 0.4,
+    roughness: 0.5,
+  }),
+
+  // R&D 캠퍼스 호환 머티리얼
   glassCurtain: new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
-    metalness: 0.85,
-    roughness: 0.12,
+    metalness: 0.8,
+    roughness: 0.2,
     transparent: true,
-    opacity: 0.78,
+    opacity: 0.82,
   }),
   glassCyan: new THREE.MeshStandardMaterial({
     color: 0x06b6d4,
     metalness: 0.8,
-    roughness: 0.15,
+    roughness: 0.2,
     transparent: true,
-    opacity: 0.75,
+    opacity: 0.78,
   }),
   frameMetal: new THREE.MeshStandardMaterial({
     color: 0x1e293b,
     metalness: 0.9,
-    roughness: 0.3,
+    roughness: 0.25,
   }),
   floorSlab: new THREE.MeshStandardMaterial({
     color: 0x0f172a,
     roughness: 0.7,
+    metalness: 0.2,
   }),
   helipadBase: new THREE.MeshStandardMaterial({
     color: 0x1e293b,
-    roughness: 0.8,
+    roughness: 0.85,
   }),
   helipadMark: new THREE.MeshStandardMaterial({
     color: 0xfacc15, // Bright yellow

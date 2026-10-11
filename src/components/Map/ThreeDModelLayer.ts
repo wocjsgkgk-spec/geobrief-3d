@@ -20,6 +20,7 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
   private scene: THREE.Scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer | null = null;
   private modelRoot: THREE.Group = new THREE.Group();
+  private directionalLight: THREE.DirectionalLight | null = null;
 
   private isVisible = true;
   private currentPreset: BuildingMassPresetId | 'custom_gltf' | null = null;
@@ -35,22 +36,32 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     this.map = map;
 
-    // 1. 태양광 및 앰비언트 조명 구축 (입체 음영비 극대화)
-    // 주 태양광 (Directional Light - 남서향에서 비추는 강렬한 직사광)
-    const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.8);
-    sunLight.position.set(80, -120, 150).normalize();
-    this.scene.add(sunLight);
+    // 1. 태양광 및 앰비언트 조명 구축 (입체 음영비 극대화 & 소프트 섀도우)
+    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.6);
+    this.directionalLight.position.set(80, -120, 150).normalize();
+    this.directionalLight.castShadow = true;
+    this.directionalLight.shadow.mapSize.width = 2048;
+    this.directionalLight.shadow.mapSize.height = 2048;
+    this.directionalLight.shadow.camera.near = 1;
+    this.directionalLight.shadow.camera.far = 800;
+    this.directionalLight.shadow.camera.left = -100;
+    this.directionalLight.shadow.camera.right = 100;
+    this.directionalLight.shadow.camera.top = 100;
+    this.directionalLight.shadow.camera.bottom = -100;
+    this.directionalLight.shadow.bias = -0.0005;
+    this.directionalLight.shadow.normalBias = 0.02;
+    this.scene.add(this.directionalLight);
 
     // 보조 채움광 (Fill Light - 반대편 대기 산란광)
-    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.7);
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.5);
     fillLight.position.set(-80, 120, 90).normalize();
     this.scene.add(fillLight);
 
     // 전방향 환경광 (Ambient Light)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
     this.scene.add(ambientLight);
 
-    // 2. Three.js WebGLRenderer 초기화 (MapLibre 캔버스 및 GL 컨텍스트 공유)
+    // 2. Three.js WebGLRenderer 초기화 (소프트 섀도우 활성화)
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas: map.getCanvas(),
@@ -60,6 +71,8 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
       });
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     } catch (err) {
       console.warn('[ThreeDModelLayer] WebGLRenderer initialization warning:', err);
     }
@@ -190,6 +203,24 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
     this.altitudeMeters = altitude;
     if (rotationDeg !== undefined) {
       this.rotationDeg = rotationDeg;
+    }
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  /**
+   * 실시간 태양광 위치 및 조도/색온도 동기화 (그림자 회전 및 각도 갱신)
+   */
+  updateSunLight(directionalVector: [number, number, number], color: string, intensity: number): void {
+    if (this.directionalLight) {
+      this.directionalLight.position.set(
+        directionalVector[0],
+        directionalVector[1],
+        directionalVector[2]
+      ).normalize();
+      this.directionalLight.color.set(color);
+      this.directionalLight.intensity = Math.max(0.6, intensity * 1.8);
     }
     if (this.map) {
       this.map.triggerRepaint();
