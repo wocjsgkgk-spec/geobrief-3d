@@ -43,6 +43,8 @@ import {
   Truck,
   Boxes,
   Layers,
+  Radio,
+  Target,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { calculateViewshed } from '@/utils/viewshedAnalysis';
@@ -55,6 +57,7 @@ import { UavSensorLayer } from './UavSensorLayer';
 import { UavHudOverlay } from './UavHudOverlay';
 import { CutFillSummaryCard } from './CutFillSummaryCard';
 import { Deck3DTilesManager } from './Deck3DTilesOverlay';
+import { TacticalDefenseLayer } from './TacticalDefenseLayer';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -75,6 +78,7 @@ export const MapViewer: React.FC = () => {
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
   const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
+  const tacticalDefenseLayerRef = useRef<TacticalDefenseLayer | null>(null);
 
   const {
     viewport,
@@ -205,6 +209,19 @@ export const MapViewer: React.FC = () => {
     updateFacilityTransform,
     removePlacedFacility,
     setTransformGizmoMode,
+    // [3단계 신규: 3D 전술 탐지 돔, 3D 보안 펜스, 입체 LOS 가시선]
+    threatDome,
+    securityWall,
+    losAnalysis,
+    setThreatDome,
+    toggleThreatDome,
+    setSecurityWall,
+    toggleSecurityWall,
+    startLosAnalysis,
+    setLosPointA,
+    setLosPointB,
+    setLosResult,
+    resetLosAnalysis,
   } = useMapStore();
 
   // 토공량 격자 셀 호버 툴팁 상태
@@ -1515,6 +1532,18 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] UavSensorLayer registration warning:', uavErr);
       }
 
+      // [지휘통제 및 보안 관제] 3D 레이더 탐지 돔, 3D 보안벽, 입체 LOS 가시선 커스텀 레이어 등록
+      try {
+        const tdLayer = new TacticalDefenseLayer();
+        tdLayer.setCallbacks((result) => {
+          useMapStore.getState().setLosResult(result);
+        });
+        map.addLayer(tdLayer);
+        tacticalDefenseLayerRef.current = tdLayer;
+      } catch (tdErr) {
+        console.warn('[MapViewer] TacticalDefenseLayer registration warning:', tdErr);
+      }
+
       map.addControl(
         new maplibregl.NavigationControl({
           visualizePitch: true,
@@ -2554,7 +2583,17 @@ export const MapViewer: React.FC = () => {
 
     // 마우스 호버 커서 처리
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode || isSensorPlacementMode) return;
+      if (
+        isDrawingMode ||
+        stampMode ||
+        isViewshedMode ||
+        isMeasureMode ||
+        isPinMode ||
+        isArrowMode ||
+        isSensorPlacementMode ||
+        losAnalysis.isActive
+      )
+        return;
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
     };
@@ -2570,7 +2609,17 @@ export const MapViewer: React.FC = () => {
         }
       }
 
-      if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode || isSensorPlacementMode) return;
+      if (
+        isDrawingMode ||
+        stampMode ||
+        isViewshedMode ||
+        isMeasureMode ||
+        isPinMode ||
+        isArrowMode ||
+        isSensorPlacementMode ||
+        losAnalysis.isActive
+      )
+        return;
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
@@ -2656,6 +2705,8 @@ export const MapViewer: React.FC = () => {
     isMeasureMode,
     isPinMode,
     isArrowMode,
+    isSensorPlacementMode,
+    losAnalysis.isActive,
   ]);
 
   // 지도 이동 시 건물 팝업 화면 좌표 동기화 (원시 좌표 기반 안정화)
@@ -3237,6 +3288,70 @@ export const MapViewer: React.FC = () => {
     if (!deck3DTilesManagerRef.current) return;
     deck3DTilesManagerRef.current.update(tile3DStream);
   }, [tile3DStream]);
+
+  // 30-1. [지휘통제 및 보안 관제] 3D 전술 탐지 돔(Threat Dome) 상태 동기화
+  useEffect(() => {
+    if (!tacticalDefenseLayerRef.current) return;
+    tacticalDefenseLayerRef.current.updateThreatDome(threatDome);
+  }, [threatDome]);
+
+  // 30-2. [지휘통제 및 보안 관제] 3D 보안벽(Security Wall) 상태 동기화
+  useEffect(() => {
+    if (!tacticalDefenseLayerRef.current) return;
+    tacticalDefenseLayerRef.current.updateSecurityWall(securityWall, completedPolygon);
+  }, [securityWall, completedPolygon]);
+
+  // 30-3. [지휘통제 및 보안 관제] 3D LOS 가시선 광선 상태 동기화
+  useEffect(() => {
+    if (!tacticalDefenseLayerRef.current) return;
+    tacticalDefenseLayerRef.current.updateLosState(losAnalysis);
+  }, [losAnalysis]);
+
+  // 30-4. [지휘통제 및 보안 관제] 3D LOS 가시선 지도 클릭 인터랙션 (관측점 A -> 목표점 B 선택)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (losAnalysis.isActive) {
+      map.getCanvas().style.cursor = 'crosshair';
+
+      const handleLosClick = (e: maplibregl.MapMouseEvent) => {
+        const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const rawElev = map.queryTerrainElevation ? map.queryTerrainElevation(coords) : null;
+        const elevation = rawElev !== null && rawElev !== undefined ? Math.round(rawElev) : 120;
+
+        if (losAnalysis.step === 'pick_a' || !losAnalysis.pointA) {
+          setLosPointA({
+            coords,
+            elevation,
+            heightOffset: 2.5,
+            name: '관측점 A (초소/고지대)',
+          });
+        } else if (losAnalysis.step === 'pick_b' || !losAnalysis.pointB) {
+          setLosPointB({
+            coords,
+            elevation,
+            heightOffset: 1.8,
+            name: '목표점 B (시설/접근로)',
+          });
+        }
+      };
+
+      map.on('click', handleLosClick);
+      return () => {
+        map.getCanvas().style.cursor = '';
+        map.off('click', handleLosClick);
+      };
+    }
+  }, [
+    losAnalysis.isActive,
+    losAnalysis.step,
+    losAnalysis.pointA,
+    losAnalysis.pointB,
+    isMapLoaded,
+    setLosPointA,
+    setLosPointB,
+  ]);
 
   // 30. [.geobrief 파일 드래그 앤 드롭 복원 핸들러]
   const handleDragOver = (e: React.DragEvent) => {
@@ -4002,6 +4117,157 @@ export const MapViewer: React.FC = () => {
                 <p className="text-[9.5px] text-teal-300/80 text-center">
                   💡 지도의 다른 지점을 클릭하면 즉시 재계산됩니다
                 </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* [지휘통제 및 보안 관제] 정밀 3D 가시선 (Line of Sight, LOS) 플로팅 HUD 카드 */}
+        {(losAnalysis.isActive || losAnalysis.result) && (
+          <div className="absolute top-16 right-6 z-30 w-84 max-w-[calc(100vw-3rem)] bg-[#0a151d]/95 backdrop-blur-md border border-cyan-500/80 rounded-xl shadow-2xl p-3.5 text-xs space-y-3 ring-1 ring-cyan-500/30 animate-fade-in">
+            {/* 헤더 */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="p-1 rounded bg-cyan-950/80 border border-cyan-700/60 text-cyan-400">
+                  <Target className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-xs">
+                    3D 입체 가시선 (LOS) 분석
+                  </h3>
+                  <p className="text-[10px] text-cyan-300/80">
+                    DEM 고도 기반 140샘플 광선 추적 (Raycasting)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={resetLosAnalysis}
+                className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
+                title="LOS 분석 초기화"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 단계 안내 */}
+            {!losAnalysis.result ? (
+              <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-800/40 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-cyan-300 font-semibold text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                  <span>
+                    {!losAnalysis.pointA
+                      ? '1단계: 관측점 A (초소/고지대)를 클릭하세요'
+                      : '2단계: 목표점 B (시설/접근로)를 클릭하세요'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-300 leading-relaxed">
+                  {!losAnalysis.pointA
+                    ? '지도에서 관측 지점을 클릭하세요. 지표면 +2.5m 기준 시선 시작점이 생성됩니다.'
+                    : `관측점 A 설정 완료 (EL. ${losAnalysis.pointA.elevation}m). 목표 지점을 클릭하면 실시간 지형 차폐를 판정합니다.`}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {/* 판정 배지 */}
+                <div
+                  className={`p-2 rounded-lg border flex items-center justify-between ${
+                    losAnalysis.result.isClear
+                      ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                      : 'bg-rose-950/60 border-rose-500/60 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    {losAnalysis.result.isClear ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span>시계 확보 (Clear LOS)</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-rose-400" />
+                        <span>시계 차단 (Blocked LOS)</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40">
+                    전술 광선 유효
+                  </span>
+                </div>
+
+                {/* 거리 및 표고 정보 */}
+                <div className="grid grid-cols-2 gap-2 text-[10.5px] bg-[#0f1d2a] p-2 rounded-lg border border-[#1d354a]">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">직선 거리</span>
+                    <span className="font-bold text-slate-200 font-mono">
+                      {losAnalysis.result.distanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">수평 거리</span>
+                    <span className="font-bold text-slate-200 font-mono">
+                      {losAnalysis.result.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">고도차 (ΔH)</span>
+                    <span className="font-bold text-slate-200 font-mono">
+                      {losAnalysis.result.elevationDiffMeters > 0 ? '+' : ''}
+                      {losAnalysis.result.elevationDiffMeters} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">관측 / 목표 표고</span>
+                    <span className="font-bold text-slate-200 font-mono text-[10px]">
+                      EL.{losAnalysis.pointA?.elevation}m → {losAnalysis.pointB?.elevation}m
+                    </span>
+                  </div>
+                </div>
+
+                {/* 차단 정보 (차단 시) */}
+                {losAnalysis.result.blockedPoint && (
+                  <div className="p-2 rounded bg-rose-950/40 border border-rose-800/40 text-[10.5px] space-y-1">
+                    <div className="text-rose-300 font-semibold flex items-center justify-between">
+                      <span>차단 능선 지표 표고</span>
+                      <span className="font-mono font-bold">
+                        EL. {losAnalysis.result.blockedPoint.elevation} m
+                      </span>
+                    </div>
+                    <div className="text-slate-400 text-[10px] flex items-center justify-between">
+                      <span>A점으로부터 차단 거리</span>
+                      <span className="font-mono text-slate-300">
+                        {losAnalysis.result.blockedPoint.distanceFromA.toLocaleString()} m
+                      </span>
+                    </div>
+                    <div className="text-[9.5px] text-rose-300/80">
+                      ⚠️ 지형 표고가 가시선보다{' '}
+                      {(
+                        losAnalysis.result.blockedPoint.elevation -
+                        losAnalysis.result.blockedPoint.rayElevation
+                      ).toFixed(1)}
+                      m 돌출되어 붉은 펄스 마커가 생성되었습니다.
+                    </div>
+                  </div>
+                )}
+
+                {/* 재분석 / 초기화 액션 */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={startLosAnalysis}
+                    className="flex-1 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-sm"
+                  >
+                    <Target className="w-3.5 h-3.5" />
+                    새로운 LOS 측정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetLosAnalysis}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-colors"
+                  >
+                    초기화
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -59,6 +59,7 @@ import {
   Plus,
   Focus,
   Edit3,
+  Target,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -195,6 +196,16 @@ export const ControlPanel: React.FC = () => {
     updateFacilityTransform,
     setTransformGizmoMode,
     flyToLocation,
+    // [3단계 신규: 3D 전술 탐지 돔, 3D 보안 펜스, 입체 LOS 가시선]
+    threatDome,
+    securityWall,
+    losAnalysis,
+    setThreatDome,
+    toggleThreatDome,
+    setSecurityWall,
+    toggleSecurityWall,
+    startLosAnalysis,
+    resetLosAnalysis,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -1918,6 +1929,381 @@ export const ControlPanel: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* 5-3. [3단계 신규] 3D 전술 탐지 돔, 3D 보안 펜스 & 입체 LOS 가시선 분석 */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0d181e]/80">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+            <Target className="w-4 h-4 text-cyan-400" />
+            3D 전술 탐지 돔 & 보안 펜스 & LOS
+          </h2>
+          <span className="text-[10px] text-cyan-300 font-mono bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-700/60 font-semibold">
+            DEFENSE 3D
+          </span>
+        </div>
+
+        {/* 1) 반구형 3D 레이더/방공 센서 탐지 돔 (Hemisphere Threat Dome) */}
+        <div className="p-3 rounded-xl bg-[#102028] border border-cyan-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300">
+                <Radio className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 전술 탐지 돔 (Threat Dome)
+                </span>
+                <span className="text-[10px] text-cyan-300/80 block">
+                  반구형 레이더 돔 & 360° 스위프 빔
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleThreatDome}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                threatDome.enabled
+                  ? 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-900/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {threatDome.enabled ? '돔 활성' : '돔 켜기'}
+            </button>
+          </div>
+
+          {threatDome.enabled && (
+            <div className="space-y-2.5 pt-1 border-t border-[#1e3442]">
+              {/* 반경 조절 슬라이더 */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">탐지 반경 (Radius)</span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {threatDome.radiusMeters >= 1000
+                      ? `${(threatDome.radiusMeters / 1000).toFixed(1)} km`
+                      : `${threatDome.radiusMeters} m`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={500}
+                  max={10000}
+                  step={500}
+                  value={threatDome.radiusMeters}
+                  onChange={(e) =>
+                    setThreatDome({
+                      radiusMeters: parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
+                />
+                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                  <span>500m</span>
+                  <span>3km</span>
+                  <span>5km</span>
+                  <span>10km</span>
+                </div>
+              </div>
+
+              {/* 돔 중심 위치 지정 버튼 */}
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+                    const elev = 100;
+                    setThreatDome({
+                      coords: center,
+                      elevation: elev,
+                    });
+                  }}
+                  className="flex-1 py-1 px-2 rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 text-[10px] font-semibold border border-cyan-800/60 transition-colors flex items-center justify-center gap-1"
+                >
+                  <Crosshair className="w-3 h-3" />
+                  {polygonCenter ? '부지 중심으로 이동' : '현재 화면 중심으로 이동'}
+                </button>
+              </div>
+
+              {/* 색상 선택 */}
+              <div className="flex items-center justify-between text-[10.5px]">
+                <span className="text-slate-400">돔 테마 색상</span>
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { label: '시안', color: '#06B6D4' },
+                    { label: '그린', color: '#10B981' },
+                    { label: '황색', color: '#F59E0B' },
+                    { label: '레드', color: '#EF4444' },
+                  ].map((item) => (
+                    <button
+                      key={item.color}
+                      type="button"
+                      onClick={() => setThreatDome({ color: item.color })}
+                      style={{ backgroundColor: item.color }}
+                      className={`w-4 h-4 rounded-full border transition-transform ${
+                        threatDome.color === item.color
+                          ? 'ring-2 ring-white scale-110 border-white'
+                          : 'border-transparent opacity-70 hover:opacity-100'
+                      }`}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-cyan-200/80 bg-cyan-950/40 p-2 rounded border border-cyan-800/30 leading-relaxed">
+                💡 3D 반구 와이어프레임 표면 및 바닥 4단 등간격 거리 링(25/50/75/100%)과 함께 360° 회전 스위프 빔과 중심 펄스가 가동됩니다.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2) 3D 수직 경계 울타리 (3D Security Perimeter Wall) */}
+        <div className="p-3 rounded-xl bg-[#1a1c15] border border-amber-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-amber-950 border border-amber-700/60 text-amber-300">
+                <ShieldCheck className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 경계 보안벽 (Security Wall)
+                </span>
+                <span className="text-[10px] text-amber-300/80 block">
+                  부지 외곽선 수직 네온 장벽 (3m~15m)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSecurityWall}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                securityWall.enabled
+                  ? 'bg-amber-600 text-white border-amber-400 shadow-lg shadow-amber-900/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {securityWall.enabled ? '보안벽 활성' : '보안벽 켜기'}
+            </button>
+          </div>
+
+          {!completedPolygon ? (
+            <div className="p-2 rounded bg-amber-950/30 border border-amber-800/40 text-[10px] text-amber-300/90 leading-tight">
+              ⚠️ 부지 구역을 먼저 지정(드로잉/스탬프)하면 외곽선에 맞춰 3D 보안벽이 자동 생성됩니다.
+            </div>
+          ) : securityWall.enabled ? (
+            <div className="space-y-2.5 pt-1 border-t border-[#342e1d]">
+              {/* 벽 높이 슬라이더 */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">장벽 높이 (Height)</span>
+                  <span className="font-mono font-bold text-amber-300">
+                    {securityWall.heightMeters} m
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={3}
+                  max={15}
+                  step={1}
+                  value={securityWall.heightMeters}
+                  onChange={(e) =>
+                    setSecurityWall({
+                      heightMeters: parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-400"
+                />
+                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                  <span>3m</span>
+                  <span>6m (표준)</span>
+                  <span>10m</span>
+                  <span>15m</span>
+                </div>
+              </div>
+
+              {/* 펄스 속도 슬라이더 */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">네온 펄스 속도</span>
+                  <span className="font-mono font-bold text-amber-300">
+                    {securityWall.pulseSpeed.toFixed(1)}x
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1.0}
+                  step={0.1}
+                  value={securityWall.pulseSpeed}
+                  onChange={(e) =>
+                    setSecurityWall({
+                      pulseSpeed: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-400"
+                />
+              </div>
+
+              {/* 색상 선택 */}
+              <div className="flex items-center justify-between text-[10.5px]">
+                <span className="text-slate-400">장벽 테마 색상</span>
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { label: '황색', color: '#F59E0B' },
+                    { label: '시안', color: '#06B6D4' },
+                    { label: '그린', color: '#10B981' },
+                    { label: '레드', color: '#EF4444' },
+                  ].map((item) => (
+                    <button
+                      key={item.color}
+                      type="button"
+                      onClick={() => setSecurityWall({ color: item.color })}
+                      style={{ backgroundColor: item.color }}
+                      className={`w-4 h-4 rounded-full border transition-transform ${
+                        securityWall.color === item.color
+                          ? 'ring-2 ring-white scale-110 border-white'
+                          : 'border-transparent opacity-70 hover:opacity-100'
+                      }`}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-amber-200/80 bg-amber-950/40 p-2 rounded border border-amber-800/30 leading-relaxed">
+                💡 동적 사선 군사 스트라이프(`/ / / /`)와 상향 펄스 그라데이션 및 상단 네온 라인이 지형 요철에 완벽히 밀착 밀봉됩니다.
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* 3) 정밀 3D 가시선 (Line of Sight, LOS) 광선 분석 */}
+        <div className="p-3 rounded-xl bg-[#0f1d22] border border-cyan-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300">
+                <Target className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 가시선 (LOS) 광선 추적
+                </span>
+                <span className="text-[10px] text-cyan-300/80 block">
+                  초소 A ↔ 목표 B 지형 차폐 물리 연산
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={losAnalysis.isActive ? resetLosAnalysis : startLosAnalysis}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                losAnalysis.isActive
+                  ? 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-900/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {losAnalysis.isActive ? '분석 중 (ESC)' : 'LOS 분석 시작'}
+            </button>
+          </div>
+
+          <div className="space-y-2 text-[10.5px]">
+            {/* 상태 단계 안내 */}
+            <div className="p-2 rounded bg-[#13242b] border border-[#1e3945] space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">진행 단계</span>
+                <span className="font-semibold text-cyan-300">
+                  {!losAnalysis.isActive && !losAnalysis.result
+                    ? '대기 상태'
+                    : !losAnalysis.pointA
+                    ? '1단계: 관측점 A 선택 대기'
+                    : !losAnalysis.pointB
+                    ? '2단계: 목표점 B 선택 대기'
+                    : '분석 완료'}
+                </span>
+              </div>
+              <div className="text-[9.5px] text-slate-400 leading-tight">
+                {!losAnalysis.pointA
+                  ? '지도에서 관측점(초소/고지대)을 클릭하면 지표+2.5m 기준 광선이 시작됩니다.'
+                  : !losAnalysis.pointB
+                  ? '지도에서 목표점(접근로/시설)을 클릭하면 140구간 DEM 표고를 대조합니다.'
+                  : '3D 씬에 시계 통과 구간(녹색 실선) 및 차단 구간(붉은 점선/펄스 마커)이 표출 중입니다.'}
+              </div>
+            </div>
+
+            {/* 분석 결과 카드 (결과 있을 시) */}
+            {losAnalysis.result && (
+              <div className="space-y-1.5 pt-1 border-t border-[#1e3945]">
+                <div
+                  className={`p-2 rounded border flex items-center justify-between font-bold text-xs ${
+                    losAnalysis.result.isClear
+                      ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                      : 'bg-rose-950/60 border-rose-500/60 text-rose-300'
+                  }`}
+                >
+                  <span>
+                    {losAnalysis.result.isClear ? '✅ 시계 확보 (Clear LOS)' : '⚠️ 시계 차단 (Blocked LOS)'}
+                  </span>
+                  <span className="text-[10px] font-mono">
+                    {losAnalysis.result.samplingCount}개 샘플
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] bg-[#12222a] p-2 rounded border border-[#1b3542] font-mono">
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">직선 거리</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.result.distanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">수평 거리</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.result.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">고도차</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.result.elevationDiffMeters > 0 ? '+' : ''}
+                      {losAnalysis.result.elevationDiffMeters} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">시점/종점 표고</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.pointA?.elevation}m → {losAnalysis.pointB?.elevation}m
+                    </span>
+                  </div>
+                </div>
+
+                {losAnalysis.result.blockedPoint && (
+                  <div className="p-2 rounded bg-rose-950/40 border border-rose-800/40 text-[10px] text-rose-200 space-y-0.5">
+                    <div className="font-bold flex justify-between">
+                      <span>차단 능선 표고</span>
+                      <span className="font-mono">
+                        EL. {losAnalysis.result.blockedPoint.elevation} m
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-300 text-[9.5px]">
+                      <span>A점으로부터 거리</span>
+                      <span className="font-mono">
+                        {losAnalysis.result.blockedPoint.distanceFromA.toLocaleString()} m
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={resetLosAnalysis}
+                  className="w-full py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  LOS 분석 결과 초기화
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 

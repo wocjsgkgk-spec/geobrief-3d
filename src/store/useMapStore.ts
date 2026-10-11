@@ -31,6 +31,11 @@ import {
   FACILITY_PRESETS,
   PlacedFacility3D,
   TransformGizmoMode,
+  ThreatDomeState,
+  SecurityWallState,
+  LosPoint,
+  LosAnalysisResult,
+  LosAnalysisState,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -418,6 +423,21 @@ interface MapStoreState {
     updates: Partial<Pick<PlacedFacility3D, 'coords' | 'elevation' | 'rotationY' | 'scale' | 'heightMeters' | 'name'>>
   ) => void;
   setTransformGizmoMode: (mode: TransformGizmoMode) => void;
+
+  // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
+  threatDome: ThreatDomeState;
+  securityWall: SecurityWallState;
+  losAnalysis: LosAnalysisState;
+
+  setThreatDome: (updates: Partial<ThreatDomeState>) => void;
+  toggleThreatDome: () => void;
+  setSecurityWall: (updates: Partial<SecurityWallState>) => void;
+  toggleSecurityWall: () => void;
+  startLosAnalysis: () => void;
+  setLosPointA: (point: LosPoint) => void;
+  setLosPointB: (point: LosPoint) => void;
+  setLosResult: (result: LosAnalysisResult | null) => void;
+  resetLosAnalysis: () => void;
 
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
@@ -1381,6 +1401,97 @@ export const useMapStore = create<MapStoreState>()(
           transformGizmoMode: mode,
         }),
 
+      // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
+      threatDome: {
+        enabled: false,
+        coords: WONJU_DEFAULT_CENTER,
+        elevation: 100,
+        radiusMeters: 3000,
+        color: '#06B6D4',
+        name: '국방 조기경보·방공 레이더 탐지 돔',
+      },
+      securityWall: {
+        enabled: false,
+        heightMeters: 6,
+        color: '#F59E0B',
+        pulseSpeed: 0.3,
+      },
+      losAnalysis: {
+        isActive: false,
+        step: 'idle',
+        pointA: null,
+        pointB: null,
+        result: null,
+      },
+
+      setThreatDome: (updates) =>
+        set((s) => ({
+          threatDome: { ...s.threatDome, ...updates },
+        })),
+
+      toggleThreatDome: () =>
+        set((s) => ({
+          threatDome: { ...s.threatDome, enabled: !s.threatDome.enabled },
+        })),
+
+      setSecurityWall: (updates) =>
+        set((s) => ({
+          securityWall: { ...s.securityWall, ...updates },
+        })),
+
+      toggleSecurityWall: () =>
+        set((s) => ({
+          securityWall: { ...s.securityWall, enabled: !s.securityWall.enabled },
+        })),
+
+      startLosAnalysis: () =>
+        set({
+          losAnalysis: {
+            isActive: true,
+            step: 'pick_a',
+            pointA: null,
+            pointB: null,
+            result: null,
+          },
+        }),
+
+      setLosPointA: (point) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            step: 'pick_b',
+            pointA: point,
+          },
+        })),
+
+      setLosPointB: (point) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            step: 'analyzed',
+            pointB: point,
+          },
+        })),
+
+      setLosResult: (result) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            result,
+          },
+        })),
+
+      resetLosAnalysis: () =>
+        set({
+          losAnalysis: {
+            isActive: false,
+            step: 'idle',
+            pointA: null,
+            pointB: null,
+            result: null,
+          },
+        }),
+
       // [.geobrief 브리핑 프로젝트 파일 입출력]
       exportProjectFile: () => {
         const state = get();
@@ -1417,6 +1528,13 @@ export const useMapStore = create<MapStoreState>()(
             pointSize: state.tile3DStream.pointSize,
           },
           placedFacilities: state.placedFacilities,
+          threatDome: state.threatDome,
+          securityWall: state.securityWall,
+          losAnalysis: {
+            pointA: state.losAnalysis.pointA,
+            pointB: state.losAnalysis.pointB,
+            result: state.losAnalysis.result,
+          },
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
         try {
@@ -1491,6 +1609,17 @@ export const useMapStore = create<MapStoreState>()(
             viewport: targetVp,
             placedFacilities: data.placedFacilities || [],
             selectedFacilityId: null,
+            threatDome: data.threatDome || get().threatDome,
+            securityWall: data.securityWall || get().securityWall,
+            losAnalysis: data.losAnalysis
+              ? {
+                  isActive: false,
+                  step: data.losAnalysis.result ? 'analyzed' : 'idle',
+                  pointA: data.losAnalysis.pointA,
+                  pointB: data.losAnalysis.pointB,
+                  result: data.losAnalysis.result,
+                }
+              : get().losAnalysis,
             defenseAnalysisResult:
               data.completedPolygon && data.polygonCenter
                 ? analyzeDefenseRegulations(data.completedPolygon, data.polygonCenter)
@@ -1587,6 +1716,27 @@ export const useMapStore = create<MapStoreState>()(
           },
           placedFacilities: [],
           selectedFacilityId: null,
+          threatDome: {
+            enabled: false,
+            coords: WONJU_DEFAULT_CENTER,
+            elevation: 100,
+            radiusMeters: 3000,
+            color: '#06B6D4',
+            name: '국방 조기경보·방공 레이더 탐지 돔',
+          },
+          securityWall: {
+            enabled: false,
+            heightMeters: 6,
+            color: '#F59E0B',
+            pulseSpeed: 0.3,
+          },
+          losAnalysis: {
+            isActive: false,
+            step: 'idle',
+            pointA: null,
+            pointB: null,
+            result: null,
+          },
           viewport: {
             longitude: defaultRegion.center[0],
             latitude: defaultRegion.center[1],

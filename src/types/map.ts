@@ -395,6 +395,65 @@ export interface GeoBriefProjectFile {
     pointSize: number;
   };
   placedFacilities?: PlacedFacility3D[];
+  threatDome?: ThreatDomeState;
+  securityWall?: SecurityWallState;
+  losAnalysis?: {
+    pointA: LosPoint | null;
+    pointB: LosPoint | null;
+    result: LosAnalysisResult | null;
+  };
+}
+
+// [3단계 신규: 반구형 3D 레이더/방공 센서 탐지 돔]
+export interface ThreatDomeState {
+  enabled: boolean;
+  coords: [number, number]; // [lng, lat]
+  elevation: number; // EL. m
+  radiusMeters: number; // 500m ~ 10000m (기본 3000m)
+  color: string; // 기본: #06B6D4 (네온 시안)
+  name?: string;
+}
+
+// [3단계 신규: 3D 수직 경계 울타리 / 보안벽]
+export interface SecurityWallState {
+  enabled: boolean;
+  heightMeters: number; // 5m ~ 15m (기본 6m)
+  color: string; // 기본: #F59E0B (네온 앰버)
+  pulseSpeed: number; // 0.1 ~ 1.0 (기본 0.3)
+}
+
+// [3단계 신규: 정밀 3D 가시선 (Line of Sight, LOS) 광선 분석]
+export interface LosPoint {
+  coords: [number, number]; // [lng, lat]
+  elevation: number; // 지면 해발고도 EL. m
+  heightOffset: number; // 관측자/목표물 높이 m (관측점: 2.5m, 목표점: 1.8m)
+  name?: string; // 관측점/목표점 명칭
+}
+
+export interface LosAnalysisResult {
+  pointA: LosPoint;
+  pointB: LosPoint;
+  isClear: boolean; // 관측 성공 여부
+  distanceMeters: number; // 3D 직선 거리 m
+  horizontalDistanceMeters: number; // 2D 수평 거리 m
+  elevationDiffMeters: number; // 두 지점 고도차 m
+  blockedPoint?: {
+    coords: [number, number];
+    elevation: number; // 차단 능선 고도 EL. m
+    rayElevation: number; // 해당 지점 광선 고도 EL. m
+    distanceFromA: number; // A로부터의 거리 m
+    t: number; // 진행률 (0 ~ 1)
+  };
+  samplingCount: number;
+  calculatedAt: number;
+}
+
+export interface LosAnalysisState {
+  isActive: boolean; // 작도/분석 모드 활성화 여부
+  step: 'idle' | 'pick_a' | 'pick_b' | 'analyzed';
+  pointA: LosPoint | null;
+  pointB: LosPoint | null;
+  result: LosAnalysisResult | null;
 }
 
 
