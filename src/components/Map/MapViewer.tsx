@@ -1329,9 +1329,9 @@ export const MapViewer: React.FC = () => {
       try {
         if (typeof (map as any).setFog === 'function') {
           (map as any).setFog({
-            range: [0.8, 8],
+            range: [0.5, 9.5],
             color: '#1e293b',
-            'horizon-blend': 0.15,
+            'horizon-blend': 0.25,
             'high-color': '#0f172a',
             'space-color': '#020617',
           });
@@ -1471,6 +1471,7 @@ export const MapViewer: React.FC = () => {
       // [Threebox-MapLibre 연동 정밀 3D 건축물 레이어 등록]
       try {
         const tbLayer = new ThreeboxBuildingLayer();
+        tbLayer.setPostProcessingEnabled(!!layers.ssaoPostProcessing);
         map.addLayer(tbLayer);
         threeboxLayerRef.current = tbLayer;
       } catch (tbErr) {
@@ -2020,6 +2021,13 @@ export const MapViewer: React.FC = () => {
       map.setLayoutProperty('vector-buildings-3d', 'visibility', visibility);
     }
   }, [layers.buildings3D, isMapLoaded]);
+
+  // 8-0. [Three.js SSAO & UnrealBloom 디지털 트윈 후처리 동적 On/Off]
+  useEffect(() => {
+    if (threeboxLayerRef.current) {
+      threeboxLayerRef.current.setPostProcessingEnabled(!!layers.ssaoPostProcessing);
+    }
+  }, [layers.ssaoPostProcessing]);
 
   // 8-1. [브이월드 건축물 공간정보 LT_C_SPBD 비동기 연동 및 실시간 상태 진단]
   useEffect(() => {
@@ -2677,9 +2685,9 @@ export const MapViewer: React.FC = () => {
     try {
       if (typeof (map as any).setFog === 'function') {
         (map as any).setFog({
-          range: [0.8, 8],
+          range: [0.5, 9.5],
           color: sunConfig.fogColor,
-          'horizon-blend': 0.15,
+          'horizon-blend': 0.25,
           'high-color': '#0f172a',
           'space-color': '#020617',
         });
@@ -2729,13 +2737,14 @@ export const MapViewer: React.FC = () => {
       console.warn('[MapLibre] Failed to update hillshade illumination direction:', e);
     }
 
-    // 5. [PBR 3D 건축물] Threebox 및 Three.js Directional Light 위치 및 그림자 각도 실시간 회전
+    // 5. [PBR 3D 건축물] Threebox 및 Three.js Directional Light 위치, 그림자 및 심도 안개 실시간 연동
     try {
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.updateSunLight(
           sunConfig.directionalVector,
           sunConfig.color,
-          sunConfig.intensity
+          sunConfig.intensity,
+          sunConfig.fogColor
         );
       }
       if (threeDLayerRef.current) {

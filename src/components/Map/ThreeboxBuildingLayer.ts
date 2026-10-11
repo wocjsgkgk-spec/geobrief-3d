@@ -1,22 +1,25 @@
 import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { BuildingMassPresetId, BUILDING_MASS_PRESETS } from '@/types/map';
 
 /**
  * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
+ * - EffectComposer 기반 SSAO(Screen Space Ambient Occlusion) 및 UnrealBloom 후처리 패스 결합
+ * - Directional Shadow Cascades (2048x2048, bias -0.0001, 동적 뷰포트 추적)
  * - terrain: true & map.queryTerrainElevation 기반 실시간 지형 밀착(Terrain Clamping)
- * - units: 'meters' 기반 5,000평 부지 맞춤 실측 스케일 (가로 60m, 세로 35m, 높이 22m)
- * - DirectionalLight(강도 0.8) & AmbientLight(강도 0.5) 건축 셰이딩 튜닝
- * - glTF/GLB 파일 비동기 로드 및 부재 시 정밀 절차적 3D 건축물(커튼월, 지붕난간, 헬리패드 H) 폴백 생성기
- * - preserveDrawingBuffer: true 기반 4K 슬라이드 캡처 안정성 보장
+ * - glTF/GLB 파일 비동기 로드 및 부재 시 정밀 절차적 3D 건축물 폴백 생성기
  */
 export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   id = 'threebox-building-layer';
   type = 'custom' as const;
   renderingMode = '3d' as const;
 
-  // Threebox 옵션 규격
   public readonly options = {
     terrain: true,
     units: 'meters',
@@ -24,10 +27,20 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   };
 
   private map: maplibregl.Map | null = null;
-  private camera: THREE.Camera = new THREE.Camera();
+  private camera: THREE.PerspectiveCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 3000);
   private scene: THREE.Scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer | null = null;
   private buildingGroup: THREE.Group = new THREE.Group();
+
+  // 후처리 파이프라인
+  private composer: EffectComposer | null = null;
+  private renderPass: RenderPass | null = null;
+  private ssaoPass: SSAOPass | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
+  private outputPass: OutputPass | null = null;
+  private isPostProcessingEnabled = true;
+  private lastWidth = 0;
+  private lastHeight = 0;
 
   // 조명 객체
   private directionalLight: THREE.DirectionalLight | null = null;
@@ -170,20 +183,20 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     this.map = map;
 
-    // 1. Directional Light 그림자 셰이딩 강화 (CastShadow 및 Shadow Bias 튜닝)
+    // 1. Directional Light 그림자 셰이딩 강화 (2048x2048, bias -0.0001, 동적 뷰포트 추적)
     this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.2);
     this.directionalLight.position.set(120, -140, 160).normalize();
     this.directionalLight.castShadow = true;
     this.directionalLight.shadow.mapSize.width = 2048;
     this.directionalLight.shadow.mapSize.height = 2048;
     this.directionalLight.shadow.camera.near = 1;
-    this.directionalLight.shadow.camera.far = 800;
-    this.directionalLight.shadow.camera.left = -100;
-    this.directionalLight.shadow.camera.right = 100;
-    this.directionalLight.shadow.camera.top = 100;
-    this.directionalLight.shadow.camera.bottom = -100;
-    // 아티팩트(Shadow Acne & Peter Panning) 방지 편향치
-    this.directionalLight.shadow.bias = -0.0005;
+    this.directionalLight.shadow.camera.far = 1200;
+    this.directionalLight.shadow.camera.left = -120;
+    this.directionalLight.shadow.camera.right = 120;
+    this.directionalLight.shadow.camera.top = 120;
+    this.directionalLight.shadow.camera.bottom = -120;
+    // 지형 표면과 맞닿는 섀도우 아티팩트 방지 편향치 (-0.0001)
+    this.directionalLight.shadow.bias = -0.0001;
     this.directionalLight.shadow.normalBias = 0.02;
     this.scene.add(this.directionalLight);
 
@@ -195,6 +208,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
     this.fillLight.position.set(-100, 120, 80).normalize();
     this.scene.add(this.fillLight);
+
+    // 산악 능선의 원근감을 강조하는 높이 기반 심도 안개 (Depth Fog)
+    this.scene.fog = new THREE.FogExp2(0x1e293b, 0.0008);
 
     // 2. WebGLRenderer 초기화 (소프트 섀도우 PCFSoftShadowMap & preserveDrawingBuffer)
     try {
@@ -209,8 +225,77 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // 3. Three.js EffectComposer 기반 후처리 파이프라인 결합 (SSAO & UnrealBloom)
+      this.initPostProcessing(map);
     } catch (err) {
       console.warn('[ThreeboxBuildingLayer] WebGLRenderer setup warning:', err);
+    }
+  }
+
+  /**
+   * Three.js EffectComposer 기반 SSAO 및 UnrealBloom 후처리 패스 결합
+   */
+  private initPostProcessing(map: maplibregl.Map): void {
+    if (!this.renderer) return;
+
+    try {
+      const canvas = map.getCanvas();
+      const width = canvas.clientWidth || 800;
+      const height = canvas.clientHeight || 600;
+      const pixelRatio = window.devicePixelRatio || 1;
+
+      // 알파 투명도를 보존하는 렌더 타깃 (MapLibre 하부 지도 투과)
+      const renderTarget = new THREE.WebGLRenderTarget(
+        Math.floor(width * pixelRatio),
+        Math.floor(height * pixelRatio),
+        {
+          minFilter: THREE.LinearFilter,
+          magFilter: THREE.LinearFilter,
+          format: THREE.RGBAFormat,
+          stencilBuffer: false,
+          depthBuffer: true,
+        }
+      );
+
+      this.composer = new EffectComposer(this.renderer, renderTarget);
+      this.composer.setPixelRatio(pixelRatio);
+      this.composer.setSize(width, height);
+
+      // (1) RenderPass (하부 캔버스 투과를 위해 clearAlpha: 0)
+      this.renderPass = new RenderPass(this.scene, this.camera);
+      this.renderPass.clearAlpha = 0;
+      this.renderPass.clear = true;
+      this.composer.addPass(this.renderPass);
+
+      // (2) SSAOPass (Screen Space Ambient Occlusion)
+      // - 건물 하단, 모서리 틈새, 산악 계곡의 굴곡진 틈에 자연스러운 소프트 음영을 생성해 지형 밀착감 극대화
+      // - kernelRadius: 0.8, minDistance: 0.005, maxDistance: 0.1
+      this.ssaoPass = new SSAOPass(this.scene, this.camera, width, height);
+      this.ssaoPass.kernelRadius = 0.8;
+      this.ssaoPass.minDistance = 0.005;
+      this.ssaoPass.maxDistance = 0.1;
+      this.composer.addPass(this.ssaoPass);
+
+      // (3) UnrealBloomPass (은은한 야간/하이라이트 블룸)
+      // - 도로망 및 네온 지시선에 은은한 발광 효과 (strength: 0.35, radius: 0.4, threshold: 0.85)
+      this.bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(width, height),
+        0.35,
+        0.4,
+        0.85
+      );
+      this.composer.addPass(this.bloomPass);
+
+      // (4) OutputPass (sRGB 색공간 톤매핑 & 감마 보정)
+      this.outputPass = new OutputPass();
+      this.composer.addPass(this.outputPass);
+
+      this.lastWidth = width;
+      this.lastHeight = height;
+    } catch (postErr) {
+      console.warn('[ThreeboxBuildingLayer] Failed to initialize post-processing pipeline:', postErr);
+      this.composer = null;
     }
   }
 
@@ -260,12 +345,51 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         .multiply(rotationZ);
 
       this.camera.projectionMatrix = m.multiply(l);
+      // SSAOPass의 깊이 선형화 연산을 위한 역투영 행렬 동기화
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
-      // 6. WebGL 상태 보존 및 렌더링
+      // 6. [Directional Shadow Cascades 동적 뷰포트 추적]
+      if (this.directionalLight) {
+        const halfBound = Math.max(80, 80 * this.scaleRatio);
+        const cam = this.directionalLight.shadow.camera;
+        cam.left = -halfBound;
+        cam.right = halfBound;
+        cam.top = halfBound;
+        cam.bottom = -halfBound;
+        cam.updateProjectionMatrix();
+      }
+
+      // 7. 뷰포트 리사이즈 감지 시 후처리 패스 버퍼 동기화
+      if (this.map && this.composer) {
+        const canvas = this.map.getCanvas();
+        const curW = canvas.clientWidth;
+        const curH = canvas.clientHeight;
+        if (curW > 0 && curH > 0 && (curW !== this.lastWidth || curH !== this.lastHeight)) {
+          this.lastWidth = curW;
+          this.lastHeight = curH;
+          this.composer.setSize(curW, curH);
+          this.ssaoPass?.setSize(curW, curH);
+          this.bloomPass?.setSize(curW, curH);
+        }
+      }
+
+      // 8. WebGL 상태 보존 및 렌더링 (SSAO 후처리 파이프라인 또는 기본 렌더)
       this.renderer.resetState();
-      this.renderer.render(this.scene, this.camera);
+
+      if (this.isPostProcessingEnabled && this.composer) {
+        this.composer.render();
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
     } catch (renderErr) {
       console.warn('[ThreeboxBuildingLayer] render error suppressed:', renderErr);
+      // 에러 시 안전하게 기본 렌더러로 폴백
+      try {
+        if (this.renderer) {
+          this.renderer.resetState();
+          this.renderer.render(this.scene, this.camera);
+        }
+      } catch {}
     }
   }
 
@@ -689,9 +813,14 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   }
 
   /**
-   * 실시간 태양광 위치 및 조도/색온도 동기화 (그림자 회전 및 각도 갱신)
+   * 실시간 태양광 위치 및 조도/색온도, 심도 안개(Fog) 색상 동기화
    */
-  updateSunLight(directionalVector: [number, number, number], color: string, intensity: number): void {
+  updateSunLight(
+    directionalVector: [number, number, number],
+    color: string,
+    intensity: number,
+    fogColor?: string
+  ): void {
     if (this.directionalLight) {
       this.directionalLight.position.set(
         directionalVector[0],
@@ -701,9 +830,26 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.directionalLight.color.set(color);
       this.directionalLight.intensity = Math.max(0.6, intensity * 1.6);
     }
+    if (this.scene.fog && fogColor) {
+      (this.scene.fog as THREE.FogExp2).color.set(fogColor);
+    }
     if (this.map) {
       this.map.triggerRepaint();
     }
+  }
+
+  /**
+   * 디지털 트윈 후처리(SSAO & Bloom) 활성화 여부 제어
+   */
+  setPostProcessingEnabled(enabled: boolean): void {
+    this.isPostProcessingEnabled = enabled;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  isPostProcessing(): boolean {
+    return this.isPostProcessingEnabled;
   }
 
   /**
@@ -728,6 +874,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
 
   onRemove(): void {
     this.clearBuildingGroup();
+    if (this.composer) {
+      this.composer.dispose();
+      this.composer = null;
+    }
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer = null;

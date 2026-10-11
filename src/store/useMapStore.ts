@@ -191,6 +191,7 @@ interface MapStoreState {
     roads: boolean;
     demContours: boolean;
     cadastral: boolean; // 브이월드 연속지적도(필지선)
+    ssaoPostProcessing: boolean; // 디지털 트윈 SSAO & Bloom 후처리
   };
   toggleLayer: (key: keyof MapStoreState['layers']) => void;
 
@@ -456,6 +457,7 @@ export const useMapStore = create<MapStoreState>()(
         roads: true,
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
+        ssaoPostProcessing: true, // 디지털 트윈 SSAO & Bloom 후처리
       },
       toggleLayer: (key) =>
         set((state) => ({

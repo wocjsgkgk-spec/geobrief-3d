@@ -323,6 +323,17 @@ export const ControlPanel: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* 실시간 렌더링 셰이딩 상태 */}
+            <div className="flex items-center justify-between text-[10px] text-slate-400 bg-[#090f0b] px-2 py-1.5 rounded border border-[#1b2b1e]">
+              <span className="flex items-center gap-1.5 text-slate-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                2048x2048 캐스케이드 섀도우 & 심도 안개 연동
+              </span>
+              <span className="font-mono text-indigo-300 font-semibold">
+                {layers.ssaoPostProcessing ? 'SSAO On' : 'SSAO Off'}
+              </span>
+            </div>
           </section>
         );
       })()}
@@ -2069,6 +2080,28 @@ export const ControlPanel: React.FC = () => {
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          {/* [1단계 신규] 디지털 트윈 SSAO 앰비언트 오클루전 & 정밀 조명 후처리 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <div>
+                <span className="text-slate-200 font-medium">SSAO & 블룸 조명 후처리</span>
+                <span className="text-[10px] text-indigo-400/90 ml-1.5 font-mono">
+                  (디지털 트윈)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.ssaoPostProcessing}
+                onChange={() => toggleLayer('ssaoPostProcessing')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
             </label>
           </div>
 
