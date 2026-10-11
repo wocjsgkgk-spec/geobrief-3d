@@ -1509,6 +1509,8 @@ export const MapViewer: React.FC = () => {
         );
         map.addLayer(tbLayer);
         threeboxLayerRef.current = tbLayer;
+        // [2단계 신규] 강원권 주요 거점 건축물 LOD2 입체 지붕 및 옥상 구조물 즉각 동기화
+        tbLayer.syncRoofs(SAMPLE_BUILDINGS.features);
       } catch (tbErr) {
         console.error(
           `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 ThreeboxBuildingLayer 등록 실패!\n` +
@@ -2127,6 +2129,9 @@ export const MapViewer: React.FC = () => {
     if (map.getLayer('vector-buildings-3d')) {
       map.setLayoutProperty('vector-buildings-3d', 'visibility', visibility);
     }
+    if (threeboxLayerRef.current) {
+      threeboxLayerRef.current.setVisible(layers.buildings3D);
+    }
   }, [layers.buildings3D, isMapLoaded]);
 
   // 8-0. [Three.js SSAO & UnrealBloom 디지털 트윈 후처리 동적 On/Off]
@@ -2241,6 +2246,12 @@ export const MapViewer: React.FC = () => {
           if (vworldSource && typeof vworldSource.setData === 'function') {
             if (result.success && result.features && result.features.features.length > 0) {
               vworldSource.setData(result.features);
+              if (threeboxLayerRef.current) {
+                threeboxLayerRef.current.syncRoofs([
+                  ...SAMPLE_BUILDINGS.features,
+                  ...result.features.features,
+                ]);
+              }
             } else {
               vworldSource.setData({ type: 'FeatureCollection', features: [] });
             }
