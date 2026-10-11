@@ -105,6 +105,107 @@ export const BUILDING_MASS_PRESETS: Record<BuildingMassPresetId, BuildingMassPre
   },
 };
 
+// [2단계 신규: 3D 인터랙티브 배치 시설물 카탈로그 프리셋]
+export type FacilityPresetId =
+  | 'defense_rd_tower' // 1) 복합 국방 R&D 타워 (유리 커튼월)
+  | 'barracks_hq' // 2) 표준 병영 막사/행정동 (지붕 디테일)
+  | 'logistics_depot' // 3) 군수 물류 데포 (트러스 지붕 구조)
+  | 'watch_tower' // 4) 경계·관측 철골 타워 (높이 15m)
+  | 'helipad_base'; // 5) 옥상/지상 표준 헬리패드(H) 베이스
+
+export interface FacilityPresetMeta {
+  id: FacilityPresetId;
+  name: string;
+  category: '국방연구' | '병영행정' | '군수보급' | '경계관측' | '작전항공';
+  defaultHeight: number; // m
+  defaultWidth: number; // m
+  defaultDepth: number; // m
+  color: string;
+  badge: string;
+  description: string;
+  iconName: string;
+}
+
+export const FACILITY_PRESETS: Record<FacilityPresetId, FacilityPresetMeta> = {
+  defense_rd_tower: {
+    id: 'defense_rd_tower',
+    name: '복합 국방 R&D 타워',
+    category: '국방연구',
+    defaultHeight: 32,
+    defaultWidth: 26,
+    defaultDepth: 20,
+    color: '#0EA5E9',
+    badge: 'R&D 타워',
+    description: '8층 규모 첨단 국방 연구 타워 · 블루 미러 유리 커튼월 · 옥상 통신 안테나 & 루프',
+    iconName: 'Building2',
+  },
+  barracks_hq: {
+    id: 'barracks_hq',
+    name: '표준 병영 막사/행정동',
+    category: '병영행정',
+    defaultHeight: 9.5,
+    defaultWidth: 38,
+    defaultDepth: 16,
+    color: '#10B981',
+    badge: '병영 막사',
+    description: '대대급 표준 병영 행정동 · 2층 콘크리트 외벽 · 박공 경사 지붕 및 진입 캐노피',
+    iconName: 'Home',
+  },
+  logistics_depot: {
+    id: 'logistics_depot',
+    name: '군수 물류 데포',
+    category: '군수보급',
+    defaultHeight: 13,
+    defaultWidth: 48,
+    defaultDepth: 28,
+    color: '#F59E0B',
+    badge: '물류 데포',
+    description: '전략 군수 물자 비축 창고 · 트러스 철골 구조 · 4연속 화물 하역 도크 롤러셔터',
+    iconName: 'Warehouse',
+  },
+  watch_tower: {
+    id: 'watch_tower',
+    name: '경계·관측 철골 타워',
+    category: '경계관측',
+    defaultHeight: 15,
+    defaultWidth: 7,
+    defaultDepth: 7,
+    color: '#EC4899',
+    badge: '철골 타워',
+    description: '15m 4각 트러스 철골 감시탑 · 상부 360도 유리 관측소 캡슐 & 서치라이트',
+    iconName: 'Radio',
+  },
+  helipad_base: {
+    id: 'helipad_base',
+    name: '표준 헬리패드(H) 베이스',
+    category: '작전항공',
+    defaultHeight: 1.2,
+    defaultWidth: 22,
+    defaultDepth: 22,
+    color: '#8B5CF6',
+    badge: '헬리패드',
+    description: 'UH-60/수리온 대응 헬기 이착륙장 · 고휘도 H 마킹 · 야간 유도등 & 안전 펜스',
+    iconName: 'Plane',
+  },
+};
+
+// 배치된 3D 시설물 오브젝트 인터페이스
+export interface PlacedFacility3D {
+  id: string;
+  presetId: FacilityPresetId;
+  name: string;
+  coords: [number, number]; // [lng, lat]
+  elevation: number; // EL. m (지형 해발고도)
+  rotationY: number; // Y축 방위각 회전 (도, 0~360)
+  scale: number; // 크기 배율 (0.5 ~ 3.0)
+  heightMeters: number; // 실측 높이 (m)
+  customGltfUrl?: string;
+  createdAt: number;
+}
+
+// 3D 변환 기즈모 조작 모드
+export type TransformGizmoMode = 'translate' | 'rotate' | 'scale';
+
 export * from './defense';
 export * from './infrastructure';
 
@@ -293,6 +394,7 @@ export interface GeoBriefProjectFile {
     maximumScreenSpaceError: number;
     pointSize: number;
   };
+  placedFacilities?: PlacedFacility3D[];
 }
 
 

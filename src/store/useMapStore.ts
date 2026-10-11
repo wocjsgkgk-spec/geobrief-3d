@@ -27,6 +27,10 @@ import {
   CutFillState,
   Tile3DStreamState,
   Tile3DPresetId,
+  FacilityPresetId,
+  FACILITY_PRESETS,
+  PlacedFacility3D,
+  TransformGizmoMode,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -399,6 +403,21 @@ interface MapStoreState {
   setTile3DStreamSse: (maximumScreenSpaceError: number) => void;
   setTile3DStreamPointSize: (pointSize: number) => void;
   setTile3DStreamStatus: (statusText?: string, isLoading?: boolean, tilesLoadedCount?: number) => void;
+
+  // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls 관리]
+  placedFacilities: PlacedFacility3D[];
+  selectedFacilityId: string | null;
+  transformGizmoMode: TransformGizmoMode;
+
+  addPlacedFacility: (presetId: FacilityPresetId, coords?: [number, number], elevation?: number) => string;
+  removePlacedFacility: (id: string) => void;
+  clearAllPlacedFacilities: () => void;
+  selectFacility: (id: string | null) => void;
+  updateFacilityTransform: (
+    id: string,
+    updates: Partial<Pick<PlacedFacility3D, 'coords' | 'elevation' | 'rotationY' | 'scale' | 'heightMeters' | 'name'>>
+  ) => void;
+  setTransformGizmoMode: (mode: TransformGizmoMode) => void;
 
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
@@ -1301,6 +1320,67 @@ export const useMapStore = create<MapStoreState>()(
           },
         })),
 
+      // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls 관리]
+      placedFacilities: [],
+      selectedFacilityId: null,
+      transformGizmoMode: 'translate',
+
+      addPlacedFacility: (presetId, customCoords, customElevation) => {
+        const state = get();
+        const preset = FACILITY_PRESETS[presetId];
+        const count = state.placedFacilities.filter((f) => f.presetId === presetId).length + 1;
+        const name = `${preset.name} #${count}`;
+        const coords: [number, number] =
+          customCoords || state.polygonCenter || [state.viewport.longitude, state.viewport.latitude];
+        const elevation = customElevation !== undefined ? customElevation : 100;
+        const newFacility: PlacedFacility3D = {
+          id: `facility-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          presetId,
+          name,
+          coords,
+          elevation,
+          rotationY: 0,
+          scale: 1,
+          heightMeters: preset.defaultHeight,
+          createdAt: Date.now(),
+        };
+
+        set((s) => ({
+          placedFacilities: [...s.placedFacilities, newFacility],
+          selectedFacilityId: newFacility.id,
+        }));
+        return newFacility.id;
+      },
+
+      removePlacedFacility: (id) =>
+        set((s) => ({
+          placedFacilities: s.placedFacilities.filter((f) => f.id !== id),
+          selectedFacilityId: s.selectedFacilityId === id ? null : s.selectedFacilityId,
+        })),
+
+      clearAllPlacedFacilities: () =>
+        set({
+          placedFacilities: [],
+          selectedFacilityId: null,
+        }),
+
+      selectFacility: (id) =>
+        set({
+          selectedFacilityId: id,
+        }),
+
+      updateFacilityTransform: (id, updates) =>
+        set((s) => ({
+          placedFacilities: s.placedFacilities.map((f) =>
+            f.id === id ? { ...f, ...updates } : f
+          ),
+        })),
+
+      setTransformGizmoMode: (mode) =>
+        set({
+          transformGizmoMode: mode,
+        }),
+
       // [.geobrief 브리핑 프로젝트 파일 입출력]
       exportProjectFile: () => {
         const state = get();
@@ -1336,6 +1416,7 @@ export const useMapStore = create<MapStoreState>()(
             maximumScreenSpaceError: state.tile3DStream.maximumScreenSpaceError,
             pointSize: state.tile3DStream.pointSize,
           },
+          placedFacilities: state.placedFacilities,
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
         try {
@@ -1408,6 +1489,8 @@ export const useMapStore = create<MapStoreState>()(
                 }
               : get().tile3DStream,
             viewport: targetVp,
+            placedFacilities: data.placedFacilities || [],
+            selectedFacilityId: null,
             defenseAnalysisResult:
               data.completedPolygon && data.polygonCenter
                 ? analyzeDefenseRegulations(data.completedPolygon, data.polygonCenter)
@@ -1502,6 +1585,8 @@ export const useMapStore = create<MapStoreState>()(
             statusText: '대기 중',
             tilesLoadedCount: 0,
           },
+          placedFacilities: [],
+          selectedFacilityId: null,
           viewport: {
             longitude: defaultRegion.center[0],
             latitude: defaultRegion.center[1],

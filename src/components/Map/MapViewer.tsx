@@ -197,6 +197,14 @@ export const MapViewer: React.FC = () => {
     // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
     tile3DStream,
     setTile3DStreamStatus,
+    // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls]
+    placedFacilities,
+    selectedFacilityId,
+    transformGizmoMode,
+    selectFacility,
+    updateFacilityTransform,
+    removePlacedFacility,
+    setTransformGizmoMode,
   } = useMapStore();
 
   // 토공량 격자 셀 호버 툴팁 상태
@@ -1472,6 +1480,14 @@ export const MapViewer: React.FC = () => {
       try {
         const tbLayer = new ThreeboxBuildingLayer();
         tbLayer.setPostProcessingEnabled(!!layers.ssaoPostProcessing);
+        tbLayer.setFacilityCallbacks(
+          (id, updates) => {
+            useMapStore.getState().updateFacilityTransform(id, updates);
+          },
+          (id) => {
+            useMapStore.getState().selectFacility(id);
+          }
+        );
         map.addLayer(tbLayer);
         threeboxLayerRef.current = tbLayer;
       } catch (tbErr) {
@@ -2029,6 +2045,45 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.ssaoPostProcessing]);
 
+  // 8-0-1. [2단계 신규: 3D 배치 시설물 목록 & 기즈모 타겟 실시간 동기화]
+  useEffect(() => {
+    if (threeboxLayerRef.current) {
+      threeboxLayerRef.current.syncFacilities(placedFacilities, selectedFacilityId);
+    }
+  }, [placedFacilities, selectedFacilityId]);
+
+  // 8-0-2. [3D 변환 기즈모 모드 (이동/회전/크기) 실시간 동기화]
+  useEffect(() => {
+    if (threeboxLayerRef.current) {
+      threeboxLayerRef.current.setGizmoMode(transformGizmoMode);
+    }
+  }, [transformGizmoMode]);
+
+  // 8-0-3. [기즈모 조작 핫키 지원: W(이동) / E(회전) / R(크기) / Esc(해제) / Del(삭제)]
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      if (e.key === 'w' || e.key === 'W') {
+        setTransformGizmoMode('translate');
+      } else if (e.key === 'e' || e.key === 'E') {
+        setTransformGizmoMode('rotate');
+      } else if (e.key === 'r' || e.key === 'R') {
+        setTransformGizmoMode('scale');
+      } else if (e.key === 'Escape') {
+        selectFacility(null);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFacilityId) {
+        removePlacedFacility(selectedFacilityId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedFacilityId, setTransformGizmoMode, selectFacility, removePlacedFacility]);
+
   // 8-1. [브이월드 건축물 공간정보 LT_C_SPBD 비동기 연동 및 실시간 상태 진단]
   useEffect(() => {
     const map = mapRef.current;
@@ -2506,6 +2561,15 @@ export const MapViewer: React.FC = () => {
 
     // 건물 클릭 처리
     const onMapClick = (e: maplibregl.MapMouseEvent) => {
+      // [2단계 신규] 3D 시설물 마우스 클릭 피킹 (Raycasting & Gizmo 부착)
+      if (threeboxLayerRef.current) {
+        const handled = threeboxLayerRef.current.handleMapClick(e.point);
+        if (handled) {
+          setSelectedBuilding(null);
+          return;
+        }
+      }
+
       if (isDrawingMode || stampMode || isViewshedMode || isMeasureMode || isPinMode || isArrowMode || isSensorPlacementMode) return;
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });

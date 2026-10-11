@@ -51,6 +51,14 @@ import {
   ArrowUp,
   Scale,
   Box,
+  Move,
+  Maximize2,
+  Building2,
+  Home,
+  Warehouse,
+  Plus,
+  Focus,
+  Edit3,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -64,6 +72,10 @@ import {
   StampShape,
   BUILDING_MASS_PRESETS,
   BuildingMassPresetId,
+  FACILITY_PRESETS,
+  FacilityPresetId,
+  PlacedFacility3D,
+  TransformGizmoMode,
 } from '@/types/map';
 
 export const ControlPanel: React.FC = () => {
@@ -172,6 +184,17 @@ export const ControlPanel: React.FC = () => {
     setTile3DStreamOpacity,
     setTile3DStreamSse,
     setTile3DStreamPointSize,
+    // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls]
+    placedFacilities,
+    selectedFacilityId,
+    transformGizmoMode,
+    addPlacedFacility,
+    removePlacedFacility,
+    clearAllPlacedFacilities,
+    selectFacility,
+    updateFacilityTransform,
+    setTransformGizmoMode,
+    flyToLocation,
   } = useMapStore();
 
   const [bookmarkInput, setBookmarkInput] = useState('');
@@ -181,6 +204,8 @@ export const ControlPanel: React.FC = () => {
   const [copiedDraft, setCopiedDraft] = useState(false);
   const [gltfInput, setGltfInput] = useState('');
   const [showGltfDrawer, setShowGltfDrawer] = useState(false);
+  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
+  const [editingFacilityName, setEditingFacilityName] = useState('');
 
   const handleCopyOpinionDraft = async () => {
     if (!defenseAnalysisResult?.officialOpinionDraft) return;
@@ -1178,6 +1203,286 @@ export const ControlPanel: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* [2단계 신규] 3D 시설물 인터랙티브 배치 및 변환 기즈모(TransformControls) */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0f1712]">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+            <Building2 className="w-4 h-4 text-cyan-400" />
+            3D 시설물 배치 카탈로그 & 기즈모
+          </h2>
+          <span className="text-[10px] font-mono font-bold bg-cyan-950/80 text-cyan-300 px-2 py-0.5 rounded border border-cyan-700/60 flex items-center gap-1">
+            배치 {placedFacilities.length}개소
+          </span>
+        </div>
+
+        <p className="text-[10.5px] text-slate-400 leading-tight">
+          국방·도시계획 3D 표준 모델을 지도 위 원하는 위치에 마우스로 즉시 안착시키고, 3축 기즈모(W/E/R)로 정밀 변환합니다.
+        </p>
+
+        {/* 1. 3D 시설물 프리셋 카탈로그 (5종 카드) */}
+        <div className="space-y-1.5">
+          <label className="text-[10.5px] font-semibold text-slate-300 block">
+            시설물 프리셋 선택 및 배치
+          </label>
+          <div className="grid grid-cols-1 gap-2">
+            {(Object.keys(FACILITY_PRESETS) as FacilityPresetId[]).map((key) => {
+              const preset = FACILITY_PRESETS[key];
+              return (
+                <div
+                  key={key}
+                  className="p-2.5 rounded-lg bg-[#142118] border border-[#233829] hover:border-cyan-500/50 transition-all flex items-start justify-between gap-2 text-xs"
+                >
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="w-2 h-2 rounded-full inline-block flex-shrink-0"
+                        style={{ backgroundColor: preset.color }}
+                      />
+                      <span className="font-bold text-slate-100 text-[11px] truncate">
+                        {preset.name}
+                      </span>
+                      <span className="text-[9px] font-mono text-cyan-300 bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-800/60">
+                        {preset.badge}
+                      </span>
+                    </div>
+                    <p className="text-[9.5px] text-slate-400 leading-tight">
+                      {preset.description}
+                    </p>
+                    <div className="text-[9px] text-slate-500 font-mono flex items-center gap-2">
+                      <span>규격: {preset.defaultWidth}m × {preset.defaultDepth}m</span>
+                      <span>·</span>
+                      <span>높이: {preset.defaultHeight}m</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      addPlacedFacility(key);
+                    }}
+                    className="flex-shrink-0 px-2 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[10.5px] flex items-center gap-1 transition-colors shadow-sm"
+                    title="현재 부지 또는 화면 중앙에 즉시 배치"
+                  >
+                    <Plus className="w-3 h-3" />
+                    배치
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2. 배치된 시설물 관리 및 TransformControls 툴바 */}
+        {placedFacilities.length > 0 && (
+          <div className="space-y-2.5 pt-2 border-t border-[#1f3023]">
+            {/* 상단 기즈모 모드 툴바 */}
+            <div className="flex items-center justify-between bg-[#0a120c] p-2 rounded-lg border border-[#1b2b1e]">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400 mr-1 font-semibold">
+                  기즈모:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTransformGizmoMode('translate')}
+                  className={`px-2 py-1 rounded text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                    transformGizmoMode === 'translate'
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold'
+                      : 'bg-[#142017] text-slate-300 border-[#26382a] hover:bg-[#1a2c1f]'
+                  }`}
+                  title="3축 위치 이동 (단축키: W)"
+                >
+                  <Move className="w-3 h-3" />
+                  이동(W)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransformGizmoMode('rotate')}
+                  className={`px-2 py-1 rounded text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                    transformGizmoMode === 'rotate'
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold'
+                      : 'bg-[#142017] text-slate-300 border-[#26382a] hover:bg-[#1a2c1f]'
+                  }`}
+                  title="Y축 방위각 회전 (단축키: E)"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  회전(E)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransformGizmoMode('scale')}
+                  className={`px-2 py-1 rounded text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                    transformGizmoMode === 'scale'
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold'
+                      : 'bg-[#142017] text-slate-300 border-[#26382a] hover:bg-[#1a2c1f]'
+                  }`}
+                  title="균등 크기 조절 (단축키: R)"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  크기(R)
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1">
+                {selectedFacilityId && (
+                  <button
+                    type="button"
+                    onClick={() => selectFacility(null)}
+                    className="text-[9.5px] text-slate-400 hover:text-slate-200 underline px-1"
+                    title="선택 해제 (Esc)"
+                  >
+                    해제
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={clearAllPlacedFacilities}
+                  className="px-1.5 py-1 text-[9.5px] rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 text-rose-300 transition-colors"
+                  title="배치된 모든 시설물 삭제"
+                >
+                  전체 삭제
+                </button>
+              </div>
+            </div>
+
+            {/* 시설물 리스트 */}
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5 custom-scrollbar">
+              {placedFacilities.map((facility) => {
+                const isSelected = selectedFacilityId === facility.id;
+                const isEditing = editingFacilityId === facility.id;
+
+                return (
+                  <div
+                    key={facility.id}
+                    className={`p-2 rounded-lg border text-xs transition-all ${
+                      isSelected
+                        ? 'bg-[#15291d] border-cyan-400 shadow-md ring-1 ring-cyan-400/40'
+                        : 'bg-[#111c14] border-[#223326] hover:bg-[#152319]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      {isEditing ? (
+                        <div className="flex items-center gap-1 flex-1 mr-2">
+                          <input
+                            type="text"
+                            value={editingFacilityName}
+                            onChange={(e) => setEditingFacilityName(e.target.value)}
+                            className="bg-[#0b140e] border border-cyan-500 rounded px-1.5 py-0.5 text-xs text-slate-100 flex-1 outline-none font-medium"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateFacilityTransform(facility.id, {
+                                  name: editingFacilityName.trim() || facility.name,
+                                });
+                                setEditingFacilityId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingFacilityId(null);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateFacilityTransform(facility.id, {
+                                name: editingFacilityName.trim() || facility.name,
+                              });
+                              setEditingFacilityId(null);
+                            }}
+                            className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px]"
+                          >
+                            저장
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          className="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => selectFacility(facility.id)}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full inline-block flex-shrink-0"
+                            style={{
+                              backgroundColor:
+                                FACILITY_PRESETS[facility.presetId]?.color || '#0ea5e9',
+                            }}
+                          />
+                          <span className="font-semibold text-slate-200 truncate text-[11px]">
+                            {facility.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingFacilityId(facility.id);
+                              setEditingFacilityName(facility.name);
+                            }}
+                            className="text-slate-500 hover:text-slate-300 p-0.5"
+                            title="이름 수정"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* 카메라 이동 포커스 */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectFacility(facility.id);
+                            flyToLocation({
+                              longitude: facility.coords[0],
+                              latitude: facility.coords[1],
+                              zoom: 16.5,
+                              pitch: 60,
+                              bearing: (facility.rotationY + 180) % 360,
+                            });
+                          }}
+                          className="p-1 rounded hover:bg-[#1f3524] text-slate-400 hover:text-cyan-300 transition-colors"
+                          title="카메라 포커스"
+                        >
+                          <Focus className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* 삭제 */}
+                        <button
+                          type="button"
+                          onClick={() => removePlacedFacility(facility.id)}
+                          className="p-1 rounded hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 transition-colors"
+                          title="시설물 삭제 (Delete)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 좌표 및 변환 상세 정보 */}
+                    <div className="grid grid-cols-3 gap-1 mt-1 text-[9.5px] font-mono text-slate-400 bg-[#0c140e] p-1 rounded border border-[#1b2b1e]">
+                      <div>
+                        <span className="text-slate-500 block text-[8.5px]">지형 표고</span>
+                        <span className="text-emerald-400 font-semibold">
+                          EL. {facility.elevation}m
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8.5px]">회전각</span>
+                        <span className="text-slate-200">
+                          {facility.rotationY}°
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8.5px]">스케일</span>
+                        <span className="text-cyan-300">
+                          {facility.scale}x
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </section>
