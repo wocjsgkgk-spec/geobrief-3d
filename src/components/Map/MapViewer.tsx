@@ -569,7 +569,7 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
-          // [브이월드 건축물 공간정보 LT_C_SPBD WFS 연동 3D 레이어 - 현실적 외벽 셰이딩]
+          // [브이월드 건축물 공간정보 LT_C_SPBD WFS 연동 3D 레이어 - 100% 불투명 PBR 현실적 건축 톤]
           {
             id: 'vworld-buildings-3d',
             type: 'fill-extrusion',
@@ -580,52 +580,46 @@ export const MapViewer: React.FC = () => {
                 'match',
                 ['get', 'bld_category'],
                 'apartment',
-                '#E2E8F0',
+                '#F1F5F9',
                 'commercial',
-                '#93C5FD',
-                '#CBD5E1',
+                '#BAE6FD',
+                '#E2E8F0',
               ],
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
               'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.92,
+              'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
           },
-          // [브이월드 건축물 옥상(Roof) 분리 레이어 - 우레탄 방수/설비 다크 슬래브]
+          // [브이월드 건축물 옥상(Roof) 분리 레이어 - 짙은 차콜 그레이 100% 불투명 슬래브]
           {
             id: 'vworld-buildings-roof',
             type: 'fill-extrusion',
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': [
-                'case',
-                ['==', ['get', 'bld_category'], 'apartment'], '#14532D',
-                ['==', ['get', 'bld_category'], 'commercial'], '#0F172A',
-                ['==', ['get', 'bld_category'], 'public_military'], '#334155',
-                '#1E293B',
-              ],
+              'fill-extrusion-color': '#334155',
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
               'fill-extrusion-base': [
                 'max',
                 0,
                 ['-', ['coalesce', ['get', 'height'], 12], 0.45],
               ],
-              'fill-extrusion-opacity': 0.98,
+              'fill-extrusion-opacity': 1.0,
             },
             layout: { visibility: 'visible' },
           },
-          // [브이월드 건축물 외곽 모서리 와이어프레임 엣지 - 0.8px 선명도 강화]
+          // [브이월드 건축물 외곽 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인]
           {
             id: 'vworld-buildings-edge',
             type: 'line',
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'line-color': '#1E293B',
-              'line-width': 0.8,
-              'line-opacity': 0.85,
+              'line-color': '#0F172A',
+              'line-width': 1.0,
+              'line-opacity': 0.9,
             },
             layout: { visibility: 'visible' },
           },
@@ -640,14 +634,14 @@ export const MapViewer: React.FC = () => {
                 'match',
                 ['get', 'type'],
                 'residential',
-                '#E2E8F0',
+                '#F1F5F9',
                 'commercial_tower',
-                '#93C5FD',
-                '#CBD5E1',
+                '#BAE6FD',
+                '#E2E8F0',
               ],
               'fill-extrusion-height': ['get', 'height'],
               'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.92,
+              'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
@@ -658,17 +652,10 @@ export const MapViewer: React.FC = () => {
             source: 'sample-buildings-source',
             minzoom: 11,
             paint: {
-              'fill-extrusion-color': [
-                'case',
-                ['==', ['get', 'type'], 'residential'], '#15803D',
-                ['==', ['get', 'type'], 'commercial_tower'], '#334155',
-                ['==', ['get', 'type'], 'research_center'], '#1E293B',
-                ['==', ['get', 'type'], 'military_facility'], '#475569',
-                '#334155',
-              ],
+              'fill-extrusion-color': '#334155',
               'fill-extrusion-height': ['get', 'height'],
               'fill-extrusion-base': ['max', 0, ['-', ['get', 'height'], 0.4]],
-              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-opacity': 1.0,
             },
             layout: { visibility: 'visible' },
           },
@@ -678,9 +665,9 @@ export const MapViewer: React.FC = () => {
             source: 'sample-buildings-source',
             minzoom: 11,
             paint: {
-              'line-color': '#1E293B',
-              'line-width': 0.8,
-              'line-opacity': 0.85,
+              'line-color': '#0F172A',
+              'line-width': 1.0,
+              'line-opacity': 0.9,
             },
             layout: { visibility: 'visible' },
           },
@@ -1177,8 +1164,8 @@ export const MapViewer: React.FC = () => {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.8,
-          position: [1.2, 120, 45],
+          intensity: 0.85,
+          position: [1.3, 115, 35], // 비스듬한 태양광 각도로 벽면 그림자 윤곽 극대화
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1378,7 +1365,7 @@ export const MapViewer: React.FC = () => {
           ? 'drawing-polygon-fill'
           : undefined;
 
-        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - 정돈된 PBR 건축 톤 및 수직 음영 그라데이션]
+        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - 100% 불투명 PBR 현실적 건축 톤]
         if (!map.getLayer('3d-buildings')) {
           map.addLayer(
             {
@@ -1392,12 +1379,12 @@ export const MapViewer: React.FC = () => {
                   'match',
                   ['coalesce', ['get', 'type'], ['get', 'class'], 'residential'],
                   ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket', 'mall'],
-                  '#93C5FD',
+                  '#BAE6FD',
                   ['military', 'government', 'public', 'civic', 'police', 'fire_station', 'barracks'],
-                  '#CBD5E1',
-                  'residential',
                   '#E2E8F0',
-                  '#CBD5E1',
+                  'residential',
+                  '#F1F5F9',
+                  '#E2E8F0',
                 ],
                 'fill-extrusion-height': [
                   'coalesce',
@@ -1407,7 +1394,7 @@ export const MapViewer: React.FC = () => {
                   12,
                 ],
                 'fill-extrusion-base': 0,
-                'fill-extrusion-opacity': 0.92,
+                'fill-extrusion-opacity': 1.0,
                 'fill-extrusion-vertical-gradient': true,
               },
               layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
@@ -1416,7 +1403,7 @@ export const MapViewer: React.FC = () => {
           );
         }
 
-        // [3D 건축물 옥상 슬래브(Roof Cap) 레이어]
+        // [3D 건축물 옥상 슬래브(Roof Cap) 레이어 - 짙은 차콜 그레이 100% 불투명]
         if (!map.getLayer('3d-buildings-roof')) {
           map.addLayer(
             {
@@ -1426,15 +1413,7 @@ export const MapViewer: React.FC = () => {
               'source-layer': 'building',
               minzoom: 12,
               paint: {
-                'fill-extrusion-color': [
-                  'match',
-                  ['get', 'type'],
-                  'residential',
-                  '#15803d',
-                  'commercial',
-                  '#334155',
-                  '#475569',
-                ],
+                'fill-extrusion-color': '#334155',
                 'fill-extrusion-height': [
                   'coalesce',
                   ['get', 'render_height'],
@@ -1457,7 +1436,7 @@ export const MapViewer: React.FC = () => {
                     0.4,
                   ],
                 ],
-                'fill-extrusion-opacity': 0.95,
+                'fill-extrusion-opacity': 1.0,
                 'fill-extrusion-vertical-gradient': true,
               },
               layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
@@ -1466,7 +1445,7 @@ export const MapViewer: React.FC = () => {
           );
         }
 
-        // [모서리 엣지(Edge Wireframe) 라인 레이어]
+        // [모서리 엣지(Edge Wireframe) 라인 레이어 - 선명한 CAD 엣지 라인]
         if (!map.getLayer('3d-buildings-edge')) {
           map.addLayer(
             {
@@ -1476,9 +1455,9 @@ export const MapViewer: React.FC = () => {
               'source-layer': 'building',
               minzoom: 12,
               paint: {
-                'line-color': '#1E293B',
-                'line-width': 0.8,
-                'line-opacity': 0.85,
+                'line-color': '#0F172A',
+                'line-width': 1.0,
+                'line-opacity': 0.9,
               },
               layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
             },

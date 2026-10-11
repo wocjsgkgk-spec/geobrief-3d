@@ -24,11 +24,11 @@ export interface RoofBuildingOptions {
 
 // [PBR 물리 기반 지붕 재질 캐시]
 const ROOF_MATERIALS = {
-  // 1. 주거용 테라코타 브라운 기와 (#B45309 ~ #9A3412)
-  terracotta: new THREE.MeshStandardMaterial({
-    color: 0x9a3412,
-    roughness: 0.65,
-    metalness: 0.15,
+  // 1. 도심/주거 표준 짙은 차콜 그레이 기와/슬레이트 (#334155)
+  charcoalRoof: new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    roughness: 0.55,
+    metalness: 0.25,
     flatShading: true,
     side: THREE.DoubleSide,
   }),
@@ -533,8 +533,8 @@ export function createProceduralRoof(options: RoofBuildingOptions): THREE.Group 
     return createParapetFlatRoofMesh(localPts, baseY);
   }
 
-  // 3. 경사 지붕 재질 결정 (테라코타 / 다크 슬레이트 / 국방 카키)
-  let material: THREE.Material = ROOF_MATERIALS.terracotta;
+  // 3. 경사 지붕 재질 결정 (차콜 그레이 / 다크 슬레이트 / 국방 카키)
+  let material: THREE.Material = ROOF_MATERIALS.charcoalRoof;
   const t = type.toLowerCase();
 
   if (colorPreset === 'slate_dark' || t.includes('public') || t.includes('office') || t.includes('hall')) {
@@ -542,11 +542,11 @@ export function createProceduralRoof(options: RoofBuildingOptions): THREE.Group 
   } else if (colorPreset === 'military_green' || t.includes('military') || t.includes('barracks') || t.includes('depot')) {
     material = ROOF_MATERIALS.militaryGreen;
   } else if (colorPreset === 'terracotta') {
-    material = ROOF_MATERIALS.terracotta;
+    material = ROOF_MATERIALS.charcoalRoof;
   } else {
-    // 주거 기본 테라코타, 일반 기타 다크 슬레이트
+    // 주거 기본 차콜 그레이, 일반 기타 다크 슬레이트
     material = t.includes('residential') || t.includes('house') || t.includes('villa')
-      ? ROOF_MATERIALS.terracotta
+      ? ROOF_MATERIALS.charcoalRoof
       : ROOF_MATERIALS.slateDark;
   }
 

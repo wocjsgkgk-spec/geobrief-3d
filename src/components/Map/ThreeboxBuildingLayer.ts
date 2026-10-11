@@ -319,6 +319,18 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
       if (!rawMatrix) return;
 
+      // [LOD 뷰포트 레벨 체크] 줌 13.8 미만 원거리에서는 세부 외벽/지붕을 바이패스하여 60fps 유지
+      if (this.map) {
+        const zoom = this.map.getZoom();
+        const isHighDetailZoom = zoom >= 13.8 && this.lodMode === 'lod2';
+        if (this.roofsGroup.visible !== isHighDetailZoom) {
+          this.roofsGroup.visible = isHighDetailZoom;
+        }
+        if (this.facadesGroup.visible !== isHighDetailZoom) {
+          this.facadesGroup.visible = isHighDetailZoom;
+        }
+      }
+
       // 1. [지형 밀착 (Terrain Clamping)] 3D DEM 지형 표고 실시간 조회
       if (this.map && this.map.queryTerrainElevation) {
         const elev = this.map.queryTerrainElevation(this.originLngLat);
