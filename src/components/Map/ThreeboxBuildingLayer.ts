@@ -232,9 +232,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.originLngLat = [c.lng, c.lat];
     }
 
-    // 1. Directional Light 그림자 셰이딩 강화 (2048x2048, bias -0.0001, 동적 뷰포트 추적)
-    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.2);
-    this.directionalLight.position.set(120, -140, 160).normalize();
+    // 1. [입체 조명 명암비 극대화] Directional Light 그림자 셰이딩 강화 (position: [1.4, 125, 45], intensity: 0.95 대응)
+    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
+    this.directionalLight.position.set(116, 141, 81).normalize();
     this.directionalLight.castShadow = true;
     this.directionalLight.shadow.mapSize.width = 2048;
     this.directionalLight.shadow.mapSize.height = 2048;
@@ -249,8 +249,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.directionalLight.shadow.normalBias = 0.02;
     this.scene.add(this.directionalLight);
 
-    // 환경광 (Ambient Light)
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    // 환경광 (Ambient Light - 0.45로 낮추어 그림자 대비 극대화)
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
     this.scene.add(this.ambientLight);
 
     // 대기 산란 반사 보조광 (Fill Light)

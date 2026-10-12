@@ -15,6 +15,9 @@ export interface KoreanBuildingMaterials {
   apartmentMaterial: THREE.MeshStandardMaterial;
   commercialMaterial: THREE.MeshStandardMaterial;
   neighborhoodMaterial: THREE.MeshStandardMaterial;
+  landmarkTowerMaterial: THREE.MeshStandardMaterial; // [신규] 반사 유리 고층 타워
+  helipadBaseMaterial: THREE.MeshStandardMaterial;   // [신규] 옥상 헬리패드 베이스
+  helipadMarkMaterial: THREE.MeshStandardMaterial;   // [신규] 옥상 헬리패드 H 마킹 및 노란색 링
   roofSlateMaterial: THREE.MeshStandardMaterial;
   parapetMaterial: THREE.MeshStandardMaterial;
   penthouseMaterial: THREE.MeshStandardMaterial;
@@ -322,6 +325,70 @@ export function createNeighborhoodCommercialCanvas(size = 512): HTMLCanvasElemen
 }
 
 /**
+ * 4. 랜드마크 및 고층 타워 반사 유리 커튼월 외벽 텍스처 생성기 (512x512)
+ * - 15층 이상 고층 빌딩 및 주요 공공청사용
+ * - 반사 유리 그라디언트, 초정밀 수직/수평 알루미늄 멀리언 그리드, 스팬드럴 글래스 패널
+ */
+export function createLandmarkCurtainWallCanvas(size = 512): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  // 1) 딥 로열 블루 / 사이언 하이라이트 글래스 베이스 그라데이션
+  const baseGrad = ctx.createLinearGradient(0, 0, size, size);
+  baseGrad.addColorStop(0, '#0F172A');
+  baseGrad.addColorStop(0.2, '#1E3A8A');
+  baseGrad.addColorStop(0.5, '#1D4ED8');
+  baseGrad.addColorStop(0.8, '#2563EB');
+  baseGrad.addColorStop(1, '#0284C7');
+  ctx.fillStyle = baseGrad;
+  ctx.fillRect(0, 0, size, size);
+
+  // 2) 층간 스팬드럴 글래스 밴드 (어두운 반사 패널, 64px 마다)
+  const floorHeight = 64; // ~3.0m 층고 축척
+  for (let y = 0; y < size; y += floorHeight) {
+    // 층간 슬래브 내부 차폐용 스팬드럴 영역
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+    ctx.fillRect(0, y, size, 14);
+
+    // 알루미늄 트랜섬(가로 프레임) 바
+    ctx.fillStyle = '#CBD5E1';
+    ctx.fillRect(0, y + 14, size, 3);
+    ctx.fillStyle = '#64748B';
+    ctx.fillRect(0, y + 17, size, 2);
+  }
+
+  // 3) 수직 알루미늄 멀리언 기둥 라인 (32px 간격)
+  const mullionStep = 32;
+  for (let x = 0; x < size; x += mullionStep) {
+    ctx.fillStyle = '#94A3B8';
+    ctx.fillRect(x, 0, 2, size);
+    ctx.fillStyle = '#F1F5F9';
+    ctx.fillRect(x + 2, 0, 1, size);
+  }
+
+  // 4) 초고층 타워 특유의 대각선 하늘 반사 하이라이트 (Specular Sheen)
+  const sheenGrad = ctx.createLinearGradient(0, size, size, 0);
+  sheenGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  sheenGrad.addColorStop(0.35, 'rgba(255, 255, 255, 0.08)');
+  sheenGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.28)');
+  sheenGrad.addColorStop(0.65, 'rgba(255, 255, 255, 0.08)');
+  sheenGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sheenGrad;
+  ctx.beginPath();
+  ctx.moveTo(0, size * 0.7);
+  ctx.lineTo(size * 0.7, 0);
+  ctx.lineTo(size, 0);
+  ctx.lineTo(0, size);
+  ctx.closePath();
+  ctx.fill();
+
+  return canvas;
+}
+
+/**
  * 캔버스로부터 RepeatWrapping CanvasTexture 생성
  */
 function createRepeatTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
@@ -347,10 +414,12 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
   const aptCanvas = createKoreanApartmentCanvas(512);
   const comCanvas = createCommercialOfficeCanvas(512);
   const neighCanvas = createNeighborhoodCommercialCanvas(512);
+  const landmarkCanvas = createLandmarkCurtainWallCanvas(512);
 
   const aptTex = createRepeatTexture(aptCanvas);
   const comTex = createRepeatTexture(comCanvas);
   const neighTex = createRepeatTexture(neighCanvas);
+  const landmarkTex = createRepeatTexture(landmarkCanvas);
 
   materialsCache = {
     // 1) 한국형 판상형 아파트 외벽 머티리얼 (roughness: 0.6, metalness: 0.2)
@@ -377,7 +446,34 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       side: THREE.DoubleSide,
     }),
 
-    // 4) 옥상 방수 슬래브 (짙은 차콜 그레이 #334155)
+    // 4) [신규] 랜드마크 및 15층 이상 고층 반사 유리 커튼월 타워 (roughness: 0.15, metalness: 0.85)
+    landmarkTowerMaterial: new THREE.MeshStandardMaterial({
+      map: landmarkTex,
+      color: 0x1d4ed8, // 로열 글래스 블루
+      roughness: 0.15, // 요구 조건 완벽 일치 (초정밀 거울 반사)
+      metalness: 0.85, // 요구 조건 완벽 일치 (금속/유리 고반사)
+      side: THREE.DoubleSide,
+    }),
+
+    // 5) [신규] 옥상 헬리패드 베이스 데크
+    helipadBaseMaterial: new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.85,
+      metalness: 0.15,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }),
+
+    // 6) [신규] 옥상 헬리패드 H 마킹 및 노란색 링
+    helipadMarkMaterial: new THREE.MeshStandardMaterial({
+      color: 0xfacc15, // 고휘도 항공 노랑
+      roughness: 0.35,
+      metalness: 0.25,
+      emissive: 0x422006, // 은은한 발광감
+      side: THREE.DoubleSide,
+    }),
+
+    // 7) 옥상 방수 슬래브 (짙은 차콜 그레이 #334155)
     roofSlateMaterial: new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.65,
@@ -386,7 +482,7 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       side: THREE.DoubleSide,
     }),
 
-    // 5) 1.2m 돌출 난간 (Parapet)
+    // 8) 1.2m 돌출 난간 (Parapet)
     parapetMaterial: new THREE.MeshStandardMaterial({
       color: 0x475569,
       roughness: 0.65,
@@ -395,7 +491,7 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       side: THREE.DoubleSide,
     }),
 
-    // 6) 엘리베이터 권상기실 / 옥탑 코어 (Penthouse)
+    // 9) 엘리베이터 권상기실 / 옥탑 코어 (Penthouse)
     penthouseMaterial: new THREE.MeshStandardMaterial({
       color: 0x1e293b,
       roughness: 0.5,
@@ -403,7 +499,7 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       flatShading: true,
     }),
 
-    // 7) 지형 밀착 기초 옹벽 (Foundation Clamping Wall)
+    // 10) 지형 밀착 기초 옹벽 (Foundation Clamping Wall)
     foundationMaterial: new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.85,
@@ -425,6 +521,9 @@ export function disposeKoreanBuildingMaterials(): void {
     materialsCache.apartmentMaterial,
     materialsCache.commercialMaterial,
     materialsCache.neighborhoodMaterial,
+    materialsCache.landmarkTowerMaterial,
+    materialsCache.helipadBaseMaterial,
+    materialsCache.helipadMarkMaterial,
     materialsCache.roofSlateMaterial,
     materialsCache.parapetMaterial,
     materialsCache.penthouseMaterial,

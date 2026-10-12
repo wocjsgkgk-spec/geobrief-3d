@@ -36,9 +36,9 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     this.map = map;
 
-    // 1. 태양광 및 앰비언트 조명 구축 (입체 음영비 극대화 & 소프트 섀도우)
-    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.6);
-    this.directionalLight.position.set(80, -120, 150).normalize();
+    // 1. [입체 조명 명암비 극대화] 태양광 및 앰비언트 조명 구축 (position: [1.4, 125, 45], intensity: 0.95 대응)
+    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
+    this.directionalLight.position.set(116, 141, 81).normalize();
     this.directionalLight.castShadow = true;
     this.directionalLight.shadow.mapSize.width = 2048;
     this.directionalLight.shadow.mapSize.height = 2048;
@@ -53,12 +53,12 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
     this.scene.add(this.directionalLight);
 
     // 보조 채움광 (Fill Light - 반대편 대기 산란광)
-    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.5);
-    fillLight.position.set(-80, 120, 90).normalize();
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+    fillLight.position.set(-80, 100, 80).normalize();
     this.scene.add(fillLight);
 
     // 전방향 환경광 (Ambient Light)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
     this.scene.add(ambientLight);
 
     // 2. Three.js WebGLRenderer 초기화 (소프트 섀도우 활성화)

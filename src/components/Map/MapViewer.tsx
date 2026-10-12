@@ -70,6 +70,7 @@ import { interpolateCinematicCamera } from '@/utils/cinematicPathInterpolator';
 import { CinematicWaypoint } from '@/types/map';
 import { registerBuildingTextures } from '@/utils/buildingTextures';
 import { registerProceduralFacadeTextures } from '@/utils/proceduralFacades';
+import { generateCrosswalksGeoJSON } from '@/utils/crosswalkGenerator';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -1383,8 +1384,8 @@ export const MapViewer: React.FC = () => {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.9,
-          position: [1.2, 115, 40],
+          intensity: 0.95,
+          position: [1.4, 125, 45],
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1520,7 +1521,199 @@ export const MapViewer: React.FC = () => {
           );
         }
 
-        // 도로망 위계화 레이어 (지방도, 2차로, 고속화도로)
+        // ---------------------------------------------------------------------
+        // [정밀 도로 노면 표기 (차선, 횡단보도, 중앙선) Drape 오버레이]
+        // ---------------------------------------------------------------------
+        // 1) 다크 아스팔트 베이스 케이싱 (주요 도로 폭 확장)
+        if (!map.getLayer('roads-asphalt-casing')) {
+          map.addLayer(
+            {
+              id: 'roads-asphalt-casing',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 13,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary', 'tertiary'],
+              paint: {
+                'line-color': '#1E293B',
+                'line-width': [
+                  'interpolate', ['linear'], ['zoom'],
+                  13, 5,
+                  15, 12,
+                  17, 24,
+                  19, 36,
+                ],
+                'line-opacity': 0.96,
+              },
+              layout: {
+                visibility: layers.roads ? 'visible' : 'none',
+                'line-cap': 'round',
+                'line-join': 'round',
+              },
+            },
+            beforeRoads
+          );
+        }
+
+        // 2) 아스팔트 주행 차로 포장면
+        if (!map.getLayer('roads-asphalt-inner')) {
+          map.addLayer(
+            {
+              id: 'roads-asphalt-inner',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 14,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary', 'tertiary'],
+              paint: {
+                'line-color': '#334155',
+                'line-width': [
+                  'interpolate', ['linear'], ['zoom'],
+                  14, 8,
+                  16, 18,
+                  18, 28,
+                ],
+                'line-opacity': 0.95,
+              },
+              layout: {
+                visibility: layers.roads ? 'visible' : 'none',
+                'line-cap': 'round',
+                'line-join': 'round',
+              },
+            },
+            beforeRoads
+          );
+        }
+
+        // 3) 도로 외곽 차도경계선 백색 실선 (좌/우)
+        if (!map.getLayer('roads-edge-white-left')) {
+          map.addLayer(
+            {
+              id: 'roads-edge-white-left',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 14.5,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary'],
+              paint: {
+                'line-color': '#F8FAFC',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 14.5, 0.8, 16, 1.5, 18, 2.4],
+                'line-offset': ['interpolate', ['linear'], ['zoom'], 14.5, -3.2, 16, -6.5, 18, -11.0],
+                'line-opacity': 0.85,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+        if (!map.getLayer('roads-edge-white-right')) {
+          map.addLayer(
+            {
+              id: 'roads-edge-white-right',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 14.5,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary'],
+              paint: {
+                'line-color': '#F8FAFC',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 14.5, 0.8, 16, 1.5, 18, 2.4],
+                'line-offset': ['interpolate', ['linear'], ['zoom'], 14.5, 3.2, 16, 6.5, 18, 11.0],
+                'line-opacity': 0.85,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+
+        // 4) 주간선도로 차선 분할선 (백색 점선 - 좌/우)
+        if (!map.getLayer('roads-lanes-white-dashed-left')) {
+          map.addLayer(
+            {
+              id: 'roads-lanes-white-dashed-left',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 15,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary'],
+              paint: {
+                'line-color': '#FFFFFF',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.2, 16, 1.8, 18, 2.5],
+                'line-dasharray': [3, 4],
+                'line-offset': ['interpolate', ['linear'], ['zoom'], 15, -2.2, 16, -4.0, 18, -6.8],
+                'line-opacity': 0.95,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+        if (!map.getLayer('roads-lanes-white-dashed-right')) {
+          map.addLayer(
+            {
+              id: 'roads-lanes-white-dashed-right',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 15,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary'],
+              paint: {
+                'line-color': '#FFFFFF',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 15, 1.2, 16, 1.8, 18, 2.5],
+                'line-dasharray': [3, 4],
+                'line-offset': ['interpolate', ['linear'], ['zoom'], 15, 2.2, 16, 4.0, 18, 6.8],
+                'line-opacity': 0.95,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+
+        // 5) 주간선도로 중앙선 (황색 복선 - 좌/우 오프셋 라인)
+        if (!map.getLayer('roads-centerline-yellow-left')) {
+          map.addLayer(
+            {
+              id: 'roads-centerline-yellow-left',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 14,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary'],
+              paint: {
+                'line-color': '#F59E0B',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1.0, 16, 1.8, 18, 2.8],
+                'line-offset': ['interpolate', ['linear'], ['zoom'], 14, -1.0, 16, -1.6, 18, -2.5],
+                'line-opacity': 0.98,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+        if (!map.getLayer('roads-centerline-yellow-right')) {
+          map.addLayer(
+            {
+              id: 'roads-centerline-yellow-right',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'transportation',
+              minzoom: 14,
+              filter: ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary'],
+              paint: {
+                'line-color': '#F59E0B',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1.0, 16, 1.8, 18, 2.8],
+                'line-offset': ['interpolate', ['linear'], ['zoom'], 14, 1.0, 16, 1.6, 18, 2.5],
+                'line-opacity': 0.98,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+
+        // 6) 광역 도로망 베이스 라인 (지방도, 2차로, 고속화도로)
         if (!map.getLayer('roads-local')) {
           map.addLayer(
             {
@@ -1571,6 +1764,50 @@ export const MapViewer: React.FC = () => {
               paint: {
                 'line-color': '#F97316',
                 'line-width': 3.5,
+                'line-opacity': 0.95,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+
+        // 7) [주요 교차로 중심 반경 30m 구간 횡단보도(Crosswalk) & 정지선 Drape 오버레이]
+        if (!map.getSource('crosswalks-source')) {
+          const crosswalkData = generateCrosswalksGeoJSON(undefined, polygonCenter ? polygonCenter : undefined);
+          map.addSource('crosswalks-source', {
+            type: 'geojson',
+            data: crosswalkData,
+          });
+        }
+        if (!map.getLayer('crosswalks-fill')) {
+          map.addLayer(
+            {
+              id: 'crosswalks-fill',
+              type: 'fill',
+              source: 'crosswalks-source',
+              minzoom: 14,
+              filter: ['==', ['get', 'type'], 'crosswalk-stripe'],
+              paint: {
+                'fill-color': '#FFFFFF',
+                'fill-opacity': 0.95,
+              },
+              layout: { visibility: layers.roads ? 'visible' : 'none' },
+            },
+            beforeRoads
+          );
+        }
+        if (!map.getLayer('crosswalks-stopline')) {
+          map.addLayer(
+            {
+              id: 'crosswalks-stopline',
+              type: 'line',
+              source: 'crosswalks-source',
+              minzoom: 14,
+              filter: ['==', ['get', 'type'], 'stop-line'],
+              paint: {
+                'line-color': '#FFFFFF',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1.5, 16, 3.0, 18, 5.0],
                 'line-opacity': 0.95,
               },
               layout: { visibility: layers.roads ? 'visible' : 'none' },
@@ -2287,9 +2524,27 @@ export const MapViewer: React.FC = () => {
 
     const roadVis = layers.roads ? 'visible' : 'none';
 
-    if (map.getLayer('roads-highways')) map.setLayoutProperty('roads-highways', 'visibility', roadVis);
-    if (map.getLayer('roads-secondary')) map.setLayoutProperty('roads-secondary', 'visibility', roadVis);
-    if (map.getLayer('roads-local')) map.setLayoutProperty('roads-local', 'visibility', roadVis);
+    const targetRoadLayers = [
+      'roads-asphalt-casing',
+      'roads-asphalt-inner',
+      'roads-edge-white-left',
+      'roads-edge-white-right',
+      'roads-lanes-white-dashed-left',
+      'roads-lanes-white-dashed-right',
+      'roads-centerline-yellow-left',
+      'roads-centerline-yellow-right',
+      'roads-highways',
+      'roads-secondary',
+      'roads-local',
+      'crosswalks-fill',
+      'crosswalks-stopline',
+    ];
+
+    for (const lid of targetRoadLayers) {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(lid, 'visibility', roadVis);
+      }
+    }
   }, [layers.roads, isMapLoaded]);
 
   // 8. 3D 건축물 Extrusion & Wireframe 엣지 토글
@@ -3217,8 +3472,8 @@ export const MapViewer: React.FC = () => {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.9,
-          position: [1.2, 115, 40],
+          intensity: 0.95,
+          position: [1.4, 125, 45],
         });
       } else {
         map.setLight({
