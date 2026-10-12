@@ -576,8 +576,15 @@ export function generateBuildingRoofsGroup(
       const ring = feat.geometry.coordinates[0] as [number, number][];
       if (!ring || ring.length < 3) continue;
 
-      const firstCoord = ring[0];
-      const groundElev = queryElevationFn ? (queryElevationFn(firstCoord) ?? 0) : 0;
+      let groundElev = typeof props.min_elev === 'number' ? props.min_elev : 0;
+      if (groundElev === 0 && queryElevationFn) {
+        let minE = Infinity;
+        for (const coord of ring) {
+          const e = queryElevationFn(coord);
+          if (e !== null && !isNaN(e) && e < minE) minE = e;
+        }
+        groundElev = isFinite(minE) ? minE : (queryElevationFn(ring[0]) ?? 0);
+      }
 
       const roofMesh = createProceduralRoof({
         polygon: ring,
@@ -596,8 +603,15 @@ export function generateBuildingRoofsGroup(
         const ring = poly[0] as [number, number][];
         if (!ring || ring.length < 3) continue;
 
-        const firstCoord = ring[0];
-        const groundElev = queryElevationFn ? (queryElevationFn(firstCoord) ?? 0) : 0;
+        let groundElev = typeof props.min_elev === 'number' ? props.min_elev : 0;
+        if (groundElev === 0 && queryElevationFn) {
+          let minE = Infinity;
+          for (const coord of ring) {
+            const e = queryElevationFn(coord);
+            if (e !== null && !isNaN(e) && e < minE) minE = e;
+          }
+          groundElev = isFinite(minE) ? minE : (queryElevationFn(ring[0]) ?? 0);
+        }
 
         const roofMesh = createProceduralRoof({
           polygon: ring,

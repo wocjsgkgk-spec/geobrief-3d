@@ -20,6 +20,8 @@ import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
+import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
+import { generateContourLines } from '@/utils/contourGenerator';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
 import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
 import {
@@ -376,6 +378,22 @@ export const MapViewer: React.FC = () => {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
+          // [2단계 신규: 국토지리정보원 정밀 수치등고선 GeoJSON 소스]
+          'contour-lines-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          // [2단계 신규: 국토지리정보원 / 브이월드 등고선 WMS 래스터 소스]
+          'vworld-contour-wms': {
+            type: 'raster',
+            tiles: [
+              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=dt_d002,lt_l_toisdepcntah&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&KEY=${
+                process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
+              }`,
+            ],
+            tileSize: 256,
+            maxzoom: 19,
+          },
           // [브이월드 건축물 공간정보 LT_C_SPBD WFS 소스]
           'vworld-buildings-source': {
             type: 'geojson',
@@ -576,6 +594,112 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
+          // [2단계 신규: 국토지리정보원 / 브이월드 수치지형도 1:5,000 WMS 래스터 등고선 레이어]
+          {
+            id: 'vworld-contour-raster',
+            type: 'raster',
+            source: 'vworld-contour-wms',
+            minzoom: 11,
+            paint: {
+              'raster-opacity': 0.35,
+            },
+            layout: { visibility: 'none' },
+          },
+          // [2단계 신규: 수치지형도 1:5,000 간곡선(Intermediate Contour) - 0.5px 반투명 화이트/골드]
+          {
+            id: 'contour-intermediate-line',
+            type: 'line',
+            source: 'contour-lines-source',
+            filter: ['==', ['get', 'type'], 'intermediate'],
+            minzoom: 12,
+            paint: {
+              'line-color': '#FEF3C7',
+              'line-width': 0.5,
+              'line-opacity': 0.25,
+            },
+            layout: { visibility: 'none' },
+          },
+          // [2단계 신규: 수치지형도 1:5,000 주곡선(Index Contour) - 0.8px 골드 라인]
+          {
+            id: 'contour-index-line',
+            type: 'line',
+            source: 'contour-lines-source',
+            filter: ['==', ['get', 'type'], 'index'],
+            minzoom: 11,
+            paint: {
+              'line-color': '#F59E0B',
+              'line-width': 0.8,
+              'line-opacity': 0.40,
+            },
+            layout: { visibility: 'none' },
+          },
+          // [2단계 신규: 수치지형도 등고선 표고 라벨]
+          {
+            id: 'contour-labels',
+            type: 'symbol',
+            source: 'contour-lines-source',
+            filter: ['==', ['get', 'type'], 'index'],
+            minzoom: 13,
+            layout: {
+              'symbol-placement': 'line',
+              'text-field': ['get', 'label'],
+              'text-size': 9,
+              'text-keep-upright': true,
+              visibility: 'none',
+            },
+            paint: {
+              'text-color': '#FCD34D',
+              'text-halo-color': '#0F172A',
+              'text-halo-width': 1.0,
+            },
+          },
+
+          // [3. 지형-건물 앰비언트 오클루전(AO) 음영 합성 - 건물 바닥 지표면 딥 섀도우 라인]
+          {
+            id: 'fusion-buildings-ao',
+            type: 'line',
+            source: 'fusion-buildings',
+            minzoom: 12,
+            paint: {
+              'line-color': '#020617',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 2.0,
+                14, 3.5,
+                16, 5.0,
+                18, 6.5,
+              ],
+              'line-blur': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 1.5,
+                14, 2.5,
+                16, 3.5,
+                18, 4.5,
+              ],
+              'line-opacity': 0.75,
+            },
+            layout: { visibility: 'visible' },
+          },
+          // [2. 건물 바닥면 적응형 기초(Adaptive Foundation) - 경사지 옹벽 및 콘크리트 기단]
+          {
+            id: 'fusion-buildings-foundation',
+            type: 'fill-extrusion',
+            source: 'fusion-buildings',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': '#475569',
+              'fill-extrusion-height': 0.2,
+              'fill-extrusion-base': ['coalesce', ['get', 'adaptive_base'], -0.6],
+              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: 'visible' },
+          },
+
           // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - 100% 불투명 PBR 현실적 건축 톤]
           {
             id: 'fusion-buildings-3d',
@@ -596,8 +720,8 @@ export const MapViewer: React.FC = () => {
                 '#94A3B8',
                 '#E2E8F0',
               ],
-              'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
-              'fill-extrusion-base': 0,
+              'fill-extrusion-height': ['coalesce', ['get', 'adaptive_height'], ['get', 'height'], 12],
+              'fill-extrusion-base': ['coalesce', ['get', 'adaptive_base'], 0],
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -611,11 +735,11 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
-              'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
+              'fill-extrusion-height': ['coalesce', ['get', 'adaptive_height'], ['get', 'height'], 12],
               'fill-extrusion-base': [
                 'max',
                 0,
-                ['-', ['coalesce', ['get', 'height'], 12], 0.45],
+                ['-', ['coalesce', ['get', 'adaptive_height'], ['get', 'height'], 12], 0.45],
               ],
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
@@ -2168,6 +2292,12 @@ export const MapViewer: React.FC = () => {
     if (map.getLayer('fusion-buildings-edge')) {
       map.setLayoutProperty('fusion-buildings-edge', 'visibility', visibility);
     }
+    if (map.getLayer('fusion-buildings-ao')) {
+      map.setLayoutProperty('fusion-buildings-ao', 'visibility', visibility);
+    }
+    if (map.getLayer('fusion-buildings-foundation')) {
+      map.setLayoutProperty('fusion-buildings-foundation', 'visibility', visibility);
+    }
     if (map.getLayer('vworld-buildings-3d')) {
       map.setLayoutProperty('vworld-buildings-3d', 'visibility', visibility);
     }
@@ -2193,6 +2323,75 @@ export const MapViewer: React.FC = () => {
       threeboxLayerRef.current.setVisible(layers.buildings3D);
     }
   }, [layers.buildings3D, isMapLoaded]);
+
+  // 8-0-0. [2단계 신규: 국토지리정보원 정밀 등고선(Contour) 레이어 가시성 및 실시간 생성 동기화]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const contourVis = layers.demContours ? 'visible' : 'none';
+
+    if (map.getLayer('vworld-contour-raster')) {
+      map.setLayoutProperty('vworld-contour-raster', 'visibility', contourVis);
+    }
+    if (map.getLayer('contour-intermediate-line')) {
+      map.setLayoutProperty('contour-intermediate-line', 'visibility', contourVis);
+    }
+    if (map.getLayer('contour-index-line')) {
+      map.setLayoutProperty('contour-index-line', 'visibility', contourVis);
+    }
+    if (map.getLayer('contour-labels')) {
+      map.setLayoutProperty('contour-labels', 'visibility', contourVis);
+    }
+
+    if (layers.demContours) {
+      let cancelled = false;
+      let contourTimer: NodeJS.Timeout | null = null;
+
+      const updateContours = () => {
+        try {
+          if (cancelled) return;
+          const bounds = map.getBounds();
+          const bbox: [number, number, number, number] = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth(),
+          ];
+          const queryElev = (coord: [number, number]) => {
+            if (map.queryTerrainElevation) {
+              return map.queryTerrainElevation(coord) ?? 150;
+            }
+            return 150;
+          };
+          const contourData = generateContourLines(bbox, queryElev, {
+            gridResolution: 30,
+            intermediateInterval: 10,
+            indexInterval: 50,
+          });
+          const source = map.getSource('contour-lines-source') as maplibregl.GeoJSONSource;
+          if (source && typeof source.setData === 'function') {
+            source.setData(contourData);
+          }
+        } catch (err) {
+          console.warn('[MapViewer] Failed to generate contour lines:', err);
+        }
+      };
+
+      const debouncedContours = () => {
+        if (contourTimer) clearTimeout(contourTimer);
+        contourTimer = setTimeout(updateContours, 300);
+      };
+
+      debouncedContours();
+      map.on('moveend', debouncedContours);
+      return () => {
+        cancelled = true;
+        if (contourTimer) clearTimeout(contourTimer);
+        map.off('moveend', debouncedContours);
+      };
+    }
+  }, [layers.demContours, isMapLoaded]);
 
   // 8-0. [Three.js SSAO & UnrealBloom 디지털 트윈 후처리 동적 On/Off]
   useEffect(() => {
@@ -2304,12 +2503,23 @@ export const MapViewer: React.FC = () => {
 
         console.log('[GeoBrief 3D Fusion API] 국토교통부 x V-World x OSM 융합 성공:', result);
 
+        // [2단계: 건물 바닥면 적응형 기초(Adaptive Foundation) 표고 샘플링 & 스냅]
+        const queryElev = (coord: [number, number]) => {
+          if (map.queryTerrainElevation) {
+            return map.queryTerrainElevation(coord);
+          }
+          return null;
+        };
+        const finalFeatures = result.features
+          ? applyAdaptiveFoundationToFeatures(result.features, queryElev)
+          : result.features;
+
         try {
           // 1) 신규 융합 소스('fusion-buildings') 갱신
           const fusionSource = map.getSource('fusion-buildings') as maplibregl.GeoJSONSource;
           if (fusionSource && typeof fusionSource.setData === 'function') {
-            if (result.success && result.features && result.features.features.length > 0) {
-              fusionSource.setData(result.features);
+            if (result.success && finalFeatures && finalFeatures.features.length > 0) {
+              fusionSource.setData(finalFeatures);
             } else {
               fusionSource.setData({ type: 'FeatureCollection', features: [] });
             }
@@ -2318,18 +2528,18 @@ export const MapViewer: React.FC = () => {
           // 2) 기존 하위 호환 소스('vworld-buildings-source') 갱신
           const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
           if (vworldSource && typeof vworldSource.setData === 'function') {
-            if (result.success && result.features && result.features.features.length > 0) {
-              vworldSource.setData(result.features);
+            if (result.success && finalFeatures && finalFeatures.features.length > 0) {
+              vworldSource.setData(finalFeatures);
             } else {
               vworldSource.setData({ type: 'FeatureCollection', features: [] });
             }
           }
 
           // 3) Threebox LOD2 입체 지붕 동기화
-          if (threeboxLayerRef.current && result.features?.features) {
+          if (threeboxLayerRef.current && finalFeatures?.features) {
             threeboxLayerRef.current.syncRoofs([
               ...SAMPLE_BUILDINGS.features,
-              ...result.features.features,
+              ...(finalFeatures.features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]),
             ]);
           }
         } catch (sourceErr) {

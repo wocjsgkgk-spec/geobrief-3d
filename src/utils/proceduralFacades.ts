@@ -543,8 +543,15 @@ export function generateBuildingFacadesGroup(
       const pts = projectCoordsToLocalMeters(ring, originLngLat);
       if (pts.length < 3) continue;
 
-      const firstCoord = ring[0];
-      const groundElev = queryElevationFn ? (queryElevationFn(firstCoord) ?? 0) : 0;
+      let groundElev = typeof props.min_elev === 'number' ? props.min_elev : 0;
+      if (groundElev === 0 && queryElevationFn) {
+        let minE = Infinity;
+        for (const coord of ring) {
+          const e = queryElevationFn(coord);
+          if (e !== null && !isNaN(e) && e < minE) minE = e;
+        }
+        groundElev = isFinite(minE) ? minE : (queryElevationFn(ring[0]) ?? 0);
+      }
 
       const H_1F = Math.min(totalH, 3.5);
       const H_Upper = Math.max(0, totalH - H_1F);

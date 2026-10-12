@@ -2421,6 +2421,30 @@ export const ControlPanel: React.FC = () => {
           </label>
         </div>
 
+        {/* [2단계 신규] 국토지리정보원 수치지형도 1:5,000 정밀 등고선 레이어 토글 */}
+        <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+          <div className="flex items-center space-x-2">
+            <Activity className="w-4 h-4 text-amber-400" />
+            <div>
+              <span className="text-xs font-medium text-slate-200 block">
+                수치지형도 정밀 등고선 표시
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                국토지리정보원 1:5,000 주곡선·간곡선 셰이딩
+              </span>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={layers.demContours}
+              onChange={() => toggleLayer('demContours')}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+          </label>
+        </div>
+
         <div className="p-2.5 rounded bg-[#18201b] border border-[#29352c] space-y-1.5">
           <div className="flex justify-between items-center text-xs">
             <span className="text-slate-300 flex items-center gap-1">
