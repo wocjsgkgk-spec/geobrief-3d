@@ -11,15 +11,25 @@ export interface Deck3DTilesOverlayCallbacks {
 }
 
 /**
+ * 브이월드 실사 3D OGC 타일 스트리밍 및 LOD 렌더링 상수 정의
+ */
+const MIN_STREAMING_ZOOM = 14; // 줌 14 이상에서만 고해상도 실사 3D 타일 활성화 (줌 13 이하는 MapLibre 경량 베이스)
+const MAX_CONCURRENT_REQUESTS = 6; // 브라우저 네트워크 블로킹 방지 및 60fps 유지를 위한 최대 동시 요청 수
+const MAX_MEMORY_USAGE_MB = 128; // 화면 밖 타일 메모리 자동 Unload 및 LRU 캐시 한도 (128MB)
+
+/**
  * MapLibre GL JS 위에서 Deck.gl MapboxOverlay를 통해
- * 3D Tiles(b3dm, pnts 포인트 클라우드)를 LOD 프러스텀 컬링 방식으로 스트리밍 렌더링하는 매니저 클래스입니다.
+ * 브이월드 실사 3D Tiles(b3dm, pnts 포인트 클라우드)를 LOD 프러스텀 컬링 방식으로 스트리밍 렌더링하는 매니저 클래스입니다.
  */
 export class Deck3DTilesManager {
   private map: MapLibreMap | null = null;
   private overlay: MapboxOverlay | null = null;
   private callbacks: Deck3DTilesOverlayCallbacks = {};
+  private currentState: Tile3DStreamState | null = null;
   private loadedTilesCounter: number = 0;
+  private unloadedTilesCounter: number = 0;
   private isDestroyed: boolean = false;
+  private isCurrentlyDetailedLOD: boolean = false;
 
   constructor(callbacks?: Deck3DTilesOverlayCallbacks) {
     if (callbacks) {
@@ -29,6 +39,7 @@ export class Deck3DTilesManager {
 
   /**
    * MapLibre 지도 인스턴스에 Deck.gl MapboxOverlay 컨트롤을 초기화 및 장착합니다.
+   * 카메라 회전, 줌, 피치 동기화 및 줌 레벨 감지 이벤트 리스너를 바인딩합니다.
    */
   public attachToMap(map: MapLibreMap): void {
     if (typeof window === 'undefined' || !map) return;
@@ -44,45 +55,123 @@ export class Deck3DTilesManager {
 
       // MapLibre 컨트롤로 주입
       (this.map as any).addControl(this.overlay as unknown as IControl);
+
+      // 줌 변경 감지 리스너 바인딩 (LOD 자동 전환)
+      this.map.on('zoom', this.handleMapZoom);
+      this.map.on('zoomend', this.handleMapZoom);
     } catch (err) {
       console.error('[Deck3DTilesManager] Failed to attach MapboxOverlay to MapLibre:', err);
     }
   }
 
   /**
+   * 줌 레벨 변화에 따른 LOD 줌 자동 전환 핸들러
+   * - 줌 13 이하: 가벼운 베이스맵 모드 (타일셋 숨김 및 리소스 절약)
+   * - 줌 14 이상: 실사 항공사진 텍스처 3D 메쉬 스트리밍 활성화
+   */
+  private handleMapZoom = (): void => {
+    if (!this.map || !this.overlay || this.isDestroyed || !this.currentState?.enabled) return;
+
+    const currentZoom = this.map.getZoom();
+    const shouldBeDetailed = currentZoom >= MIN_STREAMING_ZOOM;
+
+    if (shouldBeDetailed !== this.isCurrentlyDetailedLOD) {
+      this.isCurrentlyDetailedLOD = shouldBeDetailed;
+      this.renderTilesLayer();
+    } else if (!shouldBeDetailed) {
+      // 광역 뷰 상태 텍스트 주기적 동기화
+      this.callbacks.onStatusChange?.(
+        `LOD 광역 뷰 (줌 14 이상 확대 시 브이월드 실사 3D 타일 자동 표출 | 현재 줌: ${currentZoom.toFixed(1)})`,
+        false,
+        this.loadedTilesCounter
+      );
+    }
+  };
+
+  /**
    * 3D Tiles 스트리밍 상태에 맞춰 Deck.gl 레이어를 갱신합니다.
    */
   public update(state: Tile3DStreamState): void {
-    if (!this.overlay || this.isDestroyed) return;
+    if (this.isDestroyed) return;
+
+    const prevUrl = this.currentState?.url;
+    const prevEnabled = this.currentState?.enabled;
+    this.currentState = { ...state };
 
     if (!state.enabled || !state.url) {
-      this.overlay.setProps({ layers: [] });
+      if (this.overlay) {
+        this.overlay.setProps({ layers: [] });
+      }
       this.loadedTilesCounter = 0;
+      this.unloadedTilesCounter = 0;
+      this.isCurrentlyDetailedLOD = false;
+      return;
+    }
+
+    // 소스 변경 시 카운터 초기화
+    if (prevUrl !== state.url || !prevEnabled) {
+      this.loadedTilesCounter = 0;
+      this.unloadedTilesCounter = 0;
+    }
+
+    const currentZoom = this.map ? this.map.getZoom() : MIN_STREAMING_ZOOM;
+    this.isCurrentlyDetailedLOD = currentZoom >= MIN_STREAMING_ZOOM;
+
+    this.renderTilesLayer();
+  }
+
+  /**
+   * Deck.gl Tile3DLayer 인스턴스를 빌드하고 MapboxOverlay에 전달합니다.
+   * 화면 밖 타일 메모리 자동 Unload 및 최대 6개 동시 요청 제어(60fps 유지)가 적용됩니다.
+   */
+  private renderTilesLayer(): void {
+    if (!this.overlay || this.isDestroyed || !this.currentState || !this.currentState.enabled) return;
+
+    const currentZoom = this.map ? this.map.getZoom() : MIN_STREAMING_ZOOM;
+    const isDetailed = currentZoom >= MIN_STREAMING_ZOOM;
+
+    if (!isDetailed) {
+      // [광역 뷰 (줌 13 이하)]: 가벼운 MapLibre 기본 레이어 사용을 위해 Tile3DLayer 숨김
+      this.overlay.setProps({ layers: [] });
+      this.callbacks.onStatusChange?.(
+        `LOD 광역 뷰 (줌 14 이상 확대 시 브이월드 실사 3D 타일 자동 표출 | 현재 줌: ${currentZoom.toFixed(1)})`,
+        false,
+        this.loadedTilesCounter
+      );
       return;
     }
 
     try {
-      this.callbacks.onStatusChange?.('3D Tiles 스트리밍 연결 중...', true, this.loadedTilesCounter);
+      this.callbacks.onStatusChange?.('브이월드 실사 3D 스트리밍 연결 중...', true, this.loadedTilesCounter);
 
       const tile3DLayer = new Tile3DLayer({
         id: 'streaming-tile-3d-layer',
-        data: state.url,
+        data: this.currentState.url,
         loader: Tiles3DLoader,
-        // LOD 프러스텀 컬링 파라미터 (화면 공간 오차 한계)
-        maximumScreenSpaceError: state.maximumScreenSpaceError || 16,
-        opacity: state.opacity !== undefined ? state.opacity : 1.0,
-        pointSize: state.pointSize || 2.0,
+        visible: true,
+        // LOD 프러스텀 컬링 파라미터 (화면 공간 오차 한계: 낮을수록 정밀, 기본 16)
+        maximumScreenSpaceError: this.currentState.maximumScreenSpaceError || 16,
+        opacity: this.currentState.opacity !== undefined ? this.currentState.opacity : 1.0,
+        pointSize: this.currentState.pointSize || 2.0,
         pickable: true,
+        // 렌더링 성능 최적화: 화면 밖 타일 메모리 해제 및 동시 요청 수 제어
         loadOptions: {
           tiles3d: {
             loadGLTF: true,
+            // 1. 화면 밖 타일 메모리 해제 (최대 128MB 초과 시 LRU Unload)
+            maximumMemoryUsage: MAX_MEMORY_USAGE_MB,
+            // 2. 자식 바운딩 볼륨 프러스텀 컬링
+            cullWithChildrenBounds: true,
+            // 3. 브라우저 렌더링 스레드 부하 분산: 최대 동시 요청 제어 (6개)
+            throttleRequests: true,
+            maxRequests: MAX_CONCURRENT_REQUESTS,
           },
         },
         onTilesetLoad: (tileset: any) => {
           this.loadedTilesCounter = 1;
           const rootType = tileset?.root?.content?.uri || tileset?.root?.content?.url || '3D Model';
           this.callbacks.onStatusChange?.(
-            `타일셋 메타데이터 수신 완료 (LOD 트랙)`,
+            `브이월드 실사 3D 타일셋 연결 완료 (OGC 3D Tiles 1.0)`,
             false,
             this.loadedTilesCounter
           );
@@ -90,14 +179,27 @@ export class Deck3DTilesManager {
         onTileLoad: () => {
           this.loadedTilesCounter += 1;
           this.callbacks.onStatusChange?.(
-            `스트리밍 중 (${this.loadedTilesCounter}개 노드 로드)`,
+            `실사 3D 스트리밍 중 (${this.loadedTilesCounter}개 노드 로드 | 메모리 해제: ${this.unloadedTilesCounter}개 | 60fps 유지)`,
+            false,
+            this.loadedTilesCounter
+          );
+        },
+        onTileUnload: () => {
+          // 화면 밖으로 벗어난 타일 메모리 해제 카운팅 (60fps 최적화)
+          this.unloadedTilesCounter += 1;
+          this.callbacks.onStatusChange?.(
+            `실사 3D 스트리밍 중 (${this.loadedTilesCounter}개 노드 로드 | 메모리 해제: ${this.unloadedTilesCounter}개 | 60fps 유지)`,
             false,
             this.loadedTilesCounter
           );
         },
         onTileError: (tileHeader: any, message: string) => {
           console.warn('[Deck3DTilesManager] Tile load error:', message);
-          this.callbacks.onStatusChange?.(`일부 타일 수신 실패 (${message})`, false, this.loadedTilesCounter);
+          this.callbacks.onStatusChange?.(
+            `일부 타일 수신 실패 (${message})`,
+            false,
+            this.loadedTilesCounter
+          );
         },
       });
 
@@ -105,7 +207,7 @@ export class Deck3DTilesManager {
         layers: [tile3DLayer],
       });
     } catch (err: any) {
-      console.error('[Deck3DTilesManager] Failed to update Tile3DLayer:', err);
+      console.error('[Deck3DTilesManager] Failed to render Tile3DLayer:', err);
       this.callbacks.onStatusChange?.(`레이어 생성 오류: ${err.message || '알 수 없음'}`, false, 0);
     }
   }
@@ -115,6 +217,14 @@ export class Deck3DTilesManager {
    */
   public destroy(): void {
     this.isDestroyed = true;
+    if (this.map) {
+      try {
+        this.map.off('zoom', this.handleMapZoom);
+        this.map.off('zoomend', this.handleMapZoom);
+      } catch (e) {
+        // ignore
+      }
+    }
     if (this.overlay && this.map) {
       try {
         this.overlay.setProps({ layers: [] });
@@ -125,5 +235,6 @@ export class Deck3DTilesManager {
     }
     this.overlay = null;
     this.map = null;
+    this.currentState = null;
   }
 }

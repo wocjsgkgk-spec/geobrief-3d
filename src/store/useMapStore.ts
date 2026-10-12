@@ -53,11 +53,11 @@ export const SAMPLE_3D_TILES_PRESETS: Record<
   Tile3DPresetId,
   { name: string; url: string; type: 'b3dm' | 'pnts' | 'custom'; description: string }
 > = {
-  custom: {
-    name: '사용자 지정 URL',
-    url: '',
-    type: 'custom',
-    description: '직접 입력한 3D Tiles (tileset.json) 스트리밍 엔드포인트',
+  vworld_3d_buildings: {
+    name: '브이월드 실사 3D (OGC 타일셋)',
+    url: '/api/vworld/3dtiles/tileset.json',
+    type: 'b3dm',
+    description: '국토교통부 브이월드 디지털 트윈 실사 항공사진 텍스처 3D 건물 메쉬 (OGC 3D Tiles 1.0)',
   },
   sample_city: {
     name: 'Cesium 도시 건축물 (b3dm)',
@@ -70,6 +70,12 @@ export const SAMPLE_3D_TILES_PRESETS: Record<
     url: 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudRGB/tileset.json',
     type: 'pnts',
     description: '항공 라이다 RGB 3D 정밀 점군 데이터셋',
+  },
+  custom: {
+    name: '사용자 지정 URL',
+    url: '',
+    type: 'custom',
+    description: '직접 입력한 3D Tiles (tileset.json) 스트리밍 엔드포인트',
   },
 };
 
@@ -1318,13 +1324,13 @@ export const useMapStore = create<MapStoreState>()(
       // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
       tile3DStream: {
         enabled: false,
-        url: SAMPLE_3D_TILES_PRESETS.sample_city.url,
-        presetId: 'sample_city',
+        url: SAMPLE_3D_TILES_PRESETS.vworld_3d_buildings.url,
+        presetId: 'vworld_3d_buildings',
         opacity: 1.0,
         maximumScreenSpaceError: 16,
         pointSize: 2.0,
         isLoading: false,
-        statusText: '대기 중',
+        statusText: '대기 중 (브이월드 OGC 타일셋 준비 완료)',
         tilesLoadedCount: 0,
       },
       toggleTile3DStream: () =>

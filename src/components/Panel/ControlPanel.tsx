@@ -3039,22 +3039,28 @@ export const ControlPanel: React.FC = () => {
 
                 {/* 3D 타일셋 프리셋 선택 */}
                 <div>
-                  <label className="text-[10px] text-slate-400 block mb-1 font-semibold">
-                    타일셋 소스 선택
-                  </label>
-                  <div className="grid grid-cols-3 gap-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-400 font-semibold">
+                      타일셋 소스 선택
+                    </label>
+                    <span className="text-[9px] text-cyan-400/90 font-mono">
+                      LOD 14+ 실사 메쉬
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
                     {(
                       [
+                        { id: 'vworld_3d_buildings', label: '브이월드 실사 3D (OGC)' },
                         { id: 'sample_city', label: '도시 모델 (b3dm)' },
                         { id: 'sample_pointcloud', label: 'LiDAR 점군 (pnts)' },
-                        { id: 'custom', label: '사용자 URL' },
+                        { id: 'custom', label: '사용자 지정 URL' },
                       ] as const
                     ).map((item) => (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => setTile3DStreamPreset(item.id)}
-                        className={`py-1 px-1 rounded text-[9.5px] font-bold transition-all border text-center ${
+                        className={`py-1.5 px-1.5 rounded text-[10px] font-bold transition-all border text-center ${
                           tile3DStream.presetId === item.id
                             ? 'bg-cyan-600 border-cyan-400 text-white shadow-sm'
                             : 'bg-[#0a1620] border-cyan-900/50 text-cyan-300 hover:bg-[#112332]'
@@ -3063,6 +3069,9 @@ export const ControlPanel: React.FC = () => {
                         {item.label}
                       </button>
                     ))}
+                  </div>
+                  <div className="mt-1 text-[9.5px] text-slate-400/90 leading-tight">
+                    * 줌 13 이하: MapLibre 기본 레이어 | 줌 14 이상: 브이월드 실사 3D 메쉬 자동 스트리밍 (화면 밖 타일 메모리 자동 Unload)
                   </div>
                 </div>
 
