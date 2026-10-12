@@ -417,32 +417,32 @@ export function getFacadeMaterials(): FacadeMaterialsCache | null {
   materialsCache = {
     upperCommercial: new THREE.MeshStandardMaterial({
       map: upperComTex,
-      roughness: 0.35,
-      metalness: 0.65,
+      roughness: 0.25,
+      metalness: 0.7,
       side: THREE.DoubleSide,
     }),
     lobbyCommercial: new THREE.MeshStandardMaterial({
       map: lobbyComTex,
-      roughness: 0.3,
+      roughness: 0.25,
       metalness: 0.7,
       side: THREE.DoubleSide,
     }),
     upperResidential: new THREE.MeshStandardMaterial({
       map: upperResTex,
-      roughness: 0.45,
-      metalness: 0.45,
+      roughness: 0.35,
+      metalness: 0.55,
       side: THREE.DoubleSide,
     }),
     lobbyResidential: new THREE.MeshStandardMaterial({
       map: lobbyResTex,
-      roughness: 0.35,
-      metalness: 0.65,
+      roughness: 0.25,
+      metalness: 0.7,
       side: THREE.DoubleSide,
     }),
     militaryDepot: new THREE.MeshStandardMaterial({
       map: milTex,
-      roughness: 0.55,
-      metalness: 0.35,
+      roughness: 0.35,
+      metalness: 0.65,
       side: THREE.DoubleSide,
     }),
   };

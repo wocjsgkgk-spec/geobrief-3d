@@ -11,7 +11,7 @@ import {
   TransformGizmoMode,
   Detail3DMode,
 } from '@/types/map';
-import { generateBuildingRoofsGroup } from '@/utils/proceduralRoofs';
+import { generateLOD2RoofsGroup } from '@/utils/roofGeometryBuilder';
 import { generateBuildingFacadesGroup } from '@/utils/proceduralFacades';
 
 /**
@@ -319,10 +319,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
       if (!rawMatrix) return;
 
-      // [LOD 뷰포트 레벨 체크] 원거리(줌 13 이하)에서는 단색 음영만 렌더링, 줌 14 이상에서만 세부 창문 격자 외벽 표출 (60fps 유지)
+      // [LOD 뷰포트 레벨 체크] 브라우저 부하 방지: 줌 레벨 15 이상에서만 Threebox 정밀 입체 지붕(LOD2) 렌더링, 원거리에서는 MapLibre 네이티브 레이어로 자동 스위칭 (60fps 유지)
       if (this.map) {
         const zoom = this.map.getZoom();
-        const isHighDetailZoom = zoom >= 14.0 && this.lodMode === 'lod2';
+        const isHighDetailZoom = zoom >= 15.0 && this.lodMode === 'lod2';
         if (this.roofsGroup.visible !== isHighDetailZoom) {
           this.roofsGroup.visible = isHighDetailZoom;
         }
@@ -529,8 +529,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       );
       this.facadesGroup.add(facades);
 
-      // 2. [2단계] LOD2 입체 지붕 및 옥상 구조물 생성
-      const roofs = generateBuildingRoofsGroup(
+      // 2. [3단계 신규] 속성 기반 LOD2 입체 지붕(박공/모임/평지붕) 및 PBR 셰이딩 생성
+      const roofs = generateLOD2RoofsGroup(
         features,
         this.originLngLat,
         elevFn
@@ -538,8 +538,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.roofsGroup.add(roofs);
     }
 
-    this.roofsGroup.visible = this.lodMode === 'lod2';
-    this.facadesGroup.visible = this.lodMode === 'lod2';
+    const currentZoom = this.map ? this.map.getZoom() : 16;
+    const isHighDetailZoom = currentZoom >= 15.0 && this.lodMode === 'lod2';
+    this.roofsGroup.visible = isHighDetailZoom;
+    this.facadesGroup.visible = isHighDetailZoom;
     this.isVisible = true;
 
     if (this.map) {
