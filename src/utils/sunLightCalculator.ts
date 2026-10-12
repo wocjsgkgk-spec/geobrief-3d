@@ -103,13 +103,13 @@ export function calculateSunLight(
     skySunIntensity = 14;
     skyHorizonColor = '#64748b';
   } else if (hour < 16) {
-    // 14:00 ~ 16:00: 오후 온화한 태양광
-    color = '#FEF08A';
-    intensity = 0.66;
+    // 14:00 ~ 16:00: 오후 온화하고 또렷한 고대비 태양광
+    color = '#FFFFFF';
+    intensity = 0.85;
     fogColor = '#1e293b';
     label = `오후 ${Math.floor(hour)}시 (오후 일조)`;
     skyAtmosphereColor = 'rgba(125, 185, 245, 1)';
-    skyHaloColor = 'rgba(254, 240, 138, 0.9)';
+    skyHaloColor = 'rgba(255, 255, 255, 0.95)';
     skySunIntensity = 16;
     skyHorizonColor = '#94a3b8';
   } else if (hour < 17.5) {

@@ -580,9 +580,11 @@ export const MapViewer: React.FC = () => {
                 'match',
                 ['get', 'bld_category'],
                 'apartment',
-                '#F1F5F9',
+                '#F8FAFC',
                 'commercial',
-                '#BAE6FD',
+                '#94A3B8',
+                ['public', 'office'],
+                '#94A3B8',
                 '#E2E8F0',
               ],
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
@@ -607,10 +609,11 @@ export const MapViewer: React.FC = () => {
                 ['-', ['coalesce', ['get', 'height'], 12], 0.45],
               ],
               'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
           },
-          // [브이월드 건축물 외곽 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인]
+          // [브이월드 건축물 외곽 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인 (0.8px)]
           {
             id: 'vworld-buildings-edge',
             type: 'line',
@@ -618,7 +621,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'line-color': '#0F172A',
-              'line-width': 1.0,
+              'line-width': 0.8,
               'line-opacity': 0.9,
             },
             layout: { visibility: 'visible' },
@@ -634,9 +637,9 @@ export const MapViewer: React.FC = () => {
                 'match',
                 ['get', 'type'],
                 'residential',
-                '#F1F5F9',
+                '#F8FAFC',
                 'commercial_tower',
-                '#BAE6FD',
+                '#94A3B8',
                 '#E2E8F0',
               ],
               'fill-extrusion-height': ['get', 'height'],
@@ -656,6 +659,7 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-height': ['get', 'height'],
               'fill-extrusion-base': ['max', 0, ['-', ['get', 'height'], 0.4]],
               'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
           },
@@ -666,7 +670,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 11,
             paint: {
               'line-color': '#0F172A',
-              'line-width': 1.0,
+              'line-width': 0.8,
               'line-opacity': 0.9,
             },
             layout: { visibility: 'visible' },
@@ -1159,13 +1163,13 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] map.setFog skipped:', fogErr);
       }
 
-      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (남동향 입사각 & 깊은 그림자)]
+      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (비스듬한 오후 태양광 각도)]
       try {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
           intensity: 0.85,
-          position: [1.3, 115, 35], // 비스듬한 태양광 각도로 벽면 그림자 윤곽 극대화
+          position: [1.3, 120, 35],
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1379,11 +1383,11 @@ export const MapViewer: React.FC = () => {
                   'match',
                   ['coalesce', ['get', 'type'], ['get', 'class'], 'residential'],
                   ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket', 'mall'],
-                  '#BAE6FD',
+                  '#94A3B8',
                   ['military', 'government', 'public', 'civic', 'police', 'fire_station', 'barracks'],
-                  '#E2E8F0',
+                  '#94A3B8',
                   'residential',
-                  '#F1F5F9',
+                  '#F8FAFC',
                   '#E2E8F0',
                 ],
                 'fill-extrusion-height': [
@@ -1445,7 +1449,7 @@ export const MapViewer: React.FC = () => {
           );
         }
 
-        // [모서리 엣지(Edge Wireframe) 라인 레이어 - 선명한 CAD 엣지 라인]
+        // [모서리 엣지(Edge Wireframe) 라인 레이어 - 선명한 CAD 엣지 라인 (0.8px)]
         if (!map.getLayer('3d-buildings-edge')) {
           map.addLayer(
             {
@@ -1456,7 +1460,7 @@ export const MapViewer: React.FC = () => {
               minzoom: 12,
               paint: {
                 'line-color': '#0F172A',
-                'line-width': 1.0,
+                'line-width': 0.8,
                 'line-opacity': 0.9,
               },
               layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
@@ -2859,12 +2863,22 @@ export const MapViewer: React.FC = () => {
     const sunConfig = calculateSunLight(sunHour, lat, lng);
 
     try {
-      map.setLight({
-        anchor: 'viewport',
-        color: sunConfig.color,
-        intensity: sunConfig.intensity,
-        position: sunConfig.position,
-      });
+      if (sunHour === 14) {
+        // [오후 고대비 태양광 조명] 비스듬한 오후 태양광 각도로 벽면의 명암 대비 극대화
+        map.setLight({
+          anchor: 'viewport',
+          color: '#ffffff',
+          intensity: 0.85,
+          position: [1.3, 120, 35],
+        });
+      } else {
+        map.setLight({
+          anchor: 'viewport',
+          color: sunConfig.color,
+          intensity: sunConfig.intensity,
+          position: sunConfig.position,
+        });
+      }
     } catch (e) {
       console.warn('[MapLibre] Failed to update light:', e);
     }
