@@ -334,7 +334,7 @@ export const Header: React.FC = () => {
           <span className="hidden sm:inline">도면 표제란</span>
         </button>
 
-        {/* [신규 2단계] 3D 디테일: 일반(LOD1) / 실감(LOD2+) 토글 스위치 */}
+        {/* [3D 디테일: 일반 / 실감(LOD2)] 토글 스위치 */}
         <button
           onClick={toggleDetail3DMode}
           className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
@@ -342,7 +342,7 @@ export const Header: React.FC = () => {
               ? 'bg-amber-600/35 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md'
               : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
           }`}
-          title="3D 그래픽 디테일 전환: 일반(LOD1 - 경량 단색/절차적 기본) ⇄ 실감(LOD2+ - 외벽 파사드 텍스처, 정밀 박공지붕, 헬리패드, 트러스, 격자감시탑)"
+          title="3D 그래픽 디테일 전환: 일반(LOD1) ⇄ 실감(LOD2 - 박공 경사 지붕, 옥상 헬리패드, 트러스 지붕, 균일 창문 격자 외벽)"
         >
           <Sparkles className={`w-3.5 h-3.5 ${detail3DMode === 'lod2' ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
           <span className="hidden sm:inline">3D 디테일:</span>
@@ -353,7 +353,7 @@ export const Header: React.FC = () => {
                 : 'bg-slate-800 text-slate-300 border border-slate-700'
             }`}
           >
-            {detail3DMode === 'lod2' ? '실감(LOD2+)' : '일반(LOD1)'}
+            {detail3DMode === 'lod2' ? '실감(LOD2)' : '일반'}
           </span>
         </button>
 

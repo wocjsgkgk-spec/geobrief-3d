@@ -1149,12 +1149,19 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   ): Promise<void> {
     this.currentFacilities = facilities;
 
-    if (!this.originLngLat) {
-      if (facilities.length > 0) {
+    if (facilities.length > 0) {
+      // 거점 부지 변경 감지 (원주/춘천/철원 등 거점 간 이동 시 씬 원점 자동 리센터링)
+      if (!this.originLngLat) {
         this.originLngLat = facilities[0].coords;
       } else {
-        return;
+        const dLng = Math.abs(facilities[0].coords[0] - this.originLngLat[0]);
+        const dLat = Math.abs(facilities[0].coords[1] - this.originLngLat[1]);
+        if (dLng > 0.015 || dLat > 0.015) {
+          this.originLngLat = facilities[0].coords;
+        }
       }
+    } else if (!this.originLngLat) {
+      return;
     }
 
     const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
