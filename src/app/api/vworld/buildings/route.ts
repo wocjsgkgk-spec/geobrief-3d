@@ -165,6 +165,25 @@ export async function GET(request: NextRequest) {
 
   const [minLng, minLat, maxLng, maxLat] = coords;
 
+  // 대한민국 영토 경계 및 DoS 과부하 방지 검증 (경도 124.0~132.5, 위도 33.0~39.5)
+  const isOutOfKorea =
+    minLng < 124.0 || maxLng > 132.5 || minLat < 33.0 || maxLat > 39.5 ||
+    minLng >= maxLng || minLat >= maxLat;
+  const isSpanTooLarge = (maxLng - minLng) > 0.15 || (maxLat - minLat) > 0.15;
+
+  if (isOutOfKorea || isSpanTooLarge) {
+    return NextResponse.json(
+      {
+        success: false,
+        status: 'error',
+        message: isSpanTooLarge
+          ? 'bbox 영역이 너무 넓습니다 (최대 0.15도 이하 지원, 지도 확대 필요)'
+          : '대한민국 영토 범위를 벗어난 유효하지 않은 bbox 좌표입니다',
+      },
+      { status: 400 }
+    );
+  }
+
   // 3. V-World Data 2.0 API 호출 (서버 사이드)
   // LT_C_SPBD: 건축물일반공간정보 (V-World Data 2.0 규격: geomFilter=BOX(minX,minY,maxX,maxY))
   // 발급된 인증키의 도메인(localhost 기본값)을 최우선으로 사용하여 Vercel 클라우드에서도 도메인 불일치 에러 방지

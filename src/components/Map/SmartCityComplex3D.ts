@@ -759,6 +759,28 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       this.disposeObject(this.complexMesh);
       this.complexMesh = null;
     }
+
+    // Directional/Fill/Ambient Light 및 섀도우맵 버퍼 해제
+    if (this.directionalLight) {
+      this.scene.remove(this.directionalLight);
+      if (this.directionalLight.shadow?.map) {
+        this.directionalLight.shadow.map.dispose();
+      }
+      this.directionalLight.dispose();
+      this.directionalLight = null;
+    }
+    if (this.fillLight) {
+      this.scene.remove(this.fillLight);
+      this.fillLight.dispose();
+      this.fillLight = null;
+    }
+    if (this.ambientLight) {
+      this.scene.remove(this.ambientLight);
+      this.ambientLight.dispose();
+      this.ambientLight = null;
+    }
+
+    this.scene.clear();
     this.renderer = null;
     this.map = null;
   }

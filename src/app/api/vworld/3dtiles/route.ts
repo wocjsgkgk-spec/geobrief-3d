@@ -1,11 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// 허용 도메인 화이트리스트 (SSRF 방어)
+const ALLOWED_3DTILES_DOMAINS = [
+  'api.vworld.kr',
+  'map.vworld.kr',
+  '2d.vworld.kr',
+  'raw.githubusercontent.com',
+  'assets.cesium.com',
+];
+
+function isSafe3DTilesUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+
+    // 1. 사설 IP 및 로컬호스트 접근 원천 차단 (SSRF 공격 차단)
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('169.254.') || // 클라우드 인스턴스 메타데이터
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
+    ) {
+      return false;
+    }
+
+    // 2. 허용 도메인 화이트리스트 매칭
+    return ALLOWED_3DTILES_DOMAINS.some(
+      (d) => hostname === d || hostname.endsWith(`.${d}`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * GET /api/vworld/3dtiles
  * 브이월드 (V-World) 공식 실사 3D Tiles (OGC 3D Tiles 1.0) 스트리밍 프록시 및 타일셋 엔드포인트
  * - OGC 3D Tiles 표준 규격(tileset.json) 메타데이터 반환
  * - 강원 원주권 및 도심 거점 바운딩 볼륨(region) 계층 구조 구성
  * - 브라우저 CORS 완화 및 최대 동시 요청 제어 지원
+ * - SSRF 및 외부 API Key 탈취 방어 강화
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -13,12 +50,23 @@ export async function GET(request: NextRequest) {
   const serviceUrl = searchParams.get('serviceUrl');
 
   // 1. 외부 V-World 3D 타일셋 프록시 요청인 경우 직접 프록시
-  const targetUrl =
+  const rawTargetUrl =
     serviceUrl ||
     process.env.VWORLD_3DTILES_URL ||
     (searchParams.get('url') ? decodeURIComponent(searchParams.get('url')!) : null);
 
-  if (targetUrl) {
+  if (rawTargetUrl) {
+    if (!isSafe3DTilesUrl(rawTargetUrl)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Forbidden',
+          message: '허용되지 않은 외부 타일셋 도메인 또는 사설 IP 접근이 차단되었습니다 (SSRF 방어).',
+        },
+        { status: 403 }
+      );
+    }
+
     try {
       const vworldKey =
         customKey ||
@@ -26,8 +74,13 @@ export async function GET(request: NextRequest) {
         process.env.NEXT_PUBLIC_VWORLD_API_KEY ||
         '';
 
-      const sep = targetUrl.includes('?') ? '&' : '?';
-      const fetchUrl = vworldKey ? `${targetUrl}${sep}apiKey=${encodeURIComponent(vworldKey)}` : targetUrl;
+      const isVworldDomain = new URL(rawTargetUrl).hostname.toLowerCase().includes('vworld.kr');
+      const sep = rawTargetUrl.includes('?') ? '&' : '?';
+      // 보안 조치: V-World 도메인이 아닌 외부 서버에는 API Key가 유출되지 않도록 전송 차단
+      const fetchUrl =
+        isVworldDomain && vworldKey
+          ? `${rawTargetUrl}${sep}apiKey=${encodeURIComponent(vworldKey)}`
+          : rawTargetUrl;
 
       const upstreamRes = await fetch(fetchUrl, {
         headers: {

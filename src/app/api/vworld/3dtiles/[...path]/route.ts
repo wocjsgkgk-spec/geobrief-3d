@@ -12,7 +12,9 @@ export async function GET(
   context: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await context.params;
-  const fileName = path[path.length - 1] || '';
+  const rawFileName = path[path.length - 1] || '';
+  // 경로 순회(Path Traversal) 공격 방어: 알파벳, 숫자, 점, 대시, 언더스코어 외 문자 제거
+  const fileName = rawFileName.replace(/[^a-zA-Z0-9._-]/g, '');
 
   // 1. OGC tileset.json 하위 요청인 경우
   if (fileName === 'tileset.json') {
@@ -29,7 +31,10 @@ export async function GET(
     'ur.b3dm': 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/ur.b3dm',
   };
 
-  const remoteTileUrl = allowedTiles[fileName] || allowedTiles['parent.b3dm'];
+  const remoteTileUrl = allowedTiles[fileName];
+  if (!remoteTileUrl) {
+    return new NextResponse('Forbidden or Tile not found in allowed registry', { status: 404 });
+  }
 
   try {
     const response = await fetch(remoteTileUrl, {

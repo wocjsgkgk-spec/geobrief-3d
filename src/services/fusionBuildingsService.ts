@@ -43,13 +43,29 @@ export interface FusionBuildingsFetchResult {
  * 국토교통부 x V-World x OSM 융합 GeoJSON을 비동기 조회합니다.
  */
 export async function fetchFusionBuildings(
-  bbox: [number, number, number, number]
+  bbox: [number, number, number, number],
+  options?: { signal?: AbortSignal }
 ): Promise<FusionBuildingsFetchResult> {
   const [minLng, minLat, maxLng, maxLat] = bbox;
   const url = `/api/buildings/fusion?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
+
+  // 외부 signal이 이미 취소되었거나 도중에 취소되면 controller도 abort
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        status: 'error',
+        featureCount: 0,
+        message: '요청이 취소되었습니다',
+        errorCode: 'ABORTED',
+      };
+    }
+    options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
 
   try {
     const res = await fetch(url, {

@@ -11,8 +11,8 @@ import {
   TransformGizmoMode,
   Detail3DMode,
 } from '@/types/map';
-import { generateLOD2RoofsGroup } from '@/utils/roofGeometryBuilder';
-import { generateBuildingFacadesGroup } from '@/utils/proceduralFacades';
+import { generateLOD2RoofsGroup, disposeRoofMaterialsCache } from '@/utils/roofGeometryBuilder';
+import { generateBuildingFacadesGroup, disposeFacadeMaterialsCache } from '@/utils/proceduralFacades';
 
 /**
  * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
@@ -2028,6 +2028,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.clearFacilitiesGroup();
     this.clearRoofsGroup();
     this.clearFacadesGroup();
+    disposeRoofMaterialsCache();
+    disposeFacadeMaterialsCache();
     if (this.transformControls) {
       this.transformControls.dispose();
       this.transformControls = null;

@@ -349,6 +349,25 @@ export async function GET(request: NextRequest) {
 
   const [minLng, minLat, maxLng, maxLat] = coords;
 
+  // 대한민국 영토 경계 및 DoS 과부하 방지 검증 (경도 124.0~132.5, 위도 33.0~39.5)
+  const isOutOfKorea =
+    minLng < 124.0 || maxLng > 132.5 || minLat < 33.0 || maxLat > 39.5 ||
+    minLng >= maxLng || minLat >= maxLat;
+  const isSpanTooLarge = (maxLng - minLng) > 0.15 || (maxLat - minLat) > 0.15;
+
+  if (isOutOfKorea || isSpanTooLarge) {
+    return NextResponse.json(
+      {
+        success: false,
+        status: 'error',
+        message: isSpanTooLarge
+          ? 'bbox 영역이 너무 넓습니다 (최대 0.15도 이하 지원, 지도 확대 필요)'
+          : '대한민국 영토 범위를 벗어난 유효하지 않은 bbox 좌표입니다',
+      },
+      { status: 400 }
+    );
+  }
+
   // 2. 인증키 확인
   const rawVworldKey =
     process.env.VWORLD_API_KEY ||

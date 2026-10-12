@@ -451,6 +451,22 @@ export function getFacadeMaterials(): FacadeMaterialsCache | null {
 }
 
 /**
+ * 파사드 PBR 머티리얼 및 텍스처 GPU 리소스를 즉각 해제합니다.
+ */
+export function disposeFacadeMaterialsCache(): void {
+  if (!materialsCache) return;
+
+  const mats = Object.values(materialsCache);
+  for (const mat of mats) {
+    if (mat.map) {
+      mat.map.dispose();
+    }
+    mat.dispose();
+  }
+  materialsCache = null;
+}
+
+/**
  * WGS84 좌표 배열을 Three.js 씬 원점 기준 상대 미터([x, z]) 좌표로 변환
  */
 function projectCoordsToLocalMeters(

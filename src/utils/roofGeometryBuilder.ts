@@ -153,6 +153,25 @@ export function getRoofMaterialsForBuilding(
   return set;
 }
 
+/**
+ * 입체 지붕 PBR 재질 캐시 GPU 리소스를 즉각 해제합니다.
+ */
+export function disposeRoofMaterialsCache(): void {
+  for (const key of Object.keys(PBR_MATERIALS_CACHE)) {
+    const set = PBR_MATERIALS_CACHE[key];
+    if (set) {
+      set.roofMaterial.dispose();
+      set.wallMaterial.dispose();
+      set.windowGlassMaterial.dispose();
+      set.parapetMaterial.dispose();
+      set.floorMaterial.dispose();
+      set.ridgeMaterial.dispose();
+      set.penthouseMaterial.dispose();
+      delete PBR_MATERIALS_CACHE[key];
+    }
+  }
+}
+
 // -----------------------------------------------------------------------------
 // 2. 좌표 투영 변환 (WGS84 LngLat -> Three.js 미터 좌표)
 // -----------------------------------------------------------------------------
