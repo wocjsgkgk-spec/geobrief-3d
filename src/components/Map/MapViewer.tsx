@@ -20,6 +20,7 @@ import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
+import { LOD2BuildingEngine } from './LOD2BuildingEngine';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
 import { generateContourLines } from '@/utils/contourGenerator';
@@ -86,6 +87,7 @@ export const MapViewer: React.FC = () => {
   const orbitAnimRef = useRef<number | null>(null);
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
+  const lod2BuildingEngineRef = useRef<LOD2BuildingEngine | null>(null);
   const smartCityComplexLayerRef = useRef<SmartCityComplex3DLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
@@ -760,7 +762,7 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
-          // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - 100% 불투명 PBR 현실적 건축 톤]
+          // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - Three.js LOD2 엔진 주력 승격으로 기본 fill-extrusion 베이스라인 격하]
           {
             id: 'fusion-buildings-3d',
             type: 'fill-extrusion',
@@ -770,12 +772,12 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': ['coalesce', ['get', 'adaptive_base'], 0],
-              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-opacity': 0.6,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' }, // LOD2 Three.js 엔진이 주력 렌더러로 가동되므로 기본 박스 비활성화
           },
-          // [국토교통부 x 브이월드 x OSM 융합 건축물 옥상 슬래브 레이어 - 짙은 차콜 그레이 100% 불투명]
+          // [국토교통부 x 브이월드 x OSM 융합 건축물 옥상 슬래브 레이어]
           {
             id: 'fusion-buildings-roof',
             type: 'fill-extrusion',
@@ -785,12 +787,12 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
-              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-opacity': 0.6,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
-          // [국토교통부 x 브이월드 x OSM 융합 건축물 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인 (0.8px)]
+          // [국토교통부 x 브이월드 x OSM 융합 건축물 모서리 와이어프레임 엣지]
           {
             id: 'fusion-buildings-edge',
             type: 'line',
@@ -799,12 +801,12 @@ export const MapViewer: React.FC = () => {
             paint: {
               'line-color': '#0F172A',
               'line-width': 0.8,
-              'line-opacity': 0.9,
+              'line-opacity': 0.5,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
-          // [브이월드 건축물 공간정보 LT_C_SPBD WFS 연동 3D 레이어 - 100% 불투명 PBR 현실적 건축 톤]
+          // [브이월드 건축물 공간정보 LT_C_SPBD WFS 연동 3D 레이어 - 베이스라인 격하]
           {
             id: 'vworld-buildings-3d',
             type: 'fill-extrusion',
@@ -814,12 +816,12 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-opacity': 0.6,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
-          // [브이월드 건축물 옥상(Roof) 분리 레이어 - 짙은 차콜 그레이 100% 불투명 슬래브]
+          // [브이월드 건축물 옥상(Roof) 분리 레이어]
           {
             id: 'vworld-buildings-roof',
             type: 'fill-extrusion',
@@ -829,10 +831,10 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
-              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-opacity': 0.6,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [브이월드 건축물 외곽 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인 (0.8px)]
           {
@@ -843,9 +845,9 @@ export const MapViewer: React.FC = () => {
             paint: {
               'line-color': '#0F172A',
               'line-width': 0.8,
-              'line-opacity': 0.9,
+              'line-opacity': 0.5,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           {
@@ -1583,7 +1585,7 @@ export const MapViewer: React.FC = () => {
           ? 'drawing-polygon-fill'
           : undefined;
 
-        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - 100% 불투명 PBR 현실적 건축 톤]
+        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - Three.js LOD2 엔진 주력 승격으로 기본 fill-extrusion 비활성화]
         if (!map.getLayer('3d-buildings')) {
           map.addLayer(
             {
@@ -1596,16 +1598,16 @@ export const MapViewer: React.FC = () => {
                 'fill-extrusion-color': buildingColorExpr,
                 'fill-extrusion-height': buildingHeightExpr,
                 'fill-extrusion-base': 0,
-                'fill-extrusion-opacity': 1.0,
+                'fill-extrusion-opacity': 0.6,
                 'fill-extrusion-vertical-gradient': true,
               },
-              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+              layout: { visibility: 'none' }, // LOD2 엔진 활성화로 인한 베이스라인 비활성화
             },
             beforeBldg
           );
         }
 
-        // [3D 건축물 옥상 슬래브(Roof Cap) 레이어 - 짙은 차콜 그레이 100% 불투명]
+        // [3D 건축물 옥상 슬래브(Roof Cap) 레이어]
         if (!map.getLayer('3d-buildings-roof')) {
           map.addLayer(
             {
@@ -1618,16 +1620,16 @@ export const MapViewer: React.FC = () => {
                 'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
                 'fill-extrusion-height': buildingHeightExpr,
                 'fill-extrusion-base': buildingRoofBaseExpr,
-                'fill-extrusion-opacity': 1.0,
+                'fill-extrusion-opacity': 0.6,
                 'fill-extrusion-vertical-gradient': true,
               },
-              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeBldg
           );
         }
 
-        // [모서리 엣지(Edge Wireframe) 라인 레이어 - 선명한 CAD 엣지 라인 (0.8px)]
+        // [모서리 엣지(Edge Wireframe) 라인 레이어]
         if (!map.getLayer('3d-buildings-edge')) {
           map.addLayer(
             {
@@ -1639,9 +1641,9 @@ export const MapViewer: React.FC = () => {
               paint: {
                 'line-color': '#0F172A',
                 'line-width': 0.8,
-                'line-opacity': 0.9,
+                'line-opacity': 0.5,
               },
-              layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeBldg
           );
@@ -1680,6 +1682,17 @@ export const MapViewer: React.FC = () => {
           'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
           'color: #EF4444; font-weight: bold;'
         );
+      }
+
+      // [주력 3D 건축물 렌더러: Three.js 기반 실감 절차적 LOD2 빌딩 엔진 등록]
+      try {
+        const lod2Engine = new LOD2BuildingEngine();
+        lod2Engine.setVisible(layers.buildings3D);
+        map.addLayer(lod2Engine);
+        lod2BuildingEngineRef.current = lod2Engine;
+        lod2Engine.updateBuildings(SAMPLE_BUILDINGS.features as any);
+      } catch (lod2Err) {
+        console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
       }
 
       // [2단계 신규: 원주 1군지사 스마트 도심 3D 복합단지(LOD2) 자동 안착 레이어]
@@ -1845,6 +1858,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         threeboxLayerRef.current = null;
+      }
+      if (lod2BuildingEngineRef.current && map.getLayer('lod2-building-engine-layer')) {
+        try {
+          map.removeLayer('lod2-building-engine-layer');
+        } catch {
+          // ignore
+        }
+        lod2BuildingEngineRef.current = null;
       }
       if (threeDLayerRef.current && map.getLayer('custom-three-model-layer')) {
         try {
@@ -2276,55 +2297,45 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const visibility = layers.buildings3D ? 'visible' : 'none';
-
-    if (map.getLayer('3d-buildings')) {
-      map.setLayoutProperty('3d-buildings', 'visibility', visibility);
-    }
-    if (map.getLayer('3d-buildings-roof')) {
-      map.setLayoutProperty('3d-buildings-roof', 'visibility', visibility);
-    }
-    if (map.getLayer('3d-buildings-edge')) {
-      map.setLayoutProperty('3d-buildings-edge', 'visibility', visibility);
-    }
-    if (map.getLayer('fusion-buildings-3d')) {
-      map.setLayoutProperty('fusion-buildings-3d', 'visibility', visibility);
-    }
-    if (map.getLayer('fusion-buildings-roof')) {
-      map.setLayoutProperty('fusion-buildings-roof', 'visibility', visibility);
-    }
-    if (map.getLayer('fusion-buildings-edge')) {
-      map.setLayoutProperty('fusion-buildings-edge', 'visibility', visibility);
-    }
-    if (map.getLayer('fusion-buildings-ao')) {
-      map.setLayoutProperty('fusion-buildings-ao', 'visibility', visibility);
-    }
-    if (map.getLayer('fusion-buildings-foundation')) {
-      map.setLayoutProperty('fusion-buildings-foundation', 'visibility', visibility);
-    }
-    if (map.getLayer('vworld-buildings-3d')) {
-      map.setLayoutProperty('vworld-buildings-3d', 'visibility', visibility);
-    }
-    if (map.getLayer('vworld-buildings-roof')) {
-      map.setLayoutProperty('vworld-buildings-roof', 'visibility', visibility);
-    }
-    if (map.getLayer('vworld-buildings-edge')) {
-      map.setLayoutProperty('vworld-buildings-edge', 'visibility', visibility);
-    }
-    if (map.getLayer('sample-buildings-3d')) {
-      map.setLayoutProperty('sample-buildings-3d', 'visibility', visibility);
-    }
-    if (map.getLayer('sample-buildings-roof')) {
-      map.setLayoutProperty('sample-buildings-roof', 'visibility', visibility);
-    }
-    if (map.getLayer('sample-buildings-edge')) {
-      map.setLayoutProperty('sample-buildings-edge', 'visibility', visibility);
-    }
-    if (map.getLayer('vector-buildings-3d')) {
-      map.setLayoutProperty('vector-buildings-3d', 'visibility', visibility);
+    // Three.js LOD2 실감 3D 빌딩 엔진을 주력 렌더러로 가동 (기존 단순 박스 fill-extrusion은 비활성화/격하)
+    if (lod2BuildingEngineRef.current) {
+      lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
     }
     if (threeboxLayerRef.current) {
       threeboxLayerRef.current.setVisible(layers.buildings3D);
+    }
+
+    // 기존 단순 사각 박스 fill-extrusion 레이어들은 z-fighting 및 박스 왜곡 방지를 위해 none 유지
+    const simpleExtrusionVis = 'none';
+    if (map.getLayer('3d-buildings')) {
+      map.setLayoutProperty('3d-buildings', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('3d-buildings-roof')) {
+      map.setLayoutProperty('3d-buildings-roof', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('3d-buildings-edge')) {
+      map.setLayoutProperty('3d-buildings-edge', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('fusion-buildings-3d')) {
+      map.setLayoutProperty('fusion-buildings-3d', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('fusion-buildings-roof')) {
+      map.setLayoutProperty('fusion-buildings-roof', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('fusion-buildings-edge')) {
+      map.setLayoutProperty('fusion-buildings-edge', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('vworld-buildings-3d')) {
+      map.setLayoutProperty('vworld-buildings-3d', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('vworld-buildings-roof')) {
+      map.setLayoutProperty('vworld-buildings-roof', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('vworld-buildings-edge')) {
+      map.setLayoutProperty('vworld-buildings-edge', 'visibility', simpleExtrusionVis);
+    }
+    if (map.getLayer('sample-buildings-3d')) {
+      map.setLayoutProperty('sample-buildings-3d', 'visibility', simpleExtrusionVis);
     }
   }, [layers.buildings3D, isMapLoaded]);
 
@@ -2430,26 +2441,29 @@ export const MapViewer: React.FC = () => {
     if (threeboxLayerRef.current) {
       threeboxLayerRef.current.setLodMode(detail3DMode);
     }
+    if (lod2BuildingEngineRef.current) {
+      lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+    }
     const map = mapRef.current;
     if (map && isMapLoaded) {
-      const isVisible = layers.buildings3D;
+      // 주력 Three.js LOD2 실감 3D 렌더러가 활성화되므로 단순 박스 extrusion은 none 유지
       if (map.getLayer('3d-buildings')) {
-        map.setLayoutProperty('3d-buildings', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
       }
       if (map.getLayer('3d-buildings-roof')) {
-        map.setLayoutProperty('3d-buildings-roof', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('3d-buildings-roof', 'visibility', 'none');
       }
       if (map.getLayer('3d-buildings-edge')) {
-        map.setLayoutProperty('3d-buildings-edge', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('3d-buildings-edge', 'visibility', 'none');
       }
       if (map.getLayer('fusion-buildings-3d')) {
-        map.setLayoutProperty('fusion-buildings-3d', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('fusion-buildings-3d', 'visibility', 'none');
       }
       if (map.getLayer('fusion-buildings-roof')) {
-        map.setLayoutProperty('fusion-buildings-roof', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('fusion-buildings-roof', 'visibility', 'none');
       }
       if (map.getLayer('fusion-buildings-edge')) {
-        map.setLayoutProperty('fusion-buildings-edge', 'visibility', isVisible ? 'visible' : 'none');
+        map.setLayoutProperty('fusion-buildings-edge', 'visibility', 'none');
       }
     }
   }, [detail3DMode, layers.buildings3D, isMapLoaded]);
@@ -2546,7 +2560,16 @@ export const MapViewer: React.FC = () => {
             }
           }
 
-          // 3) Threebox LOD2 입체 지붕 동기화
+          // 3) 주력 Three.js LOD2 절차적 실감 3D 건축물 엔진 동기화 (박공/모임지붕, 난간, UV타일링 벽체, 지형 밀착)
+          if (lod2BuildingEngineRef.current && finalFeatures?.features) {
+            const allFeatures = [
+              ...SAMPLE_BUILDINGS.features,
+              ...(finalFeatures.features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]),
+            ];
+            lod2BuildingEngineRef.current.updateBuildings(allFeatures);
+          }
+
+          // 4) Threebox LOD2 입체 지붕 동기화 (기즈모 및 시설물 연동용)
           if (threeboxLayerRef.current && finalFeatures?.features) {
             threeboxLayerRef.current.syncRoofs([
               ...SAMPLE_BUILDINGS.features,
@@ -3270,6 +3293,13 @@ export const MapViewer: React.FC = () => {
           sunConfig.color,
           sunConfig.intensity,
           sunConfig.fogColor
+        );
+      }
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.updateSunLight(
+          sunConfig.directionalVector,
+          sunConfig.color,
+          sunConfig.intensity
         );
       }
       if (threeDLayerRef.current) {
@@ -4309,36 +4339,48 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty('building-mass-extrusion', 'visibility', massVis);
           map.setLayoutProperty('building-mass-edges', 'visibility', massVis);
         }
-        const bldgVis = layers.buildings3D ? 'visible' : 'none';
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+        }
+        // 주력 Three.js LOD2 실감 3D 렌더러가 활성화되므로 단순 박스 extrusion은 none 유지
         if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', bldgVis);
+          map.setLayoutProperty('3d-buildings', 'visibility', 'none');
         }
         if (map.getLayer('3d-buildings-roof')) {
-          map.setLayoutProperty('3d-buildings-roof', 'visibility', bldgVis);
+          map.setLayoutProperty('3d-buildings-roof', 'visibility', 'none');
         }
         if (map.getLayer('3d-buildings-edge')) {
-          map.setLayoutProperty('3d-buildings-edge', 'visibility', bldgVis);
+          map.setLayoutProperty('3d-buildings-edge', 'visibility', 'none');
+        }
+        if (map.getLayer('fusion-buildings-3d')) {
+          map.setLayoutProperty('fusion-buildings-3d', 'visibility', 'none');
+        }
+        if (map.getLayer('fusion-buildings-roof')) {
+          map.setLayoutProperty('fusion-buildings-roof', 'visibility', 'none');
+        }
+        if (map.getLayer('fusion-buildings-edge')) {
+          map.setLayoutProperty('fusion-buildings-edge', 'visibility', 'none');
         }
         if (map.getLayer('vworld-buildings-3d')) {
-          map.setLayoutProperty('vworld-buildings-3d', 'visibility', bldgVis);
+          map.setLayoutProperty('vworld-buildings-3d', 'visibility', 'none');
         }
         if (map.getLayer('vworld-buildings-roof')) {
-          map.setLayoutProperty('vworld-buildings-roof', 'visibility', bldgVis);
+          map.setLayoutProperty('vworld-buildings-roof', 'visibility', 'none');
         }
         if (map.getLayer('vworld-buildings-edge')) {
-          map.setLayoutProperty('vworld-buildings-edge', 'visibility', bldgVis);
+          map.setLayoutProperty('vworld-buildings-edge', 'visibility', 'none');
         }
         if (map.getLayer('sample-buildings-3d')) {
-          map.setLayoutProperty('sample-buildings-3d', 'visibility', bldgVis);
+          map.setLayoutProperty('sample-buildings-3d', 'visibility', 'none');
         }
         if (map.getLayer('sample-buildings-roof')) {
-          map.setLayoutProperty('sample-buildings-roof', 'visibility', bldgVis);
+          map.setLayoutProperty('sample-buildings-roof', 'visibility', 'none');
         }
         if (map.getLayer('sample-buildings-edge')) {
-          map.setLayoutProperty('sample-buildings-edge', 'visibility', bldgVis);
+          map.setLayoutProperty('sample-buildings-edge', 'visibility', 'none');
         }
         if (map.getLayer('vector-buildings-3d')) {
-          map.setLayoutProperty('vector-buildings-3d', 'visibility', bldgVis);
+          map.setLayoutProperty('vector-buildings-3d', 'visibility', 'none');
         }
 
         // 1.8초 후 모달 닫기
