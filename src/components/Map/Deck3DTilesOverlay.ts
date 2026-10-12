@@ -16,7 +16,7 @@ export interface Deck3DTilesOverlayCallbacks {
  */
 const MIN_STREAMING_ZOOM = 14; // 줌 14 이상에서만 고해상도 실사 3D 타일 활성화 (줌 13 이하는 MapLibre 경량 베이스)
 const MAX_CONCURRENT_REQUESTS = 6; // 브라우저 네트워크 블로킹 방지 및 60fps 유지를 위한 최대 동시 요청 수
-const MAX_MEMORY_USAGE_MB = 256; // 화면 밖 타일 메모리 자동 Unload 및 LRU 캐시 한도 (256MB)
+const MAX_MEMORY_USAGE_MB = 128; // 화면 밖 타일 메모리 즉시 Unload 및 LRU 캐시 한도 최적화 (128MB)
 
 /**
  * MapLibre GL JS 위에서 Deck.gl MapboxOverlay를 통해
@@ -150,16 +150,16 @@ export class Deck3DTilesManager {
         data: this.currentState.url,
         loader: Tiles3DLoader,
         visible: true,
-        // LOD 프러스텀 컬링 파라미터 (화면 공간 오차 한계: 16 균형, 낮을수록 초정밀)
-        maximumScreenSpaceError: this.currentState.maximumScreenSpaceError || 16,
+        // LOD 프러스텀 컬링 파라미터 (화면 공간 오차 한계: 24로 튜닝하여 시야 밖 타일 즉시 GC 및 GPU 렉 차단)
+        maximumScreenSpaceError: this.currentState.maximumScreenSpaceError || 24,
         opacity: this.currentState.opacity !== undefined ? this.currentState.opacity : 1.0,
         pointSize: this.currentState.pointSize || 2.0,
         pickable: true,
-        // 렌더링 성능 최적화: 화면 밖 타일 메모리 해제(256MB) 및 동시 요청 수 제어(60fps)
+        // 렌더링 성능 최적화: 화면 밖 타일 메모리 해제(128MB) 및 동시 요청 수 제어(60fps)
         loadOptions: {
           tiles3d: {
             loadGLTF: true,
-            // 1. 화면 밖 타일 메모리 해제 (최대 256MB 초과 시 LRU Unload)
+            // 1. 화면 밖 타일 메모리 해제 (최대 128MB 초과 시 LRU Unload)
             maximumMemoryUsage: this.currentState.maximumMemoryUsage || MAX_MEMORY_USAGE_MB,
             // 2. 자식 바운딩 볼륨 프러스텀 컬링
             cullWithChildrenBounds: true,
@@ -179,7 +179,7 @@ export class Deck3DTilesManager {
         onTileLoad: () => {
           this.loadedTilesCounter += 1;
           this.callbacks.onStatusChange?.(
-            `실사 3D 스트리밍 중 (${this.loadedTilesCounter}개 노드 로드 | 메모리 한도 256MB | 60fps 유지)`,
+            `실사 3D 스트리밍 중 (${this.loadedTilesCounter}개 노드 로드 | 메모리 한도 128MB | 60fps 유지)`,
             false,
             this.loadedTilesCounter
           );

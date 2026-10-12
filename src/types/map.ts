@@ -209,6 +209,15 @@ export type TransformGizmoMode = 'translate' | 'rotate' | 'scale';
 // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+)]
 export type Detail3DMode = 'lod1' | 'lod2';
 
+// [신규] 3D 건축물 상호 배타적 렌더러 모드 (Mutual Exclusion)
+// - native: MapLibre 기본 3D 각기둥 + 음영
+// - facade: Three.js 절차적 LOD2 한국형 실감 파사드/지붕
+// - tiles3d: Deck.gl Tile3DLayer 브이월드 OGC 실사 3D 메쉬 스트리밍
+export type RenderMode3D = 'native' | 'facade' | 'tiles3d';
+
+// [신규] 좌측 분석 패널 3단 탭
+export type SidebarTab = 'terrain_infra' | 'buildings_complex' | 'site_access';
+
 export * from './defense';
 export * from './infrastructure';
 
@@ -413,6 +422,8 @@ export interface GeoBriefProjectFile {
     showOsd: boolean;
   };
   detail3DMode?: Detail3DMode;
+  renderMode3D?: RenderMode3D;
+  activeSidebarTab?: SidebarTab;
 }
 
 // [3단계 신규: 반구형 3D 레이더/방공 센서 탐지 돔]

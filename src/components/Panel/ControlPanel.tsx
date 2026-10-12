@@ -82,6 +82,10 @@ import {
 
 export const ControlPanel: React.FC = () => {
   const {
+    renderMode3D,
+    setRenderMode3D,
+    activeSidebarTab,
+    setActiveSidebarTab,
     terrainEnabled,
     setTerrainEnabled,
     terrainExaggeration,
@@ -241,41 +245,95 @@ export const ControlPanel: React.FC = () => {
 
   return (
     <aside className="w-full md:w-[360px] md:min-w-[360px] h-full md:h-[calc(100vh-3.5rem)] bg-[#141a16] border-r border-[#242f27] flex flex-col text-slate-200 overflow-y-auto">
-      {/* 1. [신규] 동적 주소/지번 검색창 */}
-      <section className="p-4 border-b border-[#242f27] space-y-2 bg-[#101712]">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-            <Navigation2 className="w-4 h-4" />
-            전국·강원 공간 주소 검색
-          </h2>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
-                vworldDiagnostic.status === 'connected'
-                  ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
-                  : 'bg-slate-800/80 border-slate-700 text-slate-300'
-              }`}
-            >
-              <span>
-                {vworldDiagnostic.status === 'connected'
-                  ? '🟢 실시간 공간정보'
-                  : '⚪ 3D 지형 모드'}
-              </span>
-            </span>
-            <span className="text-[10px] text-emerald-400 font-mono">GIS</span>
+      {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 */}
+      <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
+        <button
+          onClick={() => setActiveSidebarTab('terrain_infra')}
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+            activeSidebarTab === 'terrain_infra'
+              ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
+          }`}
+          title="3D 지형(DEM), 공간 인프라 레이어, 토목 분석, 일조 시뮬레이션"
+        >
+          <div className="flex items-center gap-1 font-bold text-xs">
+            <Mountain className="w-3.5 h-3.5 text-emerald-400" />
+            <span>지형/인프라</span>
           </div>
-        </div>
-        <AddressSearch />
-      </section>
+          <span className="text-[9.5px] opacity-75">지형·레이어</span>
+        </button>
 
-      {/* 2. [시간대별 일조·태양광 시뮬레이션 (09:00 ~ 18:00)] */}
-      {(() => {
-        const centerLat = polygonCenter ? polygonCenter[1] : viewport.latitude;
-        const centerLng = polygonCenter ? polygonCenter[0] : viewport.longitude;
-        const sunInfo = calculateSunLight(sunHour, centerLat, centerLng);
+        <button
+          onClick={() => setActiveSidebarTab('buildings_complex')}
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+            activeSidebarTab === 'buildings_complex'
+              ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
+          }`}
+          title="3D 건축 렌더링 모드 선택, 1군지사 스마트 복합단지, 3D 시설물 배치"
+        >
+          <div className="flex items-center gap-1 font-bold text-xs">
+            <Building2 className="w-3.5 h-3.5 text-amber-400" />
+            <span>3D 건축/단지</span>
+          </div>
+          <span className="text-[9.5px] opacity-75">3D 모드·단지</span>
+        </button>
 
-        return (
-          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111913]">
+        <button
+          onClick={() => setActiveSidebarTab('site_access')}
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+            activeSidebarTab === 'site_access'
+              ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/60 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
+          }`}
+          title="전국/강원 주소 검색, 전략 유휴지 프리셋, 구역 지정, 국방 규제"
+        >
+          <div className="flex items-center gap-1 font-bold text-xs">
+            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+            <span>부지/접근성</span>
+          </div>
+          <span className="text-[9.5px] opacity-75">주소·구역·규제</span>
+        </button>
+      </div>
+
+      {/* 1. [신규] 동적 주소/지번 검색창 (부지/접근성 탭) */}
+      {activeSidebarTab === 'site_access' && (
+        <section className="p-4 border-b border-[#242f27] space-y-2 bg-[#101712]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <Navigation2 className="w-4 h-4" />
+              전국·강원 공간 주소 검색
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
+                  vworldDiagnostic.status === 'connected'
+                    ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                }`}
+              >
+                <span>
+                  {vworldDiagnostic.status === 'connected'
+                    ? '🟢 실시간 공간정보'
+                    : '⚪ 3D 지형 모드'}
+                </span>
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">GIS</span>
+            </div>
+          </div>
+          <AddressSearch />
+        </section>
+      )}
+
+      {/* 2. [시간대별 일조·태양광 시뮬레이션 (지형/인프라 탭)] */}
+      {activeSidebarTab === 'terrain_infra' &&
+        (() => {
+          const centerLat = polygonCenter ? polygonCenter[1] : viewport.latitude;
+          const centerLng = polygonCenter ? polygonCenter[0] : viewport.longitude;
+          const sunInfo = calculateSunLight(sunHour, centerLat, centerLng);
+
+          return (
+            <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111913]">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                 <Sun className="w-4 h-4 text-amber-400" />
@@ -375,13 +433,16 @@ export const ControlPanel: React.FC = () => {
         );
       })()}
 
-      {/* 3. [신규] 전략 군 유휴지 실증 데이터셋 카탈로그 (8개소+) */}
-      {(() => {
-        const currentSite =
-          MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId) || MILITARY_IDLE_SITES[0];
+      {/* [부지정보/접근성 탭 섹션 그룹 (유휴지, 시군, 북마크, 구역지정)] */}
+      {activeSidebarTab === 'site_access' && (
+        <>
+          {/* 3. [신규] 전략 군 유휴지 실증 데이터셋 카탈로그 (8개소+) */}
+          {(() => {
+            const currentSite =
+              MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId) || MILITARY_IDLE_SITES[0];
 
-        return (
-          <section className="p-4 border-b border-[#242f27] space-y-2.5 bg-[#121c15]">
+            return (
+              <section className="p-4 border-b border-[#242f27] space-y-2.5 bg-[#121c15]">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                 <Crosshair className="w-4 h-4 text-emerald-400" />
@@ -1236,14 +1297,130 @@ export const ControlPanel: React.FC = () => {
           </div>
         )}
       </section>
+        </>
+      )}
 
-      {/* [2단계 신규] 3D 시설물 인터랙티브 배치 및 변환 기즈모(TransformControls) */}
-      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0f1712]">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-            <Building2 className="w-4 h-4 text-cyan-400" />
-            3D 시설물 배치 카탈로그 & 기즈모
-          </h2>
+      {/* [3D 건축/단지 탭: 3D 렌더러 단일 선택 + 시설물 카탈로그] */}
+      {activeSidebarTab === 'buildings_complex' && (
+        <>
+          {/* [핵심 신규] 3D 건축물 렌더링 모드 단일 선택 (Mutual Exclusion) */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111a14]/80">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                3D 건축 렌더링 엔진 선택
+              </h2>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 font-semibold">
+                상호 배타적 실행
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-tight">
+              한 번에 단 하나의 주력 렌더러만 실행하여 GPU VRAM 충돌 및 렉·화면 멈춤(Crash)을 원천 차단합니다.
+            </p>
+
+            <div className="space-y-2 pt-1">
+              {/* 모드 A: 경량 네이티브 모드 */}
+              <label
+                onClick={() => setRenderMode3D('native')}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  renderMode3D === 'native'
+                    ? 'bg-blue-950/40 border-blue-500/80 shadow-md ring-1 ring-blue-500/30'
+                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renderMode3D"
+                  checked={renderMode3D === 'native'}
+                  onChange={() => setRenderMode3D('native')}
+                  className="mt-1 accent-blue-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-100">
+                      모드 A: 경량 네이티브
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300 border border-blue-700">
+                      MapLibre fill-extrusion
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
+                    기본 3D 각기둥 및 지붕 음영. 저사양 브라우저나 광역 탐색 시 가장 가볍고 빠름 (60fps 유지).
+                  </p>
+                </div>
+              </label>
+
+              {/* 모드 B: 실감 파사드 모드 (LOD2) */}
+              <label
+                onClick={() => setRenderMode3D('facade')}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  renderMode3D === 'facade'
+                    ? 'bg-amber-950/40 border-amber-500/80 shadow-md ring-1 ring-amber-500/30'
+                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renderMode3D"
+                  checked={renderMode3D === 'facade'}
+                  onChange={() => setRenderMode3D('facade')}
+                  className="mt-1 accent-amber-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-200">
+                      모드 B: 실감 파사드 (LOD2)
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-300 border border-amber-700">
+                      Three.js 절차적 생성
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
+                    한국형 판상형 아파트/상가 파사드, 경사 박공지붕, 옥상 헬리패드, DEM 지형 표고 정밀 밀착.
+                  </p>
+                </div>
+              </label>
+
+              {/* 모드 C: 고정밀 3D 타일셋 스트리밍 */}
+              <label
+                onClick={() => setRenderMode3D('tiles3d')}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  renderMode3D === 'tiles3d'
+                    ? 'bg-cyan-950/40 border-cyan-500/80 shadow-md ring-1 ring-cyan-500/30'
+                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renderMode3D"
+                  checked={renderMode3D === 'tiles3d'}
+                  onChange={() => setRenderMode3D('tiles3d')}
+                  className="mt-1 accent-cyan-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-cyan-200">
+                      모드 C: 고정밀 3D 타일셋
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-cyan-900/60 text-cyan-300 border border-cyan-700">
+                      Deck.gl Tile3DLayer
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
+                    국토부 브이월드 OGC 3D Tiles(b3dm 항공 실사 메쉬). 128MB 메모리 제한 및 LOD 프러스텀 컬링.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          {/* [2단계 신규] 3D 시설물 인터랙티브 배치 및 변환 기즈모(TransformControls) */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0f1712]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-cyan-400" />
+                3D 시설물 배치 카탈로그 & 기즈모
+              </h2>
           <span className="text-[10px] font-mono font-bold bg-cyan-950/80 text-cyan-300 px-2 py-0.5 rounded border border-cyan-700/60 flex items-center gap-1">
             배치 {placedFacilities.length}개소
           </span>
@@ -1516,14 +1693,19 @@ export const ControlPanel: React.FC = () => {
           </div>
         )}
       </section>
+        </>
+      )}
 
-      {/* 5. 국방 규제 및 비행안전 심층 분석 모듈 */}
-      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111914]/70">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-            <ShieldAlert className="w-4 h-4 text-rose-400" />
-            국방 규제 & 비행안전 심층 분석
-          </h2>
+      {/* [부지정보/접근성 탭 섹션 그룹 (국방규제, 센서/UAV, 탐지돔, 버퍼링)] */}
+      {activeSidebarTab === 'site_access' && (
+        <>
+          {/* 5. 국방 규제 및 비행안전 심층 분석 모듈 */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111914]/70">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                국방 규제 & 비행안전 심층 분석
+              </h2>
           <span className="text-[10px] text-slate-400 font-mono">
             {completedPolygon ? '분석 완료' : '부지 대기'}
           </span>
@@ -2395,13 +2577,18 @@ export const ControlPanel: React.FC = () => {
           </div>
         </div>
       </section>
+        </>
+      )}
 
-      {/* 7. 3D 지형(DEM) 및 베이스맵 스타일 원클릭 전환 */}
-      <section className="p-4 border-b border-[#242f27] space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-          <Mountain className="w-4 h-4" />
-          3D 지형 (DEM) 및 베이스맵
-        </h2>
+      {/* [지형/인프라 탭: 3D 지형 DEM, 토목분석, 공간 인프라 레이어] */}
+      {activeSidebarTab === 'terrain_infra' && (
+        <>
+          {/* 7. 3D 지형(DEM) 및 베이스맵 스타일 원클릭 전환 */}
+          <section className="p-4 border-b border-[#242f27] space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <Mountain className="w-4 h-4" />
+              3D 지형 (DEM) 및 베이스맵
+            </h2>
 
         <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
           <div className="flex items-center space-x-2">
@@ -3171,13 +3358,18 @@ export const ControlPanel: React.FC = () => {
           </div>
         </div>
       </section>
+        </>
+      )}
 
-      {/* 9. 보고서 메타데이터 인라인 편집 */}
-      <section className="p-4 space-y-3 pb-8">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-          <FileText className="w-4 h-4" />
-          보고서 메타데이터 설정
-        </h2>
+      {/* [부지정보/접근성 탭: 보고서 메타데이터 설정] */}
+      {activeSidebarTab === 'site_access' && (
+        <>
+          {/* 9. 보고서 메타데이터 인라인 편집 */}
+          <section className="p-4 space-y-3 pb-8">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <FileText className="w-4 h-4" />
+              보고서 메타데이터 설정
+            </h2>
 
         <div className="space-y-2 text-xs">
           <div>
@@ -3230,6 +3422,8 @@ export const ControlPanel: React.FC = () => {
           </div>
         </div>
       </section>
+        </>
+      )}
 
       {/* 정밀 좌표 텍스트 입력 모달 */}
       <CoordinateInputModal

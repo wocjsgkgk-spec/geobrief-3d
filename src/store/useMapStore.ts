@@ -39,6 +39,8 @@ import {
   CinematicWaypoint,
   CinematicFlightState,
   Detail3DMode,
+  RenderMode3D,
+  SidebarTab,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -452,6 +454,14 @@ interface MapStoreState {
   detail3DMode: Detail3DMode;
   setDetail3DMode: (mode: Detail3DMode) => void;
   toggleDetail3DMode: () => void;
+
+  // [신규] 3D 건축물 상호 배타적 렌더러 모드 (Mutual Exclusion)
+  renderMode3D: RenderMode3D;
+  setRenderMode3D: (mode: RenderMode3D) => void;
+
+  // [신규] 좌측 분석 패널 3단 탭
+  activeSidebarTab: SidebarTab;
+  setActiveSidebarTab: (tab: SidebarTab) => void;
 
   // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
   threatDome: ThreatDomeState;
@@ -1404,7 +1414,39 @@ export const useMapStore = create<MapStoreState>()(
       detail3DMode: 'lod2',
       setDetail3DMode: (mode) => set({ detail3DMode: mode }),
       toggleDetail3DMode: () =>
-        set((s) => ({ detail3DMode: s.detail3DMode === 'lod2' ? 'lod1' : 'lod2' })),
+        set((s) => {
+          const next = s.detail3DMode === 'lod2' ? 'lod1' : 'lod2';
+          return {
+            detail3DMode: next,
+            renderMode3D: next === 'lod2' ? 'facade' : 'native',
+          };
+        }),
+
+      // [신규] 3D 건축물 상호 배타적 렌더러 모드 (Mutual Exclusion)
+      renderMode3D: 'facade',
+      setRenderMode3D: (mode) =>
+        set((s) => {
+          const isNative = mode === 'native';
+          const isFacade = mode === 'facade';
+          const isTiles3D = mode === 'tiles3d';
+
+          return {
+            renderMode3D: mode,
+            detail3DMode: isNative ? 'lod1' : 'lod2',
+            layers: {
+              ...s.layers,
+              buildings3D: isNative || isFacade,
+            },
+            tile3DStream: {
+              ...s.tile3DStream,
+              enabled: isTiles3D,
+            },
+          };
+        }),
+
+      // [신규] 좌측 분석 패널 3단 탭
+      activeSidebarTab: 'terrain_infra',
+      setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
 
       addPlacedFacility: (presetId, customCoords, customElevation) => {
         const state = get();
@@ -1695,6 +1737,8 @@ export const useMapStore = create<MapStoreState>()(
             showOsd: state.cinematicFlight.showOsd,
           },
           detail3DMode: state.detail3DMode,
+          renderMode3D: state.renderMode3D,
+          activeSidebarTab: state.activeSidebarTab,
         };
         const jsonStr = JSON.stringify(projectData, null, 2);
         try {
@@ -1738,6 +1782,8 @@ export const useMapStore = create<MapStoreState>()(
             waterLevel: data.waterLevel || { enabled: false, elevation: 100 },
             sunHour: data.sunHour ?? 14,
             detail3DMode: data.detail3DMode || get().detail3DMode,
+            renderMode3D: data.renderMode3D || get().renderMode3D,
+            activeSidebarTab: data.activeSidebarTab || get().activeSidebarTab,
             surveillanceSensors: data.sensors || [],
             uavFlight: data.uavFlight || {
               isActive: false,

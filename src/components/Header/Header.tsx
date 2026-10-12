@@ -1,10 +1,7 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  Download,
-  Save,
-  RefreshCw,
   Mountain,
   FolderPlus,
   FolderOpen,
@@ -23,14 +20,22 @@ import {
   FileUp,
   Radio,
   ShieldCheck,
-  Plane,
   Boxes,
   Film,
   Video,
   Sparkles,
+  ChevronDown,
+  Activity,
+  BarChart3,
+  RefreshCw,
+  Save,
+  Layers,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
+import { RenderMode3D } from '@/types/map';
+
+type DropdownCategory = 'view' | 'analysis' | 'tactical' | 'export' | null;
 
 export const Header: React.FC = () => {
   const {
@@ -62,29 +67,44 @@ export const Header: React.FC = () => {
     toggleTitleBlock,
     exportProjectFile,
     importProjectFile,
-    // [신규] 국방·보안 감시 센서 콘 & 정찰 드론(UAV)
     surveillanceSensors,
     isSensorPlacementMode,
     toggleSensorPlacementMode,
     uavFlight,
     toggleUavFlight,
-    // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
     cutFill,
     toggleCutFill,
-    // [4단계 신규: 3D 시네마틱 카메라 패스 및 녹화 엔진]
     cinematicFlight,
     setCinematicBuilderOpen,
-    // [3D 디테일 LOD 토글 스위치: 일반(LOD1) / 실감(LOD2+)]
-    detail3DMode,
-    toggleDetail3DMode,
+    setShowTerrainProfile,
+    renderMode3D,
+    setRenderMode3D,
   } = useMapStore();
 
+  const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  // 외부 클릭 시 열린 드롭다운 자동 닫힘
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setActiveDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDropdownToggle = (category: DropdownCategory) => {
+    setActiveDropdown((prev) => (prev === category ? null : category));
+  };
 
   const handleExportGeobrief = () => {
     try {
       exportProjectFile();
+      setActiveDropdown(null);
     } catch (err) {
       alert('프로젝트 파일 내보내기 실패: ' + (err as Error).message);
     }
@@ -105,6 +125,7 @@ export const Header: React.FC = () => {
       alert('파일 읽기 오류: ' + (err as Error).message);
     } finally {
       if (e.target) e.target.value = '';
+      setActiveDropdown(null);
     }
   };
 
@@ -115,6 +136,18 @@ export const Header: React.FC = () => {
       )
     ) {
       resetProject();
+      setActiveDropdown(null);
+    }
+  };
+
+  // 3D 렌더 모드 3단계 원클릭 순환: 실감 파사드 -> 고정밀 3D 타일셋 -> 경량 네이티브
+  const cycleRenderMode3D = () => {
+    if (renderMode3D === 'facade') {
+      setRenderMode3D('tiles3d');
+    } else if (renderMode3D === 'tiles3d') {
+      setRenderMode3D('native');
+    } else {
+      setRenderMode3D('facade');
     }
   };
 
@@ -122,7 +155,6 @@ export const Header: React.FC = () => {
     <header className="h-14 bg-[#121714] border-b border-[#242f27] px-3 sm:px-4 flex items-center justify-between z-20 select-none overflow-x-auto no-scrollbar">
       {/* Brand & Project Info */}
       <div className="flex items-center space-x-2.5 sm:space-x-3 flex-shrink-0">
-        {/* 모바일 전용 분석 패널 서랍 토글 버튼 */}
         <button
           onClick={toggleMobilePanel}
           className="md:hidden p-2 rounded-lg bg-[#1b221e] border border-[#2f3b33] text-emerald-400 hover:text-white hover:bg-emerald-950/60 transition-colors"
@@ -146,9 +178,6 @@ export const Header: React.FC = () => {
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
               자동저장 활성
             </span>
-            <span className="hidden lg:inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-600/70 text-slate-200 whitespace-nowrap">
-              기획조정실 브리핑 모드
-            </span>
           </div>
           <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[140px] sm:max-w-xs md:max-w-md">
             {metadata.title}
@@ -156,309 +185,460 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 ml-2">
-        {/* 새 프로젝트 버튼 */}
-        <button
-          onClick={handleNewProject}
-          className="px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg bg-[#1b221e] border border-[#2f3b33] text-slate-300 hover:text-white hover:bg-rose-950/60 hover:border-rose-700/60 flex items-center space-x-1 sm:space-x-1.5 transition-all whitespace-nowrap"
-          title="작업 내용을 초기화하고 새 프로젝트 시작"
-        >
-          <FolderPlus className="w-3.5 h-3.5 text-slate-400" />
-          <span className="hidden sm:inline">새 프로젝트</span>
-        </button>
-
-        {/* 2D 평면 / 3D 입체 수동 토글 버튼 */}
-        <button
-          onClick={toggleViewMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            viewMode === '2D'
-              ? 'bg-blue-600/40 border-blue-400 text-blue-200 shadow-md ring-1 ring-blue-500/50'
-              : 'bg-[#1b221e] border-[#2f3b33] text-emerald-300 hover:bg-[#253029]'
-          }`}
-          title="2D 수직 정사 뷰(Top-Down)와 3D 경사 조감 뷰 원클릭 전환"
-        >
-          <Box className="w-3.5 h-3.5" />
-          <span>{viewMode === '2D' ? '2D 뷰' : '3D 뷰'}</span>
-        </button>
-
-        {/* 3D Orbit Tour Button */}
-        <button
-          onClick={toggleOrbiting}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isOrbiting
-              ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:bg-[#253029]'
-          }`}
-          title="3D 파노라마 자동 회전 모드 토글 (ESC 또는 마우스 조작 시 정지)"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isOrbiting ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">{isOrbiting ? '회전 중' : '3D 투어'}</span>
-        </button>
-
-        {/* 3D 가시권(Viewshed/사계) 분석 모드 버튼 */}
-        <button
-          onClick={toggleViewshedMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isViewshedMode || viewshedResult
-              ? 'bg-teal-600/40 border-teal-400 text-teal-200 ring-1 ring-teal-400/60 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 가시권(사계) 분석: 지도 클릭 지점 기준 반경 1.5km 360° 가시/차폐 영역 3D 계산"
-        >
-          <Eye className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden sm:inline">사계 분석</span>
-        </button>
-
-        {/* 3D 실측 줄자 (3D Ruler) 버튼 */}
-        <button
-          onClick={toggleMeasureMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isMeasureMode || measureResult
-              ? 'bg-amber-600/40 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 실측 줄자: 두 점 클릭 시 지형 굴곡을 따라가는 실제 지표 거리 및 고저차·경사도 정밀 측정"
-        >
-          <Ruler className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">3D 줄자</span>
-        </button>
-
-        {/* [신규] 3D 공간 주석 핀 (Billboard Pin) 버튼 */}
-        <button
-          onClick={togglePinMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isPinMode
-              ? 'bg-cyan-600/40 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/60 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 공간 주석 핀: 클릭 지점 지표 표고 안착 콜아웃 핀 추가 (더블클릭 수정)"
-        >
-          <Pin className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden sm:inline">주석 핀</span>
-          {spatialPins.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-cyan-900 border border-cyan-600 text-cyan-200 text-[9.5px] font-mono">
-              {spatialPins.length}
-            </span>
-          )}
-        </button>
-
-        {/* [신규] 3D 계획·접근 축선 화살표 버튼 */}
-        <button
-          onClick={toggleArrowMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isArrowMode
-              ? 'bg-amber-600/40 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 계획·접근 축선 화살표 작도 (시작점/끝점 클릭으로 지형 표면 밀착 화살표 생성)"
-        >
-          <MoveUpRight className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">전술 화살표</span>
-          {tacticalArrows.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-amber-900 border border-amber-600 text-amber-200 text-[9.5px] font-mono">
-              {tacticalArrows.length}
-            </span>
-          )}
-        </button>
-
-        {/* [신규] UAV 정찰 비행 시뮬레이터 버튼 */}
-        <button
-          onClick={toggleUavFlight}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            uavFlight.isActive
-              ? 'bg-emerald-600/50 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/70 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="UAV 3D 정찰 비행 시뮬레이터: 부지 외곽 순찰 비행 및 FPV 1인칭 HUD 관측 뷰 전환"
-        >
-          <Radio
-            className={`w-3.5 h-3.5 ${
-              uavFlight.isActive ? 'text-emerald-300 animate-spin' : 'text-emerald-400'
-            }`}
-          />
-          <span className="hidden sm:inline">
-            {uavFlight.isActive ? 'UAV 정찰 중' : 'UAV 정찰'}
-          </span>
-        </button>
-
-        {/* [신규] 3D 감시 센서 콘 (Sensor FOV) 버튼 */}
-        <button
-          onClick={toggleSensorPlacementMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isSensorPlacementMode
-              ? 'bg-teal-600/40 border-teal-400 text-teal-200 ring-1 ring-teal-400/60 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 감시 센서 콘(Sensor FOV): 초소/카메라 위치 클릭 시 반투명 3D 레이더 스캔 콘 배치"
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden sm:inline">센서 콘</span>
-          {surveillanceSensors.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-teal-900 border border-teal-600 text-teal-200 text-[9.5px] font-mono">
-              {surveillanceSensors.length}
-            </span>
-          )}
-        </button>
-
-        {/* [신규] 3D 토공량(절토·성토 Cut & Fill) 계산기 버튼 */}
-        <button
-          onClick={toggleCutFill}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            cutFill.enabled
-              ? 'bg-emerald-600/50 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/70 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 토공량(Cut & Fill) 계산기: 부지 내부 정밀 DEM 격자 표고 샘플링 및 절토/성토 체적·덤프트럭 환산"
-        >
-          <Boxes className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden sm:inline">토공량</span>
-          {cutFill.result && (
-            <span className="px-1.5 py-0.2 rounded-full bg-emerald-950 border border-emerald-600 text-emerald-300 text-[9.5px] font-mono">
-              EL.{cutFill.result.targetElevation}m
-            </span>
-          )}
-        </button>
-
-        {/* [신규] 도정·국방 표준 도면 표제란 (Title Block) 토글 버튼 */}
-        <button
-          onClick={toggleTitleBlock}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            showTitleBlock
-              ? 'bg-emerald-600/40 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/60 shadow-md'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="도정·국방 표준 도면 표제란(Title Block) 16:9 슬라이드 및 캡처 합성 토글"
-        >
-          <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden sm:inline">도면 표제란</span>
-        </button>
-
-        {/* [3D 디테일: 일반 / 실감(LOD2)] 토글 스위치 */}
-        <button
-          onClick={toggleDetail3DMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            detail3DMode === 'lod2'
-              ? 'bg-amber-600/35 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="3D 그래픽 디테일 전환: 일반(LOD1) ⇄ 실감(LOD2 - 박공 경사 지붕, 옥상 헬리패드, 트러스 지붕, 균일 창문 격자 외벽)"
-        >
-          <Sparkles className={`w-3.5 h-3.5 ${detail3DMode === 'lod2' ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
-          <span className="hidden sm:inline">3D 디테일:</span>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              detail3DMode === 'lod2'
-                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
-                : 'bg-slate-800 text-slate-300 border border-slate-700'
-            }`}
-          >
-            {detail3DMode === 'lod2' ? '실감(LOD2)' : '일반'}
-          </span>
-        </button>
-
-        {/* [신규] 4단계: 3D 시네마틱 카메라 경로 빌더 버튼 */}
-        <button
-          onClick={() => setCinematicBuilderOpen(true)}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            cinematicFlight.isPlaying || cinematicFlight.isBuilderOpen
-              ? 'bg-cyan-600/50 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/70 shadow-md animate-pulse'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
-          }`}
-          title="웨이포인트 기반 3D 시네마틱 카메라 비행 경로 빌더 & 1080p 동영상 녹화기"
-        >
-          <Film className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden sm:inline">시네마틱 경로</span>
-          {cinematicFlight.waypoints.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-cyan-950 border border-cyan-600 text-cyan-300 text-[9.5px] font-mono">
-              {cinematicFlight.waypoints.length} WP
-            </span>
-          )}
-        </button>
-
-        {/* [신규] 4단계: 🔴 브리핑 영상 녹화 버튼 */}
-        <button
-          onClick={() => setCinematicBuilderOpen(true)}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-bold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            cinematicFlight.isRecording
-              ? 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-950 ring-1 ring-rose-400 animate-pulse'
-              : 'bg-[#1b221e] border-[#3d2729] text-rose-300 hover:text-white hover:bg-rose-950/60'
-          }`}
-          title="Canvas Stream 기반 1080p 60fps 고해상도 브리핑 영상 실시간 녹화 & 자동 다운로드"
-        >
-          <Video className="w-3.5 h-3.5 text-rose-400" />
-          <span className="hidden sm:inline">
-            {cinematicFlight.isRecording ? '🔴 녹화 중' : '영상 녹화'}
-          </span>
-        </button>
-        <div className="flex items-center space-x-1 border-l border-r border-[#242f27] px-1 sm:px-1.5">
+      {/* 중앙: 4대 카테고리 통합 드롭다운 툴바 */}
+      <div ref={toolbarRef} className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 mx-2 relative">
+        {/* 1. [뷰 & 시네마틱] 드롭다운 */}
+        <div className="relative">
           <button
-            onClick={handleExportGeobrief}
-            className="px-2 py-1.5 text-xs font-medium rounded-lg bg-[#1b221e] border border-[#2f3b33] text-cyan-300 hover:bg-[#253029] hover:border-cyan-500/60 flex items-center space-x-1 transition-all whitespace-nowrap"
-            title="현재 프로젝트 전체 상태를 .geobrief 단일 파일로 내보내기"
+            onClick={() => handleDropdownToggle('view')}
+            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeDropdown === 'view' || isOrbiting || cinematicFlight.isPlaying || cinematicFlight.isRecording
+                ? 'bg-blue-600/30 border-blue-400/80 text-blue-200 shadow-md ring-1 ring-blue-500/40'
+                : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+            }`}
+            title="3D 뷰 전환, 360도 투어, 시네마틱 경로 및 브리핑 녹화"
           >
-            <FileDown className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden lg:inline">.geobrief 내보내기</span>
+            <Video className="w-3.5 h-3.5 text-blue-400" />
+            <span>뷰 & 시네마틱</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'view' ? 'rotate-180' : ''}`} />
           </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-2 py-1.5 text-xs font-medium rounded-lg bg-[#1b221e] border border-[#2f3b33] text-cyan-300 hover:bg-[#253029] hover:border-cyan-500/60 flex items-center space-x-1 transition-all whitespace-nowrap"
-            title=".geobrief 단일 프로젝트 파일 가져오기"
-          >
-            <FileUp className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden lg:inline">가져오기</span>
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportGeobrief}
-            accept=".geobrief,.json"
-            className="hidden"
-          />
+
+          {activeDropdown === 'view' && (
+            <div className="absolute top-11 left-0 w-60 bg-[#141d17]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                onClick={() => {
+                  toggleViewMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Box className="w-3.5 h-3.5 text-blue-400" />
+                  <span>2D/3D 입체 뷰 전환</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800">
+                  {viewMode === '2D' ? '현재 2D' : '현재 3D'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleOrbiting();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isOrbiting ? 'animate-spin' : ''}`} />
+                  <span>360도 파노라마 3D 투어</span>
+                </div>
+                {isOrbiting && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 animate-pulse border border-emerald-700">
+                    회전 중
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setCinematicBuilderOpen(true);
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Film className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>시네마틱 비행 빌더</span>
+                </div>
+                {cinematicFlight.waypoints.length > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                    {cinematicFlight.waypoints.length} WP
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setCinematicBuilderOpen(true);
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-rose-950/50 text-rose-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Video className="w-3.5 h-3.5 text-rose-400" />
+                  <span>1080p 브리핑 영상 녹화</span>
+                </div>
+                {cinematicFlight.isRecording && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-900 text-white animate-pulse border border-rose-600">
+                    🔴 녹화 중
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  togglePresentationMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  {isPresentationMode ? (
+                    <Minimize2 className="w-3.5 h-3.5 text-amber-300" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5 text-amber-400" />
+                  )}
+                  <span>대형 스크린 브리핑 뷰</span>
+                </div>
+                {isPresentationMode && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700">
+                    활성 (ESC)
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* 대형 스크린 브리핑 전용 프레젠테이션 모드 */}
-        <button
-          onClick={togglePresentationMode}
-          className={`px-2 sm:px-3 py-1.5 text-xs font-medium rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap ${
-            isPresentationMode
-              ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400/50 shadow-md'
-              : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:bg-[#253029]'
-          }`}
-          title="대형 스크린 브리핑 모드 (사이드바 접힘, ESC 키로 복귀)"
-        >
-          {isPresentationMode ? (
-            <Minimize2 className="w-3.5 h-3.5 text-amber-300" />
-          ) : (
-            <Maximize2 className="w-3.5 h-3.5 text-slate-400" />
+        {/* 2. [공간 & 토목분석] 드롭다운 */}
+        <div className="relative">
+          <button
+            onClick={() => handleDropdownToggle('analysis')}
+            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeDropdown === 'analysis' || isViewshedMode || isMeasureMode || cutFill.enabled
+                ? 'bg-emerald-600/30 border-emerald-400/80 text-emerald-200 shadow-md ring-1 ring-emerald-500/40'
+                : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+            }`}
+            title="3D 가시권(사계), 줄자 실측, 3D 토공량(Cut & Fill), 지형 횡단면"
+          >
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            <span>공간 & 토목분석</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'analysis' ? 'rotate-180' : ''}`} />
+          </button>
+
+          {activeDropdown === 'analysis' && (
+            <div className="absolute top-11 left-0 w-64 bg-[#141d17]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                onClick={() => {
+                  toggleViewshedMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Eye className="w-3.5 h-3.5 text-teal-400" />
+                  <span>3D 시계(가시권) 분석</span>
+                </div>
+                {isViewshedMode && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-700 animate-pulse">
+                    클릭 측정
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleMeasureMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Ruler className="w-3.5 h-3.5 text-amber-400" />
+                  <span>3D 실측 줄자 (경사거리)</span>
+                </div>
+                {isMeasureMode && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700 animate-pulse">
+                    측정 중
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleCutFill();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>3D 토공량(Cut & Fill) 산출</span>
+                </div>
+                {cutFill.enabled && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">
+                    EL.{cutFill.targetElevation}m
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowTerrainProfile(true);
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>지형 횡단면 고도 프로파일</span>
+                </div>
+                <span className="text-[10px] text-slate-400">모달 분석</span>
+              </button>
+            </div>
           )}
-          <span className="hidden sm:inline">{isPresentationMode ? '해제' : '브리핑 뷰'}</span>
+        </div>
+
+        {/* 3. [전술 & 주석작도] 드롭다운 */}
+        <div className="relative">
+          <button
+            onClick={() => handleDropdownToggle('tactical')}
+            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeDropdown === 'tactical' || isPinMode || isArrowMode || uavFlight.isActive || isSensorPlacementMode
+                ? 'bg-cyan-600/30 border-cyan-400/80 text-cyan-200 shadow-md ring-1 ring-cyan-500/40'
+                : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+            }`}
+            title="공간 주석 핀, 전술 접근 화살표, UAV 정찰 비행, 3D 센서 감시 콘"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+            <span>전술 & 주석작도</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'tactical' ? 'rotate-180' : ''}`} />
+          </button>
+
+          {activeDropdown === 'tactical' && (
+            <div className="absolute top-11 left-0 w-64 bg-[#141d17]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                onClick={() => {
+                  togglePinMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Pin className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>3D 공간 주석 핀</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {spatialPins.length > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                      {spatialPins.length}개
+                    </span>
+                  )}
+                  {isPinMode && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-900 text-cyan-200 animate-pulse">
+                      배치 중
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleArrowMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <MoveUpRight className="w-3.5 h-3.5 text-amber-400" />
+                  <span>전술 접근 축선 화살표</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {tacticalArrows.length > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                      {tacticalArrows.length}개
+                    </span>
+                  )}
+                  {isArrowMode && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-900 text-amber-200 animate-pulse">
+                      작도 중
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleUavFlight();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Radio className={`w-3.5 h-3.5 text-emerald-400 ${uavFlight.isActive ? 'animate-spin' : ''}`} />
+                  <span>UAV 3D 정찰 비행 시뮬레이터</span>
+                </div>
+                {uavFlight.isActive && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 animate-pulse">
+                    순찰 중
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleSensorPlacementMode();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                  <span>3D 감시 센서 콘 (FOV)</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {surveillanceSensors.length > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-800">
+                      {surveillanceSensors.length}개
+                    </span>
+                  )}
+                  {isSensorPlacementMode && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-900 text-teal-200 animate-pulse">
+                      배치 중
+                    </span>
+                  )}
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 4. [도면 & 내보내기] 드롭다운 */}
+        <div className="relative">
+          <button
+            onClick={() => handleDropdownToggle('export')}
+            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeDropdown === 'export' || showTitleBlock || slidePackProgress.isExporting
+                ? 'bg-amber-600/30 border-amber-400/80 text-amber-200 shadow-md ring-1 ring-amber-500/40'
+                : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
+            }`}
+            title="도면 표제란, PPTX 슬라이드 팩 저장, .geobrief 프로젝트 백업"
+          >
+            <FileDown className="w-3.5 h-3.5 text-amber-400" />
+            <span>도면 & 내보내기</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'export' ? 'rotate-180' : ''}`} />
+          </button>
+
+          {activeDropdown === 'export' && (
+            <div className="absolute top-11 left-0 w-64 bg-[#141d17]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                onClick={() => {
+                  toggleTitleBlock();
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>도정·국방 도면 표제란 토글</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                  {showTitleBlock ? '표시 중' : '숨김'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  triggerSlidePackExport();
+                  setActiveDropdown(null);
+                }}
+                disabled={slidePackProgress.isExporting}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-emerald-950/60 text-emerald-200 flex items-center justify-between transition-colors disabled:opacity-50"
+              >
+                <div className="flex items-center gap-2">
+                  <Presentation className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>3단 보고서 슬라이드 (.pptx)</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-300 border border-emerald-700">
+                  {slidePackProgress.isExporting ? '생성 중' : 'PPTX'}
+                </span>
+              </button>
+
+              <button
+                onClick={handleExportGeobrief}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <FileDown className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>.geobrief 프로젝트 파일 백업</span>
+                </div>
+                <span className="text-[10px] text-cyan-300 font-mono">저장</span>
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <FileUp className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>.geobrief 프로젝트 복원</span>
+                </div>
+                <span className="text-[10px] text-cyan-300 font-mono">열기</span>
+              </button>
+
+              <div className="h-px bg-[#242f27] my-1" />
+
+              <button
+                onClick={handleNewProject}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-rose-950/60 text-rose-300 flex items-center gap-2 transition-colors"
+              >
+                <FolderPlus className="w-3.5 h-3.5 text-rose-400" />
+                <span>새 프로젝트 시작 (초기화)</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImportGeobrief}
+          accept=".geobrief,.json"
+          className="hidden"
+        />
+      </div>
+
+      {/* 우측 전용 영역: [3D 디테일 모드] + [도면 저장] 직관적 배치 */}
+      <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0 ml-auto">
+        {/* [3D 디테일 모드: 실감 파사드 / 3D 타일셋 / 경량 네이티브 원클릭 전환] */}
+        <button
+          onClick={cycleRenderMode3D}
+          className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm ${
+            renderMode3D === 'facade'
+              ? 'bg-amber-600/30 border-amber-400/80 text-amber-200 shadow-amber-950/40 ring-1 ring-amber-400/50'
+              : renderMode3D === 'tiles3d'
+              ? 'bg-cyan-600/30 border-cyan-400/80 text-cyan-200 shadow-cyan-950/40 ring-1 ring-cyan-400/50'
+              : 'bg-blue-600/30 border-blue-400/80 text-blue-200 shadow-blue-950/40 ring-1 ring-blue-400/50'
+          }`}
+          title="3D 디테일 모드 전환: 실감 파사드(LOD2) ⇄ 고정밀 3D 타일셋 ⇄ 경량 네이티브(클릭 시 순환)"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+          <span className="hidden sm:inline text-slate-300 font-medium">3D 디테일:</span>
+          <span
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              renderMode3D === 'facade'
+                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50'
+                : renderMode3D === 'tiles3d'
+                ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50'
+                : 'bg-blue-500/25 text-blue-300 border border-blue-500/50'
+            }`}
+          >
+            {renderMode3D === 'facade'
+              ? '실감(LOD2)'
+              : renderMode3D === 'tiles3d'
+              ? '3D 타일셋'
+              : '경량 네이티브'}
+          </span>
         </button>
 
-        {/* 프로젝트 저장/불러오기 보관함 버튼 */}
+        {/* [도면 저장]: 프로젝트 보관함 및 클라우드/로컬 저장 */}
         <button
           onClick={() => setIsProjectModalOpen(true)}
-          className="px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1b221e] border border-[#2f3b33] text-emerald-300 hover:bg-[#253029] hover:border-emerald-600/60 flex items-center space-x-1 sm:space-x-1.5 transition-all shadow-sm whitespace-nowrap"
-          title="클라우드/로컬 프로젝트 저장 및 불러오기"
+          className="px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/60 shadow-md shadow-emerald-950/60 flex items-center space-x-1.5 transition-all whitespace-nowrap ring-1 ring-emerald-400/30"
+          title="클라우드 및 로컬 프로젝트 보관함 열기 및 도면 저장"
         >
-          <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
-          <span>보관함</span>
-        </button>
-
-        {/* 3단 보고서 슬라이드 팩 (.pptx) 내보내기 버튼 */}
-        <button
-          onClick={triggerSlidePackExport}
-          disabled={slidePackProgress.isExporting}
-          className={`px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-md flex items-center space-x-1 sm:space-x-1.5 transition-all whitespace-nowrap ${
-            slidePackProgress.isExporting
-              ? 'bg-slate-700 text-slate-400 cursor-not-allowed border border-slate-600'
-              : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/60 ring-1 ring-emerald-400/40'
-          }`}
-          title="카메라 3단 순차 비행(광역·지적·3D) 캡처 후 완성형 PPTX 프레젠테이션 자동 생성"
-        >
-          <Presentation className="w-3.5 h-3.5" />
-          <span className="hidden md:inline">3단 보고서 슬라이드 팩</span>
-          <span className="md:hidden">PPTX</span>
+          <Save className="w-3.5 h-3.5 text-emerald-200" />
+          <span>도면 저장</span>
         </button>
       </div>
 

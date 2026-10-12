@@ -247,7 +247,15 @@ export const MapViewer: React.FC = () => {
     setCinematicPlaying,
     setCinematicRecording,
     setCinematicBuilderOpen,
+    // [신규] 3D 렌더링 상호 배타적 모드 및 2D 폴백 제어
+    renderMode3D,
+    setRenderMode3D,
+    setViewMode,
+    setTerrainEnabled,
   } = useMapStore();
+
+  // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
+  const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
 
   // 토공량 격자 셀 호버 툴팁 상태
   const [hoveredCutFillCell, setHoveredCutFillCell] = useState<{
@@ -2027,7 +2035,7 @@ export const MapViewer: React.FC = () => {
       }
     });
 
-    // WebGL 컨텍스트 손실(webglcontextlost) 자동 감지 및 복구 리스너
+    // 1. WebGL 컨텍스트 손실(webglcontextlost) 자동 감지 및 가벼운 2D 모드 자동 폴백 리스너
     const canvas = map.getCanvas();
     const handleContextLost = (e: Event) => {
       e.preventDefault();
@@ -2036,23 +2044,75 @@ export const MapViewer: React.FC = () => {
       console.error(
         `%c[GeoBrief 3D WebGL CRITICAL]%c 🚨 WebGL 컨텍스트 손실 감지 (webglcontextlost)!\n` +
         ` • 상태 메시지: ${statusMessage}\n` +
-        ` • 조치: 자동 복구 대기 중 (webglcontextrestored 감지 시 자동 재렌더링 시도)`,
+        ` • 조치: 화면 멈춤 방지를 위해 가벼운 2D 네이티브 모드로 자동 폴백`,
         'background: #7F1D1D; color: #FCA5A5; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
         'color: #F87171; font-weight: bold;'
       );
+
+      // 브라우저 GPU Crash 방지: 2D 수직 뷰로 강제 전환 및 무거운 3D 레이어 안전 차단
+      setWebglFallbackWarning('⚠️ 그래픽 메모리 보호를 위해 가벼운 2D 모드로 자동 전환되었습니다.');
+      setViewMode('2D');
+      setRenderMode3D('native');
+      setTerrainEnabled(false);
+
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.setVisible(false);
+      }
+      if (deck3DTilesManagerRef.current) {
+        deck3DTilesManagerRef.current.update({ enabled: false, url: '' } as any);
+      }
+      if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.setPostProcessingEnabled(false);
+      }
+
+      try {
+        map.easeTo({ pitch: 0, bearing: 0, duration: 250 });
+      } catch {}
     };
+
     const handleContextRestored = () => {
       console.info(
         `%c[GeoBrief 3D WebGL RESTORED]%c ✅ WebGL 컨텍스트 복구 완료. 캔버스 뷰포트를 재초기화합니다.`,
         'background: #065F46; color: #A7F3D0; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
         'color: #34D399; font-weight: bold;'
       );
+      setWebglFallbackWarning(null);
       map.triggerRepaint();
     };
+
     if (canvas) {
       canvas.addEventListener('webglcontextlost', handleContextLost, false);
       canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
     }
+
+    // 2. 무거운 후처리(SSAO/Bloom) 프레임 제어: 카메라 이동 중 bypass -> 정지 시 온디맨드 렌더링
+    let moveEndTimer: NodeJS.Timeout | null = null;
+    const handleMoveStart = () => {
+      if (moveEndTimer) {
+        clearTimeout(moveEndTimer);
+        moveEndTimer = null;
+      }
+      // 카메라 이동(movestart/move) 중에는 후처리 셰이더를 bypass하여 버벅거림 없이 60fps 보장
+      if (threeboxLayerRef.current && threeboxLayerRef.current.isPostProcessing()) {
+        threeboxLayerRef.current.setPostProcessingEnabled(false);
+      }
+    };
+
+    const handleMoveEnd = () => {
+      if (moveEndTimer) clearTimeout(moveEndTimer);
+      moveEndTimer = setTimeout(() => {
+        // 카메라 정지 시 사용자의 SSAO 설정값에 따라 1회 온디맨드 렌더링
+        const currentSsao = useMapStore.getState().layers.ssaoPostProcessing;
+        if (currentSsao && threeboxLayerRef.current) {
+          threeboxLayerRef.current.setPostProcessingEnabled(true);
+          map.triggerRepaint();
+        }
+      }, 120);
+    };
+
+    map.on('movestart', handleMoveStart);
+    map.on('move', handleMoveStart);
+    map.on('moveend', handleMoveEnd);
 
     map.on('error', (e: any) => {
       const sourceId = e?.sourceId || e?.source?.id || 'N/A';
@@ -2146,6 +2206,11 @@ export const MapViewer: React.FC = () => {
         canvas.removeEventListener('webglcontextlost', handleContextLost);
         canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       }
+      try {
+        map.off('movestart', handleMoveStart);
+        map.off('move', handleMoveStart);
+        map.off('moveend', handleMoveEnd);
+      } catch {}
       resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
@@ -2553,52 +2618,85 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.roads, isMapLoaded]);
 
-  // 8. 3D 건축물 Extrusion & Wireframe 엣지 토글
+  // 8. [신규 3D 렌더러 상호 배타적 실행 (Mutual Exclusion) 동기화]
+  // 모드 A (native): MapLibre 기본 3D 각기둥 + 음영 (Three.js 및 Deck.gl 비활성화)
+  // 모드 B (facade): Three.js LOD2 실감 파사드/지붕 (MapLibre 박스 및 Deck.gl 비활성화)
+  // 모드 C (tiles3d): Deck.gl Tile3DLayer 브이월드 실사 3D 타일셋 (MapLibre 박스 및 Three.js 비활성화)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    // Three.js LOD2 실감 3D 빌딩 엔진을 주력 렌더러로 가동 (기존 단순 박스 fill-extrusion은 비활성화/격하)
-    if (lod2BuildingEngineRef.current) {
-      lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
-    }
-    if (threeboxLayerRef.current) {
-      threeboxLayerRef.current.setVisible(layers.buildings3D);
+    const nativeBuildingLayers = [
+      '3d-buildings',
+      '3d-buildings-roof',
+      '3d-buildings-edge',
+      'fusion-buildings-3d',
+      'fusion-buildings-roof',
+      'fusion-buildings-edge',
+      'vworld-buildings-3d',
+      'vworld-buildings-roof',
+      'vworld-buildings-edge',
+      'sample-buildings-3d',
+      'sample-buildings-roof',
+      'sample-buildings-edge',
+      'vector-buildings-3d',
+    ];
+
+    if (renderMode3D === 'native') {
+      // 1. 모드 A: 경량 네이티브 모드
+      const nativeVis = layers.buildings3D ? 'visible' : 'none';
+      for (const lyr of nativeBuildingLayers) {
+        if (map.getLayer(lyr)) {
+          map.setLayoutProperty(lyr, 'visibility', nativeVis);
+        }
+      }
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.setVisible(false);
+      }
+      if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.setLodMode('lod1');
+        threeboxLayerRef.current.setVisible(false);
+      }
+      if (deck3DTilesManagerRef.current) {
+        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
+      }
+    } else if (renderMode3D === 'facade') {
+      // 2. 모드 B: 실감 파사드 모드 (LOD2 Three.js 절차적 외벽/지붕)
+      for (const lyr of nativeBuildingLayers) {
+        if (map.getLayer(lyr)) {
+          map.setLayoutProperty(lyr, 'visibility', 'none');
+        }
+      }
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+      }
+      if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.setLodMode('lod2');
+        threeboxLayerRef.current.setVisible(layers.buildings3D);
+      }
+      if (deck3DTilesManagerRef.current) {
+        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
+      }
+    } else if (renderMode3D === 'tiles3d') {
+      // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (Deck.gl Tile3DLayer)
+      for (const lyr of nativeBuildingLayers) {
+        if (map.getLayer(lyr)) {
+          map.setLayoutProperty(lyr, 'visibility', 'none');
+        }
+      }
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.setVisible(false);
+      }
+      if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.setVisible(false);
+      }
+      if (deck3DTilesManagerRef.current) {
+        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
+      }
     }
 
-    // 기존 단순 사각 박스 fill-extrusion 레이어들은 z-fighting 및 박스 왜곡 방지를 위해 none 유지
-    const simpleExtrusionVis = 'none';
-    if (map.getLayer('3d-buildings')) {
-      map.setLayoutProperty('3d-buildings', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('3d-buildings-roof')) {
-      map.setLayoutProperty('3d-buildings-roof', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('3d-buildings-edge')) {
-      map.setLayoutProperty('3d-buildings-edge', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('fusion-buildings-3d')) {
-      map.setLayoutProperty('fusion-buildings-3d', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('fusion-buildings-roof')) {
-      map.setLayoutProperty('fusion-buildings-roof', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('fusion-buildings-edge')) {
-      map.setLayoutProperty('fusion-buildings-edge', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('vworld-buildings-3d')) {
-      map.setLayoutProperty('vworld-buildings-3d', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('vworld-buildings-roof')) {
-      map.setLayoutProperty('vworld-buildings-roof', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('vworld-buildings-edge')) {
-      map.setLayoutProperty('vworld-buildings-edge', 'visibility', simpleExtrusionVis);
-    }
-    if (map.getLayer('sample-buildings-3d')) {
-      map.setLayoutProperty('sample-buildings-3d', 'visibility', simpleExtrusionVis);
-    }
-  }, [layers.buildings3D, isMapLoaded]);
+    map.triggerRepaint();
+  }, [renderMode3D, layers.buildings3D, tile3DStream.enabled, tile3DStream.url, isMapLoaded]);
 
   // 8-0-0. [2단계 신규: 국토지리정보원 정밀 등고선(Contour) 레이어 가시성 및 실시간 생성 동기화]
   useEffect(() => {
@@ -2697,37 +2795,12 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.firstLogisticsSmartCity]);
 
-  // 8-0-2-1. [3D 디테일 LOD (LOD1 일반 / LOD2+ 실감) 모드 실시간 동기화]
+  // 8-0-2-1. [3D 디테일 LOD (LOD1 일반 / LOD2+ 실감) 모드 Threebox 동기화]
   useEffect(() => {
     if (threeboxLayerRef.current) {
       threeboxLayerRef.current.setLodMode(detail3DMode);
     }
-    if (lod2BuildingEngineRef.current) {
-      lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
-    }
-    const map = mapRef.current;
-    if (map && isMapLoaded) {
-      // 주력 Three.js LOD2 실감 3D 렌더러가 활성화되므로 단순 박스 extrusion은 none 유지
-      if (map.getLayer('3d-buildings')) {
-        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
-      }
-      if (map.getLayer('3d-buildings-roof')) {
-        map.setLayoutProperty('3d-buildings-roof', 'visibility', 'none');
-      }
-      if (map.getLayer('3d-buildings-edge')) {
-        map.setLayoutProperty('3d-buildings-edge', 'visibility', 'none');
-      }
-      if (map.getLayer('fusion-buildings-3d')) {
-        map.setLayoutProperty('fusion-buildings-3d', 'visibility', 'none');
-      }
-      if (map.getLayer('fusion-buildings-roof')) {
-        map.setLayoutProperty('fusion-buildings-roof', 'visibility', 'none');
-      }
-      if (map.getLayer('fusion-buildings-edge')) {
-        map.setLayoutProperty('fusion-buildings-edge', 'visibility', 'none');
-      }
-    }
-  }, [detail3DMode, layers.buildings3D, isMapLoaded]);
+  }, [detail3DMode]);
 
   // 8-0-3. [기즈모 조작 핫키 지원: W(이동) / E(회전) / R(크기) / Esc(해제) / Del(삭제)]
   useEffect(() => {
@@ -3994,8 +4067,12 @@ export const MapViewer: React.FC = () => {
   // 29. [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 상태 동기화]
   useEffect(() => {
     if (!deck3DTilesManagerRef.current) return;
-    deck3DTilesManagerRef.current.update(tile3DStream);
-  }, [tile3DStream]);
+    const shouldEnable = renderMode3D === 'tiles3d' && tile3DStream.enabled;
+    deck3DTilesManagerRef.current.update({
+      ...tile3DStream,
+      enabled: shouldEnable,
+    });
+  }, [tile3DStream, renderMode3D]);
 
   // 30-1. [지휘통제 및 보안 관제] 3D 전술 탐지 돔(Threat Dome) 상태 동기화
   useEffect(() => {
@@ -5541,6 +5618,19 @@ export const MapViewer: React.FC = () => {
                 파일을 여기에 드롭하면 카메라 뷰포트, 부지 경계, 3D 매스, 공간 주석 핀, 전술 화살표, 수위 설정이 즉시 복원됩니다.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* [신규] WebGL 컨텍스트 보호 2D 자동 전환 알림 배너 */}
+        {webglFallbackWarning && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-rose-950/90 border border-rose-500/80 text-rose-200 px-4 py-2 rounded-xl backdrop-blur-md shadow-2xl flex items-center gap-3 animate-bounce">
+            <span className="text-xs sm:text-sm font-semibold">{webglFallbackWarning}</span>
+            <button
+              onClick={() => setWebglFallbackWarning(null)}
+              className="text-xs bg-rose-800/80 hover:bg-rose-700 text-white px-2 py-0.5 rounded transition-colors"
+            >
+              닫기
+            </button>
           </div>
         )}
 
