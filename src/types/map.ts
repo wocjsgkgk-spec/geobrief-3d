@@ -357,7 +357,8 @@ export interface Tile3DStreamState {
   url: string;
   presetId: Tile3DPresetId;
   opacity: number; // 0.1 ~ 1.0
-  maximumScreenSpaceError: number; // 8 (정밀) ~ 32 (고속)
+  maximumScreenSpaceError: number; // 8 (정밀) ~ 32 (고속, 기본 16)
+  maximumMemoryUsage?: number; // 최대 메모리 한도 (MB, 기본: 256)
   pointSize: number; // 1 ~ 5
   isLoading: boolean;
   statusText?: string;

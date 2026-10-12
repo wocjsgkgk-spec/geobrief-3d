@@ -1328,6 +1328,7 @@ export const useMapStore = create<MapStoreState>()(
         presetId: 'vworld_3d_buildings',
         opacity: 1.0,
         maximumScreenSpaceError: 16,
+        maximumMemoryUsage: 256,
         pointSize: 2.0,
         isLoading: false,
         statusText: '대기 중 (브이월드 OGC 타일셋 준비 완료)',

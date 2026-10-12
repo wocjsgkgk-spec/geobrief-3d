@@ -2008,6 +2008,12 @@ export const MapViewer: React.FC = () => {
           onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
             useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
           },
+          onFallback: () => {
+            // 오프라인 또는 개발 환경에서 3D 타일셋 로드 불가 시 Three.js 한국형 실감 파사드 렌더러로 자동 폴백
+            if (lod2BuildingEngineRef.current) {
+              lod2BuildingEngineRef.current.setVisible(true);
+            }
+          },
         });
         deckManager.attachToMap(map);
         deck3DTilesManagerRef.current = deckManager;
