@@ -1,117 +1,33 @@
 /**
  * LOD2BuildingEngine.ts
  *
- * MapLibre fill-extrusion을 대체하는 Three.js 기반 실감 3D 건축물 렌더링 엔진
- * - [1. 절차적 LOD2 메쉬 파이프라인]:
- *   1) 벽체(Wall) 및 지붕(Roof) 분리 생성
- *      - 단독/연립 주택 & 군 막사: OBB 중심축 기반 22도 입체 박공/모임지붕 (Gabled/Hipped)
- *      - 대형 아파트 & 상업 빌딩: 1.2m 돌출 난간(Parapet) 및 엘리베이터 권상기실(Penthouse)
- *   2) 실측 미터(m) 단위 기반 UV 텍스처 매핑:
- *      - 층고 3.0m x 창문 2.5m 비례 정규화로 왜곡 없는 무한 반복 타일링(RepeatWrapping)
- *   3) PBR 물리 기반 재질 (MeshStandardMaterial):
- *      - 외벽: 콘크리트 및 창문 반사 프레임 질감 (roughness: 0.6, metalness: 0.2)
- *      - 지붕: 테라코타 적갈색(#8B4513) 및 슬레이트 방수 그레이(#334155) 분리
- * - [2. 3D DEM 지형 표고 정밀 밀착 (Terrain Elevation Clamping)]:
+ * MapLibre fill-extrusion을 대체하는 Three.js 기반 한국형 실감 3D 건축물 렌더링 엔진
+ * - [1. 한국 도심 특화 텍스처 및 PBR 파사드 파이프라인 (koreanBuildingTextures.ts)]:
+ *   1) 한국형 판상형 아파트 (층고 3m 기준 발코니 난간, 이중창 화이트 섀시, 층간 슬래브, 에어컨 거치대)
+ *   2) 상업 오피스 빌딩 (알루미늄 루버 멀리언, 반사 유리 커튼월, 딥블루 스카이 반사광)
+ *   3) 저층 근린생활시설 (1층 쇼윈도 통유리, 간판 띠장, 상층부 석재 타일 외장재)
+ * - [2. 실측 미터(m) 단위 기반 정밀 UV 매핑]:
+ *   - 가로 3.0m x 세로 3.0m(층고 3m) 비례 정규화로 왜곡 없는 무한 반복 타일링(THREE.RepeatWrapping)
+ *   - 옥상 상단면: 짙은 차콜 그레이(#334155) 방수 우레탄 재질과 1.2m 돌출 난간(Parapet) 분리 마감
+ * - [3. 3D DEM 지형 표고 정밀 밀착 (Terrain Elevation Clamping)]:
  *   - 외곽선 정점별 DEM 고도 샘플링 및 최저 지표면 고도(minElev)에 맞춘 기초 옹벽(Foundation) 생성
- * - [3. 렌더링 최적화 (60fps)]:
- *   - BufferGeometryUtils.mergeGeometries 기반 드로우 콜 극소화 (수백 동 -> 5 Draw Calls)
+ * - [4. 렌더링 최적화 & LOD 줌 제어 (60fps)]:
+ *   - BufferGeometryUtils.mergeGeometries 기반 드로우 콜 극소화 (수백 동 -> 8개 이하 Draw Calls)
+ *   - 줌 14 이상에서만 고해상도 세부 텍스처 메쉬가 표시되도록 LOD 필터 적용
  *   - 카메라 Frustum 컬링 활성화
  */
 
 import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import {
+  getKoreanBuildingMaterials,
+  disposeKoreanBuildingMaterials,
+  KoreanBuildingMaterials,
+} from '@/utils/koreanBuildingTextures';
 
 // =============================================================================
-// 1. 절차적 256x256 창문 그리드 캔버스 텍스처 생성기
-// =============================================================================
-function createProceduralWindowTexture(size = 256): THREE.CanvasTexture {
-  if (typeof document === 'undefined') {
-    return new THREE.CanvasTexture({} as any);
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
-
-  // 1) 외벽 베이스 콘크리트 (#F1F5F9)
-  ctx.fillStyle = '#E2E8F0';
-  ctx.fillRect(0, 0, size, size);
-
-  // 수평 줄눈 (슬래브 라인)
-  ctx.fillStyle = '#94A3B8';
-  ctx.fillRect(0, 0, size, 4);
-  ctx.fillStyle = '#CBD5E1';
-  ctx.fillRect(0, 4, size, 2);
-  ctx.fillStyle = '#64748B';
-  ctx.fillRect(0, size - 3, size, 3);
-
-  // 수직 패널 줄눈
-  ctx.fillStyle = 'rgba(100, 116, 139, 0.4)';
-  ctx.fillRect(0, 0, 2, size);
-  ctx.fillRect(size - 2, 0, 2, size);
-  ctx.fillRect(size / 2 - 1, 0, 1.5, size);
-
-  // 2) 창문 영역 배치 (가로 72%, 세로 62% 비례)
-  const marginX = Math.round(size * 0.12);
-  const winW = size - marginX * 2;
-  const winY = Math.round(size * 0.14);
-  const winH = Math.round(size * 0.62);
-
-  // 창호 외곽 알루미늄 새시 프레임 (#334155, #64748B)
-  ctx.fillStyle = '#334155';
-  ctx.fillRect(marginX - 3, winY - 3, winW + 6, winH + 6);
-  ctx.fillStyle = '#64748B';
-  ctx.fillRect(marginX - 1, winY - 1, winW + 2, winH + 2);
-
-  // 어두운 반사 유리 질감 (그라데이션 틴트 글래스)
-  const glassGrad = ctx.createLinearGradient(marginX, winY, marginX + winW, winY + winH);
-  glassGrad.addColorStop(0, '#0F1E36');
-  glassGrad.addColorStop(0.35, '#1E293B');
-  glassGrad.addColorStop(0.7, '#0F172A');
-  glassGrad.addColorStop(1, '#1A293E');
-  ctx.fillStyle = glassGrad;
-  ctx.fillRect(marginX, winY, winW, winH);
-
-  // 사선 유리 반사광 채광 스트릭 (Specular Sheen Bands)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-  ctx.beginPath();
-  ctx.moveTo(marginX + 10, winY + winH);
-  ctx.lineTo(marginX + 55, winY);
-  ctx.lineTo(marginX + 75, winY);
-  ctx.lineTo(marginX + 30, winY + winH);
-  ctx.closePath();
-  ctx.fill();
-
-  // 중앙 수직 멀리온 분할선
-  ctx.strokeStyle = '#94A3B8';
-  ctx.lineWidth = 2.0;
-  ctx.beginPath();
-  ctx.moveTo(marginX + winW / 2, winY);
-  ctx.lineTo(marginX + winW / 2, winY + winH);
-  ctx.stroke();
-
-  // 상단 트랜섬 분할선 (1/3)
-  ctx.beginPath();
-  ctx.moveTo(marginX, winY + winH * 0.33);
-  ctx.lineTo(marginX + winW, winY + winH * 0.33);
-  ctx.stroke();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
-
-  return texture;
-}
-
-// =============================================================================
-// 2. OBB (Oriented Bounding Box) 및 박공/모임 중심축 산출 유틸리티
+// 1. OBB (Oriented Bounding Box) 및 박공/모임 중심축 산출 유틸리티
 // =============================================================================
 interface OBBResult {
   centroid: THREE.Vector2;
@@ -249,11 +165,9 @@ function triangulatePolygon2D(pts: THREE.Vector2[]): number[] {
     const B = pts[V[v]];
     const C = pts[V[w]];
 
-    // 외적 볼록성 체크
     const cross = (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
     if (cross <= 1e-5) continue;
 
-    // 다른 점이 삼각형 내부에 있는지 확인
     let isEar = true;
     for (let p = 0; p < V.length; p++) {
       if (p === u || p === v || p === w) continue;
@@ -276,7 +190,7 @@ function triangulatePolygon2D(pts: THREE.Vector2[]): number[] {
     }
   }
 
-  // 폴백: 삼각팬(Triangle Fan)
+  // 폴백: 삼각팬
   if (indices.length === 0) {
     for (let i = 1; i < n - 1; i++) {
       indices.push(0, i, i + 1);
@@ -287,7 +201,7 @@ function triangulatePolygon2D(pts: THREE.Vector2[]): number[] {
 }
 
 // =============================================================================
-// 3. LOD2BuildingEngine 클래스 (MapLibre 3D 커스텀 레이어)
+// 2. LOD2BuildingEngine 클래스 (MapLibre 3D 커스텀 레이어)
 // =============================================================================
 export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   id = 'lod2-building-engine-layer';
@@ -304,21 +218,19 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private fillLight: THREE.DirectionalLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
 
-  // 병합 메쉬 노드 (단 5개의 메쉬로 모든 건물 일괄 렌더링)
-  private wallMesh: THREE.Mesh | null = null;
+  // 병합 메쉬 노드 (한국형 건축 파사드 유형별 병합 메쉬)
+  private aptWallMesh: THREE.Mesh | null = null;
+  private comWallMesh: THREE.Mesh | null = null;
+  private neighWallMesh: THREE.Mesh | null = null;
   private terracottaRoofMesh: THREE.Mesh | null = null;
   private slateRoofMesh: THREE.Mesh | null = null;
   private parapetMesh: THREE.Mesh | null = null;
   private penthouseMesh: THREE.Mesh | null = null;
   private foundationMesh: THREE.Mesh | null = null;
 
-  // PBR 물리 머티리얼 팔레트
-  private wallMaterial: THREE.MeshStandardMaterial | null = null;
+  // PBR 재질 팔레트
+  private materials: KoreanBuildingMaterials | null = null;
   private roofTerracottaMaterial: THREE.MeshStandardMaterial | null = null;
-  private roofSlateMaterial: THREE.MeshStandardMaterial | null = null;
-  private parapetMaterial: THREE.MeshStandardMaterial | null = null;
-  private penthouseMaterial: THREE.MeshStandardMaterial | null = null;
-  private foundationMaterial: THREE.MeshStandardMaterial | null = null;
 
   private originLngLat: [number, number] = [127.9358, 37.3592]; // 기본: 원주 거점
   private clampedAltitude = 0;
@@ -333,56 +245,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    * PBR 물리 기반 머티리얼 초기화
    */
   private initMaterials(): void {
-    const windowTexture = createProceduralWindowTexture(256);
+    this.materials = getKoreanBuildingMaterials();
 
-    // 1) 외벽 머티리얼 (콘크리트 질감 + 창문 UV 반복 매핑)
-    this.wallMaterial = new THREE.MeshStandardMaterial({
-      map: windowTexture,
-      roughness: 0.6,
-      metalness: 0.2,
-      side: THREE.DoubleSide,
-    });
-
-    // 2) 테라코타 적갈색 지붕 (단독/연립 주택 & 군 막사용 경사 지붕)
+    // 단독/연립 주택 및 군 막사용 테라코타 적갈색 지붕
     this.roofTerracottaMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8b4513, // 새들브라운 테라코타
+      color: 0x8b4513, // 테라코타 새들브라운
       roughness: 0.5,
       metalness: 0.15,
       flatShading: true,
-      side: THREE.DoubleSide,
-    });
-
-    // 3) 슬레이트 다크 그레이 지붕 (대형 아파트 & 상업 빌딩 옥상 방수 슬래브)
-    this.roofSlateMaterial = new THREE.MeshStandardMaterial({
-      color: 0x334155, // 짙은 차콜 슬레이트 그레이
-      roughness: 0.6,
-      metalness: 0.2,
-      flatShading: true,
-      side: THREE.DoubleSide,
-    });
-
-    // 4) 1.2m 돌출 난간 (Parapet)
-    this.parapetMaterial = new THREE.MeshStandardMaterial({
-      color: 0x475569,
-      roughness: 0.65,
-      metalness: 0.15,
-      flatShading: true,
-      side: THREE.DoubleSide,
-    });
-
-    // 5) 엘리베이터 권상기실 / 옥탑 코어 (Penthouse)
-    this.penthouseMaterial = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.5,
-      metalness: 0.3,
-      flatShading: true,
-    });
-
-    // 6) 지형 밀착 기초 옹벽 (Foundation Clamping Wall)
-    this.foundationMaterial = new THREE.MeshStandardMaterial({
-      color: 0x334155, // 어두운 기초 콘크리트
-      roughness: 0.85,
-      metalness: 0.1,
       side: THREE.DoubleSide,
     });
   }
@@ -423,7 +293,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     this.map = map;
 
-    // 지도 중심점을 로컬 미터 원점으로 초기화
     const center = map.getCenter();
     this.originLngLat = [center.lng, center.lat];
 
@@ -461,8 +330,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   }
 
   /**
-   * 수신된 GeoJSON 피처 컬렉션을 파싱하여 LOD2 실감 3D 건축물 메쉬를 일괄 생성합니다.
-   * BufferGeometryUtils.mergeGeometries를 활용해 5개 메쉬로 병합하여 60fps를 유지합니다.
+   * 수신된 GeoJSON 피처 컬렉션을 파싱하여 한국형 실감 파사드 메쉬를 일괄 생성합니다.
+   * - 가로 3.0m x 세로 3.0m 실측 정밀 UV 타일링
+   * - 판상형 아파트, 상업 오피스 빌딩, 저층 근린생활시설 3종 텍스처 분리 적용
+   * - BufferGeometryUtils.mergeGeometries를 활용해 8개 이하 메쉬로 병합하여 60fps 유지
    */
   public updateBuildings(
     features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
@@ -483,7 +354,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     this.clearMeshes();
 
-    const wallGeometries: THREE.BufferGeometry[] = [];
+    if (!this.materials) {
+      this.initMaterials();
+    }
+
+    // 3대 한국형 외벽 파사드 지오메트리 버퍼
+    const aptWallGeometries: THREE.BufferGeometry[] = [];
+    const comWallGeometries: THREE.BufferGeometry[] = [];
+    const neighWallGeometries: THREE.BufferGeometry[] = [];
+
+    // 지붕 및 부속 구조물 버퍼
     const terracottaRoofGeometries: THREE.BufferGeometry[] = [];
     const slateRoofGeometries: THREE.BufferGeometry[] = [];
     const parapetGeometries: THREE.BufferGeometry[] = [];
@@ -511,6 +391,21 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         ''
       ).toLowerCase();
 
+      // 한국 건축물 유형 판별:
+      // 1) 판상형 아파트: apartment
+      // 2) 상업 오피스: commercial
+      // 3) 저층 근린생활시설 / 일반: residential, house, villa, public, general
+      const isApartment =
+        usageType.includes('apartment') ||
+        usageType.includes('apt') ||
+        (props.name && String(props.name).includes('아파트'));
+
+      const isCommercial =
+        !isApartment &&
+        (usageType.includes('commercial') ||
+          usageType.includes('office') ||
+          (props.name && (String(props.name).includes('타워') || String(props.name).includes('빌딩'))));
+
       const rings: [number, number][][] = [];
       if (feat.geometry.type === 'Polygon') {
         rings.push(feat.geometry.coordinates[0] as [number, number][]);
@@ -527,7 +422,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         if (pts.length < 3) continue;
 
         // 1. [3D DEM 지형 표고 정밀 밀착 (Terrain Elevation Clamping)]
-        // 외곽선 각 정점의 DEM 고도를 queryTerrainElevation으로 샘플링
         const elevations: number[] = [];
         for (const coord of ring) {
           let elev = 0;
@@ -544,7 +438,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const maxElev = Math.max(...elevations);
 
         // 2. [기초 옹벽 (Adaptive Foundation Clamping) 메쉬 생성]
-        // 경사지에서 건물이 공중에 뜨지 않도록 바닥 최저점(minElev)까지 기초벽을 연장
         if (maxElev - minElev > 0.2) {
           const fPositions: number[] = [];
           const fNormals: number[] = [];
@@ -581,7 +474,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         }
 
         // 3. [벽체 (Wall) 메쉬 및 실제 미터(m) 단위 기반 UV 텍스처 매핑]
-        // 층고 3.0m x 창문 2.5m 비율의 정밀 UV 정규화
+        // 실제 축척: 가로 3.0m x 세로 3.0m(층고 3.0m) 기준으로 정확히 반복 타일링
         const wallPositions: number[] = [];
         const wallNormals: number[] = [];
         const wallUvs: number[] = [];
@@ -596,8 +489,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const segLen = p0.distanceTo(p1);
           if (segLen < 0.05) continue;
 
-          const u0 = cumDist / 2.5;
-          const u1 = (cumDist + segLen) / 2.5;
+          // 실제 미터 단위 UV 매핑: 가로 3m x 세로 3m
+          const u0 = cumDist / 3.0;
+          const u1 = (cumDist + segLen) / 3.0;
           cumDist += segLen;
 
           const vTop = totalH / 3.0;
@@ -631,24 +525,29 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           wGeom.setAttribute('position', new THREE.Float32BufferAttribute(wallPositions, 3));
           wGeom.setAttribute('normal', new THREE.Float32BufferAttribute(wallNormals, 3));
           wGeom.setAttribute('uv', new THREE.Float32BufferAttribute(wallUvs, 2));
-          wallGeometries.push(wGeom);
+
+          if (isApartment) {
+            aptWallGeometries.push(wGeom);
+          } else if (isCommercial) {
+            comWallGeometries.push(wGeom);
+          } else {
+            neighWallGeometries.push(wGeom);
+          }
         }
 
-        // 4. [입체 지붕 (LOD2 Roof) 지오메트리 분리 생성]
+        // 4. [입체 지붕 및 옥상 마감]
         const obb = computeOBB(pts);
-        const isResidential =
-          usageType.includes('residential') ||
-          usageType.includes('house') ||
-          usageType.includes('villa') ||
-          usageType.includes('military') ||
-          (totalH <= 14 && !usageType.includes('commercial') && !usageType.includes('apartment'));
+        const isPitchedRoof =
+          (usageType.includes('house') ||
+            usageType.includes('villa') ||
+            usageType.includes('military')) &&
+          totalH <= 12;
 
-        if (isResidential) {
+        if (isPitchedRoof) {
           // [유형 1: 단독/연립 주택 & 군 막사 -> 22도 입체 박공/모임 경사 지붕 (테라코타)]
           const ridgeHeight = Math.min(obb.lenV * 0.5 * Math.tan((22 * Math.PI) / 180), 5.5);
           const ridgeTop = wallTop + ridgeHeight;
 
-          // 용마루 선분: OBB 중심축을 따라 양단으로 연장
           const halfU = Math.max(0.1, obb.lenU * 0.38);
           const rP0 = new THREE.Vector2(
             obb.obbCenter.x - obb.dirU.x * halfU,
@@ -666,7 +565,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const p0 = pts[i];
             const p1 = pts[(i + 1) % N];
 
-            // 처마의 각 변에서 가장 가까운 용마루 점에 삼각면 연결
             const d0_0 = p0.distanceToSquared(rP0);
             const d0_1 = p0.distanceToSquared(rP1);
             const rMid = (d0_0 + d0_1 < p1.distanceToSquared(rP0) + p1.distanceToSquared(rP1)) ? rP0 : rP1;
@@ -676,11 +574,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               p1.x, wallTop, p1.y,
               rMid.x, ridgeTop, rMid.y
             );
-            // 간이 상향 법선
             rNormals.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
           }
 
-          // 용마루 중심부 사각 경사면 연결
           rPositions.push(
             rP0.x, ridgeTop, rP0.y,
             rP1.x, ridgeTop, rP1.y,
@@ -695,8 +591,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             terracottaRoofGeometries.push(rGeom);
           }
         } else {
-          // [유형 2: 대형 아파트 & 상업 빌딩 -> 옥상 슬래브 + 1.2m 돌출 난간 + 엘리베이터 옥탑 코어]
-          // (a) 옥상 슬래브 바닥면
+          // [유형 2: 판상형 아파트 & 상업 빌딩 -> 옥상 슬래브(#334155) + 1.2m 돌출 난간 + 엘리베이터 옥탑]
+          // (a) 옥상 방수 슬래브 바닥면 (짙은 차콜 그레이 #334155)
           const roofTriangles = triangulatePolygon2D(pts);
           if (roofTriangles.length > 0) {
             const slabPos: number[] = [];
@@ -762,17 +658,41 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     this.buildingCount = count;
 
-    // 5. [동일 재질 지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries)]
-    // 단 5번의 Draw Call로 수백 동을 렌더링하여 60fps 보장
-    if (wallGeometries.length > 0 && this.wallMaterial) {
-      const mergedWall = BufferGeometryUtils.mergeGeometries(wallGeometries, false);
-      if (mergedWall) {
-        mergedWall.computeBoundingSphere();
-        this.wallMesh = new THREE.Mesh(mergedWall, this.wallMaterial);
-        this.wallMesh.castShadow = true;
-        this.wallMesh.receiveShadow = true;
-        this.wallMesh.frustumCulled = true;
-        this.scene.add(this.wallMesh);
+    // 5. [동일 텍스처/재질 지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries)]
+    // 전체 씬을 단 8개 이하의 메쉬로 결합하여 Draw Call을 극소화(50회 이하 조건 완벽 충족)
+    if (aptWallGeometries.length > 0 && this.materials?.apartmentMaterial) {
+      const merged = BufferGeometryUtils.mergeGeometries(aptWallGeometries, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        this.aptWallMesh = new THREE.Mesh(merged, this.materials.apartmentMaterial);
+        this.aptWallMesh.castShadow = true;
+        this.aptWallMesh.receiveShadow = true;
+        this.aptWallMesh.frustumCulled = true;
+        this.scene.add(this.aptWallMesh);
+      }
+    }
+
+    if (comWallGeometries.length > 0 && this.materials?.commercialMaterial) {
+      const merged = BufferGeometryUtils.mergeGeometries(comWallGeometries, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        this.comWallMesh = new THREE.Mesh(merged, this.materials.commercialMaterial);
+        this.comWallMesh.castShadow = true;
+        this.comWallMesh.receiveShadow = true;
+        this.comWallMesh.frustumCulled = true;
+        this.scene.add(this.comWallMesh);
+      }
+    }
+
+    if (neighWallGeometries.length > 0 && this.materials?.neighborhoodMaterial) {
+      const merged = BufferGeometryUtils.mergeGeometries(neighWallGeometries, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        this.neighWallMesh = new THREE.Mesh(merged, this.materials.neighborhoodMaterial);
+        this.neighWallMesh.castShadow = true;
+        this.neighWallMesh.receiveShadow = true;
+        this.neighWallMesh.frustumCulled = true;
+        this.scene.add(this.neighWallMesh);
       }
     }
 
@@ -788,11 +708,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (slateRoofGeometries.length > 0 && this.roofSlateMaterial) {
+    if (slateRoofGeometries.length > 0 && this.materials?.roofSlateMaterial) {
       const mergedSlate = BufferGeometryUtils.mergeGeometries(slateRoofGeometries, false);
       if (mergedSlate) {
         mergedSlate.computeBoundingSphere();
-        this.slateRoofMesh = new THREE.Mesh(mergedSlate, this.roofSlateMaterial);
+        this.slateRoofMesh = new THREE.Mesh(mergedSlate, this.materials.roofSlateMaterial);
         this.slateRoofMesh.castShadow = true;
         this.slateRoofMesh.receiveShadow = true;
         this.slateRoofMesh.frustumCulled = true;
@@ -800,11 +720,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (parapetGeometries.length > 0 && this.parapetMaterial) {
+    if (parapetGeometries.length > 0 && this.materials?.parapetMaterial) {
       const mergedParapet = BufferGeometryUtils.mergeGeometries(parapetGeometries, false);
       if (mergedParapet) {
         mergedParapet.computeBoundingSphere();
-        this.parapetMesh = new THREE.Mesh(mergedParapet, this.parapetMaterial);
+        this.parapetMesh = new THREE.Mesh(mergedParapet, this.materials.parapetMaterial);
         this.parapetMesh.castShadow = true;
         this.parapetMesh.receiveShadow = true;
         this.parapetMesh.frustumCulled = true;
@@ -812,11 +732,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (penthouseGeometries.length > 0 && this.penthouseMaterial) {
+    if (penthouseGeometries.length > 0 && this.materials?.penthouseMaterial) {
       const mergedPenthouse = BufferGeometryUtils.mergeGeometries(penthouseGeometries, false);
       if (mergedPenthouse) {
         mergedPenthouse.computeBoundingSphere();
-        this.penthouseMesh = new THREE.Mesh(mergedPenthouse, this.penthouseMaterial);
+        this.penthouseMesh = new THREE.Mesh(mergedPenthouse, this.materials.penthouseMaterial);
         this.penthouseMesh.castShadow = true;
         this.penthouseMesh.receiveShadow = true;
         this.penthouseMesh.frustumCulled = true;
@@ -824,11 +744,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (foundationGeometries.length > 0 && this.foundationMaterial) {
+    if (foundationGeometries.length > 0 && this.materials?.foundationMaterial) {
       const mergedFoundation = BufferGeometryUtils.mergeGeometries(foundationGeometries, false);
       if (mergedFoundation) {
         mergedFoundation.computeBoundingSphere();
-        this.foundationMesh = new THREE.Mesh(mergedFoundation, this.foundationMaterial);
+        this.foundationMesh = new THREE.Mesh(mergedFoundation, this.materials.foundationMaterial);
         this.foundationMesh.receiveShadow = true;
         this.foundationMesh.frustumCulled = true;
         this.scene.add(this.foundationMesh);
@@ -842,10 +762,19 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
   /**
    * MapLibre 렌더링 루프
+   * - 줌 14 이상에서만 세부 텍스처 메쉬가 표시되도록 LOD 필터 적용
    */
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.isVisible || !this.renderer) {
       return;
+    }
+
+    // [LOD 줌 필터]: 줌 14 미만 광역 뷰에서는 세부 실감 텍스처 메쉬 렌더링을 스킵하여 60fps 유지
+    if (this.map) {
+      const zoom = this.map.getZoom();
+      if (zoom < 14.0) {
+        return;
+      }
     }
 
     try {
@@ -897,7 +826,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    */
   private clearMeshes(): void {
     const meshes = [
-      this.wallMesh,
+      this.aptWallMesh,
+      this.comWallMesh,
+      this.neighWallMesh,
       this.terracottaRoofMesh,
       this.slateRoofMesh,
       this.parapetMesh,
@@ -914,7 +845,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    this.wallMesh = null;
+    this.aptWallMesh = null;
+    this.comWallMesh = null;
+    this.neighWallMesh = null;
     this.terracottaRoofMesh = null;
     this.slateRoofMesh = null;
     this.parapetMesh = null;
@@ -928,31 +861,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   onRemove(): void {
     this.clearMeshes();
 
-    // 머티리얼 및 텍스처 해제
-    if (this.wallMaterial) {
-      if (this.wallMaterial.map) this.wallMaterial.map.dispose();
-      this.wallMaterial.dispose();
-      this.wallMaterial = null;
-    }
+    // 한국형 파사드 텍스처 및 머티리얼 GPU 캐시 완전 해제
+    disposeKoreanBuildingMaterials();
+    this.materials = null;
+
     if (this.roofTerracottaMaterial) {
       this.roofTerracottaMaterial.dispose();
       this.roofTerracottaMaterial = null;
-    }
-    if (this.roofSlateMaterial) {
-      this.roofSlateMaterial.dispose();
-      this.roofSlateMaterial = null;
-    }
-    if (this.parapetMaterial) {
-      this.parapetMaterial.dispose();
-      this.parapetMaterial = null;
-    }
-    if (this.penthouseMaterial) {
-      this.penthouseMaterial.dispose();
-      this.penthouseMaterial = null;
-    }
-    if (this.foundationMaterial) {
-      this.foundationMaterial.dispose();
-      this.foundationMaterial = null;
     }
 
     // 조명 해제
