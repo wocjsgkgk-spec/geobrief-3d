@@ -64,6 +64,7 @@ import { CanvasVideoRecorder } from '@/utils/canvasVideoRecorder';
 import { interpolateCinematicCamera } from '@/utils/cinematicPathInterpolator';
 import { CinematicWaypoint } from '@/types/map';
 import { registerBuildingTextures } from '@/utils/buildingTextures';
+import { registerProceduralFacadeTextures } from '@/utils/proceduralFacades';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -1199,6 +1200,7 @@ export const MapViewer: React.FC = () => {
       // [절차적 외벽 텍스처 (Procedural Facade) 256x256 패턴 스프라이트 등록]
       try {
         registerBuildingTextures(map, 256);
+        registerProceduralFacadeTextures(map, 256);
       } catch (patternErr) {
         console.warn('[MapLibre] Failed to create facade patterns:', patternErr);
       }

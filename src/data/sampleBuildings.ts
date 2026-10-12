@@ -284,5 +284,156 @@ export const SAMPLE_BUILDINGS: GeoJSON.FeatureCollection<GeoJSON.Polygon> = {
         ],
       },
     },
+
+    // 5. 원주시 무실·단계동 도심 대단지 아파트 및 상업 타워
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 무실 세영리첼 101동',
+        height: 68,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9242, 37.3435],
+            [127.9260, 37.3435],
+            [127.9260, 37.3424],
+            [127.9242, 37.3424],
+            [127.9242, 37.3435],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 무실 세영리첼 102동',
+        height: 78,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9245, 37.3452],
+            [127.9263, 37.3452],
+            [127.9263, 37.3441],
+            [127.9245, 37.3441],
+            [127.9245, 37.3452],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 단계 센트럴파크 103동',
+        height: 62,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9295, 37.3465],
+            [127.9312, 37.3465],
+            [127.9312, 37.3454],
+            [127.9295, 37.3454],
+            [127.9295, 37.3465],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 혁신비즈니스센터 메인타워',
+        height: 58,
+        min_height: 0,
+        type: 'commercial_tower',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9265, 37.3460],
+            [127.9282, 37.3460],
+            [127.9282, 37.3448],
+            [127.9265, 37.3448],
+            [127.9265, 37.3460],
+          ],
+        ],
+      },
+    },
+
+    // 6. 춘천시 온의·퇴계·약사동 도심 아파트 및 메디컬/비즈니스 타워
+    {
+      type: 'Feature',
+      properties: {
+        name: '춘천 온의 센트럴 푸르지오 101동',
+        height: 82,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.7192, 37.8830],
+            [127.7210, 37.8830],
+            [127.7210, 37.8818],
+            [127.7192, 37.8818],
+            [127.7192, 37.8830],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '춘천 온의 센트럴 푸르지오 102동',
+        height: 75,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.7215, 37.8832],
+            [127.7232, 37.8832],
+            [127.7232, 37.8820],
+            [127.7215, 37.8820],
+            [127.7215, 37.8832],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '춘천 퇴계 하이테크 비즈니스타워',
+        height: 52,
+        min_height: 0,
+        type: 'commercial_tower',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.7240, 37.8868],
+            [127.7258, 37.8868],
+            [127.7258, 37.8855],
+            [127.7240, 37.8855],
+            [127.7240, 37.8868],
+          ],
+        ],
+      },
+    },
   ],
 };

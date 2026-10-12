@@ -29,12 +29,12 @@ export interface FacadeMaterialsCache {
 let materialsCache: FacadeMaterialsCache | null = null;
 
 /**
- * 1. 기준층 상업/업무용 외벽 텍스처 (2.5m 폭 x 3.0m 층고 기준)
+ * 1. 기준층 상업/업무용 외벽 텍스처 (1개 층 3.0m x 창문 1개 2.5m 비례, 256x256)
  * - 콘크리트 및 석재 패널 줄눈(Joint Line)
  * - 어두운 반사 유리 질감(틴트 글래스 + 사선 반사광 채광)
- * - 얇은 알루미늄 창호 프레임 및 수직 분할바(Mullion)
+ * - 밝은 그레이 알루미늄 창호 프레임 및 수직 멀리온(Mullion)
  */
-function createUpperFloorCanvas(size = 512): HTMLCanvasElement {
+export function createUpperFloorCanvas(size = 256): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -50,35 +50,35 @@ function createUpperFloorCanvas(size = 512): HTMLCanvasElement {
     ctx.fillRect(0, y, size, 1.5);
   }
 
-  // 2) 층간 슬래브 및 수평 줄눈 (Joint Line)
+  // 2) 층간 슬래브 및 수평 줄눈 (두께 4.5px 밝은 그레이)
   ctx.fillStyle = '#94A3B8';
-  ctx.fillRect(0, 0, size, 5); // 상단 층간 경계선
+  ctx.fillRect(0, 0, size, 4); // 상단 층간 경계선
   ctx.fillStyle = '#CBD5E1';
-  ctx.fillRect(0, 5, size, 3);
+  ctx.fillRect(0, 4, size, 2);
   ctx.fillStyle = 'rgba(71, 85, 105, 0.35)';
   ctx.fillRect(0, size - 2, size, 2); // 하단 슬래브 접합부
 
   // 석재 패널 세로 줄눈 (Vertical Joint Lines)
-  ctx.fillStyle = 'rgba(100, 116, 139, 0.4)';
-  ctx.fillRect(0, 0, 2.5, size);
-  ctx.fillRect(size - 2.5, 0, 2.5, size);
-  ctx.fillRect(size / 2 - 1, 0, 2, size); // 중앙 패널 줄눈
+  ctx.fillStyle = 'rgba(100, 116, 139, 0.35)';
+  ctx.fillRect(0, 0, 2, size);
+  ctx.fillRect(size - 2, 0, 2, size);
+  ctx.fillRect(size / 2 - 1, 0, 1.5, size); // 중앙 패널 줄눈
 
   // 패널 베벨 하이라이트 (3D 홈 입체감)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-  ctx.fillRect(2.5, 8, size - 5, 1.5);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.fillRect(2, 6, size - 4, 1.0);
 
-  // 3) 창문 영역 배치 (가로 72%, 세로 62% 비율)
-  const marginX = size * 0.12; // 61px
-  const winW = size - marginX * 2; // 390px
-  const winY = size * 0.14; // 71px
-  const winH = size * 0.62; // 317px
+  // 3) 창문 영역 배치 (가로 72%, 세로 62% 비례)
+  const marginX = Math.round(size * 0.12); // ~31px
+  const winW = size - marginX * 2; // ~194px
+  const winY = Math.round(size * 0.14); // ~36px
+  const winH = Math.round(size * 0.62); // ~159px
 
-  // 창호 외곽 알루미늄 새시 프레임 (#334155)
+  // 창호 외곽 알루미늄 새시 프레임 (#334155, #64748B)
   ctx.fillStyle = '#334155';
-  ctx.fillRect(marginX - 6, winY - 6, winW + 12, winH + 12);
+  ctx.fillRect(marginX - 4, winY - 4, winW + 8, winH + 8);
   ctx.fillStyle = '#64748B';
-  ctx.fillRect(marginX - 3, winY - 3, winW + 6, winH + 6);
+  ctx.fillRect(marginX - 2, winY - 2, winW + 4, winH + 4);
 
   // 어두운 반사 유리 질감 (그라데이션 틴트 글래스)
   const glassGrad = ctx.createLinearGradient(marginX, winY, marginX + winW, winY + winH);
@@ -90,27 +90,27 @@ function createUpperFloorCanvas(size = 512): HTMLCanvasElement {
   ctx.fillRect(marginX, winY, winW, winH);
 
   // 사선 유리 반사광 채광 스트릭 (Specular Sheen Bands)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
   ctx.beginPath();
-  ctx.moveTo(marginX + 20, winY + winH);
+  ctx.moveTo(marginX + 10, winY + winH);
+  ctx.lineTo(marginX + 55, winY);
+  ctx.lineTo(marginX + 78, winY);
+  ctx.lineTo(marginX + 33, winY + winH);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(186, 230, 253, 0.14)';
+  ctx.beginPath();
+  ctx.moveTo(marginX + 65, winY + winH);
   ctx.lineTo(marginX + 110, winY);
-  ctx.lineTo(marginX + 155, winY);
-  ctx.lineTo(marginX + 65, winY + winH);
+  ctx.lineTo(marginX + 125, winY);
+  ctx.lineTo(marginX + 80, winY + winH);
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(186, 230, 253, 0.12)';
-  ctx.beginPath();
-  ctx.moveTo(marginX + 130, winY + winH);
-  ctx.lineTo(marginX + 220, winY);
-  ctx.lineTo(marginX + 245, winY);
-  ctx.lineTo(marginX + 155, winY + winH);
-  ctx.closePath();
-  ctx.fill();
-
-  // 4) 알루미늄 창호 멀리온 (수직/수평 분할 프레임)
+  // 4) 밝은 그레이 알루미늄 창호 멀리온 (수직/수평 분할 프레임)
   ctx.strokeStyle = '#94A3B8';
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 2.0;
   // 중앙 수직 멀리온
   ctx.beginPath();
   ctx.moveTo(marginX + winW / 2, winY);
@@ -124,23 +124,23 @@ function createUpperFloorCanvas(size = 512): HTMLCanvasElement {
 
   // 창문 내측 음영 테두리
   ctx.strokeStyle = '#1E293B';
-  ctx.lineWidth = 2.0;
+  ctx.lineWidth = 1.0;
   ctx.strokeRect(marginX + 1, winY + 1, winW - 2, winH - 2);
 
   // 5) 창호 하단 스팬드럴 패널 & 창틀 턱 (Sill Drop Shadow)
   ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
-  ctx.fillRect(marginX - 6, winY + winH + 6, winW + 12, 4);
+  ctx.fillRect(marginX - 4, winY + winH + 4, winW + 8, 3);
 
   return canvas;
 }
 
 /**
- * 2. 1층 전용 로비 파사드 텍스처 (2.5m 폭 x 3.0m 층고 기준)
+ * 2. 1층 전용 로비 파사드 텍스처 (1개 층 3.0m x 창문 1개 2.5m 비례, 256x256)
  * - 출입문 캐노피 및 차양 드롭 섀도우
  * - 대형 전면 통유리창(Curtain Wall Lobby) 및 실내 웜라이트 은은한 조명
  * - 화강암 다크 석재 기둥 & 자동 출입문 프레임
  */
-function createLobbyCanvas(size = 512): HTMLCanvasElement {
+export function createLobbyCanvas(size = 256): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -151,7 +151,7 @@ function createLobbyCanvas(size = 512): HTMLCanvasElement {
   ctx.fillRect(0, 0, size, size);
 
   // 좌우 화강암 구조 기둥 (Pillars)
-  const pillarW = 42;
+  const pillarW = 22;
   const colGrad1 = ctx.createLinearGradient(0, 0, pillarW, 0);
   colGrad1.addColorStop(0, '#0F172A');
   colGrad1.addColorStop(0.5, '#334155');
@@ -169,8 +169,8 @@ function createLobbyCanvas(size = 512): HTMLCanvasElement {
   // 2) 대형 로비 통유리 아트리움 (Double-height Clear Glass)
   const lobbyX = pillarW;
   const lobbyW = size - pillarW * 2;
-  const lobbyY = 55;
-  const lobbyH = size - 75;
+  const lobbyY = 28;
+  const lobbyH = size - 38;
 
   const lobbyGlassGrad = ctx.createLinearGradient(lobbyX, lobbyY, lobbyX, lobbyY + lobbyH);
   lobbyGlassGrad.addColorStop(0, '#0F1E36');
@@ -180,8 +180,8 @@ function createLobbyCanvas(size = 512): HTMLCanvasElement {
   ctx.fillRect(lobbyX, lobbyY, lobbyW, lobbyH);
 
   // 실내 로비 데스크 및 웜라이트 조명 확산
-  const warmLight = ctx.createRadialGradient(size / 2, size - 60, 20, size / 2, size - 60, 160);
-  warmLight.addColorStop(0, 'rgba(254, 240, 138, 0.18)');
+  const warmLight = ctx.createRadialGradient(size / 2, size - 30, 10, size / 2, size - 30, 80);
+  warmLight.addColorStop(0, 'rgba(254, 240, 138, 0.20)');
   warmLight.addColorStop(0.6, 'rgba(253, 224, 71, 0.08)');
   warmLight.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = warmLight;
@@ -189,35 +189,34 @@ function createLobbyCanvas(size = 512): HTMLCanvasElement {
 
   // 3) 상단 출입문 캐노피 (Entrance Canopy Slab)
   ctx.fillStyle = '#0F172A';
-  ctx.fillRect(lobbyX - 8, 38, lobbyW + 16, 18);
+  ctx.fillRect(lobbyX - 4, 18, lobbyW + 8, 10);
   ctx.fillStyle = '#64748B';
-  ctx.fillRect(lobbyX - 6, 39, lobbyW + 12, 3);
+  ctx.fillRect(lobbyX - 3, 19, lobbyW + 6, 2);
   // 캐노피 하단 짙은 드롭 섀도우
   ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-  ctx.fillRect(lobbyX, 56, lobbyW, 14);
+  ctx.fillRect(lobbyX, 28, lobbyW, 8);
 
   // 캐노피 하단 매립형 LED 다운라이트 4구
   for (let i = 1; i <= 4; i++) {
     const lx = lobbyX + (lobbyW / 5) * i;
     ctx.fillStyle = '#FEF08A';
     ctx.beginPath();
-    ctx.arc(lx, 55, 3.5, 0, Math.PI * 2);
+    ctx.arc(lx, 27, 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = 'rgba(254, 240, 138, 0.25)';
     ctx.beginPath();
-    ctx.arc(lx, 60, 12, 0, Math.PI * 2);
+    ctx.arc(lx, 30, 6, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // 4) 자동 출입문(Sliding Glass Entrance Doors) 프레임
-  const doorW = lobbyW * 0.62;
+  const doorW = lobbyW * 0.65;
   const doorX = size / 2 - doorW / 2;
-  const doorY = size * 0.42;
-  const doorH = size - doorY - 20;
+  const doorY = Math.round(size * 0.45);
+  const doorH = size - doorY - 10;
 
-  // 도어 외곽 스테인리스 헤어라인 프레임 (#CBD5E1)
   ctx.strokeStyle = '#CBD5E1';
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 2;
   ctx.strokeRect(doorX, doorY, doorW, doorH);
 
   // 양개형 자동문 중앙 분할선
@@ -228,84 +227,91 @@ function createLobbyCanvas(size = 512): HTMLCanvasElement {
 
   // 도어 손잡이 바
   ctx.fillStyle = '#F8FAFC';
-  ctx.fillRect(doorX + doorW / 2 - 8, doorY + doorH * 0.4, 3, doorH * 0.25);
-  ctx.fillRect(doorX + doorW / 2 + 5, doorY + doorH * 0.4, 3, doorH * 0.25);
+  ctx.fillRect(doorX + doorW / 2 - 5, doorY + doorH * 0.4, 2, doorH * 0.25);
+  ctx.fillRect(doorX + doorW / 2 + 3, doorY + doorH * 0.4, 2, doorH * 0.25);
 
   // 5) 지면 맞닿는 석재 걸레받이 (Granite Plinth)
   ctx.fillStyle = '#0F172A';
-  ctx.fillRect(0, size - 20, size, 20);
+  ctx.fillRect(0, size - 10, size, 10);
 
   return canvas;
 }
 
 /**
- * 3. 주거/아파트용 외벽 텍스처 (발코니 난간선 및 층간 슬래브 특화)
+ * 3. 주거/아파트용 외벽 텍스처 (1개 층 3.0m x 창문 1개 2.5m 비례, 256x256)
+ * - 발코니 난간선 및 층간 콘크리트 슬래브 특화
+ * - 알루미늄 화이트 새시와 고대비 틴트 글래스
  */
-function createResidentialCanvas(size = 512): HTMLCanvasElement {
+export function createResidentialCanvas(size = 256): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
-  // 베이스 웜 베이지 콘크리트
+  // 베이스 웜 베이지/오프화이트 콘크리트 (#F8FAFC)
   ctx.fillStyle = '#F8FAFC';
   ctx.fillRect(0, 0, size, size);
 
-  // 층간 슬래브
+  // 층간 콘크리트 슬래브 (두께 5px)
   ctx.fillStyle = '#CBD5E1';
-  ctx.fillRect(0, 0, size, 8);
+  ctx.fillRect(0, 0, size, 5);
   ctx.fillStyle = '#94A3B8';
-  ctx.fillRect(0, 7, size, 2.5);
+  ctx.fillRect(0, 4.5, size, 1.5);
 
-  const marginX = 40;
+  const marginX = 20;
   const winW = size - marginX * 2;
-  const winY = 24;
-  const winH = size * 0.52;
+  const winY = 14;
+  const winH = Math.round(size * 0.52);
 
-  // 창문
-  ctx.fillStyle = '#1E293B';
+  // 창문 어두운 틴트 글래스
+  const glassGrad = ctx.createLinearGradient(marginX, winY, marginX + winW, winY + winH);
+  glassGrad.addColorStop(0, '#1E293B');
+  glassGrad.addColorStop(0.5, '#334155');
+  glassGrad.addColorStop(1, '#0F172A');
+  ctx.fillStyle = glassGrad;
   ctx.fillRect(marginX, winY, winW, winH);
 
-  // 반사광
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+  // 사선 반사광 하이라이트
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
   ctx.beginPath();
-  ctx.moveTo(marginX + 20, winY + winH);
-  ctx.lineTo(marginX + 80, winY);
-  ctx.lineTo(marginX + 120, winY);
-  ctx.lineTo(marginX + 60, winY + winH);
+  ctx.moveTo(marginX + 10, winY + winH);
+  ctx.lineTo(marginX + 45, winY);
+  ctx.lineTo(marginX + 65, winY);
+  ctx.lineTo(marginX + 30, winY + winH);
   ctx.closePath();
   ctx.fill();
 
-  // 창틀 새시
+  // 창틀 새시 (화이트/연회색 알루미늄)
   ctx.strokeStyle = '#F1F5F9';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
   ctx.strokeRect(marginX, winY, winW, winH);
   ctx.beginPath();
   ctx.moveTo(marginX + winW / 2, winY);
   ctx.lineTo(marginX + winW / 2, winY + winH);
   ctx.stroke();
 
-  // 하단 발코니(베란다) 난간
+  // 하단 발코니(베란다) 난간 및 스팬드럴 패널
   const balY = winY + winH;
-  const balH = size - balY - 8;
+  const balH = size - balY - 5;
   ctx.fillStyle = '#E2E8F0';
   ctx.fillRect(marginX, balY, winW, balH);
   ctx.fillStyle = '#94A3B8';
-  ctx.fillRect(marginX, balY, winW, 3);
+  ctx.fillRect(marginX, balY, winW, 2);
 
-  // 세로 살
+  // 세로 살 (Railing Balusters)
   ctx.fillStyle = '#64748B';
-  for (let x = marginX + 12; x < marginX + winW - 6; x += 16) {
-    ctx.fillRect(x, balY + 3, 2, balH - 4);
+  for (let x = marginX + 6; x < marginX + winW - 4; x += 10) {
+    ctx.fillRect(x, balY + 2, 1.5, balH - 3);
   }
 
   return canvas;
 }
 
 /**
- * 4. 군사/공공청사/물류데포 외벽 텍스처 (방호 슬레이트 및 루버 그릴)
+ * 4. 군사/공공청사/물류데포 외벽 텍스처 (1개 층 3.0m x 창문 1개 2.5m 비례, 256x256)
+ * - 짙은 슬레이트 카키 그레이 및 방호 루버 창호 패턴
  */
-function createMilitaryCanvas(size = 512): HTMLCanvasElement {
+export function createMilitaryCanvas(size = 256): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -317,27 +323,27 @@ function createMilitaryCanvas(size = 512): HTMLCanvasElement {
 
   // 슬래브 조인트
   ctx.fillStyle = '#1E293B';
-  ctx.fillRect(0, 0, size, 6);
-  ctx.fillRect(0, size - 4, size, 4);
+  ctx.fillRect(0, 0, size, 4);
+  ctx.fillRect(0, size - 3, size, 3);
 
   // 창문 (방호형 컴팩트 윈도우)
-  const winX = 64;
-  const winW = size - 128;
-  const winY = 60;
-  const winH = size * 0.45;
+  const winX = 32;
+  const winW = size - 64;
+  const winY = 32;
+  const winH = Math.round(size * 0.45);
 
   ctx.fillStyle = '#0F172A';
   ctx.fillRect(winX, winY, winW, winH);
 
   // 세로 방호 루버
   ctx.fillStyle = '#475569';
-  for (let x = winX + 14; x < winX + winW; x += 22) {
-    ctx.fillRect(x, winY, 4, winH);
+  for (let x = winX + 8; x < winX + winW; x += 12) {
+    ctx.fillRect(x, winY, 2.5, winH);
   }
 
   // 창틀 외곽 스틸 프레임
   ctx.strokeStyle = '#64748B';
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 2;
   ctx.strokeRect(winX, winY, winW, winH);
 
   return canvas;
@@ -359,7 +365,35 @@ function setupTexture(canvas: HTMLCanvasElement, repeatV = true): THREE.CanvasTe
 }
 
 /**
- * 건축 파사드 PBR 재질 싱글톤 캐시 반환
+ * MapLibre 인스턴스에 절차적 외벽 스프라이트 등록 (256x256)
+ */
+export function registerProceduralFacadeTextures(map: any, size = 256): void {
+  if (typeof window === 'undefined' || !map) return;
+
+  try {
+    const list = [
+      { id: 'facade-window-grid-commercial', canvas: createUpperFloorCanvas(size) },
+      { id: 'facade-window-grid-residential', canvas: createResidentialCanvas(size) },
+      { id: 'facade-window-grid-lobby', canvas: createLobbyCanvas(size) },
+      { id: 'facade-window-grid-military', canvas: createMilitaryCanvas(size) },
+    ];
+
+    for (const item of list) {
+      if (!map.hasImage(item.id)) {
+        const ctx = item.canvas.getContext('2d');
+        if (ctx) {
+          const imgData = ctx.getImageData(0, 0, size, size);
+          map.addImage(item.id, imgData);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[proceduralFacades] Failed to register facade textures to map:', err);
+  }
+}
+
+/**
+ * 건축 파사드 PBR 재질 싱글톤 캐시 반환 (256x256 타일 규격)
  */
 export function getFacadeMaterials(): FacadeMaterialsCache | null {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -368,11 +402,11 @@ export function getFacadeMaterials(): FacadeMaterialsCache | null {
 
   if (materialsCache) return materialsCache;
 
-  const upperComCanvas = createUpperFloorCanvas(512);
-  const lobbyComCanvas = createLobbyCanvas(512);
-  const upperResCanvas = createResidentialCanvas(512);
-  const lobbyResCanvas = createLobbyCanvas(512);
-  const milCanvas = createMilitaryCanvas(512);
+  const upperComCanvas = createUpperFloorCanvas(256);
+  const lobbyComCanvas = createLobbyCanvas(256);
+  const upperResCanvas = createResidentialCanvas(256);
+  const lobbyResCanvas = createLobbyCanvas(256);
+  const milCanvas = createMilitaryCanvas(256);
 
   const upperComTex = setupTexture(upperComCanvas, true);
   const lobbyComTex = setupTexture(lobbyComCanvas, false);

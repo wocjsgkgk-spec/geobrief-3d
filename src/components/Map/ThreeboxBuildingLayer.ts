@@ -319,10 +319,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
       if (!rawMatrix) return;
 
-      // [LOD 뷰포트 레벨 체크] 줌 13.8 미만 원거리에서는 세부 외벽/지붕을 바이패스하여 60fps 유지
+      // [LOD 뷰포트 레벨 체크] 원거리(줌 13 이하)에서는 단색 음영만 렌더링, 줌 14 이상에서만 세부 창문 격자 외벽 표출 (60fps 유지)
       if (this.map) {
         const zoom = this.map.getZoom();
-        const isHighDetailZoom = zoom >= 13.8 && this.lodMode === 'lod2';
+        const isHighDetailZoom = zoom >= 14.0 && this.lodMode === 'lod2';
         if (this.roofsGroup.visible !== isHighDetailZoom) {
           this.roofsGroup.visible = isHighDetailZoom;
         }
