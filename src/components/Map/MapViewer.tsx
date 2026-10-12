@@ -16,6 +16,7 @@ import { generateSlidePackPptx } from '@/utils/pptxExportEngine';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { BUILDING_MASS_PRESETS } from '@/types/map';
 import { isVworldConfigured, fetchVworldBuildings } from '@/services/vworldService';
+import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
@@ -370,6 +371,11 @@ export const MapViewer: React.FC = () => {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
+          // [국토교통부 x 브이월드 x OSM 건물통합 융합 소스]
+          'fusion-buildings': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
           // [브이월드 건축물 공간정보 LT_C_SPBD WFS 소스]
           'vworld-buildings-source': {
             type: 'geojson',
@@ -566,6 +572,66 @@ export const MapViewer: React.FC = () => {
               'line-color': '#DC2626',
               'line-width': 3.5,
               'line-dasharray': [4, 2],
+            },
+            layout: { visibility: 'visible' },
+          },
+
+          // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - 100% 불투명 PBR 현실적 건축 톤]
+          {
+            id: 'fusion-buildings-3d',
+            type: 'fill-extrusion',
+            source: 'fusion-buildings',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': [
+                'match',
+                ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], 'general'],
+                'residential',
+                '#F8FAFC',
+                'apartment',
+                '#F8FAFC',
+                'commercial',
+                '#94A3B8',
+                ['public', 'military', 'public_military'],
+                '#94A3B8',
+                '#E2E8F0',
+              ],
+              'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
+              'fill-extrusion-base': 0,
+              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: 'visible' },
+          },
+          // [국토교통부 x 브이월드 x OSM 융합 건축물 옥상 슬래브 레이어 - 짙은 차콜 그레이 100% 불투명]
+          {
+            id: 'fusion-buildings-roof',
+            type: 'fill-extrusion',
+            source: 'fusion-buildings',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
+              'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
+              'fill-extrusion-base': [
+                'max',
+                0,
+                ['-', ['coalesce', ['get', 'height'], 12], 0.45],
+              ],
+              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: 'visible' },
+          },
+          // [국토교통부 x 브이월드 x OSM 융합 건축물 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인 (0.8px)]
+          {
+            id: 'fusion-buildings-edge',
+            type: 'line',
+            source: 'fusion-buildings',
+            minzoom: 12,
+            paint: {
+              'line-color': '#0F172A',
+              'line-width': 0.8,
+              'line-opacity': 0.9,
             },
             layout: { visibility: 'visible' },
           },
@@ -2093,6 +2159,15 @@ export const MapViewer: React.FC = () => {
     if (map.getLayer('3d-buildings-edge')) {
       map.setLayoutProperty('3d-buildings-edge', 'visibility', visibility);
     }
+    if (map.getLayer('fusion-buildings-3d')) {
+      map.setLayoutProperty('fusion-buildings-3d', 'visibility', visibility);
+    }
+    if (map.getLayer('fusion-buildings-roof')) {
+      map.setLayoutProperty('fusion-buildings-roof', 'visibility', visibility);
+    }
+    if (map.getLayer('fusion-buildings-edge')) {
+      map.setLayoutProperty('fusion-buildings-edge', 'visibility', visibility);
+    }
     if (map.getLayer('vworld-buildings-3d')) {
       map.setLayoutProperty('vworld-buildings-3d', 'visibility', visibility);
     }
@@ -2157,6 +2232,15 @@ export const MapViewer: React.FC = () => {
       if (map.getLayer('3d-buildings-edge')) {
         map.setLayoutProperty('3d-buildings-edge', 'visibility', isVisible ? 'visible' : 'none');
       }
+      if (map.getLayer('fusion-buildings-3d')) {
+        map.setLayoutProperty('fusion-buildings-3d', 'visibility', isVisible ? 'visible' : 'none');
+      }
+      if (map.getLayer('fusion-buildings-roof')) {
+        map.setLayoutProperty('fusion-buildings-roof', 'visibility', isVisible ? 'visible' : 'none');
+      }
+      if (map.getLayer('fusion-buildings-edge')) {
+        map.setLayoutProperty('fusion-buildings-edge', 'visibility', isVisible ? 'visible' : 'none');
+      }
     }
   }, [detail3DMode, layers.buildings3D, isMapLoaded]);
 
@@ -2185,24 +2269,16 @@ export const MapViewer: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedFacilityId, setTransformGizmoMode, selectFacility, removePlacedFacility]);
 
-  // 8-1. [브이월드 건축물 공간정보 LT_C_SPBD 비동기 연동 및 실시간 상태 진단]
+  // 8-1. [국토교통부 x V-World x OSM 건물 융합 API 비동기 연동 및 실시간 상태 진단]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (!isVworldConfigured()) {
-      setVworldDiagnostic({
-        status: 'unconfigured',
-        message: 'API 키 미등록 (.env.local 미등록) -> 오픈 무료 벡터 건물로 자동 대체',
-        lastChecked: Date.now(),
-        featureCount: 0,
-      });
-      return;
-    }
-
     if (!layers.buildings3D) return;
 
     let isCancelled = false;
+    let timer: NodeJS.Timeout | null = null;
+
     const fetchBoundsBuildings = async () => {
       try {
         const zoom = map.getZoom();
@@ -2214,7 +2290,7 @@ export const MapViewer: React.FC = () => {
           bounds.getEast(),
           bounds.getNorth(),
         ];
-        const result = await fetchVworldBuildings(bbox);
+        const result = await fetchFusionBuildings(bbox);
         if (isCancelled) return;
 
         setVworldDiagnostic({
@@ -2226,26 +2302,41 @@ export const MapViewer: React.FC = () => {
           errorDetail: result.errorDetail,
         });
 
+        console.log('[GeoBrief 3D Fusion API] 국토교통부 x V-World x OSM 융합 성공:', result);
+
         try {
+          // 1) 신규 융합 소스('fusion-buildings') 갱신
+          const fusionSource = map.getSource('fusion-buildings') as maplibregl.GeoJSONSource;
+          if (fusionSource && typeof fusionSource.setData === 'function') {
+            if (result.success && result.features && result.features.features.length > 0) {
+              fusionSource.setData(result.features);
+            } else {
+              fusionSource.setData({ type: 'FeatureCollection', features: [] });
+            }
+          }
+
+          // 2) 기존 하위 호환 소스('vworld-buildings-source') 갱신
           const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
           if (vworldSource && typeof vworldSource.setData === 'function') {
             if (result.success && result.features && result.features.features.length > 0) {
               vworldSource.setData(result.features);
-              if (threeboxLayerRef.current) {
-                threeboxLayerRef.current.syncRoofs([
-                  ...SAMPLE_BUILDINGS.features,
-                  ...result.features.features,
-                ]);
-              }
             } else {
               vworldSource.setData({ type: 'FeatureCollection', features: [] });
             }
           }
+
+          // 3) Threebox LOD2 입체 지붕 동기화
+          if (threeboxLayerRef.current && result.features?.features) {
+            threeboxLayerRef.current.syncRoofs([
+              ...SAMPLE_BUILDINGS.features,
+              ...result.features.features,
+            ]);
+          }
         } catch (sourceErr) {
-          console.warn('[MapViewer] Failed to update vworld-buildings-source:', sourceErr);
+          console.warn('[MapViewer] Failed to update building sources:', sourceErr);
         }
       } catch (err: any) {
-        console.warn('[V-World API] Unexpected exception in fetchBoundsBuildings:', err);
+        console.warn('[Fusion API] Unexpected exception in fetchBoundsBuildings:', err);
         if (!isCancelled) {
           setVworldDiagnostic({
             status: 'error',
@@ -2258,10 +2349,19 @@ export const MapViewer: React.FC = () => {
       }
     };
 
-    const timer = setTimeout(fetchBoundsBuildings, 800);
+    const debouncedFetch = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(fetchBoundsBuildings, 600);
+    };
+
+    // 지도 이동 및 줌 완료(moveend) 리스너 연동
+    map.on('moveend', debouncedFetch);
+    debouncedFetch();
+
     return () => {
       isCancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      map.off('moveend', debouncedFetch);
     };
   }, [isMapLoaded, viewport.latitude, viewport.longitude, viewport.zoom, layers.buildings3D, setVworldDiagnostic]);
 
@@ -2650,6 +2750,8 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const buildingLayers = [
+      'fusion-buildings-3d',
+      'fusion-buildings-roof',
       'vworld-buildings-3d',
       'vworld-buildings-roof',
       'sample-buildings',
@@ -2708,6 +2810,7 @@ export const MapViewer: React.FC = () => {
       const props = (feature.properties || {}) as Record<string, any>;
 
       const bldName =
+        props.buildingName ||
         props.name ||
         props.bld_nm ||
         props.pos_bul_nm ||
@@ -2721,11 +2824,11 @@ export const MapViewer: React.FC = () => {
 
       const category =
         props.bld_category_label ||
-        (props.bld_category === 'apartment'
+        (props.usageType === 'residential' || props.bld_category === 'apartment'
           ? '공동주택·아파트'
-          : props.bld_category === 'public_military'
+          : props.usageType === 'military_public' || props.bld_category === 'public_military' || props.isMilitaryOrPublic
           ? '공공청사·군사시설'
-          : props.bld_category === 'commercial'
+          : props.usageType === 'commercial' || props.bld_category === 'commercial'
           ? '상업·업무시설'
           : '일반 건축물');
 

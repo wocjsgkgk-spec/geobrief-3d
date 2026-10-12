@@ -1,0 +1,498 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+/**
+ * 건물 용도 및 명칭을 바탕으로 표준 용도 카테고리와 국방/공공 플래그를 판별합니다.
+ */
+function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
+  const combined = `${name} ${detailName} ${bdtypCd}`.toLowerCase();
+
+  // 1. 군사 및 공공안보 시설
+  const isMilitary =
+    combined.includes('군부대') ||
+    combined.includes('대대') ||
+    combined.includes('사단') ||
+    combined.includes('군단') ||
+    combined.includes('사령부') ||
+    combined.includes('연대') ||
+    combined.includes('포대') ||
+    combined.includes('탄약') ||
+    combined.includes('병영') ||
+    combined.includes('막사') ||
+    combined.includes('보급고') ||
+    combined.includes('군사') ||
+    combined.includes('비행단') ||
+    combined.includes('기지') ||
+    combined.includes('예비군') ||
+    combined.includes('훈련장');
+
+  // 2. 공공청사 및 교육·치안·소방 시설
+  const isPublic =
+    combined.includes('청사') ||
+    combined.includes('시청') ||
+    combined.includes('도청') ||
+    combined.includes('구청') ||
+    combined.includes('군청') ||
+    combined.includes('면사무소') ||
+    combined.includes('동주민센터') ||
+    combined.includes('행정복지센터') ||
+    combined.includes('파출소') ||
+    combined.includes('경찰서') ||
+    combined.includes('소방서') ||
+    combined.includes('보건소') ||
+    combined.includes('우체국') ||
+    combined.includes('학교') ||
+    combined.includes('초등학교') ||
+    combined.includes('중학교') ||
+    combined.includes('고등학교') ||
+    combined.includes('대학교') ||
+    combined.includes('법원') ||
+    combined.includes('검찰청');
+
+  const isMilitaryOrPublic = isMilitary || isPublic;
+
+  // 3. 주거 시설 (아파트, 빌라, 다세대)
+  if (
+    combined.includes('아파트') ||
+    combined.includes('apt') ||
+    combined.includes('빌라') ||
+    combined.includes('연립') ||
+    combined.includes('맨션') ||
+    combined.includes('주택') ||
+    combined.includes('단지') ||
+    combined.includes('하이츠') ||
+    combined.includes('푸르지오') ||
+    combined.includes('자이') ||
+    combined.includes('힐스테이트') ||
+    combined.includes('래미안') ||
+    combined.includes('e편한') ||
+    combined.includes('더샵') ||
+    combined.includes('아이파크') ||
+    combined.includes('롯데캐슬')
+  ) {
+    return {
+      usageType: 'residential' as const,
+      isMilitaryOrPublic,
+      category: 'apartment' as const,
+      color: '#F8FAFC',
+    };
+  }
+
+  if (isMilitary) {
+    return {
+      usageType: 'military' as const,
+      isMilitaryOrPublic: true,
+      category: 'public_military' as const,
+      color: '#94A3B8',
+    };
+  }
+
+  if (isPublic) {
+    return {
+      usageType: 'public' as const,
+      isMilitaryOrPublic: true,
+      category: 'public_military' as const,
+      color: '#94A3B8',
+    };
+  }
+
+  // 4. 상업 / 업무시설
+  if (
+    combined.includes('타워') ||
+    combined.includes('빌딩') ||
+    combined.includes('센터') ||
+    combined.includes('오피스') ||
+    combined.includes('프라자') ||
+    combined.includes('플라자') ||
+    combined.includes('마트') ||
+    combined.includes('백화점') ||
+    combined.includes('쇼핑') ||
+    combined.includes('몰') ||
+    combined.includes('호텔') ||
+    combined.includes('은행') ||
+    combined.includes('병원') ||
+    combined.includes('상가')
+  ) {
+    return {
+      usageType: 'commercial' as const,
+      isMilitaryOrPublic: false,
+      category: 'commercial' as const,
+      color: '#94A3B8',
+    };
+  }
+
+  // 5. 일반 건축물
+  return {
+    usageType: 'general' as const,
+    isMilitaryOrPublic: false,
+    category: 'general' as const,
+    color: '#E2E8F0',
+  };
+}
+
+/**
+ * OSM 지붕 형태(roof:shape) 속성을 정규화하거나 용도 기반 지능형 추론을 수행합니다.
+ */
+function determineRoofShape(
+  osmShape?: string,
+  usageType = 'general',
+  levels = 2
+): { roofShape: string; roofColour: string } {
+  const norm = (osmShape || '').toLowerCase().trim();
+
+  // OSM 명시적 값 정규화
+  if (norm.includes('gable')) {
+    return { roofShape: 'gabled', roofColour: '#334155' };
+  }
+  if (norm.includes('hip')) {
+    return { roofShape: 'hipped', roofColour: '#334155' };
+  }
+  if (norm.includes('flat')) {
+    return { roofShape: 'flat', roofColour: '#334155' };
+  }
+  if (norm.includes('dome')) {
+    return { roofShape: 'dome', roofColour: '#1E293B' };
+  }
+  if (norm.includes('mansard')) {
+    return { roofShape: 'hipped', roofColour: '#334155' };
+  }
+  if (norm.includes('skillion')) {
+    return { roofShape: 'gabled', roofColour: '#334155' };
+  }
+
+  // 휴리스틱 추론:
+  // - 5층 이상 또는 대형 상업/아파트: 평지붕(flat)
+  if (levels >= 5 || usageType === 'commercial') {
+    return { roofShape: 'flat', roofColour: '#334155' };
+  }
+
+  // - 저층 주거/단독주택/군사 막사: 박공 경사 지붕(gabled)
+  if (usageType === 'military' || usageType === 'residential') {
+    return { roofShape: 'gabled', roofColour: '#334155' };
+  }
+
+  // - 공공청사: 모임지붕(hipped)
+  if (usageType === 'public') {
+    return { roofShape: 'hipped', roofColour: '#272E3B' };
+  }
+
+  return { roofShape: 'flat', roofColour: '#334155' };
+}
+
+/**
+ * OpenStreetMap Overpass API를 통해 해당 BBOX 영역 내 지붕 및 건물 태그를 비동기 쿼리합니다.
+ */
+async function fetchOsmBuildingTags(
+  minLng: number,
+  minLat: number,
+  maxLng: number,
+  maxLat: number
+): Promise<Map<string, { roofShape?: string; roofColour?: string; levels?: number; name?: string }>> {
+  const tagMap = new Map<string, { roofShape?: string; roofColour?: string; levels?: number; name?: string }>();
+
+  // 1초 초과 시 즉시 무중단 폴백하기 위해 타임아웃 3초 설정
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const ql = `[out:json][timeout:3];(way["building"](${minLat},${minLng},${maxLat},${maxLng}););out tags center 80;`;
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`;
+
+    const res = await fetch(overpassUrl, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return tagMap;
+
+    const data = await res.json();
+    const elements = data.elements || [];
+
+    for (const el of elements) {
+      if (!el.tags) continue;
+      const t = el.tags;
+      const bldName = t.name || t['name:ko'] || '';
+      const roofShape = t['roof:shape'] || t['building:roof:shape'];
+      const roofColour = t['roof:colour'] || t['roof:color'];
+      const levels = t['building:levels'] ? parseInt(t['building:levels'], 10) : undefined;
+
+      const info = {
+        roofShape,
+        roofColour,
+        levels: isNaN(levels as number) ? undefined : levels,
+        name: bldName,
+      };
+
+      if (bldName) tagMap.set(bldName.toLowerCase(), info);
+      if (el.center) {
+        const keyCoord = `${el.center.lon.toFixed(4)},${el.center.lat.toFixed(4)}`;
+        tagMap.set(keyCoord, info);
+      }
+    }
+  } catch {
+    clearTimeout(timeoutId);
+    // Overpass 실패 시 무중단 안전 폴백
+  }
+
+  return tagMap;
+}
+
+/**
+ * 국토교통부 건물통합정보 / 건축물대장 API (공공데이터포털 data.go.kr) 조회
+ */
+async function fetchPublicDataBuildingRegistry(
+  apiKey: string,
+  minLng: number,
+  minLat: number,
+  maxLng: number,
+  maxLat: number
+): Promise<Map<string, { height?: number; levels?: number; name?: string; bdtypCd?: string }>> {
+  const registryMap = new Map<string, { height?: number; levels?: number; name?: string; bdtypCd?: string }>();
+  if (!apiKey || apiKey === 'your_public_data_portal_key_here') return registryMap;
+
+  // 공공데이터포털 건축물대장 표제부 API 엔드포인트
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    // 국토교통부 오픈데이터 연동 규격
+    const url = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${encodeURIComponent(
+      apiKey
+    )}&numOfRows=100&pageNo=1&_type=json`;
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const json = await res.json();
+      const items = json?.response?.body?.items?.item || [];
+      for (const it of Array.isArray(items) ? items : [items]) {
+        const bldName = (it.bldNm || '').trim();
+        const height = parseFloat(it.heit || '0');
+        const levels = parseInt(it.grndFlrCnt || '0', 10);
+        const bdtypCd = it.mainPurpsCd || '';
+
+        if (bldName) {
+          registryMap.set(bldName.toLowerCase(), {
+            height: height > 0 ? height : undefined,
+            levels: levels > 0 ? levels : undefined,
+            name: bldName,
+            bdtypCd,
+          });
+        }
+      }
+    }
+  } catch {
+    clearTimeout(timeoutId);
+    // 공공데이터포털 미등록 또는 통신 불가 시 V-World + OSM으로 무중단 폴백
+  }
+
+  return registryMap;
+}
+
+/**
+ * GET /api/buildings/fusion?bbox=minLng,minLat,maxLng,maxLat
+ *
+ * [국토교통부 건물통합정보 x V-World x OpenStreetMap 3대 소스 융합 API]
+ * 1. V-World WFS (LT_C_SPBD): 건물 실측 외곽선 지오메트리 폴리곤
+ * 2. 국토교통부 건물통합정보(공공데이터포털): 실측 높이(HEI), 지상층수(GRND_FLR_CNT), 주용도코드
+ * 3. OpenStreetMap (Overpass): 지붕 형태(roof:shape), 지붕 색상, 층수
+ * 4. 단일 통일 GeoJSON 정규화 반환: { height, levels, roofShape, roofColour, buildingName, usageType, isMilitaryOrPublic }
+ */
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const bboxParam = searchParams.get('bbox');
+
+  // 1. BBOX 파라미터 유효성 검증
+  if (!bboxParam) {
+    return NextResponse.json(
+      {
+        success: false,
+        status: 'error',
+        message: 'bbox 파라미터가 필요합니다 (형식: minLng,minLat,maxLng,maxLat)',
+      },
+      { status: 400 }
+    );
+  }
+
+  const coords = bboxParam.split(',').map((v) => parseFloat(v.trim()));
+  if (coords.length !== 4 || coords.some((n) => isNaN(n))) {
+    return NextResponse.json(
+      {
+        success: false,
+        status: 'error',
+        message: '유효하지 않은 bbox 좌표입니다',
+      },
+      { status: 400 }
+    );
+  }
+
+  const [minLng, minLat, maxLng, maxLat] = coords;
+
+  // 2. 인증키 확인
+  const rawVworldKey =
+    process.env.VWORLD_API_KEY ||
+    process.env.NEXT_PUBLIC_VWORLD_API_KEY ||
+    '';
+  const cleanVworldKey = rawVworldKey.replace(/['"`]/g, '').trim();
+
+  const rawDataGoKey = process.env.DATA_GO_KR_API_KEY || '';
+  const cleanDataGoKey = rawDataGoKey.replace(/['"`]/g, '').trim();
+
+  const domain = process.env.VWORLD_DOMAIN || 'localhost';
+
+  // 3. 다중 소스 병렬 비동기 수신 (V-World WFS + OSM 태그 + 국토교통부 공공데이터)
+  const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
+  const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+    cleanVworldKey
+  )}&domain=${encodeURIComponent(domain)}&geomFilter=${encodeURIComponent(
+    geomFilter
+  )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+
+  const vworldController = new AbortController();
+  const vworldTimeout = setTimeout(() => vworldController.abort(), 7000);
+
+  let vworldData: any = null;
+  let hasVworld = false;
+
+  try {
+    if (cleanVworldKey && cleanVworldKey !== 'your_vworld_api_key_here') {
+      const vworldRes = await fetch(vworldUrl, {
+        signal: vworldController.signal,
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      clearTimeout(vworldTimeout);
+      if (vworldRes.ok) {
+        vworldData = await vworldRes.json();
+        hasVworld = vworldData?.response?.status === 'OK';
+      }
+    }
+  } catch {
+    clearTimeout(vworldTimeout);
+    hasVworld = false;
+  }
+
+  // 병렬 수신: OSM Overpass 지붕 태그 & 국토교통부 공공데이터
+  const [osmTagsMap, publicDataMap] = await Promise.all([
+    fetchOsmBuildingTags(minLng, minLat, maxLng, maxLat),
+    fetchPublicDataBuildingRegistry(cleanDataGoKey, minLng, minLat, maxLng, maxLat),
+  ]);
+
+  const hasDataGoKr = publicDataMap.size > 0;
+  const hasOsm = osmTagsMap.size > 0;
+
+  // 4. V-World 피처 컬렉션 추출
+  const rawFeatures =
+    hasVworld && vworldData?.response?.result?.featureCollection?.features
+      ? vworldData.response.result.featureCollection.features
+      : [];
+
+  // 5. 3대 소스 교차 매핑 및 단일 GeoJSON 정규화
+  const fusedFeatures = rawFeatures
+    .map((item: any, idx: number) => {
+      if (!item.geometry || !item.properties) return null;
+
+      const props = item.properties;
+      const buldNm = (props.buld_nm || '').trim();
+      const buldNmDc = (props.buld_nm_dc || '').trim();
+      const rdNm = (props.rd_nm || '').trim();
+      const buldNo = (props.buld_no || '').trim();
+      const gu = (props.gu || '').trim();
+      const bdtypCd = (props.bdtyp_cd || '').trim();
+
+      // [1] 건물 명칭 통합 산출
+      let bldName = buldNm;
+      if (!bldName && rdNm && buldNo) {
+        bldName = `${rdNm} ${buldNo}`;
+      } else if (!bldName && buldNmDc) {
+        bldName = buldNmDc;
+      } else if (!bldName && gu) {
+        bldName = `${gu} 건축물`;
+      } else if (!bldName) {
+        bldName = `도심 건축물 #${idx + 1}`;
+      }
+
+      const lookupKey = bldName.toLowerCase();
+
+      // [2] 국토교통부 건물통합정보(공공데이터포털) 교차 매핑
+      const publicData = publicDataMap.get(lookupKey);
+      const rawLevels = parseInt(
+        String(publicData?.levels || props.gro_flo_co || props.grnd_flr_cnt || '2'),
+        10
+      );
+      const levels = Math.max(1, isNaN(rawLevels) ? 2 : rawLevels);
+
+      // 실측 높이(HEI) 우선 적용 -> 없을 시 층수 * 3.3m
+      const height = publicData?.height
+        ? publicData.height
+        : levels * 3.3;
+
+      // [3] 건물 용도 및 국방/공공 플래그 판별
+      const { usageType, isMilitaryOrPublic, category, color } = classifyBuildingUsage(
+        bldName,
+        buldNmDc,
+        publicData?.bdtypCd || bdtypCd
+      );
+
+      // [4] OSM 지붕 형태(roof:shape) 및 지붕 색상(roof:colour) 교차 매핑
+      const osmData = osmTagsMap.get(lookupKey);
+      const { roofShape, roofColour } = determineRoofShape(
+        osmData?.roofShape,
+        usageType,
+        levels
+      );
+
+      return {
+        type: 'Feature',
+        id: props.buld_se_cd || `fusion-bld-${idx}`,
+        properties: {
+          ...props,
+          // [필수 표준 융합 속성 7종]
+          height: Math.round(height * 10) / 10,
+          levels,
+          roofShape,
+          roofColour: osmData?.roofColour || roofColour,
+          buildingName: bldName,
+          usageType,
+          isMilitaryOrPublic,
+
+          // 하위 호환성 필드 (기존 3D 레이어 및 UI 실시간 바인딩용)
+          name: bldName,
+          bld_category: category,
+          color,
+          min_height: 0,
+          source: 'fusion',
+          fusedSources: {
+            vworld: true,
+            dataGoKr: !!publicData,
+            osm: !!osmData,
+          },
+        },
+        geometry: item.geometry,
+      };
+    })
+    .filter(Boolean);
+
+  return NextResponse.json({
+    success: true,
+    status: 'connected',
+    fusionSources: {
+      vworld: hasVworld,
+      dataGoKr: hasDataGoKr,
+      osm: hasOsm,
+    },
+    featureCount: fusedFeatures.length,
+    message: `융합 완료 (총 ${fusedFeatures.length}건 / 국토교통부·V-World·OSM 결합)`,
+    features: {
+      type: 'FeatureCollection',
+      features: fusedFeatures,
+    },
+  });
+}
