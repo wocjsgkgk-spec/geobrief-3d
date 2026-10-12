@@ -10,7 +10,7 @@ export interface FusionBuildingProperties {
   roofShape: string;
   roofColour: string;
   buildingName: string;
-  usageType: 'residential' | 'commercial' | 'public' | 'military' | 'general';
+  usageType: 'residential' | 'commercial' | 'public' | 'military' | 'general' | 'apartment';
   isMilitaryOrPublic: boolean;
   name: string;
   color: string;

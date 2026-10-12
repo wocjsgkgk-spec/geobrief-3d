@@ -288,6 +288,64 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    // [1단계: 건물 실제 층고 높낮이 다변화 표현식 (아파트 45~75m, 상업 20~28m, 주택 6~9m)]
+    const buildingHeightExpr: any = [
+      'coalesce',
+      ['get', 'adaptive_height'],
+      ['get', 'render_height'],
+      ['get', 'height'],
+      [
+        'case',
+        ['has', 'building:levels'],
+        ['*', ['to-number', ['get', 'building:levels'], 1], 3.2],
+        ['has', 'GRND_FLR_CNT'],
+        ['*', ['to-number', ['get', 'GRND_FLR_CNT'], 1], 3.2],
+        ['has', 'levels'],
+        ['*', ['to-number', ['get', 'levels'], 1], 3.2],
+        [
+          'match',
+          ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+          ['apartment', 'apartments'],
+          52,
+          ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+          24,
+          ['residential', 'house', 'detached', 'villa'],
+          8.5,
+          ['military', 'public', 'government', 'public_military'],
+          16,
+          14,
+        ],
+      ],
+    ];
+
+    // [1단계: 옥상 분리 마감 슬래브 바닥 높이 표현식]
+    const buildingRoofBaseExpr: any = [
+      'max',
+      0,
+      ['-', buildingHeightExpr, 0.45],
+    ];
+
+    // [2단계: 실제 도시 건축 외장재 컬러 팔레트 표현식]
+    const buildingColorExpr: any = [
+      'coalesce',
+      ['get', 'color'],
+      [
+        'match',
+        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+        ['apartment', 'apartments'],
+        '#F8FAFC', // 대형 아파트: 밝은 화이트 콘크리트 톤
+        ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+        '#BAE6FD', // 상업/업무 시설: 은은한 글래스 블루 톤
+        ['residential', 'house', 'detached', 'villa'],
+        '#FDE68A', // 일반 주택가: 붉은 벽돌 및 샌드 브라운 톤
+        ['military', 'barracks', 'depot'],
+        '#E2E8F0', // 군사/국방: 모던 콘크리트 베이지
+        ['public', 'government', 'public_military', 'civic'],
+        '#93C5FD', // 공공청사: 차분한 스카이블루/그레이
+        '#F1F5F9', // 일반 건축물: 오프화이트/콘크리트 그레이
+      ],
+    ];
+
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: {
@@ -707,20 +765,8 @@ export const MapViewer: React.FC = () => {
             source: 'fusion-buildings',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': [
-                'match',
-                ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], 'general'],
-                'residential',
-                '#F8FAFC',
-                'apartment',
-                '#F8FAFC',
-                'commercial',
-                '#94A3B8',
-                ['public', 'military', 'public_military'],
-                '#94A3B8',
-                '#E2E8F0',
-              ],
-              'fill-extrusion-height': ['coalesce', ['get', 'adaptive_height'], ['get', 'height'], 12],
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': ['coalesce', ['get', 'adaptive_base'], 0],
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
@@ -735,12 +781,8 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
-              'fill-extrusion-height': ['coalesce', ['get', 'adaptive_height'], ['get', 'height'], 12],
-              'fill-extrusion-base': [
-                'max',
-                0,
-                ['-', ['coalesce', ['get', 'adaptive_height'], ['get', 'height'], 12], 0.45],
-              ],
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -767,18 +809,8 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': [
-                'match',
-                ['get', 'bld_category'],
-                'apartment',
-                '#F8FAFC',
-                'commercial',
-                '#94A3B8',
-                ['public', 'office'],
-                '#94A3B8',
-                '#E2E8F0',
-              ],
-              'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
@@ -792,13 +824,9 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#334155',
-              'fill-extrusion-height': ['coalesce', ['get', 'height'], 12],
-              'fill-extrusion-base': [
-                'max',
-                0,
-                ['-', ['coalesce', ['get', 'height'], 12], 0.45],
-              ],
+              'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -824,16 +852,8 @@ export const MapViewer: React.FC = () => {
             source: 'sample-buildings-source',
             minzoom: 11,
             paint: {
-              'fill-extrusion-color': [
-                'match',
-                ['get', 'type'],
-                'residential',
-                '#F8FAFC',
-                'commercial_tower',
-                '#94A3B8',
-                '#E2E8F0',
-              ],
-              'fill-extrusion-height': ['get', 'height'],
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
@@ -846,9 +866,9 @@ export const MapViewer: React.FC = () => {
             source: 'sample-buildings-source',
             minzoom: 11,
             paint: {
-              'fill-extrusion-color': '#334155',
-              'fill-extrusion-height': ['get', 'height'],
-              'fill-extrusion-base': ['max', 0, ['-', ['get', 'height'], 0.4]],
+              'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1359,8 +1379,8 @@ export const MapViewer: React.FC = () => {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.85,
-          position: [1.3, 120, 35],
+          intensity: 0.9,
+          position: [1.2, 115, 40],
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1571,24 +1591,8 @@ export const MapViewer: React.FC = () => {
               'source-layer': 'building',
               minzoom: 12,
               paint: {
-                'fill-extrusion-color': [
-                  'match',
-                  ['coalesce', ['get', 'type'], ['get', 'class'], 'residential'],
-                  ['commercial', 'office', 'retail', 'hotel', 'bank', 'supermarket', 'mall'],
-                  '#94A3B8',
-                  ['military', 'government', 'public', 'civic', 'police', 'fire_station', 'barracks'],
-                  '#94A3B8',
-                  'residential',
-                  '#F8FAFC',
-                  '#E2E8F0',
-                ],
-                'fill-extrusion-height': [
-                  'coalesce',
-                  ['get', 'render_height'],
-                  ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                  ['get', 'height'],
-                  12,
-                ],
+                'fill-extrusion-color': buildingColorExpr,
+                'fill-extrusion-height': buildingHeightExpr,
                 'fill-extrusion-base': 0,
                 'fill-extrusion-opacity': 1.0,
                 'fill-extrusion-vertical-gradient': true,
@@ -1609,29 +1613,9 @@ export const MapViewer: React.FC = () => {
               'source-layer': 'building',
               minzoom: 12,
               paint: {
-                'fill-extrusion-color': '#334155',
-                'fill-extrusion-height': [
-                  'coalesce',
-                  ['get', 'render_height'],
-                  ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                  ['get', 'height'],
-                  12,
-                ],
-                'fill-extrusion-base': [
-                  'max',
-                  0,
-                  [
-                    '-',
-                    [
-                      'coalesce',
-                      ['get', 'render_height'],
-                      ['*', ['coalesce', ['get', 'building:levels'], ['get', 'levels'], 3], 3.5],
-                      ['get', 'height'],
-                      12,
-                    ],
-                    0.4,
-                  ],
-                ],
+                'fill-extrusion-color': ['coalesce', ['get', 'roofColour'], '#334155'],
+                'fill-extrusion-height': buildingHeightExpr,
+                'fill-extrusion-base': buildingRoofBaseExpr,
                 'fill-extrusion-opacity': 1.0,
                 'fill-extrusion-vertical-gradient': true,
               },
@@ -3183,8 +3167,8 @@ export const MapViewer: React.FC = () => {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.85,
-          position: [1.3, 120, 35],
+          intensity: 0.9,
+          position: [1.2, 115, 40],
         });
       } else {
         map.setLight({

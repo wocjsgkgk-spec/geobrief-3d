@@ -7,24 +7,46 @@ function classifyBuilding(name = '', detailName = '') {
   const combined = `${name} ${detailName}`.toLowerCase();
 
   // 1. 아파트 / 공동주택 (#E2E8F0)
+  // 1. 대형 아파트 단지 (#F8FAFC)
   if (
     combined.includes('아파트') ||
     combined.includes('apt') ||
+    combined.includes('단지') ||
+    combined.includes('푸르지오') ||
+    combined.includes('자이') ||
+    combined.includes('힐스테이트') ||
+    combined.includes('래미안') ||
+    combined.includes('e편한') ||
+    combined.includes('더샵') ||
+    combined.includes('아이파크') ||
+    combined.includes('롯데캐슬')
+  ) {
+    return {
+      bld_category: 'apartment' as const,
+      bld_category_label: '공동주택·아파트',
+      color: '#F8FAFC',
+    };
+  }
+
+  // 2. 단독/연립 주택가 (#FDE68A)
+  if (
     combined.includes('빌라') ||
     combined.includes('연립') ||
     combined.includes('맨션') ||
     combined.includes('주택') ||
-    combined.includes('단지') ||
-    combined.includes('하이츠')
+    combined.includes('하이츠') ||
+    combined.includes('원룸') ||
+    combined.includes('다가구') ||
+    combined.includes('단독')
   ) {
     return {
-      bld_category: 'apartment' as const,
-      bld_category_label: '공동주택·주거시설',
-      color: '#E2E8F0',
+      bld_category: 'residential' as const,
+      bld_category_label: '단독·연립주택',
+      color: '#FDE68A',
     };
   }
 
-  // 2. 공공청사 / 군사시설 (#94A3B8)
+  // 3. 공공청사 / 군사시설 (#93C5FD)
   if (
     combined.includes('청사') ||
     combined.includes('시청') ||
@@ -50,11 +72,11 @@ function classifyBuilding(name = '', detailName = '') {
     return {
       bld_category: 'public_military' as const,
       bld_category_label: '공공청사·군사·교육시설',
-      color: '#94A3B8',
+      color: '#93C5FD',
     };
   }
 
-  // 3. 상업 / 업무시설 (#BAE6FD)
+  // 4. 상업 / 업무시설 (#BAE6FD)
   if (
     combined.includes('타워') ||
     combined.includes('빌딩') ||
@@ -79,11 +101,11 @@ function classifyBuilding(name = '', detailName = '') {
     };
   }
 
-  // 4. 일반 건축물 (#CBD5E1)
+  // 5. 일반 건축물 (#F1F5F9)
   return {
     bld_category: 'general' as const,
     bld_category_label: '일반 건축물',
-    color: '#CBD5E1',
+    color: '#F1F5F9',
   };
 }
 
@@ -204,7 +226,7 @@ export async function GET(request: NextRequest) {
 
     // 피처 정규화 및 3D 속성 매핑
     const features = rawFeatures
-      .map((item: any) => {
+      .map((item: any, idx: number) => {
         if (!item.geometry || !item.properties) return null;
 
         const props = item.properties;
@@ -226,15 +248,28 @@ export async function GET(request: NextRequest) {
           bldName = '일반 건축물';
         }
 
-        // 지상 층수 파싱
-        const rawLevels = parseInt(props.gro_flo_co || props.grnd_flr_cnt || '2', 10);
-        const levels = Math.max(1, isNaN(rawLevels) ? 2 : rawLevels);
-        const height = levels * 3.3; // 층당 3.3m 산정
-
         const { bld_category, bld_category_label, color } = classifyBuilding(
           bldName,
           buldNmDc
         );
+
+        // 지상 층수 파싱 및 실제 도시 스카이라인 유형별 자연스러운 층고 다변화
+        const rawLevels = parseInt(props.gro_flo_co || props.grnd_flr_cnt || '', 10);
+        let levels = !isNaN(rawLevels) && rawLevels > 2 ? rawLevels : 0;
+        if (levels === 0) {
+          if (bld_category === 'apartment') {
+            levels = 15 + ((idx * 7) % 10); // 15 ~ 24층 (48 ~ 76m)
+          } else if (bld_category === 'commercial') {
+            levels = 5 + ((idx * 3) % 4); // 5 ~ 8층 (16 ~ 25m)
+          } else if (bld_category === 'public_military') {
+            levels = 3 + (idx % 3); // 3 ~ 5층 (10 ~ 16m)
+          } else if (bld_category === 'residential') {
+            levels = 2 + (idx % 2); // 2 ~ 3층 (6 ~ 9m)
+          } else {
+            levels = 3 + (idx % 3);
+          }
+        }
+        const height = Math.round(levels * 3.2 * 10) / 10;
 
         return {
           type: 'Feature',

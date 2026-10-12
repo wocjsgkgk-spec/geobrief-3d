@@ -50,16 +50,11 @@ function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
 
   const isMilitaryOrPublic = isMilitary || isPublic;
 
-  // 3. 주거 시설 (아파트, 빌라, 다세대)
-  if (
+  // 3. 주거 시설 (대형 아파트 vs 단독/연립 주택)
+  const isApt =
     combined.includes('아파트') ||
     combined.includes('apt') ||
-    combined.includes('빌라') ||
-    combined.includes('연립') ||
-    combined.includes('맨션') ||
-    combined.includes('주택') ||
     combined.includes('단지') ||
-    combined.includes('하이츠') ||
     combined.includes('푸르지오') ||
     combined.includes('자이') ||
     combined.includes('힐스테이트') ||
@@ -67,13 +62,32 @@ function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
     combined.includes('e편한') ||
     combined.includes('더샵') ||
     combined.includes('아이파크') ||
-    combined.includes('롯데캐슬')
+    combined.includes('롯데캐슬');
+
+  if (isApt) {
+    return {
+      usageType: 'apartment' as const,
+      isMilitaryOrPublic,
+      category: 'apartment' as const,
+      color: '#F8FAFC',
+    };
+  }
+
+  if (
+    combined.includes('빌라') ||
+    combined.includes('연립') ||
+    combined.includes('맨션') ||
+    combined.includes('주택') ||
+    combined.includes('하이츠') ||
+    combined.includes('원룸') ||
+    combined.includes('다가구') ||
+    combined.includes('단독')
   ) {
     return {
       usageType: 'residential' as const,
       isMilitaryOrPublic,
-      category: 'apartment' as const,
-      color: '#F8FAFC',
+      category: 'residential' as const,
+      color: '#FDE68A',
     };
   }
 
@@ -82,7 +96,7 @@ function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
       usageType: 'military' as const,
       isMilitaryOrPublic: true,
       category: 'public_military' as const,
-      color: '#94A3B8',
+      color: '#E2E8F0',
     };
   }
 
@@ -91,7 +105,7 @@ function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
       usageType: 'public' as const,
       isMilitaryOrPublic: true,
       category: 'public_military' as const,
-      color: '#94A3B8',
+      color: '#93C5FD',
     };
   }
 
@@ -116,7 +130,7 @@ function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
       usageType: 'commercial' as const,
       isMilitaryOrPublic: false,
       category: 'commercial' as const,
-      color: '#94A3B8',
+      color: '#BAE6FD',
     };
   }
 
@@ -125,7 +139,7 @@ function classifyBuildingUsage(name = '', detailName = '', bdtypCd = '') {
     usageType: 'general' as const,
     isMilitaryOrPublic: false,
     category: 'general' as const,
-    color: '#E2E8F0',
+    color: '#F1F5F9',
   };
 }
 
@@ -423,23 +437,56 @@ export async function GET(request: NextRequest) {
 
       // [2] 국토교통부 건물통합정보(공공데이터포털) 교차 매핑
       const publicData = publicDataMap.get(lookupKey);
-      const rawLevels = parseInt(
-        String(publicData?.levels || props.gro_flo_co || props.grnd_flr_cnt || '2'),
-        10
-      );
-      const levels = Math.max(1, isNaN(rawLevels) ? 2 : rawLevels);
-
-      // 실측 높이(HEI) 우선 적용 -> 없을 시 층수 * 3.3m
-      const height = publicData?.height
-        ? publicData.height
-        : levels * 3.3;
 
       // [3] 건물 용도 및 국방/공공 플래그 판별
-      const { usageType, isMilitaryOrPublic, category, color } = classifyBuildingUsage(
+      const { usageType, isMilitaryOrPublic, category, color: baseColor } = classifyBuildingUsage(
         bldName,
         buldNmDc,
         publicData?.bdtypCd || bdtypCd
       );
+
+      // [4] 실제 층고 높낮이 다변화
+      const parsedLevels = parseInt(
+        String(publicData?.levels || props.gro_flo_co || props.grnd_flr_cnt || ''),
+        10
+      );
+
+      let levels = !isNaN(parsedLevels) && parsedLevels > 0 ? parsedLevels : 0;
+      if (levels === 0) {
+        // 실제 도시 스카이라인 유형별 자연스러운 층고 다변화:
+        if (category === 'apartment') {
+          // 아파트 단지: 15 ~ 24층 (동별 고유 해시 기반 자연스러운 스카이라인)
+          levels = 15 + ((idx * 7) % 10);
+        } else if (usageType === 'commercial') {
+          // 상가/업무 빌딩: 5 ~ 8층 (16 ~ 25m)
+          levels = 5 + ((idx * 3) % 4);
+        } else if (usageType === 'military' || usageType === 'public') {
+          // 공공/국방 청사: 3 ~ 5층 (10 ~ 16m)
+          levels = 3 + (idx % 3);
+        } else if (usageType === 'residential') {
+          // 단독/연립 주택: 2 ~ 3층 (6 ~ 9m)
+          levels = 2 + (idx % 2);
+        } else {
+          levels = 3 + (idx % 3);
+        }
+      }
+
+      // 실측 높이(HEI) 우선 적용 -> 없을 시 층수 * 3.2m
+      const height = publicData?.height
+        ? publicData.height
+        : Math.round(levels * 3.2 * 10) / 10;
+
+      // 건축 외장재 컬러 팔레트:
+      // 아파트: #F8FAFC, 상업: #BAE6FD, 주택: #FDE68A, 공공/국방: #93C5FD, 일반: #F1F5F9
+      const color = category === 'apartment'
+        ? '#F8FAFC'
+        : usageType === 'commercial'
+        ? '#BAE6FD'
+        : usageType === 'residential'
+        ? '#FDE68A'
+        : isMilitaryOrPublic
+        ? '#93C5FD'
+        : '#F1F5F9';
 
       // [4] OSM 지붕 형태(roof:shape) 및 지붕 색상(roof:colour) 교차 매핑
       const osmData = osmTagsMap.get(lookupKey);

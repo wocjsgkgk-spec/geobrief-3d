@@ -15,7 +15,7 @@ export interface VworldBuildingProperties {
   levels: number;
   height: number;
   min_height: number;
-  bld_category: 'apartment' | 'public_military' | 'commercial' | 'general';
+  bld_category: 'apartment' | 'residential' | 'public_military' | 'commercial' | 'general';
   bld_category_label?: string;
   color: string;
   source: 'vworld';
@@ -121,31 +121,45 @@ export function classifyVworldBuilding(
   name = '',
   categoryCode = ''
 ): {
-  bld_category: 'apartment' | 'public_military' | 'commercial' | 'general';
+  bld_category: 'apartment' | 'residential' | 'public_military' | 'commercial' | 'general';
   bld_category_label: string;
   color: string;
 } {
   const lower = name.toLowerCase();
 
-  // 1. 아파트 / 공동주택 (#E2E8F0)
+  // 1. 대형 아파트 단지 (#F8FAFC)
   if (
     lower.includes('아파트') ||
     lower.includes('apt') ||
-    lower.includes('빌라') ||
-    lower.includes('연립') ||
-    lower.includes('맨션') ||
-    lower.includes('주택') ||
     lower.includes('단지') ||
     categoryCode === '01000'
   ) {
     return {
       bld_category: 'apartment',
       bld_category_label: '공동주택·아파트',
-      color: '#E2E8F0',
+      color: '#F8FAFC',
     };
   }
 
-  // 2. 공공청사 / 군사시설 (#94A3B8)
+  // 2. 단독/연립 주택가 (#FDE68A)
+  if (
+    lower.includes('빌라') ||
+    lower.includes('연립') ||
+    lower.includes('맨션') ||
+    lower.includes('주택') ||
+    lower.includes('하이츠') ||
+    lower.includes('원룸') ||
+    lower.includes('다가구') ||
+    lower.includes('단독')
+  ) {
+    return {
+      bld_category: 'residential',
+      bld_category_label: '단독·연립주택',
+      color: '#FDE68A',
+    };
+  }
+
+  // 3. 공공청사 / 군사시설 (#93C5FD)
   if (
     lower.includes('청사') ||
     lower.includes('시청') ||
@@ -167,11 +181,11 @@ export function classifyVworldBuilding(
     return {
       bld_category: 'public_military',
       bld_category_label: '공공청사·군사시설',
-      color: '#94A3B8',
+      color: '#93C5FD',
     };
   }
 
-  // 3. 상업 / 업무시설 (#BAE6FD)
+  // 4. 상업 / 업무시설 (#BAE6FD)
   if (
     lower.includes('타워') ||
     lower.includes('빌딩') ||
@@ -194,11 +208,11 @@ export function classifyVworldBuilding(
     };
   }
 
-  // 4. 일반 건물 (#CBD5E1)
+  // 5. 일반 건물 (#F1F5F9)
   return {
     bld_category: 'general',
     bld_category_label: '일반 건축물',
-    color: '#CBD5E1',
+    color: '#F1F5F9',
   };
 }
 
