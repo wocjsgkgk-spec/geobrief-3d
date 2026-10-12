@@ -20,6 +20,7 @@ import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
+import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
 import { generateContourLines } from '@/utils/contourGenerator';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
@@ -85,6 +86,7 @@ export const MapViewer: React.FC = () => {
   const orbitAnimRef = useRef<number | null>(null);
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
+  const smartCityComplexLayerRef = useRef<SmartCityComplex3DLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
   const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
@@ -1680,6 +1682,16 @@ export const MapViewer: React.FC = () => {
         );
       }
 
+      // [2단계 신규: 원주 1군지사 스마트 도심 3D 복합단지(LOD2) 자동 안착 레이어]
+      try {
+        const smartCityLayer = new SmartCityComplex3DLayer();
+        smartCityLayer.setVisible(!!layers.firstLogisticsSmartCity);
+        map.addLayer(smartCityLayer);
+        smartCityComplexLayerRef.current = smartCityLayer;
+      } catch (scErr) {
+        console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
+      }
+
       // [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어 등록]
       try {
         const wlLayer = new WaterLevelLayer();
@@ -1841,6 +1853,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         threeDLayerRef.current = null;
+      }
+      if (smartCityComplexLayerRef.current && map.getLayer('smart-city-complex-3d-layer')) {
+        try {
+          map.removeLayer('smart-city-complex-3d-layer');
+        } catch {
+          // ignore
+        }
+        smartCityComplexLayerRef.current = null;
       }
       if (waterLevelLayerRef.current && map.getLayer('custom-water-level-layer')) {
         try {
@@ -2397,6 +2417,13 @@ export const MapViewer: React.FC = () => {
       threeboxLayerRef.current.setGizmoMode(transformGizmoMode);
     }
   }, [transformGizmoMode]);
+
+  // 8-0-3. [2단계 신규: 1군지사 미래 개발 구상안(3D 입체) 가시성 실시간 동기화]
+  useEffect(() => {
+    if (smartCityComplexLayerRef.current) {
+      smartCityComplexLayerRef.current.setVisible(!!layers.firstLogisticsSmartCity);
+    }
+  }, [layers.firstLogisticsSmartCity]);
 
   // 8-0-2-1. [3D 디테일 LOD (LOD1 일반 / LOD2+ 실감) 모드 실시간 동기화]
   useEffect(() => {
@@ -3247,6 +3274,13 @@ export const MapViewer: React.FC = () => {
       }
       if (threeDLayerRef.current) {
         threeDLayerRef.current.updateSunLight(
+          sunConfig.directionalVector,
+          sunConfig.color,
+          sunConfig.intensity
+        );
+      }
+      if (smartCityComplexLayerRef.current) {
+        smartCityComplexLayerRef.current.updateSunLight(
           sunConfig.directionalVector,
           sunConfig.color,
           sunConfig.intensity

@@ -218,6 +218,7 @@ interface MapStoreState {
     demContours: boolean;
     cadastral: boolean; // 브이월드 연속지적도(필지선)
     ssaoPostProcessing: boolean; // 디지털 트윈 SSAO & Bloom 후처리
+    firstLogisticsSmartCity: boolean; // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
   };
   toggleLayer: (key: keyof MapStoreState['layers']) => void;
 
@@ -535,6 +536,7 @@ export const useMapStore = create<MapStoreState>()(
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
         ssaoPostProcessing: true, // 디지털 트윈 SSAO & Bloom 후처리
+        firstLogisticsSmartCity: false, // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
       },
       toggleLayer: (key) =>
         set((state) => ({

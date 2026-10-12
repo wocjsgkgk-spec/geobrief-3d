@@ -214,6 +214,22 @@ export const STRATEGIC_SITES_3D: Record<string, StrategicSite3DConfig> = {
       },
     ],
   },
+
+  // 4. 원주 1군지사 이전부지 (스마트 미래 도심 3D 복합단지 거점)
+  'first-logistics-wonju': {
+    siteId: 'first-logistics-wonju',
+    name: '원주 1군지사 이전부지',
+    region: '원주시',
+    district: '강원특별자치도 원주시 우산동·학성동',
+    center: [127.9358, 37.3592],
+    recommendedCamera: {
+      zoom: 15.5,
+      pitch: 58,
+      bearing: 338,
+    },
+    description: '첨단 국방·모빌리티 R&D 타워, 스마트 지식산업센터, 복합 문화컨벤션이 집약된 스마트 미래 도심 복합단지',
+    facilities: [],
+  },
 };
 
 /**
