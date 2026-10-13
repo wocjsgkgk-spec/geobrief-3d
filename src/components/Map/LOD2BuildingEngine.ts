@@ -378,9 +378,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       const center = map.getCenter();
       this.originLngLat = [center.lng, center.lat];
 
-      // 1. [조명 설정 - 섀도우맵 바이패스로 WebGL FBO 보존]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
-      this.directionalLight.position.set(116, 141, 81).normalize();
+      // 1. [조명 설정 - 비스듬한 태양광 각도 (intensity: 0.9, position: [1.3, 115, 40])]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.8);
+      this.directionalLight.position.set(115, 40, 1.3).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
@@ -591,10 +591,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const nz = -dx / len;
 
             fPositions.push(
-              p0.x, minElev, p0.y,
+              p0.x, minElev - 1.5, p0.y,
               p1.x, e1, p1.y,
-              p1.x, minElev, p1.y,
-              p0.x, minElev, p0.y,
+              p1.x, minElev - 1.5, p1.y,
+              p0.x, minElev - 1.5, p0.y,
               p0.x, e0, p0.y,
               p1.x, e1, p1.y
             );
@@ -636,10 +636,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const nz = -dx / segLen;
 
           wallPositions.push(
-            p0.x, minElev, p0.y,
+            p0.x, minElev - 1.5, p0.y,
             p1.x, wallTop, p1.y,
-            p1.x, minElev, p1.y,
-            p0.x, minElev, p0.y,
+            p1.x, minElev - 1.5, p1.y,
+            p0.x, minElev - 1.5, p0.y,
             p0.x, wallTop, p0.y,
             p1.x, wallTop, p1.y
           );
@@ -1322,18 +1322,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
       if (!rawMatrix) return;
 
-      // 1. [3D DEM 지형 표고 실시간 조회]
-      if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
-        const queried = (this.map as any).queryTerrainElevation(this.originLngLat);
-        if (queried !== null && queried !== undefined) {
-          this.clampedAltitude = Math.max(0, queried);
-        }
-      }
-
-      // 2. Mercator 좌표계 투영
+      // 1. [3D DEM 지형 표고 정합 및 Z축 동기화]
+      // Three.js 좌표계 원점을 해수면(고도 0)으로 기준하여, 건물 메쉬 버텍스의 절대 표고(m)가 지형 DEM 표면에 1:1로 직접 안착되도록 정합
       const mercator = maplibregl.MercatorCoordinate.fromLngLat(
         this.originLngLat,
-        this.clampedAltitude
+        0
       );
 
       // 3. units: 'meters' 스케일 환산

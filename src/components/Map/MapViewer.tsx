@@ -72,6 +72,7 @@ import { CinematicWaypoint } from '@/types/map';
 import { registerBuildingTextures } from '@/utils/buildingTextures';
 import { registerProceduralFacadeTextures } from '@/utils/proceduralFacades';
 import { registerFacadeImagesToMap } from '@/utils/facadeGenerator';
+import { registerFacadeTexturesToMap } from '@/utils/facadeTextures';
 import { generateCrosswalksGeoJSON } from '@/utils/crosswalkGenerator';
 
 export interface SelectedBuildingInfo {
@@ -1847,12 +1848,12 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] map.setFog skipped:', fogErr);
       }
 
-      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (비스듬한 태양광 각도, 강도 0.85)]
+      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (비스듬한 태양광 각도, 강도 0.9, position: [1.3, 115, 40])]
       try {
         safeSetLight(map, {
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.85,
+          intensity: 0.9,
           position: [1.3, 115, 40],
         });
       } catch (lightErr) {
@@ -1861,6 +1862,7 @@ export const MapViewer: React.FC = () => {
 
       // [절차적 외벽 텍스처 (Procedural Facade) 512x512 고해상도 패턴 스프라이트 등록]
       try {
+        registerFacadeTexturesToMap(map, 512);
         registerBuildingTextures(map, 256);
         registerProceduralFacadeTextures(map, 256);
         registerFacadeImagesToMap(map);
@@ -4073,11 +4075,11 @@ export const MapViewer: React.FC = () => {
 
     try {
       if (sunHour === 14) {
-        // [오후 고대비 태양광 조명] 비스듬한 태양광 각도로 벽면의 명암 대비 극대화 (강도 0.85)
+        // [오후 고대비 태양광 조명] 비스듬한 태양광 각도로 벽면의 명암 대비 극대화 (강도 0.9)
         safeSetLight(map, {
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.85,
+          intensity: 0.9,
           position: [1.3, 115, 40],
         });
       } else {

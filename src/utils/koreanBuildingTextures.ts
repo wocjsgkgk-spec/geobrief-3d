@@ -12,6 +12,7 @@
  */
 
 import * as THREE from 'three';
+import { createApartmentFacadeCanvas, createCommercialFacadeCanvas } from './facadeTextures';
 
 export interface KoreanBuildingMaterials {
   apartmentMaterial: THREE.MeshStandardMaterial;
@@ -457,8 +458,8 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
     return materialsCache;
   }
 
-  const aptCanvas = createKoreanApartmentCanvas(512);
-  const comCanvas = createCommercialOfficeCanvas(512);
+  const aptCanvas = createApartmentFacadeCanvas(512);
+  const comCanvas = createCommercialFacadeCanvas(512);
   const neighCanvas = createNeighborhoodCommercialCanvas(512);
   const landmarkCanvas = createLandmarkCurtainWallCanvas(512);
   const solarCanvas = createSolarPanelCanvas(256);
