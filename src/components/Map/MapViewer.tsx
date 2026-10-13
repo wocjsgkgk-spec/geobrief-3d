@@ -180,11 +180,11 @@ function sanitizeCameraOptions<T extends Record<string, any>>(options: T, mapIns
 }
 
 /**
- * [긴급 세이프 모드 (Safe Mode)]
- * true일 때 모든 커스텀 3D/분석 레이어, WMS, Deck.gl, Threebox, 일조 조명 등을 비활성화하고,
- * 오직 MapLibre GL의 기본 위성 래스터 타일 1개만 로드하는 순수 베이스맵 모드로 동작합니다.
+ * [3D 렌더링 세이프 모드 플래그]
+ * false: 풀 3D 건축물, LOD2 절차적 입체 지붕, 스마트 복합단지, DEM 지형 정상 가동
+ * true: 긴급 베이스맵 격리 모드
  */
-const SAFE_MODE = true;
+const SAFE_MODE = false;
 
 /**
  * [순수 위성 래스터 + 3D DEM 표준 베이스 스타일]
@@ -1748,11 +1748,12 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] terrarium-dem addSource notice:', demInitErr);
       }
 
+      // [지형(DEM) 즉각 동기화] terrarium-dem 소스 기반 3D 지형 표고 활성화
+      safeSetTerrain(map, terrainEnabled, terrainExaggeration);
+
       // [SAFE_MODE] 순수 위성 래스터 베이스맵 격리: 무거운 비동기 작업 및 커스텀 3D 레이어 주입 일체 바이패스
       if (SAFE_MODE) {
         console.info('[MapViewer SAFE_MODE] 순수 위성 베이스맵 로드 성공! terrarium-dem 지형 소스 동기화 완료.');
-        // 안전하게 초기 지형 상태 반영
-        safeSetTerrain(map, terrainEnabled, terrainExaggeration);
         setTimeout(() => {
           try {
             map.resize();
@@ -5172,9 +5173,13 @@ export const MapViewer: React.FC = () => {
                 }`}
               />
               [엔진 디버그 모니터]
-              {SAFE_MODE && (
+              {SAFE_MODE ? (
                 <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded text-[10px]">
                   세이프 모드 (순수 위성 베이스맵 격리)
+                </span>
+              ) : (
+                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px]">
+                  3D 풀 렌더링 가동 중 (건물 & 지형)
                 </span>
               )}
               {debugErrors.length > 0 ? (
@@ -5195,7 +5200,7 @@ export const MapViewer: React.FC = () => {
           {debugErrors.length === 0 ? (
             <div className="text-[11px] text-emerald-400/90 leading-relaxed">
               • 현재 브라우저 런타임 WebGL 및 MapLibre 에러가 0건입니다.<br />
-              • Esri World Imagery 위성 래스터 타일이 정상적으로 화면에 렌더링되고 있습니다.
+              • Esri 위성 영상 및 3D 건축물·DEM 입체 지형이 정상 렌더링 중입니다.
             </div>
           ) : (
             <div className="space-y-1.5">
