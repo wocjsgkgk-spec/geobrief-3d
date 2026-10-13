@@ -187,7 +187,7 @@ function sanitizeCameraOptions<T extends Record<string, any>>(options: T, mapIns
 const SAFE_MODE = true;
 
 /**
- * [순수 위성 래스터 10줄 이내 표준 베이스 스타일]
+ * [순수 위성 래스터 + 3D DEM 표준 베이스 스타일]
  */
 const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -201,6 +201,15 @@ const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
       attribution: 'Esri World Imagery',
       maxzoom: 19,
     },
+    'terrarium-dem': {
+      type: 'raster-dem',
+      tiles: [
+        'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+      ],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 15,
+    },
   },
   layers: [
     {
@@ -211,6 +220,65 @@ const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
     },
   ],
 };
+
+/**
+ * [MapLibre GL 지형(Terrain) 안전 적용 헬퍼 함수]
+ * - 스타일 로드 여부 검증 (isStyleLoaded)
+ * - terrarium-dem 소스 부재 시 동적 자동 등록
+ * - style.load 대기 큐 처리
+ * - try-catch 예외 방어
+ */
+export function safeSetTerrain(
+  map: maplibregl.Map | null,
+  enableTerrain: boolean,
+  terrainExaggeration = 1.5
+): void {
+  if (!map) return;
+
+  const executeSetTerrain = () => {
+    try {
+      if (enableTerrain) {
+        // 소스가 없을 경우 먼저 addSource 실행
+        if (!map.getSource('terrarium-dem')) {
+          map.addSource('terrarium-dem', {
+            type: 'raster-dem',
+            encoding: 'terrarium',
+            tiles: [
+              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+            ],
+            tileSize: 256,
+            maxzoom: 15,
+          });
+        }
+        // 소스 존재 재확인 후 안전하게 setTerrain 적용
+        if (map.getSource('terrarium-dem')) {
+          try {
+            map.setTerrain({
+              source: 'terrarium-dem',
+              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.5,
+            });
+          } catch (err) {
+            console.warn('[MapViewer] setTerrain 호출 중 오류 방어:', err);
+          }
+        }
+      } else {
+        try {
+          map.setTerrain(null);
+        } catch (err) {
+          console.warn('[MapViewer] setTerrain 해제 중 오류 방어:', err);
+        }
+      }
+    } catch (outerErr) {
+      console.warn('[MapViewer] safeSetTerrain 외곽 오류 방어:', outerErr);
+    }
+  };
+
+  if (!map.isStyleLoaded()) {
+    map.once('style.load', executeSetTerrain);
+  } else {
+    executeSetTerrain();
+  }
+}
 
 export const MapViewer: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -1574,6 +1642,25 @@ export const MapViewer: React.FC = () => {
       return this;
     };
 
+    // [지형 조작 안전 방어 래퍼] terrarium-dem 소스 부재 시 setTerrain 크래시 원천 차단
+    const origSetTerrain = map.setTerrain.bind(map);
+    map.setTerrain = function (options: any) {
+      try {
+        if (!options) {
+          return origSetTerrain(null);
+        }
+        const srcId = options?.source;
+        if (srcId && !this.getSource(srcId)) {
+          console.warn(`[MapViewer] setTerrain skipped: source '${srcId}' does not exist.`);
+          return this;
+        }
+        return origSetTerrain(options);
+      } catch (err) {
+        console.warn('[MapViewer] map.setTerrain warning suppressed:', err);
+        return this;
+      }
+    };
+
     const handleMove = () => {
       const bearing = map.getBearing();
       const pitch = map.getPitch();
@@ -1644,9 +1731,28 @@ export const MapViewer: React.FC = () => {
     map.on('load', () => {
       setIsMapLoaded(true);
 
+      // [2단계: 지형 소스 초기화 순서 강제화] map.on('load') 최상단에서 terrarium-dem 소스 최우선 등록 보장
+      try {
+        if (!map.getSource('terrarium-dem')) {
+          map.addSource('terrarium-dem', {
+            type: 'raster-dem',
+            encoding: 'terrarium',
+            tiles: [
+              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+            ],
+            tileSize: 256,
+            maxzoom: 15,
+          });
+        }
+      } catch (demInitErr) {
+        console.warn('[MapViewer] terrarium-dem addSource notice:', demInitErr);
+      }
+
       // [SAFE_MODE] 순수 위성 래스터 베이스맵 격리: 무거운 비동기 작업 및 커스텀 3D 레이어 주입 일체 바이패스
       if (SAFE_MODE) {
-        console.info('[MapViewer SAFE_MODE] 순수 위성 베이스맵 로드 성공! 모든 커스텀 3D/분석 레이어 주입을 바이패스합니다.');
+        console.info('[MapViewer SAFE_MODE] 순수 위성 베이스맵 로드 성공! terrarium-dem 지형 소스 동기화 완료.');
+        // 안전하게 초기 지형 상태 반영
+        safeSetTerrain(map, terrainEnabled, terrainExaggeration);
         setTimeout(() => {
           try {
             map.resize();
@@ -3262,19 +3368,12 @@ export const MapViewer: React.FC = () => {
     }
   }, [baseMap, isMapLoaded]);
 
-  // 10. 3D 지형 On/Off 및 고저차 배율 반영
+  // 10. 3D 지형 On/Off 및 고저차 배율 반영 (소스 존재 검증 및 try-catch 방어)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (terrainEnabled) {
-      map.setTerrain({
-        source: 'terrarium-dem',
-        exaggeration: terrainExaggeration,
-      });
-    } else {
-      map.setTerrain(null);
-    }
+    safeSetTerrain(map, terrainEnabled, terrainExaggeration);
   }, [terrainEnabled, terrainExaggeration, isMapLoaded]);
 
   // 11. 동적 주소 검색, 18개 시·군, 북마크 flyTo 카메라 이동
