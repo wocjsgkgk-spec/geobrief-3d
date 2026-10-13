@@ -60,6 +60,17 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
 
   // 텔레메트리 업데이트 콜백
   public onTelemetryUpdate?: (telemetry: UavTelemetry) => void;
+  private isVisible = true;
+
+  public setVisible(visible: boolean): void {
+    this.isVisible = visible;
+    this.sensorsGroup.visible = visible;
+    this.uavGroup.visible = visible && this.uavState.isActive;
+    this.pathLineGroup.visible = visible && this.uavState.isActive;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
 
   constructor() {
     this.scene.add(this.sensorsGroup);
@@ -69,34 +80,38 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
   }
 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-
-    // 조명 파이프라인
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(50, -50, 100).normalize();
-    this.scene.add(dirLight);
-
-    const ambLight = new THREE.AmbientLight(0xffffff, 0.7);
-    this.scene.add(ambLight);
-
     try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-        alpha: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    } catch (err) {
-      console.warn('[UavSensorLayer] WebGLRenderer setup error:', err);
-    }
+      this.map = map;
 
-    this.rebuildFlightPath();
+      // 조명 파이프라인
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(50, -50, 100).normalize();
+      this.scene.add(dirLight);
+
+      const ambLight = new THREE.AmbientLight(0xffffff, 0.7);
+      this.scene.add(ambLight);
+
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+          alpha: true,
+        });
+        this.renderer.autoClear = false;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      } catch (err) {
+        console.warn('[UavSensorLayer] WebGLRenderer setup error:', err);
+      }
+
+      this.rebuildFlightPath();
+    } catch (onAddErr) {
+      console.warn('[UavSensorLayer] onAdd error suppressed:', onAddErr);
+    }
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.map || !this.renderer) return;
+    if (!this.map || !this.renderer || !this.isVisible) return;
 
     try {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
@@ -186,6 +201,11 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
       // 4. WebGL 상태 복원 및 렌더링
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+
+      if (gl && typeof (gl as any).bindFramebuffer === 'function') {
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
       this.map.triggerRepaint();
     } catch (renderErr) {
       console.warn('[UavSensorLayer] render error suppressed:', renderErr);

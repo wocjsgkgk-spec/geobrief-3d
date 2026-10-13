@@ -34,47 +34,40 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
   }
 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-
-    // 1. [입체 조명 명암비 극대화] 태양광 및 앰비언트 조명 구축 (position: [1.4, 125, 45], intensity: 0.95 대응)
-    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
-    this.directionalLight.position.set(116, 141, 81).normalize();
-    this.directionalLight.castShadow = true;
-    this.directionalLight.shadow.mapSize.width = 2048;
-    this.directionalLight.shadow.mapSize.height = 2048;
-    this.directionalLight.shadow.camera.near = 1;
-    this.directionalLight.shadow.camera.far = 800;
-    this.directionalLight.shadow.camera.left = -100;
-    this.directionalLight.shadow.camera.right = 100;
-    this.directionalLight.shadow.camera.top = 100;
-    this.directionalLight.shadow.camera.bottom = -100;
-    this.directionalLight.shadow.bias = -0.0005;
-    this.directionalLight.shadow.normalBias = 0.02;
-    this.scene.add(this.directionalLight);
-
-    // 보조 채움광 (Fill Light - 반대편 대기 산란광)
-    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
-    fillLight.position.set(-80, 100, 80).normalize();
-    this.scene.add(fillLight);
-
-    // 전방향 환경광 (Ambient Light)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
-    this.scene.add(ambientLight);
-
-    // 2. Three.js WebGLRenderer 초기화 (소프트 섀도우 활성화)
     try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-        alpha: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    } catch (err) {
-      console.warn('[ThreeDModelLayer] WebGLRenderer initialization warning:', err);
+      this.map = map;
+
+      // 1. [조명 구축 - 섀도우맵 바이패스로 WebGL FBO 보존]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
+      this.directionalLight.position.set(116, 141, 81).normalize();
+      this.directionalLight.castShadow = false;
+      this.scene.add(this.directionalLight);
+
+      // 보조 채움광 (Fill Light)
+      const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+      fillLight.position.set(-80, 100, 80).normalize();
+      this.scene.add(fillLight);
+
+      // 전방향 환경광 (Ambient Light)
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+      this.scene.add(ambientLight);
+
+      // 2. Three.js WebGLRenderer 초기화 (섀도우맵 비활성화)
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+          alpha: true,
+        });
+        this.renderer.autoClear = false;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.shadowMap.enabled = false;
+      } catch (err) {
+        console.warn('[ThreeDModelLayer] WebGLRenderer initialization warning:', err);
+      }
+    } catch (onAddErr) {
+      console.warn('[ThreeDModelLayer] onAdd exception caught:', onAddErr);
     }
   }
 
@@ -96,7 +89,6 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
       const meterScale = mercator.meterInMercatorCoordinateUnits() * this.scaleRatio;
 
       // 3. Three.js (Y-Up) 좌표계를 MapLibre Mercator (Z-Up, Y-South)로 변환
-      // rotateX(PI/2): Three.js Y축을 하늘(Z) 방향으로 세움
       const rotationX = new THREE.Matrix4().makeRotationAxis(
         new THREE.Vector3(1, 0, 0),
         Math.PI / 2
@@ -121,8 +113,12 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
       // 5. MapLibre의 WebGL 상태를 보존하며 Three.js 씬 렌더링
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+
+      if (gl && typeof (gl as any).bindFramebuffer === 'function') {
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
     } catch (renderErr) {
-      // 렌더 에러 시 지도 전체 중단 방지
       console.warn('[ThreeDModelLayer] render error suppressed:', renderErr);
     }
   }

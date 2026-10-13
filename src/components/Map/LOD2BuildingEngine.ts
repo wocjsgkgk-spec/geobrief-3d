@@ -366,41 +366,41 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    * MapLibre 지도 장착 콜백
    */
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-
-    const center = map.getCenter();
-    this.originLngLat = [center.lng, center.lat];
-
-    // 1. [입체 조명 명암비 극대화] Directional Sun Light
-    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
-    this.directionalLight.position.set(116, 141, 81).normalize();
-    this.directionalLight.castShadow = true;
-    this.directionalLight.shadow.mapSize.width = 2048;
-    this.directionalLight.shadow.mapSize.height = 2048;
-    this.directionalLight.shadow.bias = -0.0001;
-    this.scene.add(this.directionalLight);
-
-    this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
-    this.fillLight.position.set(-80, 100, 80).normalize();
-    this.scene.add(this.fillLight);
-
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.42);
-    this.scene.add(this.ambientLight);
-
-    // 2. WebGLRenderer 연동
     try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-        alpha: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    } catch (err) {
-      console.warn('[LOD2BuildingEngine] WebGLRenderer setup notice:', err);
+      this.map = map;
+
+      const center = map.getCenter();
+      this.originLngLat = [center.lng, center.lat];
+
+      // 1. [조명 설정 - 섀도우맵 바이패스로 WebGL FBO 보존]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
+      this.directionalLight.position.set(116, 141, 81).normalize();
+      this.directionalLight.castShadow = false;
+      this.scene.add(this.directionalLight);
+
+      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+      this.fillLight.position.set(-80, 100, 80).normalize();
+      this.scene.add(this.fillLight);
+
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.42);
+      this.scene.add(this.ambientLight);
+
+      // 2. WebGLRenderer 연동 (섀도우맵 비활성화)
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+          alpha: true,
+        });
+        this.renderer.autoClear = false;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.shadowMap.enabled = false;
+      } catch (err) {
+        console.warn('[LOD2BuildingEngine] WebGLRenderer setup notice:', err);
+      }
+    } catch (onAddErr) {
+      console.warn('[LOD2BuildingEngine] onAdd exception caught:', onAddErr);
     }
   }
 
@@ -1339,9 +1339,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
       this.camera.projectionMatrix = m.multiply(l);
 
-      // 6. WebGL 렌더링
+      // 6. WebGL 렌더링 및 상태 완전 복원
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+
+      if (gl && typeof (gl as any).bindFramebuffer === 'function') {
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
     } catch (renderErr) {
       console.warn('[LOD2BuildingEngine] render warning:', renderErr);
     }

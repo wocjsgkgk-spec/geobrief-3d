@@ -225,88 +225,80 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   }
 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-
-    if (!this.originLngLat && map) {
-      const c = map.getCenter();
-      this.originLngLat = [c.lng, c.lat];
-    }
-
-    // 1. [입체 조명 명암비 극대화] Directional Light 그림자 셰이딩 강화 (position: [1.4, 125, 45], intensity: 0.95 대응)
-    this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
-    this.directionalLight.position.set(116, 141, 81).normalize();
-    this.directionalLight.castShadow = true;
-    this.directionalLight.shadow.mapSize.width = 2048;
-    this.directionalLight.shadow.mapSize.height = 2048;
-    this.directionalLight.shadow.camera.near = 1;
-    this.directionalLight.shadow.camera.far = 1200;
-    this.directionalLight.shadow.camera.left = -120;
-    this.directionalLight.shadow.camera.right = 120;
-    this.directionalLight.shadow.camera.top = 120;
-    this.directionalLight.shadow.camera.bottom = -120;
-    // 지형 표면과 맞닿는 섀도우 아티팩트 방지 편향치 (-0.0001)
-    this.directionalLight.shadow.bias = -0.0001;
-    this.directionalLight.shadow.normalBias = 0.02;
-    this.scene.add(this.directionalLight);
-
-    // 환경광 (Ambient Light - 0.45로 낮추어 그림자 대비 극대화)
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
-    this.scene.add(this.ambientLight);
-
-    // 대기 산란 반사 보조광 (Fill Light)
-    this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
-    this.fillLight.position.set(-100, 120, 80).normalize();
-    this.scene.add(this.fillLight);
-
-    // 산악 능선의 원근감을 강조하는 높이 기반 심도 안개 (Depth Fog)
-    this.scene.fog = new THREE.FogExp2(0x1e293b, 0.0008);
-
-    // 2. WebGLRenderer 초기화 (소프트 섀도우 PCFSoftShadowMap & preserveDrawingBuffer)
     try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-        alpha: true,
-        preserveDrawingBuffer: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.map = map;
 
-      // 3. [2단계 신규] TransformControls 인터랙티브 3D 변환 기즈모 마운트
-      try {
-        this.transformControls = new TransformControls(this.camera, map.getCanvas());
-        this.transformControls.size = 0.85;
-        this.transformHelper = this.transformControls.getHelper();
-        this.scene.add(this.transformHelper);
-
-        // 기즈모 조작 중 지도 이동/회전 방지 (Orbit Lock 충돌 방지)
-        this.transformControls.addEventListener('dragging-changed', (event) => {
-          this.isDraggingGizmo = !!event.value;
-          if (this.isDraggingGizmo) {
-            map.dragPan.disable();
-            map.dragRotate.disable();
-            map.touchZoomRotate.disable();
-            map.scrollZoom.disable();
-          } else {
-            map.dragPan.enable();
-            map.dragRotate.enable();
-            map.touchZoomRotate.enable();
-            map.scrollZoom.enable();
-          }
-        });
-
-        // 오브젝트 변환 시 실시간 지형 고도 샘플링 및 바닥 자동 스냅 (Terrain Clamping)
-        this.transformControls.addEventListener('change', () => {
-          this.handleGizmoChange();
-        });
-      } catch (tcErr) {
-        console.warn('[ThreeboxBuildingLayer] TransformControls setup warning:', tcErr);
+      if (!this.originLngLat && map) {
+        const c = map.getCenter();
+        this.originLngLat = [c.lng, c.lat];
       }
-    } catch (err) {
-      console.warn('[ThreeboxBuildingLayer] WebGLRenderer setup warning:', err);
+
+      // 1. [조명 설정 - 섀도우맵 바이패스로 WebGL FBO 충돌 원천 방지]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
+      this.directionalLight.position.set(116, 141, 81).normalize();
+      this.directionalLight.castShadow = false;
+      this.scene.add(this.directionalLight);
+
+      // 환경광 (Ambient Light)
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+      this.scene.add(this.ambientLight);
+
+      // 대기 산란 반사 보조광 (Fill Light)
+      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
+      this.fillLight.position.set(-100, 120, 80).normalize();
+      this.scene.add(this.fillLight);
+
+      // 높이 기반 심도 안개 (Depth Fog)
+      this.scene.fog = new THREE.FogExp2(0x1e293b, 0.0008);
+
+      // 2. WebGLRenderer 초기화 (섀도우맵 비활성화로 MapLibre 베이스맵 캔버스 보존)
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+          alpha: true,
+          preserveDrawingBuffer: true,
+        });
+        this.renderer.autoClear = false;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.shadowMap.enabled = false;
+
+        // 3. TransformControls 인터랙티브 3D 변환 기즈모 마운트
+        try {
+          this.transformControls = new TransformControls(this.camera, map.getCanvas());
+          this.transformControls.size = 0.85;
+          this.transformHelper = this.transformControls.getHelper();
+          this.scene.add(this.transformHelper);
+
+          // 기즈모 조작 중 지도 이동/회전 방지 (Orbit Lock 충돌 방지)
+          this.transformControls.addEventListener('dragging-changed', (event) => {
+            this.isDraggingGizmo = !!event.value;
+            if (this.isDraggingGizmo) {
+              map.dragPan.disable();
+              map.dragRotate.disable();
+              map.touchZoomRotate.disable();
+              map.scrollZoom.disable();
+            } else {
+              map.dragPan.enable();
+              map.dragRotate.enable();
+              map.touchZoomRotate.enable();
+              map.scrollZoom.enable();
+            }
+          });
+
+          // 오브젝트 변환 시 실시간 지형 고도 샘플링 및 바닥 자동 스냅 (Terrain Clamping)
+          this.transformControls.addEventListener('change', () => {
+            this.handleGizmoChange();
+          });
+        } catch (tcErr) {
+          console.warn('[ThreeboxBuildingLayer] TransformControls setup warning:', tcErr);
+        }
+      } catch (err) {
+        console.warn('[ThreeboxBuildingLayer] WebGLRenderer setup warning:', err);
+      }
+    } catch (onAddErr) {
+      console.warn('[ThreeboxBuildingLayer] onAdd exception caught:', onAddErr);
     }
   }
 
@@ -375,32 +367,18 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         .multiply(rotationX);
 
       this.camera.projectionMatrix = m.multiply(l);
-      // SSAOPass의 깊이 선형화 연산을 위한 역투영 행렬 동기화
-      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
-      // 6. [Directional Shadow Cascades 동적 뷰포트 추적]
-      if (this.directionalLight) {
-        const halfBound = Math.max(250, 80 * this.scaleRatio);
-        const cam = this.directionalLight.shadow.camera;
-        cam.left = -halfBound;
-        cam.right = halfBound;
-        cam.top = halfBound;
-        cam.bottom = -halfBound;
-        cam.updateProjectionMatrix();
-      }
-
-      // 7. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출
+      // 6. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+
+      // WebGL 기본 프레임버퍼 바인딩 안전 복원 (검은 화면 방지)
+      if (gl && typeof (gl as any).bindFramebuffer === 'function') {
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
     } catch (renderErr) {
       console.warn('[ThreeboxBuildingLayer] render error suppressed:', renderErr);
-      // 에러 시 안전하게 기본 렌더러로 폴백
-      try {
-        if (this.renderer) {
-          this.renderer.resetState();
-          this.renderer.render(this.scene, this.camera);
-        }
-      } catch {}
     }
   }
 
@@ -968,15 +946,13 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   /**
    * 디지털 트윈 후처리(SSAO & Bloom) 활성화 여부 제어
    */
-  setPostProcessingEnabled(enabled: boolean): void {
-    this.isPostProcessingEnabled = enabled;
-    if (this.map) {
-      this.map.triggerRepaint();
-    }
+  setPostProcessingEnabled(_enabled: boolean): void {
+    // WebGL 충돌 및 검은 화면 방지를 위해 후처리 파이프라인 상시 바이패스
+    this.isPostProcessingEnabled = false;
   }
 
   isPostProcessing(): boolean {
-    return this.isPostProcessingEnabled;
+    return false;
   }
 
   /**

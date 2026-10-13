@@ -98,33 +98,37 @@ export class Deck3DTilesManager {
    * 3D Tiles 스트리밍 상태에 맞춰 Deck.gl 레이어를 갱신합니다.
    */
   public update(state: Tile3DStreamState): void {
-    if (this.isDestroyed) return;
+    try {
+      if (this.isDestroyed) return;
 
-    const prevUrl = this.currentState?.url;
-    const prevEnabled = this.currentState?.enabled;
-    this.currentState = { ...state };
+      const prevUrl = this.currentState?.url;
+      const prevEnabled = this.currentState?.enabled;
+      this.currentState = { ...state };
 
-    if (!state.enabled || !state.url) {
-      this.cancelPendingRequest();
-      if (this.overlay) {
-        this.overlay.setProps({ layers: [] });
+      if (!state.enabled || !state.url) {
+        this.cancelPendingRequest();
+        if (this.overlay) {
+          this.overlay.setProps({ layers: [] });
+        }
+        this.loadedTilesCounter = 0;
+        this.unloadedTilesCounter = 0;
+        this.isCurrentlyDetailedLOD = false;
+        return;
       }
-      this.loadedTilesCounter = 0;
-      this.unloadedTilesCounter = 0;
-      this.isCurrentlyDetailedLOD = false;
-      return;
+
+      // 소스 변경 시 카운터 초기화
+      if (prevUrl !== state.url || !prevEnabled) {
+        this.loadedTilesCounter = 0;
+        this.unloadedTilesCounter = 0;
+      }
+
+      const currentZoom = this.map ? this.map.getZoom() : MIN_STREAMING_ZOOM;
+      this.isCurrentlyDetailedLOD = currentZoom >= MIN_STREAMING_ZOOM;
+
+      this.renderTilesLayer();
+    } catch (updateErr) {
+      console.warn('[Deck3DTilesManager] update error suppressed:', updateErr);
     }
-
-    // 소스 변경 시 카운터 초기화
-    if (prevUrl !== state.url || !prevEnabled) {
-      this.loadedTilesCounter = 0;
-      this.unloadedTilesCounter = 0;
-    }
-
-    const currentZoom = this.map ? this.map.getZoom() : MIN_STREAMING_ZOOM;
-    this.isCurrentlyDetailedLOD = currentZoom >= MIN_STREAMING_ZOOM;
-
-    this.renderTilesLayer();
   }
 
   /**

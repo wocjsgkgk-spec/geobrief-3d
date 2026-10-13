@@ -64,19 +64,23 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
   }
 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-
     try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-        alpha: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    } catch (err) {
-      console.warn('[WaterLevelLayer] WebGLRenderer initialization warning:', err);
+      this.map = map;
+
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+          alpha: true,
+        });
+        this.renderer.autoClear = false;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      } catch (err) {
+        console.warn('[WaterLevelLayer] WebGLRenderer initialization warning:', err);
+      }
+    } catch (onAddErr) {
+      console.warn('[WaterLevelLayer] onAdd error suppressed:', onAddErr);
     }
   }
 
@@ -130,6 +134,11 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
       // WebGL 상태 복원 및 렌더링
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+
+      if (gl && typeof (gl as any).bindFramebuffer === 'function') {
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
 
       // 지형(DEM)과의 깊이 테스트를 위해 렌더 후 맵 리페인트 요청 (수위 변화 시)
       if (Math.abs(diff) > 0.05) {

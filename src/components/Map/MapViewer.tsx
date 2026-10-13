@@ -110,6 +110,75 @@ function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   }
 }
 
+/**
+ * 카메라 이동(flyTo, easeTo, jumpTo) 시 경위도 좌표 및 고도/각도 무결성 검증 헬퍼
+ * NaN 또는 유효 범위를 벗어난 값이 입력될 경우 기본 좌표로 자동 폴백하여 블랙스크린 붕괴 방지
+ */
+function sanitizeCameraOptions<T extends Record<string, any>>(options: T, mapInstance?: maplibregl.Map): T {
+  if (!options || typeof options !== 'object') return options;
+  const sanitized: any = { ...options };
+
+  // 1. Center 경위도 검증 (NaN 및 유효 범위 -180~180, -85~85 차단)
+  if (sanitized.center !== undefined && sanitized.center !== null) {
+    let lng: number | undefined;
+    let lat: number | undefined;
+    if (Array.isArray(sanitized.center)) {
+      lng = Number(sanitized.center[0]);
+      lat = Number(sanitized.center[1]);
+    } else if (typeof sanitized.center === 'object') {
+      lng = Number((sanitized.center as any).lng ?? (sanitized.center as any).lon);
+      lat = Number((sanitized.center as any).lat);
+    }
+
+    if (lng === undefined || lat === undefined || isNaN(lng) || isNaN(lat) || !isFinite(lng) || !isFinite(lat)) {
+      console.warn('[MapViewer Camera] Invalid center coordinates (NaN/Infinite), falling back:', sanitized.center);
+      if (mapInstance) {
+        const cur = mapInstance.getCenter();
+        sanitized.center = [cur.lng, cur.lat];
+      } else {
+        sanitized.center = [127.9358, 37.3592];
+      }
+    } else {
+      sanitized.center = [
+        Math.max(-180, Math.min(180, lng)),
+        Math.max(-85, Math.min(85, lat)),
+      ];
+    }
+  }
+
+  // 2. Zoom 검증 (0 ~ 24)
+  if (sanitized.zoom !== undefined && sanitized.zoom !== null) {
+    const z = Number(sanitized.zoom);
+    if (isNaN(z) || !isFinite(z)) {
+      sanitized.zoom = mapInstance ? mapInstance.getZoom() : 15;
+    } else {
+      sanitized.zoom = Math.max(0, Math.min(24, z));
+    }
+  }
+
+  // 3. Pitch 검증 (0 ~ 85)
+  if (sanitized.pitch !== undefined && sanitized.pitch !== null) {
+    const p = Number(sanitized.pitch);
+    if (isNaN(p) || !isFinite(p)) {
+      sanitized.pitch = mapInstance ? mapInstance.getPitch() : 0;
+    } else {
+      sanitized.pitch = Math.max(0, Math.min(85, p));
+    }
+  }
+
+  // 4. Bearing 검증 (0 ~ 360 정규화)
+  if (sanitized.bearing !== undefined && sanitized.bearing !== null) {
+    const b = Number(sanitized.bearing);
+    if (isNaN(b) || !isFinite(b)) {
+      sanitized.bearing = mapInstance ? mapInstance.getBearing() : 0;
+    } else {
+      sanitized.bearing = ((b % 360) + 360) % 360;
+    }
+  }
+
+  return sanitized as T;
+}
+
 export const MapViewer: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -1430,6 +1499,37 @@ export const MapViewer: React.FC = () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
     };
 
+    // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
+    const origFlyTo = map.flyTo.bind(map);
+    map.flyTo = function (options: any) {
+      try {
+        return origFlyTo(sanitizeCameraOptions(options, map));
+      } catch (err) {
+        console.warn('[MapViewer] flyTo warning suppressed:', err);
+        return this;
+      }
+    };
+
+    const origEaseTo = map.easeTo.bind(map);
+    map.easeTo = function (options: any) {
+      try {
+        return origEaseTo(sanitizeCameraOptions(options, map));
+      } catch (err) {
+        console.warn('[MapViewer] easeTo warning suppressed:', err);
+        return this;
+      }
+    };
+
+    const origJumpTo = map.jumpTo.bind(map);
+    map.jumpTo = function (options: any) {
+      try {
+        return origJumpTo(sanitizeCameraOptions(options, map));
+      } catch (err) {
+        console.warn('[MapViewer] jumpTo warning suppressed:', err);
+        return this;
+      }
+    };
+
     map.on('move', handleMove);
     map.on('zoom', () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
@@ -1959,7 +2059,7 @@ export const MapViewer: React.FC = () => {
       // [Threebox-MapLibre 연동 정밀 3D 건축물 레이어 등록]
       try {
         const tbLayer = new ThreeboxBuildingLayer();
-        tbLayer.setPostProcessingEnabled(!!layers.ssaoPostProcessing);
+        tbLayer.setPostProcessingEnabled(false); // [긴급 조치: WebGL 검은 화면 방지 후처리 상시 바이패스]
         tbLayer.setFacilityCallbacks(
           (id, updates) => {
             useMapStore.getState().updateFacilityTransform(id, updates);
@@ -2121,7 +2221,7 @@ export const MapViewer: React.FC = () => {
         'color: #F87171; font-weight: bold;'
       );
 
-      // 브라우저 GPU Crash 방지: 2D 수직 뷰로 강제 전환 및 무거운 3D 레이어 안전 차단
+      // 브라우저 GPU Crash 방지: 2D 수직 뷰로 강제 전환 및 무거운 3D 레이어 일체 안전 해제
       setWebglFallbackWarning('⚠️ 그래픽 메모리 보호를 위해 가벼운 2D 모드로 자동 전환되었습니다.');
       setViewMode('2D');
       setRenderMode3D('native');
@@ -2134,7 +2234,23 @@ export const MapViewer: React.FC = () => {
         deck3DTilesManagerRef.current.update({ enabled: false, url: '' } as any);
       }
       if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.setVisible(false);
         threeboxLayerRef.current.setPostProcessingEnabled(false);
+      }
+      if (smartCityComplexLayerRef.current) {
+        smartCityComplexLayerRef.current.setVisible(false);
+      }
+      if (threeDLayerRef.current) {
+        threeDLayerRef.current.setVisible(false);
+      }
+      if (waterLevelLayerRef.current) {
+        waterLevelLayerRef.current.setVisible(false);
+      }
+      if (uavSensorLayerRef.current) {
+        uavSensorLayerRef.current.setVisible(false);
+      }
+      if (tacticalDefenseLayerRef.current) {
+        tacticalDefenseLayerRef.current.setVisible(false);
       }
 
       try {
@@ -2157,29 +2273,18 @@ export const MapViewer: React.FC = () => {
       canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
     }
 
-    // 2. 무거운 후처리(SSAO/Bloom) 프레임 제어: 카메라 이동 중 bypass -> 정지 시 온디맨드 렌더링
-    let moveEndTimer: NodeJS.Timeout | null = null;
+    // 2. 후처리(SSAO/Bloom) 상시 바이패스 제어로 네이티브 렌더 루프 및 베이스맵 보장
     const handleMoveStart = () => {
-      if (moveEndTimer) {
-        clearTimeout(moveEndTimer);
-        moveEndTimer = null;
-      }
-      // 카메라 이동(movestart/move) 중에는 후처리 셰이더를 bypass하여 버벅거림 없이 60fps 보장
-      if (threeboxLayerRef.current && threeboxLayerRef.current.isPostProcessing()) {
+      if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setPostProcessingEnabled(false);
       }
     };
 
     const handleMoveEnd = () => {
-      if (moveEndTimer) clearTimeout(moveEndTimer);
-      moveEndTimer = setTimeout(() => {
-        // 카메라 정지 시 사용자의 SSAO 설정값에 따라 1회 온디맨드 렌더링
-        const currentSsao = useMapStore.getState().layers.ssaoPostProcessing;
-        if (currentSsao && threeboxLayerRef.current) {
-          threeboxLayerRef.current.setPostProcessingEnabled(true);
-          map.triggerRepaint();
-        }
-      }, 120);
+      // 검은 화면 충돌 방지: 후처리는 항상 바이패스 상태로 유지하여 네이티브 렌더링 유지
+      if (threeboxLayerRef.current) {
+        threeboxLayerRef.current.setPostProcessingEnabled(false);
+      }
     };
 
     map.on('movestart', handleMoveStart);
@@ -2834,10 +2939,10 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.demContours, isMapLoaded]);
 
-  // 8-0. [Three.js SSAO & UnrealBloom 디지털 트윈 후처리 동적 On/Off]
+  // 8-0. [Three.js SSAO & UnrealBloom 디지털 트윈 후처리: WebGL 충돌 방지를 위해 상시 바이패스]
   useEffect(() => {
     if (threeboxLayerRef.current) {
-      threeboxLayerRef.current.setPostProcessingEnabled(!!layers.ssaoPostProcessing);
+      threeboxLayerRef.current.setPostProcessingEnabled(false);
     }
   }, [layers.ssaoPostProcessing]);
 

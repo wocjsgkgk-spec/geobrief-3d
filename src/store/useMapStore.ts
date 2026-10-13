@@ -557,7 +557,7 @@ export const useMapStore = create<MapStoreState>()(
         roads: true,
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
-        ssaoPostProcessing: true, // 디지털 트윈 SSAO & Bloom 후처리
+        ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
         firstLogisticsSmartCity: false, // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
       },
       toggleLayer: (key) =>

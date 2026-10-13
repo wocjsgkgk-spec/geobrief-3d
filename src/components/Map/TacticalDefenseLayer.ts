@@ -71,6 +71,17 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
 
   // 콜백
   private onLosCalculated?: (result: LosAnalysisResult) => void;
+  private isVisible = true;
+
+  public setVisible(visible: boolean): void {
+    this.isVisible = visible;
+    this.threatDomeGroup.visible = visible && this.threatDomeState.enabled;
+    this.securityWallGroup.visible = visible && this.securityWallState.enabled;
+    this.losGroup.visible = visible && this.losState.isActive;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
 
   constructor() {
     this.scene.add(this.threatDomeGroup);
@@ -83,32 +94,36 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
   }
 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
-    this.map = map;
-
     try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas: map.getCanvas(),
-        context: gl,
-        antialias: true,
-        alpha: true,
-      });
-      this.renderer.autoClear = false;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    } catch (err) {
-      console.warn('[TacticalDefenseLayer] WebGLRenderer setup error:', err);
+      this.map = map;
+
+      try {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+          alpha: true,
+        });
+        this.renderer.autoClear = false;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      } catch (err) {
+        console.warn('[TacticalDefenseLayer] WebGLRenderer setup error:', err);
+      }
+
+      // 1. 보안벽 전용 동적 네온 사선 스트라이프 텍스처 생성
+      this.initWallTexture();
+
+      // 2. 초기 메쉬 빌드
+      this.rebuildThreatDome();
+      this.rebuildSecurityWall();
+      this.rebuildLosRay();
+    } catch (onAddErr) {
+      console.warn('[TacticalDefenseLayer] onAdd error suppressed:', onAddErr);
     }
-
-    // 1. 보안벽 전용 동적 네온 사선 스트라이프 텍스처 생성
-    this.initWallTexture();
-
-    // 2. 초기 메쉬 빌드
-    this.rebuildThreatDome();
-    this.rebuildSecurityWall();
-    this.rebuildLosRay();
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.map || !this.renderer) return;
+    if (!this.map || !this.renderer || !this.isVisible) return;
 
     try {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
@@ -157,6 +172,11 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
 
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
+      this.renderer.resetState();
+
+      if (gl && typeof (gl as any).bindFramebuffer === 'function') {
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
 
       // 연속 애니메이션이 필요한 경우 지속 리페인트 요청
       if (
