@@ -193,22 +193,28 @@ function determineRoofShape(
 }
 
 /**
- * OpenStreetMap Overpass API를 통해 해당 BBOX 영역 내 지붕 및 건물 태그를 비동기 쿼리합니다.
+ * OpenStreetMap Overpass API를 통해 해당 BBOX 영역 내 지붕 및 건물 폴리곤 지오메트리를 비동기 쿼리합니다.
+ * V-World WFS 응답이 없거나 인증키가 미설정된 환경에서도 강원도 및 전국 3D 건물이 즉각 표출되도록 지원합니다.
  */
-async function fetchOsmBuildingTags(
+interface OsmFetchResult {
+  tagMap: Map<string, { roofShape?: string; roofColour?: string; levels?: number; name?: string }>;
+  osmFeatures: any[];
+}
+
+async function fetchOsmBuildings(
   minLng: number,
   minLat: number,
   maxLng: number,
   maxLat: number
-): Promise<Map<string, { roofShape?: string; roofColour?: string; levels?: number; name?: string }>> {
+): Promise<OsmFetchResult> {
   const tagMap = new Map<string, { roofShape?: string; roofColour?: string; levels?: number; name?: string }>();
+  const osmFeatures: any[] = [];
 
-  // 1초 초과 시 즉시 무중단 폴백하기 위해 타임아웃 3초 설정
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3500);
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
 
   try {
-    const ql = `[out:json][timeout:3];(way["building"](${minLat},${minLng},${maxLat},${maxLng}););out tags center 80;`;
+    const ql = `[out:json][timeout:4];(way["building"](${minLat},${minLng},${maxLat},${maxLng}););out geom 120;`;
     const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`;
 
     const res = await fetch(overpassUrl, {
@@ -219,30 +225,55 @@ async function fetchOsmBuildingTags(
 
     clearTimeout(timeoutId);
 
-    if (!res.ok) return tagMap;
+    if (res.ok) {
+      const data = await res.json();
+      const elements = data.elements || [];
 
-    const data = await res.json();
-    const elements = data.elements || [];
+      for (const el of elements) {
+        if (!el.tags) continue;
+        const t = el.tags;
+        const bldName = t.name || t['name:ko'] || '';
+        const roofShape = t['roof:shape'] || t['building:roof:shape'];
+        const roofColour = t['roof:colour'] || t['roof:color'];
+        const levels = t['building:levels'] ? parseInt(t['building:levels'], 10) : undefined;
+        const height = t.height ? parseFloat(t.height) : undefined;
 
-    for (const el of elements) {
-      if (!el.tags) continue;
-      const t = el.tags;
-      const bldName = t.name || t['name:ko'] || '';
-      const roofShape = t['roof:shape'] || t['building:roof:shape'];
-      const roofColour = t['roof:colour'] || t['roof:color'];
-      const levels = t['building:levels'] ? parseInt(t['building:levels'], 10) : undefined;
+        const info = {
+          roofShape,
+          roofColour,
+          levels: isNaN(levels as number) ? undefined : levels,
+          name: bldName,
+        };
 
-      const info = {
-        roofShape,
-        roofColour,
-        levels: isNaN(levels as number) ? undefined : levels,
-        name: bldName,
-      };
+        if (bldName) tagMap.set(bldName.toLowerCase(), info);
 
-      if (bldName) tagMap.set(bldName.toLowerCase(), info);
-      if (el.center) {
-        const keyCoord = `${el.center.lon.toFixed(4)},${el.center.lat.toFixed(4)}`;
-        tagMap.set(keyCoord, info);
+        // 지오메트리 폴리곤 구성
+        if (Array.isArray(el.geometry) && el.geometry.length >= 3) {
+          const ring: [number, number][] = el.geometry.map((pt: any) => [pt.lon, pt.lat]);
+          // 닫힌 링 보장
+          const first = ring[0];
+          const last = ring[ring.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            ring.push([first[0], first[1]]);
+          }
+
+          osmFeatures.push({
+            type: 'Feature',
+            properties: {
+              buld_nm: bldName,
+              buld_nm_dc: t['building:use'] || t.building || '',
+              bdtyp_cd: t.building || 'general',
+              gro_flo_co: levels,
+              height: height,
+              roofShape,
+              roofColour,
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [ring],
+            },
+          });
+        }
       }
     }
   } catch {
@@ -250,7 +281,7 @@ async function fetchOsmBuildingTags(
     // Overpass 실패 시 무중단 안전 폴백
   }
 
-  return tagMap;
+  return { tagMap, osmFeatures };
 }
 
 /**
@@ -423,20 +454,27 @@ export async function GET(request: NextRequest) {
     hasVworld = false;
   }
 
-  // 병렬 수신: OSM Overpass 지붕 태그 & 국토교통부 공공데이터
-  const [osmTagsMap, publicDataMap] = await Promise.all([
-    fetchOsmBuildingTags(minLng, minLat, maxLng, maxLat),
+  // 병렬 수신: OSM Overpass 건물 폴리곤 및 지붕 태그 & 국토교통부 공공데이터
+  const [{ tagMap: osmTagsMap, osmFeatures }, publicDataMap] = await Promise.all([
+    fetchOsmBuildings(minLng, minLat, maxLng, maxLat),
     fetchPublicDataBuildingRegistry(cleanDataGoKey, minLng, minLat, maxLng, maxLat),
   ]);
 
   const hasDataGoKr = publicDataMap.size > 0;
-  const hasOsm = osmTagsMap.size > 0;
+  let hasOsm = osmTagsMap.size > 0 || osmFeatures.length > 0;
 
-  // 4. V-World 피처 컬렉션 추출
-  const rawFeatures =
+  // 4. 피처 컬렉션 추출: V-World 우선, V-World 부재 또는 인증키 에러 시 OSM Overpass 건물 폴리곤으로 자동 대체
+  let rawFeatures =
     hasVworld && vworldData?.response?.result?.featureCollection?.features
       ? vworldData.response.result.featureCollection.features
       : [];
+
+  let isOsmFallback = false;
+  if (rawFeatures.length === 0 && osmFeatures.length > 0) {
+    rawFeatures = osmFeatures;
+    isOsmFallback = true;
+    hasOsm = true;
+  }
 
   // 5. 3대 소스 교차 매핑 및 단일 GeoJSON 정규화
   const fusedFeatures = rawFeatures
@@ -545,11 +583,11 @@ export async function GET(request: NextRequest) {
           bld_category: category,
           color,
           min_height: 0,
-          source: 'fusion',
+          source: isOsmFallback ? 'osm' : 'fusion',
           fusedSources: {
-            vworld: true,
+            vworld: !isOsmFallback && hasVworld,
             dataGoKr: !!publicData,
-            osm: !!osmData,
+            osm: isOsmFallback || !!osmData,
           },
         },
         geometry: item.geometry,

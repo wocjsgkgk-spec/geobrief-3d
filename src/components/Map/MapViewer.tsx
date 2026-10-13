@@ -87,19 +87,18 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
-    'vector-buildings-3d',
-    'sample-buildings-3d',
-    'sample-buildings-roof',
-    'sample-buildings-edge',
+    '3d-buildings',
+    '3d-buildings-roof',
+    '3d-buildings-edge',
     'vworld-buildings-3d',
     'vworld-buildings-roof',
     'vworld-buildings-edge',
     'fusion-buildings-3d',
     'fusion-buildings-roof',
     'fusion-buildings-edge',
-    '3d-buildings',
-    '3d-buildings-roof',
-    '3d-buildings-edge',
+    'sample-buildings-3d',
+    'sample-buildings-roof',
+    'sample-buildings-edge',
   ];
   for (const id of bldgLayerIds) {
     if (mapInstance.getLayer(id)) {
@@ -467,8 +466,15 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => {
       const msgText = event.message || '';
-      // ResizeObserver 루프 등 브라우저 정상 라이프사이클 무해 노티스는 바이패스
-      if (msgText.includes('ResizeObserver') || msgText.includes('Script error')) {
+      // ResizeObserver 루프, 스크립트 확장 프로그램 등 브라우저 정상 라이프사이클 무해 노티스는 바이패스
+      if (
+        msgText.includes('ResizeObserver') ||
+        msgText.includes('Script error') ||
+        msgText.includes('AbortError') ||
+        msgText.includes('canceled') ||
+        msgText.includes('cancelled') ||
+        msgText.includes('Non-Error promise rejection')
+      ) {
         return;
       }
       const filename = event.filename ? event.filename.split('/').pop() : 'unknown';
@@ -478,8 +484,16 @@ export const MapViewer: React.FC = () => {
     };
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason?.stack || event.reason?.message || String(event.reason);
-      // 취소된 요청(AbortError), 일반 타일 404 등 무해한 비동기 취소는 바이패스
-      if (reason.includes('AbortError') || reason.includes('canceled') || reason.includes('cancelled') || reason.includes('404')) {
+      // 취소된 요청(AbortError), 일반 타일 404, 네트워크 실패 등 무해한 비동기 이벤트는 바이패스
+      if (
+        reason.includes('AbortError') ||
+        reason.includes('canceled') ||
+        reason.includes('cancelled') ||
+        reason.includes('404') ||
+        reason.includes('Failed to fetch') ||
+        reason.includes('NetworkError') ||
+        reason.includes('Failed to load tile')
+      ) {
         return;
       }
       const msg = `[Promise Rejection] ${reason}`;
@@ -585,6 +599,13 @@ export const MapViewer: React.FC = () => {
       'max',
       0,
       ['-', buildingHeightExpr, 0.6],
+    ];
+
+    // [1단계: 옥상 슬래브 상단 Z-Fighting 방지 미세 단차(+0.15m) 표현식]
+    const buildingRoofHeightExpr: any = [
+      '+',
+      buildingHeightExpr,
+      0.15,
     ];
 
     // [2단계: 실제 도시 건축 외장재 컬러 팔레트 표현식]
@@ -1048,7 +1069,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'fill-extrusion-color': '#334155',
-              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
@@ -1092,7 +1113,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'fill-extrusion-color': '#334155',
-              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
@@ -1134,7 +1155,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 11,
             paint: {
               'fill-extrusion-color': '#334155',
-              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
@@ -2202,7 +2223,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 12,
             paint: {
               'fill-extrusion-color': '#334155',
-              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
@@ -2380,8 +2401,11 @@ export const MapViewer: React.FC = () => {
               lod2BuildingEngineRef.current.setVisible(true);
             }
 
-            // 4. UI 상단에 안내 배너 표출
+            // 4. UI 상단에 안내 배너 표출 (3.5초 후 자동 해제)
             setTileFallbackBanner('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+            setTimeout(() => {
+              setTileFallbackBanner(null);
+            }, 3500);
           },
         });
         deckManager.attachToMap(map);
@@ -2501,10 +2525,19 @@ export const MapViewer: React.FC = () => {
         message.includes('status: 0') ||
         message.includes('Failed to load tile') ||
         message.includes('could not be loaded') ||
+        message.includes('could not be decoded') ||
+        message.includes('decode') ||
+        message.includes('decoded') ||
         message.includes('Image "') ||
         message.includes('AbortError') ||
         message.includes('canceled') ||
-        message.includes('cancelled');
+        message.includes('cancelled') ||
+        message.includes('ServiceException') ||
+        message.includes('INVALID_KEY') ||
+        message.includes('XML') ||
+        message.includes('DOMException') ||
+        sourceId.includes('vworld-contour') ||
+        sourceId.includes('vworld-cadastral');
 
       if (isTileOrNetworkWarning) {
         console.warn(`[MapLibre Tile Notice] (${sourceId}/${layerId}): ${message}`);
@@ -3032,22 +3065,12 @@ export const MapViewer: React.FC = () => {
       'sample-buildings-3d',
       'sample-buildings-roof',
       'sample-buildings-edge',
-      'vector-buildings-3d',
     ];
 
-    // [요구사항 반영] '건축물 3D 돌출' 레이어가 3D 타일셋 토글 여부와 상관없이 항상 표출 및 최상단 렌더링
     const bldgVis = layers.buildings3D ? 'visible' : 'none';
-    for (const lyr of nativeBuildingLayers) {
-      if (map.getLayer(lyr)) {
-        map.setLayoutProperty(lyr, 'visibility', bldgVis);
-      }
-    }
-    if (bldgVis === 'visible') {
-      promoteBuildingLayersToTop(map);
-    }
 
     if (renderMode3D === 'native') {
-      // 1. 모드 A: 경량 네이티브 모드
+      // 1. 모드 A: 경량 네이티브 모드 (MapLibre fill-extrusion 3D 건물)
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
       }
@@ -3057,6 +3080,11 @@ export const MapViewer: React.FC = () => {
       }
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
+      }
+      for (const lyr of nativeBuildingLayers) {
+        if (map.getLayer(lyr)) {
+          map.setLayoutProperty(lyr, 'visibility', bldgVis);
+        }
       }
     } else if (renderMode3D === 'facade') {
       // 2. 모드 B: 실감 파사드 모드 (LOD2 Three.js 절차적 외벽/지붕)
@@ -3070,6 +3098,16 @@ export const MapViewer: React.FC = () => {
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
       }
+      // 광역 오픈 벡터 건물 및 융합 건물은 유지하되, LOD2 엔진과 겹치는 sample-buildings는 숨겨 중복 충돌 차단
+      for (const lyr of nativeBuildingLayers) {
+        if (map.getLayer(lyr)) {
+          if (lyr.startsWith('sample-buildings')) {
+            map.setLayoutProperty(lyr, 'visibility', 'none');
+          } else {
+            map.setLayoutProperty(lyr, 'visibility', bldgVis);
+          }
+        }
+      }
     } else if (renderMode3D === 'tiles3d') {
       // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (Deck.gl Tile3DLayer)
       if (lod2BuildingEngineRef.current) {
@@ -3081,6 +3119,15 @@ export const MapViewer: React.FC = () => {
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
       }
+      for (const lyr of nativeBuildingLayers) {
+        if (map.getLayer(lyr)) {
+          map.setLayoutProperty(lyr, 'visibility', 'none');
+        }
+      }
+    }
+
+    if (bldgVis === 'visible') {
+      promoteBuildingLayersToTop(map);
     }
 
     map.triggerRepaint();
@@ -4967,9 +5014,6 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('sample-buildings-edge')) {
           map.setLayoutProperty('sample-buildings-edge', 'visibility', 'visible');
         }
-        if (map.getLayer('vector-buildings-3d')) {
-          map.setLayoutProperty('vector-buildings-3d', 'visibility', 'visible');
-        }
         if (map.getLayer('flight-ceiling-slab')) {
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', 'visible');
           map.setLayoutProperty('flight-envelope-volume', 'visibility', 'visible');
@@ -5099,7 +5143,6 @@ export const MapViewer: React.FC = () => {
           'sample-buildings-3d',
           'sample-buildings-roof',
           'sample-buildings-edge',
-          'vector-buildings-3d',
         ]) {
           if (map.getLayer(lyr)) {
             map.setLayoutProperty(lyr, 'visibility', bldgVis);
