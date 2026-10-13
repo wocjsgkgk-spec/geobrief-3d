@@ -188,52 +188,40 @@ const SAFE_MODE = false;
 /**
  * [순수 위성 래스터 + 3D DEM 표준 베이스 스타일]
  */
-const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
+const baseStyle: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
-    'satellite-source': {
-      type: 'raster',
-      tiles: [
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      ],
-      tileSize: 256,
-      attribution: 'Esri World Imagery',
-      maxzoom: 19,
-    },
     'satellite-tiles': {
       type: 'raster',
       tiles: [
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
       ],
       tileSize: 256,
-      attribution: 'Esri World Imagery',
       maxzoom: 19,
     },
     'terrarium-dem': {
       type: 'raster-dem',
+      encoding: 'terrarium',
       tiles: [
         'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
       ],
-      encoding: 'terrarium',
       tileSize: 256,
       maxzoom: 15,
     },
   },
   layers: [
     {
-      id: 'satellite-layer',
+      id: 'satellite-base-layer',
       type: 'raster',
-      source: 'satellite-source',
+      source: 'satellite-tiles',
       paint: {
         'raster-opacity': 1.0,
-        'raster-fade-duration': 100,
       },
-      layout: { visibility: 'visible' },
     },
   ],
 };
+const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = baseStyle;
 
 /**
  * [MapLibre GL 지형(Terrain) 안전 적용 헬퍼 함수]
@@ -253,28 +241,26 @@ export function safeSetTerrain(
     try {
       if (enableTerrain) {
         // [지형 표면과 위성 텍스처 결합 보장] 위성 소스 부재 시 동적 자동 등록
-        if (!map.getSource('satellite-source') && !map.getSource('satellite-tiles')) {
-          map.addSource('satellite-source', {
+        if (!map.getSource('satellite-tiles') && !map.getSource('satellite-source')) {
+          map.addSource('satellite-tiles', {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
             maxzoom: 19,
           });
         }
-        if (!map.getLayer('satellite-layer')) {
+        if (!map.getLayer('satellite-base-layer') && !map.getLayer('satellite-layer')) {
           const firstLayer = map.getLayer('3d-buildings') ? '3d-buildings' : undefined;
           map.addLayer(
             {
-              id: 'satellite-layer',
+              id: 'satellite-base-layer',
               type: 'raster',
-              source: map.getSource('satellite-source') ? 'satellite-source' : 'satellite-tiles',
+              source: map.getSource('satellite-tiles') ? 'satellite-tiles' : 'satellite-source',
               paint: {
                 'raster-opacity': 1.0,
-                'raster-fade-duration': 100,
               },
               layout: { visibility: 'visible' },
             },
@@ -690,24 +676,24 @@ export const MapViewer: React.FC = () => {
           position: [1.3, 115, 40],
         },
         sources: {
-          'satellite-source': {
-            type: 'raster',
-            tiles: [
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            ],
-            tileSize: 256,
-            attribution: 'Esri World Imagery',
-            maxzoom: 19,
-          },
           'satellite-tiles': {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery',
+            attribution: 'Esri World Imagery, Google',
+            maxzoom: 19,
+          },
+          'satellite-source': {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            ],
+            tileSize: 256,
+            attribution: 'Esri World Imagery, Google',
             maxzoom: 19,
           },
           'clean-tiles': {
@@ -851,37 +837,47 @@ export const MapViewer: React.FC = () => {
           },
         },
         layers: [
+          // [기본 정적 위성 베이스 레이어 - MapLibre 초기 스타일 정적 고정]
+          {
+            id: 'satellite-base-layer',
+            type: 'raster',
+            source: 'satellite-tiles',
+            paint: {
+              'raster-opacity': 1.0,
+            },
+            layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
+          },
           // 베이스맵 레이어
           {
             id: 'clean-layer',
             type: 'raster',
             source: 'clean-tiles',
-            layout: { visibility: 'none' },
+            layout: { visibility: baseMap === 'clean' ? 'visible' : 'none' },
           },
           {
             id: 'satellite-layer',
             type: 'raster',
-            source: 'satellite-source',
+            source: 'satellite-tiles',
             paint: {
               'raster-opacity': 1.0,
               'raster-fade-duration': 100,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
-          // [지형 힐셰이드(Hillshade) 입체 음영 합성 레이어 - 산맥 능선과 계곡의 그림자 굴곡을 입체적으로 블렌딩]
+          // [지형 힐셰이드(Hillshade) 입체 음영 레이어 - 위성 타일 가림 방지를 위해 기본 비활성화]
           {
             id: 'terrain-hillshade',
             type: 'hillshade',
             source: 'terrarium-dem',
             paint: {
-              'hillshade-exaggeration': 0.5,
-              'hillshade-shadow-color': 'rgba(15, 23, 42, 0.45)',
-              'hillshade-highlight-color': 'rgba(255, 255, 255, 0.35)',
+              'hillshade-exaggeration': 0.3,
+              'hillshade-shadow-color': 'rgba(15, 23, 42, 0.35)',
+              'hillshade-highlight-color': 'rgba(255, 255, 255, 0.25)',
               'hillshade-accent-color': 'rgba(0, 0, 0, 0)',
               'hillshade-illumination-direction': 315,
               'hillshade-illumination-anchor': 'viewport',
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [Phase 3] 반경 분석 버퍼 링 레이어 (지형에 밀착된 채우기 & 테두리)
@@ -1652,9 +1648,15 @@ export const MapViewer: React.FC = () => {
         ],
       };
 
+    // [1단계: 검은색 background 레이어 및 초기 스타일 정적 구성 보장]
+    const initialMapStyle = SAFE_MODE ? baseStyle : fullMapStyle;
+    if (initialMapStyle && initialMapStyle.layers) {
+      initialMapStyle.layers = initialMapStyle.layers.filter((l: any) => l.type !== 'background');
+    }
+
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: SAFE_MODE ? PURE_SATELLITE_STYLE : fullMapStyle,
+      style: initialMapStyle,
       center: [viewport.longitude, viewport.latitude],
       zoom: viewport.zoom,
       pitch: SAFE_MODE ? 0 : viewport.pitch,
@@ -1800,60 +1802,26 @@ export const MapViewer: React.FC = () => {
     map.on('load', () => {
       setIsMapLoaded(true);
 
-      // [1단계: 위성 래스터 소스 및 레이어 등록 보장 (Esri 고해상도 위성영상)]
+      // [1. 검은색 background 레이어 존재 시 제거하여 위성 타일 가림 방지]
       try {
-        if (!map.getSource('satellite-source')) {
-          map.addSource('satellite-source', {
-            type: 'raster',
-            tiles: [
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-            ],
-            tileSize: 256,
-            attribution: 'Esri World Imagery',
-            maxzoom: 19,
-          });
-        }
-        if (!map.getLayer('satellite-layer')) {
-          const firstBuilding = map.getLayer('3d-buildings') ? '3d-buildings' : undefined;
-          map.addLayer(
-            {
-              id: 'satellite-layer',
-              type: 'raster',
-              source: 'satellite-source',
-              paint: {
-                'raster-opacity': 1.0,
-                'raster-fade-duration': 100,
-              },
-              layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
-            },
-            firstBuilding
-          );
-        }
-      } catch (satErr) {
-        console.warn('[MapViewer] satellite-source addSource notice:', satErr);
+        const bgLayers = map.getStyle().layers?.filter((l: any) => l.type === 'background') || [];
+        bgLayers.forEach((l: any) => {
+          if (map.getLayer(l.id)) {
+            map.removeLayer(l.id);
+          }
+        });
+      } catch (bgErr) {
+        console.warn('[MapViewer] background layer cleanup notice:', bgErr);
       }
 
-      // [2단계: 지형 소스 초기화 순서 강제화] map.on('load') 최상단에서 terrarium-dem 소스 최우선 등록 보장
-      try {
-        if (!map.getSource('terrarium-dem')) {
-          map.addSource('terrarium-dem', {
-            type: 'raster-dem',
-            encoding: 'terrarium',
-            tiles: [
-              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-            ],
-            tileSize: 256,
-            maxzoom: 15,
-          });
+      // [2. 지형(Terrarium DEM)과 위성 레이어 드레이핑(Draping) 결합]
+      if (map.getSource('terrarium-dem')) {
+        try {
+          map.setTerrain({ source: 'terrarium-dem', exaggeration: 1.2 });
+        } catch (err) {
+          console.warn('setTerrain 안전 처리:', err);
         }
-      } catch (demInitErr) {
-        console.warn('[MapViewer] terrarium-dem addSource notice:', demInitErr);
       }
-
-      // [지형(DEM) 즉각 동기화] terrarium-dem 소스 기반 3D 지형 표고 활성화
-      safeSetTerrain(map, terrainEnabled, terrainExaggeration);
 
       // [SAFE_MODE] 순수 위성 래스터 베이스맵 격리: 무거운 비동기 작업 및 커스텀 3D 레이어 주입 일체 바이패스
       if (SAFE_MODE) {
@@ -3504,6 +3472,13 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
+    if (map.getLayer('satellite-base-layer')) {
+      map.setLayoutProperty(
+        'satellite-base-layer',
+        'visibility',
+        baseMap === 'satellite' ? 'visible' : 'none'
+      );
+    }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(
         'satellite-layer',
