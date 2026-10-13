@@ -17,10 +17,12 @@ export interface Deck3DTilesOverlayCallbacks {
 const MIN_STREAMING_ZOOM = 14; // 줌 14 이상에서만 고해상도 실사 3D 타일 활성화 (줌 13 이하는 MapLibre 경량 베이스)
 const MAX_CONCURRENT_REQUESTS = 6; // 브라우저 네트워크 블로킹 방지 및 60fps 유지를 위한 최대 동시 요청 수
 const MAX_MEMORY_USAGE_MB = 128; // 화면 밖 타일 메모리 즉시 Unload 및 LRU 캐시 한도 최적화 (128MB)
+const CONNECTION_TIMEOUT_MS = 5000; // 5초 연결 타임아웃 (무한 로딩 방지 및 안전 폴백)
 
 /**
  * MapLibre GL JS 위에서 Deck.gl MapboxOverlay를 통해
  * 브이월드 실사 3D Tiles(b3dm, pnts 포인트 클라우드)를 LOD 프러스텀 컬링 방식으로 스트리밍 렌더링하는 매니저 클래스입니다.
+ * 5초 연결 타임아웃(AbortController) 및 지능형 실감 파사드 자동 폴백(Auto-Fallback)을 지원합니다.
  */
 export class Deck3DTilesManager {
   private map: MapLibreMap | null = null;
@@ -31,6 +33,10 @@ export class Deck3DTilesManager {
   private unloadedTilesCounter: number = 0;
   private isDestroyed: boolean = false;
   private isCurrentlyDetailedLOD: boolean = false;
+
+  // 5초 연결 타임아웃 및 네트워크 취소 제어
+  private connectionTimeoutTimer: NodeJS.Timeout | null = null;
+  private abortController: AbortController | null = null;
 
   constructor(callbacks?: Deck3DTilesOverlayCallbacks) {
     if (callbacks) {
@@ -48,7 +54,6 @@ export class Deck3DTilesManager {
     this.isDestroyed = false;
 
     try {
-      // MapboxOverlay는 MapLibre IControl 규격을 준수하여 카메라와 100% 동기화됩니다.
       this.overlay = new MapboxOverlay({
         interleaved: true, // MapLibre 3D 공간과 깊이 버퍼 인터리빙
         layers: [],
@@ -100,6 +105,7 @@ export class Deck3DTilesManager {
     this.currentState = { ...state };
 
     if (!state.enabled || !state.url) {
+      this.cancelPendingRequest();
       if (this.overlay) {
         this.overlay.setProps({ layers: [] });
       }
@@ -122,17 +128,43 @@ export class Deck3DTilesManager {
   }
 
   /**
-   * Deck.gl Tile3DLayer 인스턴스를 빌드하고 MapboxOverlay에 전달합니다.
-   * 화면 밖 타일 메모리 자동 Unload 및 최대 6개 동시 요청 제어(60fps 유지)가 적용됩니다.
+   * 실행 중인 5초 타임아웃 타이머를 안전하게 제거합니다.
    */
-  private renderTilesLayer(): void {
+  private clearTimeoutTimer(): void {
+    if (this.connectionTimeoutTimer) {
+      clearTimeout(this.connectionTimeoutTimer);
+      this.connectionTimeoutTimer = null;
+    }
+  }
+
+  /**
+   * 대기 중인 네트워크 요청 및 타임아웃 타이머를 즉시 취소합니다.
+   */
+  private cancelPendingRequest(): void {
+    this.clearTimeoutTimer();
+    if (this.abortController) {
+      try {
+        this.abortController.abort();
+      } catch {
+        // ignore
+      }
+      this.abortController = null;
+    }
+  }
+
+  /**
+   * Deck.gl Tile3DLayer 인스턴스를 빌드하고 MapboxOverlay에 전달합니다.
+   * - 5초 타임아웃(AbortController) 사전 연결 진단
+   * - 404, CORS, 네트워크 무응답 감지 시 즉각 LOD2 실감 파사드로 자동 폴백
+   */
+  private async renderTilesLayer(): Promise<void> {
     if (!this.overlay || this.isDestroyed || !this.currentState || !this.currentState.enabled) return;
 
     const currentZoom = this.map ? this.map.getZoom() : MIN_STREAMING_ZOOM;
     const isDetailed = currentZoom >= MIN_STREAMING_ZOOM;
 
     if (!isDetailed) {
-      // [광역 뷰 (줌 13 이하)]: 가벼운 MapLibre 기본 레이어 사용을 위해 Tile3DLayer 숨김
+      this.cancelPendingRequest();
       this.overlay.setProps({ layers: [] });
       this.callbacks.onStatusChange?.(
         `LOD 광역 뷰 (줌 14 이상 확대 시 브이월드 실사 3D 타일 자동 표출 | 현재 줌: ${currentZoom.toFixed(1)})`,
@@ -142,12 +174,76 @@ export class Deck3DTilesManager {
       return;
     }
 
-    try {
-      this.callbacks.onStatusChange?.('브이월드 실사 3D 스트리밍 연결 중...', true, this.loadedTilesCounter);
+    const targetUrl = this.currentState.url;
+    if (!targetUrl) return;
 
+    // 1. 기존 진행 중인 타이머 및 요청 정리
+    this.cancelPendingRequest();
+
+    const controller = new AbortController();
+    this.abortController = controller;
+
+    // 로딩 시작 상태 알림
+    this.callbacks.onStatusChange?.('브이월드 실사 3D 스트리밍 연결 중...', true, this.loadedTilesCounter);
+
+    // 2. 5초 연결 안전 타임아웃 타이머 가동
+    this.connectionTimeoutTimer = setTimeout(() => {
+      if (this.isDestroyed || !this.currentState?.enabled) return;
+      console.warn(
+        `%c[Deck3DTilesManager TIMEOUT]%c ⚠️ 3D 타일셋 연결 5초 초과: '${targetUrl}'. 무한 로딩을 차단하고 실감 파사드로 자동 폴백합니다.`,
+        'background: #78350F; color: #FDE68A; font-weight: bold; padding: 2px 6px; border-radius: 4px;',
+        'color: #F59E0B; font-weight: bold;'
+      );
+
+      this.cancelPendingRequest();
+      if (this.overlay) {
+        this.overlay.setProps({ layers: [] });
+      }
+      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨', false, 0);
+      this.callbacks.onFallback?.('5초 타일셋 응답 타임아웃');
+    }, CONNECTION_TIMEOUT_MS);
+
+    // 3. 사전 연결 진단 (Pre-flight fetch): 404, 500, CORS, 네트워크 단절 즉시 검출
+    try {
+      const response = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json, text/plain, */*' },
+        cache: 'no-cache',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} (${response.statusText || 'Not Found'})`);
+      }
+    } catch (fetchErr: any) {
+      if (this.isDestroyed || !this.currentState?.enabled) return;
+
+      // 이미 abort된 경우(타임아웃 또는 사용자 모드 변경)
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      this.clearTimeoutTimer();
+      console.error(
+        `%c[Deck3DTilesManager ERROR]%c 🚨 3D 타일셋 연결 실패: '${targetUrl}'\n • 상세 에러: ${fetchErr?.message || fetchErr}\n • 조치: LOD2 실감 파사드로 자동 폴백`,
+        'background: #7F1D1D; color: #FCA5A5; font-weight: bold; padding: 2px 6px; border-radius: 4px;',
+        'color: #EF4444; font-weight: bold;'
+      );
+
+      if (this.overlay) {
+        this.overlay.setProps({ layers: [] });
+      }
+      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨', false, 0);
+      this.callbacks.onFallback?.(`3D 타일셋 연결 실패 (${fetchErr?.message || '네트워크 오류'})`);
+      return;
+    }
+
+    if (this.isDestroyed || !this.currentState?.enabled || controller.signal.aborted) return;
+
+    // 4. Deck.gl Tile3DLayer 인스턴스 생성 및 마운트
+    try {
       const tile3DLayer = new Tile3DLayer({
-        id: 'streaming-tile-3d-layer',
-        data: this.currentState.url,
+        id: `streaming-tile-3d-layer-${Date.now()}`,
+        data: targetUrl,
         loader: Tiles3DLoader,
         visible: true,
         // LOD 프러스텀 컬링 파라미터 (화면 공간 오차 한계: 24로 튜닝하여 시야 밖 타일 즉시 GC 및 GPU 렉 차단)
@@ -157,6 +253,9 @@ export class Deck3DTilesManager {
         pickable: true,
         // 렌더링 성능 최적화: 화면 밖 타일 메모리 해제(128MB) 및 동시 요청 수 제어(60fps)
         loadOptions: {
+          fetch: {
+            signal: controller.signal,
+          },
           tiles3d: {
             loadGLTF: true,
             // 1. 화면 밖 타일 메모리 해제 (최대 128MB 초과 시 LRU Unload)
@@ -169,6 +268,8 @@ export class Deck3DTilesManager {
           },
         },
         onTilesetLoad: (tileset: any) => {
+          // 타일셋 메타데이터 수신 완료 -> 5초 안전 타임아웃 해제
+          this.clearTimeoutTimer();
           this.loadedTilesCounter = 1;
           this.callbacks.onStatusChange?.(
             `브이월드 실사 3D 타일셋 연결 완료 (OGC 3D Tiles 1.0)`,
@@ -177,6 +278,7 @@ export class Deck3DTilesManager {
           );
         },
         onTileLoad: () => {
+          this.clearTimeoutTimer();
           this.loadedTilesCounter += 1;
           this.callbacks.onStatusChange?.(
             `실사 3D 스트리밍 중 (${this.loadedTilesCounter}개 노드 로드 | 메모리 한도 128MB | 60fps 유지)`,
@@ -194,13 +296,14 @@ export class Deck3DTilesManager {
           );
         },
         onTileError: (tileHeader: any, message: string) => {
-          console.warn('[Deck3DTilesManager] Tile load error:', message);
+          console.warn('[Deck3DTilesManager] Tile node error:', message, tileHeader?.url);
+          this.clearTimeoutTimer();
           this.callbacks.onStatusChange?.(
-            `3D 타일 수신 실패 (${message}) - Three.js 파사드 렌더러로 자동 폴백 유지`,
+            `⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨`,
             false,
             this.loadedTilesCounter
           );
-          // 오프라인 / 개발 환경에서 타일 로드 실패 시 Three.js 파사드 렌더러로 자동 폴백
+          // 오프라인 / 미지원 지역에서 타일 로드 실패 시 Three.js 파사드 렌더러로 자동 폴백
           this.callbacks.onFallback?.(message);
         },
       });
@@ -209,8 +312,9 @@ export class Deck3DTilesManager {
         layers: [tile3DLayer],
       });
     } catch (err: any) {
+      this.clearTimeoutTimer();
       console.error('[Deck3DTilesManager] Failed to render Tile3DLayer:', err);
-      this.callbacks.onStatusChange?.(`레이어 생성 오류: ${err.message || '알 수 없음'} - Three.js 파사드 렌더러 자동 폴백`, false, 0);
+      this.callbacks.onStatusChange?.(`⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨`, false, 0);
       this.callbacks.onFallback?.(err.message || '렌더링 실패');
     }
   }
@@ -220,6 +324,8 @@ export class Deck3DTilesManager {
    */
   public destroy(): void {
     this.isDestroyed = true;
+    this.cancelPendingRequest();
+
     if (this.map) {
       try {
         this.map.off('zoom', this.handleMapZoom);

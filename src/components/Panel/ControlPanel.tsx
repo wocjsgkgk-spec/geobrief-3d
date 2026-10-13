@@ -67,6 +67,7 @@ import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleS
 import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { AddressSearch } from '@/components/Search/AddressSearch';
 import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
+import { Custom3DTilesModal } from '@/components/Modal/Custom3DTilesModal';
 import { useMapStore } from '@/store/useMapStore';
 import {
   Bookmark as BookmarkItem,
@@ -86,6 +87,8 @@ export const ControlPanel: React.FC = () => {
     setRenderMode3D,
     activeSidebarTab,
     setActiveSidebarTab,
+    isCustom3DTilesModalOpen,
+    setCustom3DTilesModalOpen,
     terrainEnabled,
     setTerrainEnabled,
     terrainExaggeration,
@@ -1409,6 +1412,24 @@ export const ControlPanel: React.FC = () => {
                   <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
                     국토부 브이월드 OGC 3D Tiles(b3dm 항공 실사 메쉬). 128MB 메모리 제한 및 LOD 프러스텀 컬링.
                   </p>
+
+                  <div className="mt-2.5 pt-2 border-t border-cyan-900/40 flex items-center justify-between">
+                    <span className="text-[10px] text-cyan-300/80 font-mono truncate max-w-[160px]">
+                      {tile3DStream.statusText || '5초 타임아웃 보호 활성'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setCustom3DTilesModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-900/50 hover:bg-cyan-800/80 text-cyan-200 border border-cyan-600/60 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap"
+                    >
+                      <Sliders className="w-3 h-3 text-cyan-400" />
+                      <span>URL & 프리셋 설정</span>
+                    </button>
+                  </div>
                 </div>
               </label>
             </div>
@@ -3429,6 +3450,12 @@ export const ControlPanel: React.FC = () => {
       <CoordinateInputModal
         isOpen={isCoordModalOpen}
         onClose={() => setIsCoordModalOpen(false)}
+      />
+
+      {/* 3D Tiles 커스텀 URL 및 샘플 테스트 슬롯 모달 */}
+      <Custom3DTilesModal
+        isOpen={isCustom3DTilesModalOpen}
+        onClose={() => setCustom3DTilesModalOpen(false)}
       />
     </aside>
   );

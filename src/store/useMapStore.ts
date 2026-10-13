@@ -463,6 +463,10 @@ interface MapStoreState {
   activeSidebarTab: SidebarTab;
   setActiveSidebarTab: (tab: SidebarTab) => void;
 
+  // [신규] 3D 타일셋 커스텀 URL 직접 입력 및 테스트 모달 상태
+  isCustom3DTilesModalOpen: boolean;
+  setCustom3DTilesModalOpen: (open: boolean) => void;
+
   // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
   threatDome: ThreatDomeState;
   securityWall: SecurityWallState;
@@ -1447,6 +1451,10 @@ export const useMapStore = create<MapStoreState>()(
       // [신규] 좌측 분석 패널 3단 탭
       activeSidebarTab: 'terrain_infra',
       setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
+
+      // [신규] 3D 타일셋 커스텀 URL 직접 입력 및 테스트 모달 상태
+      isCustom3DTilesModalOpen: false,
+      setCustom3DTilesModalOpen: (open) => set({ isCustom3DTilesModalOpen: open }),
 
       addPlacedFacility: (presetId, customCoords, customElevation) => {
         const state = get();

@@ -50,6 +50,7 @@ import {
   Layers,
   Radio,
   Target,
+  Sparkles,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { calculateViewshed } from '@/utils/viewshedAnalysis';
@@ -256,6 +257,18 @@ export const MapViewer: React.FC = () => {
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
+
+  // [신규] 3D 타일셋 미지원/타임아웃 감지 시 실감 파사드 자동 폴백 배너 상태
+  const [tileFallbackBanner, setTileFallbackBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tileFallbackBanner) {
+      const timer = setTimeout(() => {
+        setTileFallbackBanner(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [tileFallbackBanner]);
 
   // 토공량 격자 셀 호버 툴팁 상태
   const [hoveredCutFillCell, setHoveredCutFillCell] = useState<{
@@ -2016,11 +2029,30 @@ export const MapViewer: React.FC = () => {
           onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
             useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
           },
-          onFallback: () => {
-            // 오프라인 또는 개발 환경에서 3D 타일셋 로드 불가 시 Three.js 한국형 실감 파사드 렌더러로 자동 폴백
+          onFallback: (reason?: string) => {
+            console.warn(
+              `%c[MapViewer AUTO-FALLBACK]%c ⚠️ 3D 타일셋 연결 실패/타임아웃 (${reason || '사유 미상'})\n • 조치: 즉시 LOD2 실감 파사드 모드로 자동 전환 및 무한 로딩 해제`,
+              'background: #78350F; color: #FDE68A; font-weight: bold; padding: 2px 6px; border-radius: 4px;',
+              'color: #F59E0B; font-weight: bold;'
+            );
+
+            // 1. 무한 로딩 인디케이터 즉시 해제 및 상태 메시지 동기화
+            useMapStore.getState().setTile3DStreamStatus(
+              '⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨',
+              false,
+              0
+            );
+
+            // 2. 3D 렌더링 모드를 지능적으로 [실감 파사드(facade/LOD2)]로 원클릭 자동 전환
+            useMapStore.getState().setRenderMode3D('facade');
+
+            // 3. Three.js LOD2 실감 3D 빌딩 엔진 즉시 활성화
             if (lod2BuildingEngineRef.current) {
               lod2BuildingEngineRef.current.setVisible(true);
             }
+
+            // 4. UI 상단에 안내 배너 표출
+            setTileFallbackBanner('⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨');
           },
         });
         deckManager.attachToMap(map);
@@ -5630,6 +5662,20 @@ export const MapViewer: React.FC = () => {
               className="text-xs bg-rose-800/80 hover:bg-rose-700 text-white px-2 py-0.5 rounded transition-colors"
             >
               닫기
+            </button>
+          </div>
+        )}
+
+        {/* [신규] 3D 타일셋 미지원/타임아웃 감지 시 실감 파사드 자동 폴백 안내 배지 */}
+        {tileFallbackBanner && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 bg-amber-950/95 border border-amber-500/80 text-amber-200 px-4 py-2 rounded-xl backdrop-blur-md shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top duration-300">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+            <span className="text-xs sm:text-sm font-semibold">{tileFallbackBanner}</span>
+            <button
+              onClick={() => setTileFallbackBanner(null)}
+              className="text-xs ml-2 bg-amber-900/70 hover:bg-amber-800 text-amber-200 hover:text-white px-2 py-0.5 rounded transition-colors"
+            >
+              확인
             </button>
           </div>
         )}
