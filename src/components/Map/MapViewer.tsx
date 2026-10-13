@@ -539,19 +539,8 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // [줌 레벨 비례 강제 최소 높이 폴백 표현식: 줌 13일 때 최소 15m, 줌 16일 때 최소 35m]
-    const zoomFallbackHeightExpr: any = [
-      'interpolate',
-      ['linear'],
-      ['zoom'],
-      13,
-      ['coalesce', ['get', 'render_height'], ['get', 'height'], 15],
-      16,
-      ['coalesce', ['get', 'render_height'], ['get', 'height'], 35],
-    ];
-
-    // [2단계: 건물 실제 층수(Floor Count) 및 높이 속성 바인딩 - 층당 3.2m 정규화 동적 계산식]
-    const rawHeightCalculation: any = [
+    // [2단계: 건물 실제 층수(Floor Count) 및 높이 속성 바인딩 - 층당 3.2m 정규화 동적 계산식 (MapLibre 표준 규격)]
+    const buildingHeightExpr: any = [
       'coalesce',
       ['get', 'adaptive_height'],
       ['get', 'render_height'],
@@ -585,16 +574,10 @@ export const MapViewer: React.FC = () => {
           12.8, // 4층 * 3.2m
           ['military', 'public', 'government', 'public_military'],
           19.2, // 6층 * 3.2m
-          zoomFallbackHeightExpr,
+          16.0, // 기본 5층 * 3.2m
         ],
       ],
-      zoomFallbackHeightExpr,
-    ];
-
-    const buildingHeightExpr: any = [
-      'max',
-      zoomFallbackHeightExpr,
-      rawHeightCalculation,
+      16.0, // 기본 최소 16m
     ];
 
     // [1단계: 옥상 분리 마감 슬래브 바닥 높이 표현식]
@@ -1579,18 +1562,6 @@ export const MapViewer: React.FC = () => {
             },
           },
         ],
-        terrain: {
-          source: 'terrarium-dem',
-          exaggeration: 1.5,
-        },
-        sky: {
-          'sky-color': '#0d151c',
-          'sky-horizon-blend': 0.6,
-          'horizon-color': '#0f172a',
-          'horizon-fog-blend': 0.8,
-          'fog-color': '#0f172a',
-          'fog-ground-blend': 0.75,
-        },
       };
 
     const map = new maplibregl.Map({
@@ -1795,27 +1766,6 @@ export const MapViewer: React.FC = () => {
         });
       } catch (lightErr) {
         console.warn('[MapLibre] safeSetLight skipped or not supported:', lightErr);
-      }
-
-      // [물리 기반 대기 산란 (Sky Shader & Atmosphere)] 실시간 하늘 레이어 등록
-      try {
-        const initSun = calculateSunLight(13, viewport.latitude, viewport.longitude);
-        if (!map.getLayer('sky-atmosphere')) {
-          map.addLayer({
-            id: 'sky-atmosphere',
-            type: 'sky',
-            paint: {
-              'sky-type': 'atmosphere',
-              'sky-atmosphere-sun': [initSun.azimuthDeg, initSun.altitudeDeg],
-              'sky-atmosphere-sun-intensity': initSun.skySunIntensity,
-              'sky-atmosphere-halo-color': initSun.skyHaloColor,
-              'sky-atmosphere-color': initSun.skyAtmosphereColor,
-              'sky-opacity': 1,
-            },
-          } as any);
-        }
-      } catch (skyErr) {
-        console.warn('[MapLibre] sky layer setup note:', skyErr);
       }
 
       // [절차적 외벽 텍스처 (Procedural Facade) 512x512 고해상도 패턴 스프라이트 등록]

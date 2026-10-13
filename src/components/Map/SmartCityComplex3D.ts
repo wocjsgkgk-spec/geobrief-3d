@@ -773,12 +773,13 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       this.camera.projectionMatrix = m.multiply(l);
 
       // 5. 렌더링 및 WebGL 상태 완전 복원
+      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
 
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
-        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
     } catch (renderErr) {
       console.warn('[SmartCityComplex3DLayer] render error suppressed:', renderErr);

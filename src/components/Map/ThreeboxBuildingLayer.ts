@@ -369,13 +369,14 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.camera.projectionMatrix = m.multiply(l);
 
       // 6. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출
+      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
 
       // WebGL 기본 프레임버퍼 바인딩 안전 복원 (검은 화면 방지)
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
-        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
     } catch (renderErr) {
       console.warn('[ThreeboxBuildingLayer] render error suppressed:', renderErr);

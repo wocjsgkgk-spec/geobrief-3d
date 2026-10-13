@@ -199,12 +199,13 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
       }
 
       // 4. WebGL 상태 복원 및 렌더링
+      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
 
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
-        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
       this.map.triggerRepaint();
     } catch (renderErr) {

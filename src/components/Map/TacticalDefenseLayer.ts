@@ -170,12 +170,13 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         this.losBlockedRotMesh.rotation.y += deltaSec * 3.0;
       }
 
+      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
 
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
-        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
 
       // 연속 애니메이션이 필요한 경우 지속 리페인트 요청

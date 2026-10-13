@@ -132,12 +132,13 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
       this.camera.projectionMatrix = m.multiply(l);
 
       // WebGL 상태 복원 및 렌더링
+      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
 
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
-        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
 
       // 지형(DEM)과의 깊이 테스트를 위해 렌더 후 맵 리페인트 요청 (수위 변화 시)

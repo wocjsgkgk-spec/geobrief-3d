@@ -1355,12 +1355,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.camera.projectionMatrix = m.multiply(l);
 
       // 6. WebGL 렌더링 및 상태 완전 복원
+      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
 
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
-        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
+        (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
       this.consecutiveErrors = 0;
     } catch (renderErr) {
