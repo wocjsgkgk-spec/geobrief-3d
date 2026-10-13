@@ -111,12 +111,14 @@ const DEFAULT_VWORLD_DIAGNOSTIC: VworldDiagnosticState = {
 };
 
 const DEFAULT_METADATA: BriefingMetadata = {
-  title: '강원권 전략 유휴부지 공간 분석 보고서',
+  title: '원주 1군지사 이전부지 공간분석도',
   subtitle: '원주시·강원 거점 지형고저 및 입지 인프라 브리핑',
   department: '강원특별자치도 기획조정실',
   author: '공간정책분석관',
-  date: '2026. 10. 08',
-  securityLevel: '공개',
+  date: '2026. 10. 13',
+  securityLevel: '일반 (대외비 해제)',
+  sheetNo: 'GB-2026-002',
+  scale: '1:5,000',
 };
 
 export interface FlyToSignal extends ViewportState {

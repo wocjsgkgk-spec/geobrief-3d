@@ -4462,6 +4462,8 @@ export const MapViewer: React.FC = () => {
                   author: metadata.author,
                   date: metadata.date,
                   securityLevel: metadata.securityLevel,
+                  sheetNo: metadata.sheetNo || 'GB-2026-002',
+                  scale: metadata.scale || '1:5,000',
                 });
               }
               const compUrl = outCanvas.toDataURL('image/png');
@@ -4496,6 +4498,8 @@ export const MapViewer: React.FC = () => {
                   author: metadata.author,
                   date: metadata.date,
                   securityLevel: metadata.securityLevel,
+                  sheetNo: metadata.sheetNo || 'GB-2026-002',
+                  scale: metadata.scale || '1:5,000',
                 });
               }
             }
@@ -5181,59 +5185,80 @@ export const MapViewer: React.FC = () => {
                 </div>
 
                 {/* 거리 및 표고 정보 */}
-                <div className="grid grid-cols-2 gap-2 text-[10.5px] bg-[#0f1d2a] p-2 rounded-lg border border-[#1d354a]">
+                <div className="grid grid-cols-2 gap-2 text-[10.5px] bg-[#0f1d2a] p-2.5 rounded-lg border border-[#1d354a]">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">직선 거리</span>
-                    <span className="font-bold text-slate-200 font-mono">
+                    <span className="text-slate-400 block text-[10px]">직선거리 (3D)</span>
+                    <span className="font-bold text-slate-100 font-mono text-xs">
                       {losAnalysis.result.distanceMeters.toLocaleString()} m
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">수평 거리</span>
-                    <span className="font-bold text-slate-200 font-mono">
-                      {losAnalysis.result.horizontalDistanceMeters.toLocaleString()} m
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">고도차 (ΔH)</span>
-                    <span className="font-bold text-slate-200 font-mono">
+                    <span className="text-slate-400 block text-[10px]">고저차 (Δh)</span>
+                    <span className="font-bold text-slate-100 font-mono text-xs">
                       {losAnalysis.result.elevationDiffMeters > 0 ? '+' : ''}
                       {losAnalysis.result.elevationDiffMeters} m
                     </span>
                   </div>
                   <div>
+                    <span className="text-slate-400 block text-[10px]">수평거리 (2D)</span>
+                    <span className="font-bold text-slate-300 font-mono">
+                      {losAnalysis.result.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
                     <span className="text-slate-400 block text-[10px]">관측 / 목표 표고</span>
-                    <span className="font-bold text-slate-200 font-mono text-[10px]">
-                      EL.{losAnalysis.pointA?.elevation}m → {losAnalysis.pointB?.elevation}m
+                    <span className="font-bold text-slate-300 font-mono text-[10px]">
+                      EL.{losAnalysis.pointA?.elevation}m → EL.{losAnalysis.pointB?.elevation}m
                     </span>
                   </div>
                 </div>
 
-                {/* 차단 정보 (차단 시) */}
-                {losAnalysis.result.blockedPoint && (
-                  <div className="p-2 rounded bg-rose-950/40 border border-rose-800/40 text-[10.5px] space-y-1">
-                    <div className="text-rose-300 font-semibold flex items-center justify-between">
-                      <span>차단 능선 지표 표고</span>
-                      <span className="font-mono font-bold">
-                        EL. {losAnalysis.result.blockedPoint.elevation} m
-                      </span>
-                    </div>
-                    <div className="text-slate-400 text-[10px] flex items-center justify-between">
-                      <span>A점으로부터 차단 거리</span>
-                      <span className="font-mono text-slate-300">
-                        {losAnalysis.result.blockedPoint.distanceFromA.toLocaleString()} m
-                      </span>
-                    </div>
-                    <div className="text-[9.5px] text-rose-300/80">
-                      ⚠️ 지형 표고가 가시선보다{' '}
-                      {(
-                        losAnalysis.result.blockedPoint.elevation -
-                        losAnalysis.result.blockedPoint.rayElevation
-                      ).toFixed(1)}
-                      m 돌출되어 붉은 펄스 마커가 생성되었습니다.
-                    </div>
+                {/* 최대 차폐 장애물 분석 */}
+                <div
+                  className={`p-2.5 rounded-lg border text-[10.5px] space-y-1.5 ${
+                    losAnalysis.result.isClear
+                      ? 'bg-emerald-950/40 border-emerald-800/40'
+                      : 'bg-rose-950/50 border-rose-800/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className={losAnalysis.result.isClear ? 'text-emerald-300' : 'text-rose-300'}>
+                      {losAnalysis.result.isClear ? '경로상 최고 지형 고도' : '최대 차폐 장애물 고도'}
+                    </span>
+                    <span className={`font-mono font-bold text-xs ${losAnalysis.result.isClear ? 'text-emerald-200' : 'text-rose-200'}`}>
+                      EL. {losAnalysis.result.maxObstacleElevation || (losAnalysis.result.blockedPoint?.elevation ?? 0)} m
+                    </span>
                   </div>
-                )}
+
+                  {losAnalysis.result.blockedPoint ? (
+                    <>
+                      <div className="flex items-center justify-between text-[10px] text-slate-300">
+                        <span className="text-slate-400">최대 차폐 돌출량</span>
+                        <span className="font-mono text-rose-300 font-bold">
+                          +{losAnalysis.result.maxPenetrationDepth || (losAnalysis.result.blockedPoint.elevation - losAnalysis.result.blockedPoint.rayElevation).toFixed(1)} m
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-300">
+                        <span className="text-slate-400">차단 지점 거리 (A 기준)</span>
+                        <span className="font-mono text-slate-200">
+                          {losAnalysis.result.blockedPoint.distanceFromA.toLocaleString()} m
+                        </span>
+                      </div>
+                      <div className="text-[9.5px] text-rose-300/90 leading-tight pt-0.5">
+                        ⚠️ [시계 차단 봉우리] 산등성이에 가려져 직시가 불가능합니다. (3D 적색 경고 마커 및 펄스 표출 중)
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[9.5px] text-emerald-300/90 leading-tight pt-0.5">
+                      ✅ [직시 가능 (Clear LOS)] 관측점과 목표점 간 지형 간섭이 없습니다. (네온 그린 빔 및 발광 펄스 활성화)
+                    </div>
+                  )}
+
+                  <div className="text-[9px] text-slate-400 pt-1 border-t border-slate-800/60 flex items-center justify-between font-mono">
+                    <span>DEM 정밀 샘플링</span>
+                    <span className="text-slate-300">{losAnalysis.result.samplingCount}개 지점 (5m 간격)</span>
+                  </div>
+                </div>
 
                 {/* 재분석 / 초기화 액션 */}
                 <div className="flex items-center gap-1.5 pt-1">

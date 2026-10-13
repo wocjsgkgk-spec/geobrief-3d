@@ -49,7 +49,9 @@ export interface BriefingMetadata {
   department: string;
   author: string;
   date: string;
-  securityLevel: '대외비' | '공개' | '군사대외비';
+  securityLevel: '대외비' | '공개' | '군사대외비' | '일반 (대외비 해제)';
+  sheetNo?: string;
+  scale?: string;
 }
 
 export interface PolygonArea {
@@ -459,12 +461,17 @@ export interface LosAnalysisResult {
   distanceMeters: number; // 3D 직선 거리 m
   horizontalDistanceMeters: number; // 2D 수평 거리 m
   elevationDiffMeters: number; // 두 지점 고도차 m
+  maxObstacleElevation?: number; // 최대 차폐 장애물 고도 EL. m
+  maxPenetrationDepth?: number; // 최대 지형 차폐 돌출량 m
+  samplingIntervalMeters?: number; // 샘플링 간격 m (기본 5m)
   blockedPoint?: {
     coords: [number, number];
     elevation: number; // 차단 능선 고도 EL. m
     rayElevation: number; // 해당 지점 광선 고도 EL. m
     distanceFromA: number; // A로부터의 거리 m
     t: number; // 진행률 (0 ~ 1)
+    maxObstacleElevation?: number;
+    maxPenetration?: number;
   };
   samplingCount: number;
   calculatedAt: number;

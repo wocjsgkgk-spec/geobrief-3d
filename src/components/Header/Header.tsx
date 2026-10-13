@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Save,
   Layers,
+  Target,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -79,6 +80,9 @@ export const Header: React.FC = () => {
     setShowTerrainProfile,
     renderMode3D,
     setRenderMode3D,
+    losAnalysis,
+    startLosAnalysis,
+    resetLosAnalysis,
   } = useMapStore();
 
   const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
@@ -305,11 +309,11 @@ export const Header: React.FC = () => {
           <button
             onClick={() => handleDropdownToggle('analysis')}
             className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              activeDropdown === 'analysis' || isViewshedMode || isMeasureMode || cutFill.enabled
+              activeDropdown === 'analysis' || isViewshedMode || isMeasureMode || cutFill.enabled || losAnalysis.isActive || !!losAnalysis.result
                 ? 'bg-emerald-600/30 border-emerald-400/80 text-emerald-200 shadow-md ring-1 ring-emerald-500/40'
                 : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
             }`}
-            title="3D 가시권(사계), 줄자 실측, 3D 토공량(Cut & Fill), 지형 횡단면"
+            title="3D 가시선(LOS), 3D 가시권(사계), 줄자 실측, 3D 토공량(Cut & Fill), 지형 횡단면"
           >
             <Activity className="w-3.5 h-3.5 text-emerald-400" />
             <span>공간 & 토목분석</span>
@@ -318,6 +322,34 @@ export const Header: React.FC = () => {
 
           {activeDropdown === 'analysis' && (
             <div className="absolute top-11 left-0 w-64 bg-[#141d17]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-1.5 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-100">
+              {/* [3D 가시선(LOS) 광선 추적] 도구 */}
+              <button
+                onClick={() => {
+                  if (losAnalysis.isActive || losAnalysis.result) {
+                    resetLosAnalysis();
+                  } else {
+                    startLosAnalysis();
+                  }
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="font-semibold text-emerald-200">3D 가시선(LOS) 광선 추적</span>
+                </div>
+                {losAnalysis.isActive && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 animate-pulse">
+                    {losAnalysis.step === 'pick_a' ? 'A점 선택' : 'B점 선택'}
+                  </span>
+                )}
+                {losAnalysis.result && !losAnalysis.isActive && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-300 border border-emerald-600">
+                    분석 완료
+                  </span>
+                )}
+              </button>
+
               <button
                 onClick={() => {
                   toggleViewshedMode();

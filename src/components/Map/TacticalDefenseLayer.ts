@@ -37,6 +37,10 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
   private wallMaterial: THREE.MeshBasicMaterial | null = null;
   private wallTexture: THREE.CanvasTexture | null = null;
   private losBlockedPulseMesh: THREE.Mesh | null = null;
+  private losBlockedRotMesh: THREE.Mesh | null = null;
+  private losClearPulseMesh: THREE.Group | null = null;
+  private losClearStartPt: THREE.Vector3 = new THREE.Vector3();
+  private losClearEndPt: THREE.Vector3 = new THREE.Vector3();
 
   // 상태 데이터 캐시
   private threatDomeState: ThreatDomeState = {
@@ -132,10 +136,23 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         this.wallTexture.offset.y += deltaSec * this.securityWallState.pulseSpeed;
       }
 
-      // 3. LOS 시계 차단 지점 펄스 애니메이션
+      // 3. LOS 시계 차단 지점 및 발광 펄스 애니메이션
+      if (this.losClearPulseMesh) {
+        const pulseT = (this.animTimer * 1.5) % 1.0;
+        this.losClearPulseMesh.position.lerpVectors(
+          this.losClearStartPt,
+          this.losClearEndPt,
+          pulseT
+        );
+      }
+
       if (this.losBlockedPulseMesh) {
-        const s = 1 + 0.4 * Math.sin(this.animTimer * 5);
+        const s = 1 + 0.45 * Math.sin(this.animTimer * 6);
         this.losBlockedPulseMesh.scale.set(s, s, s);
+      }
+
+      if (this.losBlockedRotMesh) {
+        this.losBlockedRotMesh.rotation.y += deltaSec * 3.0;
       }
 
       this.renderer.resetState();
@@ -145,7 +162,8 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       if (
         this.threatDomeState.enabled ||
         this.securityWallState.enabled ||
-        this.losBlockedPulseMesh
+        this.losBlockedPulseMesh ||
+        this.losClearPulseMesh
       ) {
         this.map.triggerRepaint();
       }
@@ -506,6 +524,8 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       this.disposeHierarchy(child);
     }
     this.losBlockedPulseMesh = null;
+    this.losBlockedRotMesh = null;
+    this.losClearPulseMesh = null;
 
     if (!this.map) return;
     const { pointA, pointB } = this.losState;
@@ -544,16 +564,26 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
     );
     this.losGroup.add(markerBMesh);
 
-    // 3. DEM 표고 광선 추적 (Raycast Sampling)
-    const samples = 140;
+    // 3. DEM 표고 광선 추적 (Terrarium DEM 지형 표고 5m 간격 정밀 샘플링)
     const startAlt = pointA.elevation + (pointA.heightOffset || 2.5);
     const endAlt = pointB.elevation + (pointB.heightOffset || 1.8);
+    const dx = (pointB.coords[0] - pointA.coords[0]) * 88000;
+    const dy = (pointB.coords[1] - pointA.coords[1]) * 111000;
+    const horizDist = Math.hypot(dx, dy);
+    const elevDiff = endAlt - startAlt;
+    const directDist = Math.hypot(horizDist, elevDiff);
+
+    // 5m 간격 정밀 샘플링 (최소 20개, 최대 1000개)
+    const sampleInterval = 5.0;
+    const samples = Math.max(20, Math.min(1000, Math.ceil(directDist / sampleInterval)));
 
     let isBlocked = false;
     let blockedT = 1.0;
     let blockedCoord: [number, number] = [0, 0];
     let blockedTerrainAlt = 0;
     let blockedRayAlt = 0;
+    let maxObstacleElevation = Math.max(startAlt, endAlt);
+    let maxPenetration = 0;
 
     for (let i = 1; i < samples; i++) {
       const t = i / samples;
@@ -569,25 +599,27 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         }
       }
 
+      if (curTerrainAlt > maxObstacleElevation) {
+        maxObstacleElevation = curTerrainAlt;
+      }
+
+      const pen = curTerrainAlt - curRayAlt;
       // 지형이 광선보다 0.5m 이상 높을 경우 시계 차단으로 판정
-      if (curTerrainAlt > curRayAlt + 0.5) {
-        isBlocked = true;
-        blockedT = t;
-        blockedCoord = [curLng, curLat];
-        blockedTerrainAlt = curTerrainAlt;
-        blockedRayAlt = curRayAlt;
-        break;
+      if (pen > 0.5) {
+        if (!isBlocked) {
+          isBlocked = true;
+          blockedT = t;
+          blockedCoord = [curLng, curLat];
+          blockedTerrainAlt = curTerrainAlt;
+          blockedRayAlt = curRayAlt;
+        }
+        if (pen > maxPenetration) {
+          maxPenetration = pen;
+        }
       }
     }
 
-    // 4. 거리 및 통계 계산
-    const dx = (pointB.coords[0] - pointA.coords[0]) * 88000;
-    const dy = (pointB.coords[1] - pointA.coords[1]) * 111000;
-    const horizDist = Math.sqrt(dx * dx + dy * dy);
-    const elevDiff = endAlt - startAlt;
-    const directDist = Math.sqrt(horizDist * horizDist + elevDiff * elevDiff);
-
-    // 결과 알림 콜백
+    // 4. 결과 통계 및 콜백 통지
     if (this.onLosCalculated && this.losState.step === 'analyzed') {
       this.onLosCalculated({
         pointA,
@@ -596,6 +628,9 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         distanceMeters: Math.round(directDist),
         horizontalDistanceMeters: Math.round(horizDist),
         elevationDiffMeters: Math.round(elevDiff),
+        maxObstacleElevation: Math.round(maxObstacleElevation),
+        maxPenetrationDepth: Math.round(maxPenetration * 10) / 10,
+        samplingIntervalMeters: 5,
         blockedPoint: isBlocked
           ? {
               coords: blockedCoord,
@@ -603,6 +638,8 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
               rayElevation: Math.round(blockedRayAlt),
               distanceFromA: Math.round(directDist * blockedT),
               t: blockedT,
+              maxObstacleElevation: Math.round(maxObstacleElevation),
+              maxPenetration: Math.round(maxPenetration * 10) / 10,
             }
           : undefined,
         samplingCount: samples,
@@ -610,9 +647,9 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       });
     }
 
-    // 5. 3D 가시선 빔 렌더링
+    // 5. 3D 가시선 빔 렌더링 & 발광 펄스
     if (!isBlocked) {
-      // (1) 관측 성공: A부터 B까지 녹색(#10B981) 실선 빔
+      // (1) 관측 성공: A부터 B까지 네온 그린(#10B981) 실선 빔
       const lineGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercA.x, mercA.y, mercA.z),
         new THREE.Vector3(mercB.x, mercB.y, mercB.z),
@@ -624,14 +661,39 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         depthWrite: false,
       });
       this.losGroup.add(new THREE.Line(lineGeo, lineMat));
+
+      // 네온 그린 발광 펄스 패킷 (빛 알갱이의 실시간 광선 주사)
+      const pulseGroup = new THREE.Group();
+      const photon = new THREE.Mesh(
+        new THREE.SphereGeometry(3.5, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x34d399 })
+      );
+      pulseGroup.add(photon);
+
+      const halo = new THREE.Mesh(
+        new THREE.RingGeometry(4.5, 6.5, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0x10b981,
+          transparent: true,
+          opacity: 0.85,
+          side: THREE.DoubleSide,
+        })
+      );
+      halo.rotation.x = -Math.PI / 2;
+      pulseGroup.add(halo);
+
+      this.losGroup.add(pulseGroup);
+      this.losClearPulseMesh = pulseGroup;
+      this.losClearStartPt.set(mercA.x, mercA.y, mercA.z);
+      this.losClearEndPt.set(mercB.x, mercB.y, mercB.z);
     } else {
-      // (2) 관측 차단: A부터 차단점까지 녹색, 차단점부터 B까지 붉은색 점선
+      // (2) 관측 차단: A -> 차단점(네온 그린 실선 + 펄스), 차단점 -> B(붉은색 점선)
       const mercBlocked = maplibregl.MercatorCoordinate.fromLngLat(
         blockedCoord,
         blockedRayAlt
       );
 
-      // A -> 차단점 (녹색 실선)
+      // A -> 차단점 (네온 그린 실선)
       const clearGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercA.x, mercA.y, mercA.z),
         new THREE.Vector3(mercBlocked.x, mercBlocked.y, mercBlocked.z),
@@ -644,32 +706,57 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       });
       this.losGroup.add(new THREE.Line(clearGeo, clearMat));
 
-      // 차단점 -> B (붉은색 점선/반투명 빔)
+      // 네온 그린 발광 펄스 패킷
+      const pulseGroup = new THREE.Group();
+      const photon = new THREE.Mesh(
+        new THREE.SphereGeometry(3.5, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x34d399 })
+      );
+      pulseGroup.add(photon);
+
+      const halo = new THREE.Mesh(
+        new THREE.RingGeometry(4.5, 6.5, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0x10b981,
+          transparent: true,
+          opacity: 0.85,
+          side: THREE.DoubleSide,
+        })
+      );
+      halo.rotation.x = -Math.PI / 2;
+      pulseGroup.add(halo);
+
+      this.losGroup.add(pulseGroup);
+      this.losClearPulseMesh = pulseGroup;
+      this.losClearStartPt.set(mercA.x, mercA.y, mercA.z);
+      this.losClearEndPt.set(mercBlocked.x, mercBlocked.y, mercBlocked.z);
+
+      // 차단점 -> B (붉은색 점선 #EF4444)
       const blockedGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercBlocked.x, mercBlocked.y, mercBlocked.z),
         new THREE.Vector3(mercB.x, mercB.y, mercB.z),
       ]);
       const blockedMat = new THREE.LineDashedMaterial({
         color: 0xef4444,
-        dashSize: 3,
-        gapSize: 1.5,
+        dashSize: 4,
+        gapSize: 2,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.9,
         depthWrite: false,
       });
       const blockedLine = new THREE.Line(blockedGeo, blockedMat);
       blockedLine.computeLineDistances();
       this.losGroup.add(blockedLine);
 
-      // (3) [시계 차단 지점] 3D 마커 및 능선 충돌 펄스 링
+      // (3) [시계 차단 봉우리] 3D 경고 마커 & 능선 충돌 펄스 링 & 3D 라벨
       const meterScale = mercBlocked.meterInMercatorCoordinateUnits();
       const markerGroup = new THREE.Group();
       markerGroup.position.set(mercBlocked.x, mercBlocked.y, mercBlocked.z);
       markerGroup.scale.set(meterScale, meterScale, meterScale);
       markerGroup.rotation.x = Math.PI / 2;
 
-      // 붉은색 다이아몬드/원추 마커
-      const coneGeo = new THREE.ConeGeometry(5, 12, 8);
+      // 붉은색 역원추(Cone) 마커
+      const coneGeo = new THREE.ConeGeometry(5, 14, 8);
       coneGeo.rotateX(Math.PI);
       const coneMat = new THREE.MeshBasicMaterial({
         color: 0xef4444,
@@ -677,8 +764,19 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         opacity: 0.9,
       });
       const coneMesh = new THREE.Mesh(coneGeo, coneMat);
-      coneMesh.position.y = 8;
+      coneMesh.position.y = 10;
       markerGroup.add(coneMesh);
+
+      // 3D 회전 다이아몬드 비컨 (Octahedron)
+      const diamondGeo = new THREE.OctahedronGeometry(4.5, 0);
+      const diamondMat = new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        wireframe: false,
+      });
+      const diamondMesh = new THREE.Mesh(diamondGeo, diamondMat);
+      diamondMesh.position.y = 19;
+      markerGroup.add(diamondMesh);
+      this.losBlockedRotMesh = diamondMesh;
 
       // 지면까지 이어지는 수직 적색 점선 지시선
       const mercGround = maplibregl.MercatorCoordinate.fromLngLat(
@@ -692,22 +790,58 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       const groundLineMat = new THREE.LineBasicMaterial({
         color: 0xef4444,
         transparent: true,
-        opacity: 0.7,
+        opacity: 0.75,
       });
       this.losGroup.add(new THREE.Line(groundLineGeo, groundLineMat));
 
       // 차단점 충돌 펄스 링
-      const pulseGeo = new THREE.RingGeometry(8, 10, 24);
+      const pulseGeo = new THREE.RingGeometry(8, 11, 24);
       const pulseMat = new THREE.MeshBasicMaterial({
         color: 0xef4444,
         transparent: true,
-        opacity: 0.7,
+        opacity: 0.75,
         side: THREE.DoubleSide,
       });
       const pulseRing = new THREE.Mesh(pulseGeo, pulseMat);
       pulseRing.rotation.x = -Math.PI / 2;
       markerGroup.add(pulseRing);
       this.losBlockedPulseMesh = pulseRing;
+
+      // 3D 텍스트 빌보드 스프라이트 [⚠️ 시계 차단 봉우리 EL. xxx m]
+      try {
+        const labelCanvas = document.createElement('canvas');
+        labelCanvas.width = 384;
+        labelCanvas.height = 72;
+        const lCtx = labelCanvas.getContext('2d');
+        if (lCtx) {
+          lCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          lCtx.beginPath();
+          lCtx.roundRect(4, 4, 376, 64, 10);
+          lCtx.fill();
+          lCtx.strokeStyle = '#EF4444';
+          lCtx.lineWidth = 3;
+          lCtx.stroke();
+
+          lCtx.fillStyle = '#EF4444';
+          lCtx.fillRect(10, 10, 8, 52);
+
+          lCtx.fillStyle = '#FFFFFF';
+          lCtx.font = 'bold 22px sans-serif';
+          lCtx.fillText(`⚠️ 시계 차단 봉우리 EL. ${Math.round(blockedTerrainAlt)}m`, 28, 44);
+        }
+        const labelTex = new THREE.CanvasTexture(labelCanvas);
+        const spriteMat = new THREE.SpriteMaterial({
+          map: labelTex,
+          depthTest: false,
+          transparent: true,
+        });
+        const labelSprite = new THREE.Sprite(spriteMat);
+        labelSprite.scale.set(45, 9, 1);
+        labelSprite.position.set(0, 28, 0);
+        markerGroup.add(labelSprite);
+      } catch (spriteErr) {
+        // Sprite creation fallback
+      }
 
       this.losGroup.add(markerGroup);
     }
