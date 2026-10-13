@@ -634,6 +634,8 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   private centerLngLat: [number, number] = FIRST_LOGISTICS_WONJU_CENTER;
   private clampedAltitude = 0;
   private rotationDeg = -12; // 부지 주축 각도
+  private scaleY = 0; // 솟아오르는(Rise-Up) 보간 진행률 (0 -> 1)
+  private targetScaleY = 0;
 
   constructor(center = FIRST_LOGISTICS_WONJU_CENTER) {
     this.centerLngLat = center;
@@ -641,6 +643,10 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
 
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
+    this.targetScaleY = visible ? 1 : 0;
+    if (visible && this.scaleY < 0.05) {
+      this.scaleY = 0.05;
+    }
     if (this.map) {
       this.map.triggerRepaint();
     }
@@ -703,13 +709,31 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.isVisible || !this.renderer) {
+    if ((!this.isVisible && this.scaleY <= 0.001) || !this.renderer) {
       return;
     }
 
     try {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
       if (!rawMatrix) return;
+
+      // 0. 부드러운 솟아오름(Rise-Up) 보간 애니메이션
+      if (Math.abs(this.scaleY - this.targetScaleY) > 0.005) {
+        this.scaleY += (this.targetScaleY - this.scaleY) * 0.14;
+        if (this.map) {
+          this.map.triggerRepaint();
+        }
+      } else {
+        this.scaleY = this.targetScaleY;
+      }
+
+      if (this.scaleY <= 0.001) {
+        return;
+      }
+
+      if (this.complexMesh) {
+        this.complexMesh.scale.set(1, this.scaleY, 1);
+      }
 
       // 1. [3D 지형 DEM 표고 밀착 (Terrain Clamping)]
       if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
