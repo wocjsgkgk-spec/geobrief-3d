@@ -196,7 +196,6 @@ const baseStyle: maplibregl.StyleSpecification = {
       type: 'raster',
       tiles: [
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
       ],
       tileSize: 256,
       maxzoom: 19,
@@ -247,7 +246,6 @@ export function safeSetTerrain(
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
             maxzoom: 19,
@@ -303,10 +301,10 @@ export function safeSetTerrain(
     }
   };
 
-  if (!map.isStyleLoaded()) {
-    map.once('style.load', executeSetTerrain);
-  } else {
+  if (map.getStyle()) {
     executeSetTerrain();
+  } else {
+    map.once('load', executeSetTerrain);
   }
 }
 
@@ -682,20 +680,18 @@ export const MapViewer: React.FC = () => {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery, Google',
+            attribution: 'Esri World Imagery',
             maxzoom: 19,
           },
           'satellite-source': {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery, Google',
+            attribution: 'Esri World Imagery',
             maxzoom: 19,
           },
           'clean-tiles': {
@@ -708,6 +704,15 @@ export const MapViewer: React.FC = () => {
             maxzoom: 19,
           },
           'terrarium-dem': {
+            type: 'raster-dem',
+            tiles: [
+              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+            ],
+            encoding: 'terrarium',
+            tileSize: 256,
+            maxzoom: 15,
+          },
+          'terrarium-dem-hillshade': {
             type: 'raster-dem',
             tiles: [
               'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
@@ -870,7 +875,7 @@ export const MapViewer: React.FC = () => {
           {
             id: 'terrain-hillshade',
             type: 'hillshade',
-            source: 'terrarium-dem',
+            source: 'terrarium-dem-hillshade',
             paint: {
               'hillshade-exaggeration': 0.3,
               'hillshade-shadow-color': 'rgba(15, 23, 42, 0.35)',
@@ -1671,13 +1676,14 @@ export const MapViewer: React.FC = () => {
       },
       attributionControl: false,
       doubleClickZoom: false,
-      // 한반도 및 전국 전역 자유 팬/줌 및 모바일 터치 제스처 보장
-      dragPan: true,
+        dragPan: true,
       dragRotate: true,
       scrollZoom: true,
       touchZoomRotate: true,
       touchPitch: true,
     });
+
+    (window as any).__map = map;
 
     // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
     setTimeout(() => {
@@ -2609,6 +2615,8 @@ export const MapViewer: React.FC = () => {
         message.includes('INVALID_KEY') ||
         message.includes('XML') ||
         message.includes('DOMException') ||
+        message.includes('cannot calculate elevation') ||
+        message.includes('hillshade') ||
         sourceId.includes('vworld-contour') ||
         sourceId.includes('vworld-cadastral');
 
@@ -3708,7 +3716,7 @@ export const MapViewer: React.FC = () => {
       map.setPaintProperty('drawing-polygon-line', 'line-color', '#F59E0B');
       map.setPaintProperty('drawing-polygon-line', 'line-width', 3.5);
     } else {
-      map.setPaintProperty('drawing-polygon-fill', 'fill-pattern', '');
+      map.setPaintProperty('drawing-polygon-fill', 'fill-pattern', undefined);
       const colors = {
         blue: { fill: '#3B82F6', line: '#2563EB' },
         orange: { fill: '#F97316', line: '#EA580C' },

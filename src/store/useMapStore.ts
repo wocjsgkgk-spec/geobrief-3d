@@ -1214,7 +1214,7 @@ export const useMapStore = create<MapStoreState>()(
         })),
 
       // [도정·국방 표준 도면 타이틀 블록]
-      showTitleBlock: true,
+      showTitleBlock: false,
       toggleTitleBlock: () => set((state) => ({ showTitleBlock: !state.showTitleBlock })),
 
       // [국방·보안 브리핑] 3D 감시 센서 콘 (Sensor FOV Frustum)
@@ -1920,7 +1920,7 @@ export const useMapStore = create<MapStoreState>()(
           isArrowMode: false,
           arrowDraftPoints: [],
           waterLevel: { enabled: false, elevation: 100 },
-          showTitleBlock: true,
+          showTitleBlock: false,
           surveillanceSensors: [],
           isSensorPlacementMode: false,
           uavFlight: {
