@@ -191,10 +191,21 @@ const SAFE_MODE = false;
 const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
+    'satellite-source': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      attribution: 'Esri World Imagery',
+      maxzoom: 19,
+    },
     'satellite-tiles': {
       type: 'raster',
       tiles: [
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
       attribution: 'Esri World Imagery',
@@ -214,8 +225,12 @@ const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
     {
       id: 'satellite-layer',
       type: 'raster',
-      source: 'satellite-tiles',
-      paint: {},
+      source: 'satellite-source',
+      paint: {
+        'raster-opacity': 1.0,
+        'raster-fade-duration': 100,
+      },
+      layout: { visibility: 'visible' },
     },
   ],
 };
@@ -230,14 +245,43 @@ const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
 export function safeSetTerrain(
   map: maplibregl.Map | null,
   enableTerrain: boolean,
-  terrainExaggeration = 1.5
+  terrainExaggeration = 1.2
 ): void {
   if (!map) return;
 
   const executeSetTerrain = () => {
     try {
       if (enableTerrain) {
-        // 소스가 없을 경우 먼저 addSource 실행
+        // [지형 표면과 위성 텍스처 결합 보장] 위성 소스 부재 시 동적 자동 등록
+        if (!map.getSource('satellite-source') && !map.getSource('satellite-tiles')) {
+          map.addSource('satellite-source', {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+            ],
+            tileSize: 256,
+            maxzoom: 19,
+          });
+        }
+        if (!map.getLayer('satellite-layer')) {
+          const firstLayer = map.getLayer('3d-buildings') ? '3d-buildings' : undefined;
+          map.addLayer(
+            {
+              id: 'satellite-layer',
+              type: 'raster',
+              source: map.getSource('satellite-source') ? 'satellite-source' : 'satellite-tiles',
+              paint: {
+                'raster-opacity': 1.0,
+                'raster-fade-duration': 100,
+              },
+              layout: { visibility: 'visible' },
+            },
+            firstLayer
+          );
+        }
+        // DEM 지형 소스 부재 시 동적 자동 등록
         if (!map.getSource('terrarium-dem')) {
           map.addSource('terrarium-dem', {
             type: 'raster-dem',
@@ -249,12 +293,12 @@ export function safeSetTerrain(
             maxzoom: 15,
           });
         }
-        // 소스 존재 재확인 후 안전하게 setTerrain 적용
+        // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.2)
         if (map.getSource('terrarium-dem')) {
           try {
             map.setTerrain({
               source: 'terrarium-dem',
-              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.5,
+              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.2,
             });
           } catch (err) {
             console.warn('[MapViewer] setTerrain 호출 중 오류 방어:', err);
@@ -608,6 +652,14 @@ export const MapViewer: React.FC = () => {
       0.15,
     ];
 
+    // [3단계: 건물 기초 지반 밀착 표현식 (Foundation Clamping)]
+    // 경사지 및 산악 지형에서 건물이 지표면 위에 떠 보이지 않도록 adaptive_base 또는 -1.5m 기초 깊이를 부여하여 지면에 완벽 안착
+    const buildingBaseExpr: any = [
+      'coalesce',
+      ['get', 'adaptive_base'],
+      -1.5,
+    ];
+
     // [2단계: 실제 도시 건축 외장재 컬러 팔레트 표현식]
     const buildingColorExpr: any = [
       'coalesce',
@@ -638,10 +690,21 @@ export const MapViewer: React.FC = () => {
           position: [1.3, 115, 40],
         },
         sources: {
+          'satellite-source': {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            ],
+            tileSize: 256,
+            attribution: 'Esri World Imagery',
+            maxzoom: 19,
+          },
           'satellite-tiles': {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
             ],
             tileSize: 256,
             attribution: 'Esri World Imagery',
@@ -798,7 +861,11 @@ export const MapViewer: React.FC = () => {
           {
             id: 'satellite-layer',
             type: 'raster',
-            source: 'satellite-tiles',
+            source: 'satellite-source',
+            paint: {
+              'raster-opacity': 1.0,
+              'raster-fade-duration': 100,
+            },
             layout: { visibility: 'visible' },
           },
           // [지형 힐셰이드(Hillshade) 입체 음영 합성 레이어 - 산맥 능선과 계곡의 그림자 굴곡을 입체적으로 블렌딩]
@@ -807,10 +874,10 @@ export const MapViewer: React.FC = () => {
             type: 'hillshade',
             source: 'terrarium-dem',
             paint: {
-              'hillshade-exaggeration': 0.75,
-              'hillshade-shadow-color': '#0f172a',
-              'hillshade-highlight-color': '#ffffff',
-              'hillshade-accent-color': '#1e293b',
+              'hillshade-exaggeration': 0.5,
+              'hillshade-shadow-color': 'rgba(15, 23, 42, 0.45)',
+              'hillshade-highlight-color': 'rgba(255, 255, 255, 0.35)',
+              'hillshade-accent-color': 'rgba(0, 0, 0, 0)',
               'hillshade-illumination-direction': 315,
               'hillshade-illumination-anchor': 'viewport',
             },
@@ -1039,7 +1106,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': '#475569',
               'fill-extrusion-height': 0.2,
-              'fill-extrusion-base': ['coalesce', ['get', 'adaptive_base'], -0.6],
+              'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1055,7 +1122,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': 0,
+              'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1099,7 +1166,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': 0,
+              'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1142,7 +1209,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': 0,
+              'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1447,7 +1514,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': '#06B6D4',
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
-              'fill-extrusion-base': 0,
+              'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.35,
             },
             layout: { visibility: 'visible' },
@@ -1733,6 +1800,41 @@ export const MapViewer: React.FC = () => {
     map.on('load', () => {
       setIsMapLoaded(true);
 
+      // [1단계: 위성 래스터 소스 및 레이어 등록 보장 (Esri 고해상도 위성영상)]
+      try {
+        if (!map.getSource('satellite-source')) {
+          map.addSource('satellite-source', {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+            ],
+            tileSize: 256,
+            attribution: 'Esri World Imagery',
+            maxzoom: 19,
+          });
+        }
+        if (!map.getLayer('satellite-layer')) {
+          const firstBuilding = map.getLayer('3d-buildings') ? '3d-buildings' : undefined;
+          map.addLayer(
+            {
+              id: 'satellite-layer',
+              type: 'raster',
+              source: 'satellite-source',
+              paint: {
+                'raster-opacity': 1.0,
+                'raster-fade-duration': 100,
+              },
+              layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
+            },
+            firstBuilding
+          );
+        }
+      } catch (satErr) {
+        console.warn('[MapViewer] satellite-source addSource notice:', satErr);
+      }
+
       // [2단계: 지형 소스 초기화 순서 강제화] map.on('load') 최상단에서 terrarium-dem 소스 최우선 등록 보장
       try {
         if (!map.getSource('terrarium-dem')) {
@@ -1768,9 +1870,9 @@ export const MapViewer: React.FC = () => {
       try {
         if (typeof (map as any).setFog === 'function') {
           (map as any).setFog({
-            range: [0.5, 10],
-            color: '#0f172a',
-            'horizon-blend': 0.12,
+            range: [1.5, 12],
+            color: '#bae6fd',
+            'horizon-blend': 0.15,
           });
         }
       } catch (fogErr) {
@@ -2205,7 +2307,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': 0,
+              'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -3402,12 +3504,14 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (map.getLayer('satellite-layer') && map.getLayer('clean-layer')) {
+    if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(
         'satellite-layer',
         'visibility',
         baseMap === 'satellite' ? 'visible' : 'none'
       );
+    }
+    if (map.getLayer('clean-layer')) {
       map.setLayoutProperty(
         'clean-layer',
         'visibility',
@@ -4016,9 +4120,9 @@ export const MapViewer: React.FC = () => {
     try {
       if (typeof (map as any).setFog === 'function') {
         (map as any).setFog({
-          range: [0.5, 10],
-          color: sunConfig.fogColor || '#0f172a',
-          'horizon-blend': 0.12,
+          range: [1.5, 12],
+          color: sunConfig.fogColor || '#bae6fd',
+          'horizon-blend': 0.15,
         });
       }
     } catch (e) {

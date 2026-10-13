@@ -117,7 +117,7 @@ export function calculateSunLight(
   // 시간대별 색상 및 대기 산란(Sky Shader) 그라데이션 튜닝
   let color = '#FFFFFF';
   let intensity = 0.65;
-  let fogColor = '#1e293b';
+  let fogColor = '#bae6fd';
   let label = `${Math.floor(safeHour)}:00`;
 
   let skyAtmosphereColor = 'rgba(135, 206, 235, 1)'; // 청명한 하늘
@@ -129,7 +129,7 @@ export function calculateSunLight(
     // 09:00 ~ 10:00: 청명한 아침 햇살 (따뜻한 골드 톤 & 청아한 아침 하늘)
     color = '#FED7AA'; // warm amber
     intensity = 0.55;
-    fogColor = '#242b35';
+    fogColor = '#e0f2fe';
     label = `오전 ${Math.floor(safeHour)}시 (아침 사광)`;
     skyAtmosphereColor = 'rgba(176, 212, 245, 1)';
     skyHaloColor = 'rgba(254, 215, 170, 0.95)';
@@ -139,7 +139,7 @@ export function calculateSunLight(
     // 10:00 ~ 11:30: 오전 순광
     color = '#FEF3C7';
     intensity = 0.65;
-    fogColor = '#1e293b';
+    fogColor = '#bae6fd';
     label = `오전 ${Math.floor(safeHour)}시 (맑은 일조)`;
     skyAtmosphereColor = 'rgba(147, 197, 253, 1)';
     skyHaloColor = 'rgba(255, 250, 230, 0.9)';
@@ -149,7 +149,7 @@ export function calculateSunLight(
     // 12:00 ~ 13:30: 정오 직사광선 (최대 조도, 백색광, 청명한 딥 블루)
     color = '#FFFFFF';
     intensity = 0.75;
-    fogColor = '#16202e';
+    fogColor = '#93c5fd';
     label = `정오 ${Math.floor(safeHour)}시 (정오 직사광)`;
     skyAtmosphereColor = 'rgba(96, 165, 250, 1)';
     skyHaloColor = 'rgba(255, 255, 255, 0.95)';
@@ -159,7 +159,7 @@ export function calculateSunLight(
     // 14:00 ~ 16:00: 오후 온화하고 또렷한 고대비 태양광
     color = '#FFFFFF';
     intensity = 0.85;
-    fogColor = '#1e293b';
+    fogColor = '#bae6fd';
     label = `오후 ${Math.floor(safeHour)}시 (오후 일조)`;
     skyAtmosphereColor = 'rgba(125, 185, 245, 1)';
     skyHaloColor = 'rgba(255, 255, 255, 0.95)';
@@ -169,7 +169,7 @@ export function calculateSunLight(
     // 16:00 ~ 17:30: 늦은 오후 황금빛 햇살 (Golden Hour & 주황빛 산란)
     color = '#FDBA74';
     intensity = 0.58;
-    fogColor = '#2d2426';
+    fogColor = '#fed7aa';
     label = `오후 ${Math.floor(safeHour)}시 (골든 아워)`;
     skyAtmosphereColor = 'rgba(249, 168, 117, 1)';
     skyHaloColor = 'rgba(253, 186, 116, 0.95)';
@@ -179,7 +179,7 @@ export function calculateSunLight(
     // 17:30 ~ 18:00: 석양 노을 (드라마틱한 주황/선홍색 대기 산란)
     color = '#FB923C';
     intensity = 0.48;
-    fogColor = '#382225';
+    fogColor = '#fecdd3';
     label = `오후 ${Math.floor(safeHour)}시 (석양 노을)`;
     skyAtmosphereColor = 'rgba(239, 100, 80, 1)';
     skyHaloColor = 'rgba(251, 146, 60, 0.98)';

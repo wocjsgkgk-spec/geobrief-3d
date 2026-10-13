@@ -533,7 +533,7 @@ export const useMapStore = create<MapStoreState>()(
       },
 
       terrainEnabled: true,
-      terrainExaggeration: 1.5,
+      terrainExaggeration: 1.2,
       baseMap: 'satellite',
       setTerrainEnabled: (terrainEnabled) => set({ terrainEnabled }),
       setTerrainExaggeration: (terrainExaggeration) => set({ terrainExaggeration }),
@@ -1893,7 +1893,7 @@ export const useMapStore = create<MapStoreState>()(
           },
           baseMap: 'satellite',
           terrainEnabled: true,
-          terrainExaggeration: 1.5,
+          terrainExaggeration: 1.2,
           selectedRegionId: defaultRegion.id,
           selectedIdleSiteId: 'camp-long-wonju',
           showSlopeAnalysis: false,
