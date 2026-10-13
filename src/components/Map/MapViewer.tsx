@@ -333,6 +333,7 @@ export const MapViewer: React.FC = () => {
   const {
     viewport,
     setViewport,
+    selectedIdleSiteId,
     terrainEnabled,
     terrainExaggeration,
     baseMap,
@@ -2375,9 +2376,9 @@ export const MapViewer: React.FC = () => {
         console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
       }
 
-      // [2단계 신규: 원주 1군지사 스마트 도심 3D 복합단지(LOD2) 자동 안착 레이어]
+      // [2단계 신규: 원주 1군지사 및 강원 다중 거점 스마트 3D 복합단지(LOD2) 자동 안착 레이어]
       try {
-        const smartCityLayer = new SmartCityComplex3DLayer();
+        const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
         smartCityLayer.setVisible(!!layers.firstLogisticsSmartCity);
         map.addLayer(smartCityLayer);
         smartCityComplexLayerRef.current = smartCityLayer;
@@ -3295,12 +3296,15 @@ export const MapViewer: React.FC = () => {
     }
   }, [transformGizmoMode]);
 
-  // 8-0-3. [2단계 신규: 1군지사 미래 개발 구상안(3D 입체) 가시성 실시간 동기화]
+  // 8-0-3. [강원권 다중 거점 3D 스마트 복합단지(LOD2) 자동 안착 및 거점 전환 동기화]
   useEffect(() => {
     if (smartCityComplexLayerRef.current) {
+      if (selectedIdleSiteId) {
+        smartCityComplexLayerRef.current.setSite(selectedIdleSiteId);
+      }
       smartCityComplexLayerRef.current.setVisible(!!layers.firstLogisticsSmartCity);
     }
-  }, [layers.firstLogisticsSmartCity]);
+  }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
 
   // 8-0-2-1. [3D 디테일 LOD (LOD1 일반 / LOD2+ 실감) 모드 Threebox 동기화]
   useEffect(() => {

@@ -47,6 +47,7 @@ import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
 import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
 import { BORDER_DISTRICT_IDS } from '@/constants/borderSecurityZones';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
+import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
 import { generateStrategicFacilities, STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { generateSpiralPreset, generateApproachPreset } from '@/utils/cinematicPathInterpolator';
 import type { CloudProject } from '@/lib/supabase';
@@ -986,12 +987,15 @@ export const useMapStore = create<MapStoreState>()(
           vworldDiagnostic: { ...state.vworldDiagnostic, ...data },
         })),
 
-      // 전략 군 유휴지 실증 프리셋 (8개소+)
-      selectedIdleSiteId: 'camp-long-wonju',
+      // 전략 군 유휴지 실증 프리셋 (강원 6대+ 다중 거점 통합)
+      selectedIdleSiteId: 'first-logistics-wonju',
       selectIdleSite: (siteId: string) => {
-        const found = MILITARY_IDLE_SITES.find((s) => s.id === siteId);
+        const gangwonSite = getGangwonMilitarySiteById(siteId);
+        const legacySite = MILITARY_IDLE_SITES.find((s) => s.id === siteId);
+        const found = gangwonSite || legacySite;
         if (!found) return;
 
+        const canonicalId = gangwonSite ? gangwonSite.id : siteId;
         const isBorder = (BORDER_DISTRICT_IDS as readonly string[]).includes(found.regionId);
         const center = found.center;
         const poly = found.polygon;
@@ -1000,20 +1004,19 @@ export const useMapStore = create<MapStoreState>()(
         const defResult = analyzeDefenseRegulations(poly, center);
         const accessResult = analyzeAccessibility(center, get().accessibilityResult?.rows);
 
-        const strategicCfg = STRATEGIC_SITES_3D[siteId];
-        const cam = strategicCfg?.recommendedCamera || found.recommendedCamera;
+        // 3D 항공 뷰 (pitch: 55°, bearing: 20°)
         const targetVp: ViewportState = {
           longitude: center[0],
           latitude: center[1],
-          zoom: cam.zoom,
-          pitch: cam.pitch,
-          bearing: cam.bearing,
+          zoom: found.recommendedCamera?.zoom || 15.6,
+          pitch: 55,
+          bearing: 20,
         };
 
-        const strategicFacilities = generateStrategicFacilities(siteId, 100);
+        const strategicFacilities = generateStrategicFacilities(canonicalId, 100);
 
-        set({
-          selectedIdleSiteId: siteId,
+        set((state) => ({
+          selectedIdleSiteId: canonicalId,
           selectedRegionId: found.regionId,
           isBorderDistrict: isBorder,
           borderSecurityVisible: isBorder,
@@ -1025,14 +1028,18 @@ export const useMapStore = create<MapStoreState>()(
           defenseAnalysisResult: defResult,
           accessibilityResult: accessResult,
           viewMode: '3D',
+          layers: {
+            ...state.layers,
+            firstLogisticsSmartCity: true,
+          },
           placedFacilities:
-            strategicFacilities.length > 0 ? strategicFacilities : get().placedFacilities,
+            strategicFacilities.length > 0 ? strategicFacilities : state.placedFacilities,
           selectedFacilityId:
             strategicFacilities.length > 0 ? strategicFacilities[0].id : null,
           metadata: {
-            ...get().metadata,
+            ...state.metadata,
             title: `${found.name} 공간 분석 보고서`,
-            subtitle: `${found.district} | ${found.devVision}`,
+            subtitle: `${found.district} | ${'themeTitle' in found ? (found as any).themeTitle : found.devVision}`,
           },
           viewport: targetVp,
           flyToSignal: {
@@ -1040,7 +1047,7 @@ export const useMapStore = create<MapStoreState>()(
             timestamp: Date.now(),
             duration: 1800,
           },
-        });
+        }));
       },
 
       // 토목·지형 단면 및 3단 경사도 분석 도구

@@ -64,6 +64,7 @@ import {
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
+import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
 import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { AddressSearch } from '@/components/Search/AddressSearch';
 import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
@@ -440,124 +441,173 @@ export const ControlPanel: React.FC = () => {
       {/* [부지정보/접근성 탭 섹션 그룹 (유휴지, 시군, 북마크, 구역지정)] */}
       {activeSidebarTab === 'site_access' && (
         <>
-          {/* 3. [신규] 전략 군 유휴지 실증 데이터셋 카탈로그 (8개소+) */}
+          {/* 3. [강원권 다중 거점] 군 유휴부지 3D 스마트 복합단지(LOD2) 자동 안착 카탈로그 */}
           {(() => {
-            const currentSite =
-              MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId) || MILITARY_IDLE_SITES[0];
+            const currentGangwon = getGangwonMilitarySiteById(selectedIdleSiteId || '');
+            const currentLegacy = MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId);
+            const currentSite = currentGangwon || currentLegacy || GANGWON_MILITARY_SITES[0];
 
             return (
               <section className="p-4 border-b border-[#242f27] space-y-2.5 bg-[#121c15]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                <Crosshair className="w-4 h-4 text-emerald-400" />
-                전략 군 유휴지 실증 프리셋
-              </h2>
-              <span className="text-[10px] text-emerald-300 font-mono font-semibold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/60">
-                실증 DB {MILITARY_IDLE_SITES.length}개소
-              </span>
-            </div>
-
-            {/* 유휴지 선택 셀렉터 */}
-            <div>
-              <select
-                value={selectedIdleSiteId || currentSite.id}
-                onChange={(e) => selectIdleSite(e.target.value)}
-                className="w-full bg-[#18261c] border border-[#2d4232] focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-100 font-medium focus:outline-none transition-colors cursor-pointer shadow-inner"
-              >
-                {MILITARY_IDLE_SITES.map((site) => (
-                  <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100">
-                    {site.name} ({site.district.split(' ').slice(1, 3).join(' ')} · {site.areaPyeong.toLocaleString()}평)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 선택된 유휴지 브리핑 카드 */}
-            {currentSite && (
-              <div className="p-3 bg-[#152219] border border-[#2a3e2f] rounded-lg space-y-2 text-xs">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-bold text-slate-100 flex items-center gap-1.5 text-xs">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      {currentSite.name}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                      {currentSite.district}
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 font-bold">
-                    약 {currentSite.areaPyeong.toLocaleString()}평
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <Crosshair className="w-4 h-4 text-emerald-400" />
+                    강원 군 유휴지 3D 스마트 복합단지 (LOD2)
+                  </h2>
+                  <span className="text-[10px] text-emerald-300 font-mono font-semibold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/60">
+                    실증 {GANGWON_MILITARY_SITES.length}개 거점
                   </span>
                 </div>
 
-                {/* 면적 & 관리기관 */}
-                <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#0f1712] p-2 rounded border border-[#213024]">
-                  <div>
-                    <span className="text-slate-400 block">대지 면적</span>
-                    <span className="font-semibold text-slate-200 font-mono">
-                      {currentSite.areaSqm.toLocaleString()} ㎡
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">관리 기관</span>
-                    <span className="font-semibold text-slate-300 truncate block">
-                      {currentSite.managingAgency}
-                    </span>
-                  </div>
+                {/* 유휴지 선택 셀렉터 */}
+                <div>
+                  <select
+                    value={selectedIdleSiteId || currentSite.id}
+                    onChange={(e) => selectIdleSite(e.target.value)}
+                    className="w-full bg-[#18261c] border border-[#2d4232] focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-100 font-medium focus:outline-none transition-colors cursor-pointer shadow-inner"
+                  >
+                    <optgroup label="📍 강원권 3D 스마트 복합단지 핵심 거점" className="bg-[#121a14] text-emerald-400 font-bold">
+                      {GANGWON_MILITARY_SITES.map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
+                          [{site.hubCategoryLabel}] {site.name} ({site.areaPyeong.toLocaleString()}평)
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="📋 기타 강원 군 유휴지 실증지" className="bg-[#121a14] text-slate-400 font-bold">
+                      {MILITARY_IDLE_SITES.filter(
+                        (ms) => !GANGWON_MILITARY_SITES.some((gs) => gs.id === ms.id || gs.aliasIds.includes(ms.id))
+                      ).map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-300 font-normal">
+                          {site.name} ({site.areaPyeong.toLocaleString()}평)
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
                 </div>
 
-                {/* 개발 비전 */}
-                <div className="p-2 rounded bg-emerald-950/30 border border-emerald-800/40 text-[10.5px] text-emerald-200/90 leading-relaxed">
-                  <span className="font-bold text-emerald-400 block text-[9.5px] uppercase tracking-wider mb-0.5">
-                    💡 미래 개발 비전
-                  </span>
-                  {currentSite.devVision}
-                </div>
-
-                {/* 부지 특성 뱃지 */}
-                <div className="flex flex-wrap gap-1 pt-0.5">
-                  {currentSite.keyFeatures.map((feat, idx) => (
-                    <span
-                      key={idx}
-                      className="text-[9.5px] px-1.5 py-0.5 rounded bg-[#101913] text-slate-300 border border-[#26372b]"
-                    >
-                      • {feat}
-                    </span>
-                  ))}
-                </div>
-
-                {/* 3D 거점 모델 연동 상태 */}
-                {STRATEGIC_SITES_3D[currentSite.id] && (
-                  <div className="p-2 rounded bg-cyan-950/30 border border-cyan-800/40 text-[10.5px] text-cyan-200/90 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-cyan-400 text-[9.5px] uppercase tracking-wider flex items-center gap-1">
-                        <Box className="w-3 h-3 text-cyan-400" />
-                        강원 거점 정밀 3D 건축 모델 자동 안착
-                      </span>
-                      <span className="text-[9px] font-mono bg-cyan-900/60 px-1.5 py-0.5 rounded text-cyan-300 border border-cyan-700/60 font-semibold">
-                        {STRATEGIC_SITES_3D[currentSite.id].facilities.length}개동 연동
+                {/* 선택된 유휴지 브리핑 카드 */}
+                {currentSite && (
+                  <div className="p-3 bg-[#152219] border border-[#2a3e2f] rounded-lg space-y-2 text-xs">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          {'hubCategoryLabel' in currentSite && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-semibold">
+                              {(currentSite as any).hubCategoryLabel}
+                            </span>
+                          )}
+                          <h3 className="font-bold text-slate-100 text-xs">
+                            {currentSite.name}
+                          </h3>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                          {currentSite.district}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 font-bold whitespace-nowrap">
+                        약 {currentSite.areaPyeong.toLocaleString()}평
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-300">
-                      {STRATEGIC_SITES_3D[currentSite.id].description}
-                    </p>
+
+                    {/* 면적 & 관리기관 */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#0f1712] p-2 rounded border border-[#213024]">
+                      <div>
+                        <span className="text-slate-400 block">대지 면적</span>
+                        <span className="font-semibold text-slate-200 font-mono">
+                          {currentSite.areaSqm.toLocaleString()} ㎡
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">관리 기관</span>
+                        <span className="font-semibold text-slate-300 truncate block">
+                          {currentSite.managingAgency}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 개발 테마 & 비전 */}
+                    <div className="p-2 rounded bg-emerald-950/30 border border-emerald-800/40 text-[10.5px] text-emerald-200/90 leading-relaxed">
+                      {'themeTitle' in currentSite && (
+                        <span className="font-bold text-emerald-300 block text-[10px] mb-0.5">
+                          🎯 {(currentSite as any).themeTitle}
+                        </span>
+                      )}
+                      <p className="text-[10px] text-emerald-100/80">
+                        {currentSite.devVision}
+                      </p>
+                    </div>
+
+                    {/* 교통 접근성 실시간 진단 */}
+                    {'transitInfo' in currentSite && (
+                      <div className="p-2 rounded bg-[#101913] border border-[#223526] space-y-1 text-[10px]">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-300 flex items-center gap-1">
+                            <Navigation2 className="w-3 h-3 text-cyan-400" />
+                            교통 접근성 인프라
+                          </span>
+                          <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800">
+                            접근성 {(currentSite as any).transitInfo.score}점
+                          </span>
+                        </div>
+                        <div className="text-slate-400 space-y-0.5 text-[9.5px]">
+                          <div>• 고속도로: {(currentSite as any).transitInfo.highway}</div>
+                          <div>• 철도/KTX: {(currentSite as any).transitInfo.railway}</div>
+                          <div>• 간선국도: {(currentSite as any).transitInfo.nationalRoad}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3D 스마트 복합단지(LOD2) 절차적 메쉬 구성 */}
+                    <div className="p-2 rounded bg-cyan-950/25 border border-cyan-800/40 text-[10px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-cyan-300 flex items-center gap-1">
+                          <Box className="w-3 h-3 text-cyan-400" />
+                          3D 스마트 복합단지(LOD2) 자동 안착 메쉬
+                        </span>
+                        <span className="text-[9px] font-mono text-cyan-300 font-semibold bg-cyan-900/60 px-1.5 py-0.2 rounded">
+                          Terrain Clamped
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 pt-0.5 text-[9px]">
+                        {'complex3DPresets' in currentSite ? (
+                          (currentSite as any).complex3DPresets.map((preset: string, pIdx: number) => {
+                            const labelMap: Record<string, string> = {
+                              rd_tower: 'R&D 타워(헬리패드)',
+                              knowledge_center: '지식산업센터(태양광)',
+                              logistics_depot: '군수물류 데포(아치트러스)',
+                              watch_tower: '전술 감시탑(360°관측큐브)',
+                              residential_support: '표준 주거동(박공지붕)',
+                              civic_convention: '문화컨벤션(곡선아치)',
+                            };
+                            return (
+                              <span
+                                key={pIdx}
+                                className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-200 border border-cyan-700/60 font-medium"
+                              >
+                                {labelMap[preset] || preset}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <span className="text-slate-400">표준 군 복합지원 시설 메쉬</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 원클릭 카메라 3D 항공 뷰 비행 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => selectIdleSite(currentSite.id)}
+                      className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50"
+                    >
+                      <Navigation2 className="w-3.5 h-3.5" />
+                      <span>3D 항공 뷰(55°/20°) 전환 및 복합단지 안착</span>
+                    </button>
                   </div>
                 )}
-
-                {/* 원클릭 카메라 비행 버튼 */}
-                <button
-                  type="button"
-                  onClick={() => selectIdleSite(currentSite.id)}
-                  className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50"
-                >
-                  <Navigation2 className="w-3.5 h-3.5" />
-                  <span>이 부지로 3D 입체 비행 및 폴리곤 로드</span>
-                </button>
-              </div>
-            )}
-          </section>
-        );
-      })()}
+              </section>
+            );
+          })()}
 
       {/* 3. 강원특별자치도 18개 시·군 전역 퀵 셀렉터 (GANGWON_REGIONS) */}
       {(() => {
