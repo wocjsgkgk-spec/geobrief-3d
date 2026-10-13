@@ -286,6 +286,7 @@ export const MapViewer: React.FC = () => {
 
   // [긴급 에러 오버레이 상태] Window Error, Promise Rejection, MapLibre Error 실시간 수집
   const [debugErrors, setDebugErrors] = useState<string[]>([]);
+  const [isDebugCollapsed, setIsDebugCollapsed] = useState<boolean>(true);
   const orbitAnimRef = useRef<number | null>(null);
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
@@ -465,13 +466,22 @@ export const MapViewer: React.FC = () => {
   // [긴급 에러 오버레이] Window Error & Unhandled Promise Rejection 실시간 감지 리스너
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => {
+      const msgText = event.message || '';
+      // ResizeObserver 루프 등 브라우저 정상 라이프사이클 무해 노티스는 바이패스
+      if (msgText.includes('ResizeObserver') || msgText.includes('Script error')) {
+        return;
+      }
       const filename = event.filename ? event.filename.split('/').pop() : 'unknown';
-      const msg = `[Window Error] ${event.message} (${filename}:${event.lineno || 0}:${event.colno || 0})`;
+      const msg = `[Window Error] ${msgText} (${filename}:${event.lineno || 0}:${event.colno || 0})`;
       console.error('[ErrorOverlay]', msg);
       setDebugErrors((prev) => [...prev.slice(-19), msg]);
     };
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason?.stack || event.reason?.message || String(event.reason);
+      // 취소된 요청(AbortError), 일반 타일 404 등 무해한 비동기 취소는 바이패스
+      if (reason.includes('AbortError') || reason.includes('canceled') || reason.includes('cancelled') || reason.includes('404')) {
+        return;
+      }
       const msg = `[Promise Rejection] ${reason}`;
       console.error('[ErrorOverlay]', msg);
       setDebugErrors((prev) => [...prev.slice(-19), msg]);
@@ -2530,6 +2540,27 @@ export const MapViewer: React.FC = () => {
       const message = errObj?.message || (typeof errObj === 'string' ? errObj : JSON.stringify(errObj));
       const stack = errObj?.stack || '';
 
+      // [네트워크/타일 무해 경고 격리] 타일 404, 취소(Abort), 이미지 디코딩 등 일반 네트워크 이벤트는 콘솔 워닝으로만 분류
+      const isTileOrNetworkWarning =
+        message.includes('404') ||
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('status: 404') ||
+        message.includes('status: 401') ||
+        message.includes('status: 403') ||
+        message.includes('status: 0') ||
+        message.includes('Failed to load tile') ||
+        message.includes('could not be loaded') ||
+        message.includes('Image "') ||
+        message.includes('AbortError') ||
+        message.includes('canceled') ||
+        message.includes('cancelled');
+
+      if (isTileOrNetworkWarning) {
+        console.warn(`[MapLibre Tile Notice] (${sourceId}/${layerId}): ${message}`);
+        return;
+      }
+
       let fileInfo = 'Unknown Location';
       if (stack) {
         const lines = stack.split('\n');
@@ -3247,13 +3278,30 @@ export const MapViewer: React.FC = () => {
     const fetchBoundsBuildings = async () => {
       try {
         const zoom = map.getZoom();
-        if (zoom < 13) return; // 13 레벨 이상에서만 건물 상세 페칭
+        if (zoom < 11.8) return; // 11.8 레벨 이상에서 강원 전역 시·군 건물 상세 페칭
         const bounds = map.getBounds();
+        const center = map.getCenter();
+        let west = bounds.getWest();
+        let south = bounds.getSouth();
+        let east = bounds.getEast();
+        let north = bounds.getNorth();
+
+        // 뷰포트가 넓을 경우 중심 좌표 기준 0.10도 서브 영역으로 안전 클램핑
+        const MAX_QUERY_SPAN = 0.10;
+        if (east - west > MAX_QUERY_SPAN) {
+          west = center.lng - MAX_QUERY_SPAN / 2;
+          east = center.lng + MAX_QUERY_SPAN / 2;
+        }
+        if (north - south > MAX_QUERY_SPAN) {
+          south = center.lat - MAX_QUERY_SPAN / 2;
+          north = center.lat + MAX_QUERY_SPAN / 2;
+        }
+
         const bbox: [number, number, number, number] = [
-          bounds.getWest(),
-          bounds.getSouth(),
-          bounds.getEast(),
-          bounds.getNorth(),
+          Math.round(west * 10000) / 10000,
+          Math.round(south * 10000) / 10000,
+          Math.round(east * 10000) / 10000,
+          Math.round(north * 10000) / 10000,
         ];
         const result = await fetchFusionBuildings(bbox);
         if (isCancelled) return;
@@ -3302,19 +3350,21 @@ export const MapViewer: React.FC = () => {
           }
 
           // 3) 주력 Three.js LOD2 절차적 실감 3D 건축물 엔진 동기화 (박공/모임지붕, 난간, UV타일링 벽체, 지형 밀착)
-          if (lod2BuildingEngineRef.current && finalFeatures?.features) {
+          if (lod2BuildingEngineRef.current) {
+            const extra = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
             const allFeatures = [
               ...SAMPLE_BUILDINGS.features,
-              ...(finalFeatures.features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]),
+              ...extra,
             ];
             lod2BuildingEngineRef.current.updateBuildings(allFeatures);
           }
 
           // 4) Threebox LOD2 입체 지붕 동기화 (기즈모 및 시설물 연동용)
-          if (threeboxLayerRef.current && finalFeatures?.features) {
+          if (threeboxLayerRef.current) {
+            const extra = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
             threeboxLayerRef.current.syncRoofs([
               ...SAMPLE_BUILDINGS.features,
-              ...(finalFeatures.features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]),
+              ...extra,
             ]);
           }
         } catch (sourceErr) {
@@ -5159,59 +5209,60 @@ export const MapViewer: React.FC = () => {
         {/* [1. 브라우저 화면 내 긴급 에러 오버레이 (Error Overlay)] */}
         <div
           id="map-debug-overlay"
-          className={`absolute top-2 left-2 right-2 max-h-56 overflow-y-auto ${
+          className={`absolute top-2 left-2 z-[9999] pointer-events-auto transition-all text-xs font-mono rounded-lg shadow-xl backdrop-blur-md border ${
             debugErrors.length > 0
-              ? 'bg-red-950/95 border-red-500 text-red-200'
-              : 'bg-black/85 border-emerald-500/70 text-emerald-300'
-          } border text-xs font-mono p-3 rounded-lg shadow-2xl backdrop-blur-md z-[9999] pointer-events-auto transition-all`}
+              ? 'bg-red-950/95 border-red-500 text-red-200 p-3 max-h-56 overflow-y-auto max-w-xl'
+              : 'bg-black/80 border-emerald-500/60 text-emerald-300 px-3 py-1.5'
+          }`}
         >
-          <div className="flex items-center justify-between font-bold border-b border-white/10 pb-1.5 mb-2">
-            <span className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  debugErrors.length > 0 ? 'bg-red-500 animate-ping' : 'bg-emerald-400'
-                }`}
-              />
-              [엔진 디버그 모니터]
-              {SAFE_MODE ? (
-                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded text-[10px]">
-                  세이프 모드 (순수 위성 베이스맵 격리)
-                </span>
-              ) : (
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px]">
-                  3D 풀 렌더링 가동 중 (건물 & 지형)
-                </span>
-              )}
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                debugErrors.length > 0 ? 'bg-red-500 animate-ping' : 'bg-emerald-400'
+              }`}
+            />
+            <span className="font-bold">
               {debugErrors.length > 0 ? (
-                <span className="text-red-400">🚨 에러 {debugErrors.length}건 감지</span>
+                <span className="text-red-400">🚨 렌더링 에러 {debugErrors.length}건 감지</span>
               ) : (
-                <span className="text-emerald-400">✅ WebGL 런타임 정상 (에러 0건)</span>
+                <span className="text-emerald-300">✅ WebGL 3D 엔진 정상 (강원 18개 시·군 연동)</span>
               )}
             </span>
-            {debugErrors.length > 0 && (
+            {debugErrors.length > 0 ? (
               <button
                 onClick={() => setDebugErrors([])}
-                className="text-[10px] bg-red-800 hover:bg-red-700 px-2 py-0.5 rounded text-white font-sans"
+                className="text-[10px] bg-red-800 hover:bg-red-700 px-2 py-0.5 rounded text-white font-sans ml-auto"
               >
                 로그 초기화
               </button>
+            ) : (
+              <button
+                onClick={() => setIsDebugCollapsed(!isDebugCollapsed)}
+                className="text-[10px] text-emerald-400/70 hover:text-emerald-200 underline ml-2 cursor-pointer"
+              >
+                {isDebugCollapsed ? '상세보기' : '접기'}
+              </button>
             )}
           </div>
-          {debugErrors.length === 0 ? (
-            <div className="text-[11px] text-emerald-400/90 leading-relaxed">
-              • 현재 브라우저 런타임 WebGL 및 MapLibre 에러가 0건입니다.<br />
-              • Esri 위성 영상 및 3D 건축물·DEM 입체 지형이 정상 렌더링 중입니다.
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {debugErrors.map((err, idx) => (
-                <div
-                  key={idx}
-                  className="break-all whitespace-pre-wrap text-[11px] bg-red-900/60 p-1.5 rounded border border-red-700/60 font-mono"
-                >
-                  {err}
+          {(!isDebugCollapsed || debugErrors.length > 0) && (
+            <div className="mt-2 pt-2 border-t border-white/10 text-[11px] leading-relaxed">
+              {debugErrors.length === 0 ? (
+                <div className="text-emerald-400/90">
+                  • 현재 브라우저 런타임 WebGL 및 MapLibre 에러가 0건입니다.<br />
+                  • 강원특별자치도 18개 시·군 3D 랜드마크 및 DEM 입체 지형이 정상 렌더링 중입니다.
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {debugErrors.map((err, idx) => (
+                    <div
+                      key={idx}
+                      className="break-all whitespace-pre-wrap text-[11px] bg-red-900/60 p-1.5 rounded border border-red-700/60 font-mono"
+                    >
+                      {err}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -347,25 +347,36 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const [minLng, minLat, maxLng, maxLat] = coords;
+  let [minLng, minLat, maxLng, maxLat] = coords;
 
-  // 대한민국 영토 경계 및 DoS 과부하 방지 검증 (경도 124.0~132.5, 위도 33.0~39.5)
+  // 대한민국 영토 경계 검증 (경도 124.0~132.5, 위도 33.0~39.5)
   const isOutOfKorea =
     minLng < 124.0 || maxLng > 132.5 || minLat < 33.0 || maxLat > 39.5 ||
     minLng >= maxLng || minLat >= maxLat;
-  const isSpanTooLarge = (maxLng - minLng) > 0.15 || (maxLat - minLat) > 0.15;
 
-  if (isOutOfKorea || isSpanTooLarge) {
+  if (isOutOfKorea) {
     return NextResponse.json(
       {
         success: false,
         status: 'error',
-        message: isSpanTooLarge
-          ? 'bbox 영역이 너무 넓습니다 (최대 0.15도 이하 지원, 지도 확대 필요)'
-          : '대한민국 영토 범위를 벗어난 유효하지 않은 bbox 좌표입니다',
+        message: '대한민국 영토 범위를 벗어난 유효하지 않은 bbox 좌표입니다',
       },
       { status: 400 }
     );
+  }
+
+  // 뷰포트가 넓을 경우(줌 12~13 등) 중심 좌표 기준 0.12도 서브 영역으로 자동 클램핑하여 400 에러 차단
+  const lngSpan = maxLng - minLng;
+  const latSpan = maxLat - minLat;
+  const MAX_SPAN = 0.12;
+  if (lngSpan > MAX_SPAN || latSpan > MAX_SPAN) {
+    const centerLng = (minLng + maxLng) / 2;
+    const centerLat = (minLat + maxLat) / 2;
+    const halfSpan = MAX_SPAN / 2;
+    minLng = Math.round((centerLng - halfSpan) * 10000) / 10000;
+    maxLng = Math.round((centerLng + halfSpan) * 10000) / 10000;
+    minLat = Math.round((centerLat - halfSpan) * 10000) / 10000;
+    maxLat = Math.round((centerLat + halfSpan) * 10000) / 10000;
   }
 
   // 2. 인증키 확인
