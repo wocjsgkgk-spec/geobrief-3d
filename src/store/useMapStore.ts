@@ -2053,14 +2053,31 @@ export const useMapStore = create<MapStoreState>()(
     }),
     {
       name: 'geobrief-3d-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        if (typeof window !== 'undefined') {
+          try {
+            return window.localStorage;
+          } catch {
+            return sessionStorage;
+          }
+        }
+        return {
+          getItem: () => null,
+          setItem: () => {},
+          removeItem: () => {},
+        };
+      }),
       onRehydrateStorage: () => (state) => {
-        if (state && state.completedPolygon && state.polygonCenter) {
-          state.defenseAnalysisResult = analyzeDefenseRegulations(
-            state.completedPolygon,
-            state.polygonCenter
-          );
-          state.accessibilityResult = analyzeAccessibility(state.polygonCenter);
+        try {
+          if (state && state.completedPolygon && state.polygonCenter) {
+            state.defenseAnalysisResult = analyzeDefenseRegulations(
+              state.completedPolygon,
+              state.polygonCenter
+            );
+            state.accessibilityResult = analyzeAccessibility(state.polygonCenter);
+          }
+        } catch (rehydrateErr) {
+          console.warn('[useMapStore] onRehydrateStorage safe bypass:', rehydrateErr);
         }
       },
       partialize: (state) => ({

@@ -35,6 +35,7 @@ let materialsCache: FacadeMaterialsCache | null = null;
  * - 밝은 그레이 알루미늄 창호 프레임 및 수직 멀리온(Mullion)
  */
 export function createUpperFloorCanvas(size = 256): HTMLCanvasElement {
+  if (typeof document === 'undefined') return null as any;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -141,6 +142,7 @@ export function createUpperFloorCanvas(size = 256): HTMLCanvasElement {
  * - 화강암 다크 석재 기둥 & 자동 출입문 프레임
  */
 export function createLobbyCanvas(size = 256): HTMLCanvasElement {
+  if (typeof document === 'undefined') return null as any;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -243,6 +245,7 @@ export function createLobbyCanvas(size = 256): HTMLCanvasElement {
  * - 알루미늄 화이트 새시와 고대비 틴트 글래스
  */
 export function createResidentialCanvas(size = 256): HTMLCanvasElement {
+  if (typeof document === 'undefined') return null as any;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -312,6 +315,7 @@ export function createResidentialCanvas(size = 256): HTMLCanvasElement {
  * - 짙은 슬레이트 카키 그레이 및 방호 루버 창호 패턴
  */
 export function createMilitaryCanvas(size = 256): HTMLCanvasElement {
+  if (typeof document === 'undefined') return null as any;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;

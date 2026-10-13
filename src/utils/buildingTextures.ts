@@ -22,6 +22,9 @@ export interface FacadeTextureResult {
  * - 모던 베이지/그레이 콘크리트 베이스, 8개 층 층간 슬래브, 4개 세대 창문 및 발코니 음영선
  */
 export function createResidentialFacade(size = 256): FacadeTextureResult {
+  if (typeof document === 'undefined') {
+    return { id: 'facade-residential-pattern', canvas: {} as HTMLCanvasElement, imageData: {} as ImageData, dataUrl: '' };
+  }
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -132,6 +135,9 @@ export function createResidentialFacade(size = 256): FacadeTextureResult {
  * - 다크 네이비 구조체, 8x8 커튼월 그리드, 스카이블루/시안 반사 글래스, 스펙큘러 대각 광택
  */
 export function createCommercialFacade(size = 256): FacadeTextureResult {
+  if (typeof document === 'undefined') {
+    return { id: 'facade-commercial-pattern', canvas: {} as HTMLCanvasElement, imageData: {} as ImageData, dataUrl: '' };
+  }
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -211,6 +217,9 @@ export function createCommercialFacade(size = 256): FacadeTextureResult {
  * - 매트 다크 슬레이트 콘크리트, 16개 세로 차양 루버(Louver), 방호형 슬릿 창호 패턴
  */
 export function createMilitaryFacade(size = 256): FacadeTextureResult {
+  if (typeof document === 'undefined') {
+    return { id: 'facade-military-pattern', canvas: {} as HTMLCanvasElement, imageData: {} as ImageData, dataUrl: '' };
+  }
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;

@@ -331,9 +331,10 @@ export const ControlPanel: React.FC = () => {
       {/* 2. [시간대별 일조·태양광 시뮬레이션 (지형/인프라 탭)] */}
       {activeSidebarTab === 'terrain_infra' &&
         (() => {
-          const centerLat = polygonCenter ? polygonCenter[1] : viewport.latitude;
-          const centerLng = polygonCenter ? polygonCenter[0] : viewport.longitude;
-          const sunInfo = calculateSunLight(sunHour, centerLat, centerLng);
+          const centerLat = polygonCenter ? polygonCenter[1] : (viewport?.latitude ?? 37.342);
+          const centerLng = polygonCenter ? polygonCenter[0] : (viewport?.longitude ?? 127.925);
+          const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(9, Math.min(18, sunHour)) : 12;
+          const sunInfo = calculateSunLight(safeHour, centerLat, centerLng);
 
           return (
             <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111913]">
@@ -344,7 +345,7 @@ export const ControlPanel: React.FC = () => {
               </h2>
               <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
                 <Clock className="w-3 h-3 text-amber-400" />
-                {sunInfo.label}
+                {sunInfo?.label ?? `${Math.floor(safeHour)}:00`}
               </span>
             </div>
 
@@ -355,8 +356,8 @@ export const ControlPanel: React.FC = () => {
                   <Sunrise className="w-3 h-3 text-orange-400" /> 09:00
                 </span>
                 <span className="font-bold text-amber-300 font-mono text-xs">
-                  {Math.floor(sunHour).toString().padStart(2, '0')}:
-                  {Math.round((sunHour % 1) * 60).toString().padStart(2, '0')}
+                  {Math.floor(safeHour).toString().padStart(2, '0')}:
+                  {Math.round((safeHour % 1) * 60).toString().padStart(2, '0')}
                 </span>
                 <span className="font-semibold flex items-center gap-1 text-[10.5px]">
                   18:00 <Sunset className="w-3 h-3 text-rose-400" />
@@ -405,19 +406,19 @@ export const ControlPanel: React.FC = () => {
               <div>
                 <span className="text-slate-400 block">태양 방위각</span>
                 <span className="font-bold text-slate-200 font-mono">
-                  {sunInfo.azimuthDeg}°
+                  {sunInfo?.azimuthDeg ?? 180}°
                 </span>
               </div>
               <div>
                 <span className="text-slate-400 block">태양 고도각</span>
                 <span className="font-bold text-amber-300 font-mono">
-                  {Math.max(-90, Math.min(90, sunInfo.altitudeDeg))}°
+                  {Math.max(-90, Math.min(90, sunInfo?.altitudeDeg ?? 45))}°
                 </span>
               </div>
               <div>
                 <span className="text-slate-400 block">조도 강도</span>
                 <span className="font-bold text-emerald-400 font-mono">
-                  {Math.round(sunInfo.intensity * 100)}%
+                  {Math.round((sunInfo?.intensity ?? 0.65) * 100)}%
                 </span>
               </div>
             </div>
