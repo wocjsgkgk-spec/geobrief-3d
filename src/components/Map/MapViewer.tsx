@@ -421,31 +421,41 @@ export const MapViewer: React.FC = () => {
       ['coalesce', ['get', 'render_height'], ['get', 'height'], 35],
     ];
 
-    // [1단계: 건물 실제 층고 높낮이 다변화 표현식 - 데이터 부재/0인 경우에도 강제 폴백으로 확실히 돌출]
+    // [2단계: 건물 실제 층수(Floor Count) 및 높이 속성 바인딩 - 층당 3.2m 정규화 동적 계산식]
     const rawHeightCalculation: any = [
       'coalesce',
       ['get', 'adaptive_height'],
       ['get', 'render_height'],
       ['get', 'height'],
+      ['get', 'bld_hgt'],
+      ['get', 'BD_HGT'],
       [
         'case',
         ['has', 'building:levels'],
         ['*', ['to-number', ['get', 'building:levels'], 1], 3.2],
         ['has', 'GRND_FLR_CNT'],
         ['*', ['to-number', ['get', 'GRND_FLR_CNT'], 1], 3.2],
+        ['has', 'flr_cnt'],
+        ['*', ['to-number', ['get', 'flr_cnt'], 1], 3.2],
+        ['has', 'FLR_CNT'],
+        ['*', ['to-number', ['get', 'FLR_CNT'], 1], 3.2],
         ['has', 'levels'],
         ['*', ['to-number', ['get', 'levels'], 1], 3.2],
+        ['has', 'floor'],
+        ['*', ['to-number', ['get', 'floor'], 1], 3.2],
+        ['has', 'floors'],
+        ['*', ['to-number', ['get', 'floors'], 1], 3.2],
         [
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          52,
+          51.2, // 16층 * 3.2m
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          28,
+          28.8, // 9층 * 3.2m
           ['residential', 'house', 'detached', 'villa'],
-          12,
+          12.8, // 4층 * 3.2m
           ['military', 'public', 'government', 'public_military'],
-          18,
+          19.2, // 6층 * 3.2m
           zoomFallbackHeightExpr,
         ],
       ],
@@ -490,6 +500,12 @@ export const MapViewer: React.FC = () => {
       container: mapContainerRef.current,
       style: {
         version: 8,
+        light: {
+          anchor: 'viewport',
+          color: '#ffffff',
+          intensity: 0.85,
+          position: [1.3, 115, 40],
+        },
         sources: {
           'satellite-tiles': {
             type: 'raster',
@@ -660,11 +676,12 @@ export const MapViewer: React.FC = () => {
             type: 'hillshade',
             source: 'terrarium-dem',
             paint: {
-              'hillshade-exaggeration': 0.7,
+              'hillshade-exaggeration': 0.75,
               'hillshade-shadow-color': '#0f172a',
               'hillshade-highlight-color': '#ffffff',
               'hillshade-accent-color': '#1e293b',
               'hillshade-illumination-direction': 315,
+              'hillshade-illumination-anchor': 'viewport',
             },
             layout: { visibility: 'visible' },
           },
@@ -898,14 +915,14 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
-          // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - 밝은 모던 베이지/화이트 벽체 및 차콜 옥상]
+          // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - 차분한 오프화이트 벽체 및 짙은 슬레이트 옥상]
           {
             id: 'fusion-buildings-3d',
             type: 'fill-extrusion',
             source: 'fusion-buildings',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#F1F5F9',
+              'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.95,
@@ -949,7 +966,7 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#F1F5F9',
+              'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.95,
@@ -992,7 +1009,7 @@ export const MapViewer: React.FC = () => {
             source: 'sample-buildings-source',
             minzoom: 11,
             paint: {
-              'fill-extrusion-color': '#F1F5F9',
+              'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.95,
@@ -1551,13 +1568,13 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] map.setFog skipped:', fogErr);
       }
 
-      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (비스듬한 오후 태양광 각도, 강도 0.9)]
+      // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (비스듬한 태양광 각도, 강도 0.85)]
       try {
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.9,
-          position: [1.4, 125, 45],
+          intensity: 0.85,
+          position: [1.3, 115, 40],
         });
       } catch (lightErr) {
         console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
@@ -1998,7 +2015,7 @@ export const MapViewer: React.FC = () => {
             'source-layer': 'building',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#F1F5F9',
+              'fill-extrusion-color': '#F8FAFC',
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.95,
@@ -3719,12 +3736,12 @@ export const MapViewer: React.FC = () => {
 
     try {
       if (sunHour === 14) {
-        // [오후 고대비 태양광 조명] 비스듬한 오후 태양광 각도로 벽면의 명암 대비 극대화 (강도 0.9)
+        // [오후 고대비 태양광 조명] 비스듬한 태양광 각도로 벽면의 명암 대비 극대화 (강도 0.85)
         map.setLight({
           anchor: 'viewport',
           color: '#ffffff',
-          intensity: 0.9,
-          position: [1.4, 125, 45],
+          intensity: 0.85,
+          position: [1.3, 115, 40],
         });
       } else {
         map.setLight({
