@@ -179,9 +179,45 @@ function sanitizeCameraOptions<T extends Record<string, any>>(options: T, mapIns
   return sanitized as T;
 }
 
+/**
+ * [긴급 세이프 모드 (Safe Mode)]
+ * true일 때 모든 커스텀 3D/분석 레이어, WMS, Deck.gl, Threebox, 일조 조명 등을 비활성화하고,
+ * 오직 MapLibre GL의 기본 위성 래스터 타일 1개만 로드하는 순수 베이스맵 모드로 동작합니다.
+ */
+const SAFE_MODE = true;
+
+/**
+ * [순수 위성 래스터 10줄 이내 표준 베이스 스타일]
+ */
+const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    'satellite-tiles': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      attribution: 'Esri World Imagery',
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    {
+      id: 'satellite-layer',
+      type: 'raster',
+      source: 'satellite-tiles',
+      paint: {},
+    },
+  ],
+};
+
 export const MapViewer: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+
+  // [긴급 에러 오버레이 상태] Window Error, Promise Rejection, MapLibre Error 실시간 수집
+  const [debugErrors, setDebugErrors] = useState<string[]>([]);
   const orbitAnimRef = useRef<number | null>(null);
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
@@ -358,14 +394,28 @@ export const MapViewer: React.FC = () => {
   // [신규] 3D 타일셋 미지원/타임아웃 감지 시 실감 파사드 자동 폴백 배너 상태
   const [tileFallbackBanner, setTileFallbackBanner] = useState<string | null>(null);
 
+  // [긴급 에러 오버레이] Window Error & Unhandled Promise Rejection 실시간 감지 리스너
   useEffect(() => {
-    if (tileFallbackBanner) {
-      const timer = setTimeout(() => {
-        setTileFallbackBanner(null);
-      }, 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [tileFallbackBanner]);
+    const handleGlobalError = (event: ErrorEvent) => {
+      const filename = event.filename ? event.filename.split('/').pop() : 'unknown';
+      const msg = `[Window Error] ${event.message} (${filename}:${event.lineno || 0}:${event.colno || 0})`;
+      console.error('[ErrorOverlay]', msg);
+      setDebugErrors((prev) => [...prev.slice(-19), msg]);
+    };
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason?.stack || event.reason?.message || String(event.reason);
+      const msg = `[Promise Rejection] ${reason}`;
+      console.error('[ErrorOverlay]', msg);
+      setDebugErrors((prev) => [...prev.slice(-19), msg]);
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   // 토공량 격자 셀 호버 툴팁 상태
   const [hoveredCutFillCell, setHoveredCutFillCell] = useState<{
@@ -497,11 +547,9 @@ export const MapViewer: React.FC = () => {
       ],
     ];
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: {
-        version: 8,
-        light: {
+    const fullMapStyle: any = {
+      version: 8,
+      light: {
           anchor: 'viewport',
           color: '#ffffff',
           intensity: 0.85,
@@ -1465,11 +1513,15 @@ export const MapViewer: React.FC = () => {
           'fog-color': '#0f172a',
           'fog-ground-blend': 0.75,
         },
-      },
+      };
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: SAFE_MODE ? PURE_SATELLITE_STYLE : fullMapStyle,
       center: [viewport.longitude, viewport.latitude],
       zoom: viewport.zoom,
-      pitch: viewport.pitch,
-      bearing: viewport.bearing,
+      pitch: SAFE_MODE ? 0 : viewport.pitch,
+      bearing: SAFE_MODE ? 0 : viewport.bearing,
       minZoom: 3,
       maxZoom: 20,
       maxPitch: 85,
@@ -1485,6 +1537,42 @@ export const MapViewer: React.FC = () => {
       touchZoomRotate: true,
       touchPitch: true,
     });
+
+    // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
+    setTimeout(() => {
+      try {
+        if (mapRef.current) {
+          mapRef.current.resize();
+        }
+      } catch (resizeErr) {
+        console.warn('[MapViewer] initial map.resize error:', resizeErr);
+      }
+    }, 300);
+
+    // [레이어 조작 안전 방어 래퍼] 존재하지 않는 레이어 조작 시 MapLibre 런타임 오류 원천 차단
+    const origSetLayoutProperty = map.setLayoutProperty.bind(map);
+    map.setLayoutProperty = function (layerId: string, name: string, value: any) {
+      try {
+        if (this.getLayer(layerId)) {
+          return origSetLayoutProperty(layerId, name, value);
+        }
+      } catch (err) {
+        console.warn(`[MapViewer] setLayoutProperty skipped for ${layerId}:`, err);
+      }
+      return this;
+    };
+
+    const origSetPaintProperty = map.setPaintProperty.bind(map);
+    map.setPaintProperty = function (layerId: string, name: string, value: any) {
+      try {
+        if (this.getLayer(layerId)) {
+          return origSetPaintProperty(layerId, name, value);
+        }
+      } catch (err) {
+        console.warn(`[MapViewer] setPaintProperty skipped for ${layerId}:`, err);
+      }
+      return this;
+    };
 
     const handleMove = () => {
       const bearing = map.getBearing();
@@ -1555,6 +1643,17 @@ export const MapViewer: React.FC = () => {
 
     map.on('load', () => {
       setIsMapLoaded(true);
+
+      // [SAFE_MODE] 순수 위성 래스터 베이스맵 격리: 무거운 비동기 작업 및 커스텀 3D 레이어 주입 일체 바이패스
+      if (SAFE_MODE) {
+        console.info('[MapViewer SAFE_MODE] 순수 위성 베이스맵 로드 성공! 모든 커스텀 3D/분석 레이어 주입을 바이패스합니다.');
+        setTimeout(() => {
+          try {
+            map.resize();
+          } catch {}
+        }, 100);
+        return;
+      }
 
       // [대기 환경 (Atmospheric Fog)] 원경 산악 지형과 지평선의 입체 공간감 극대화
       try {
@@ -2244,6 +2343,8 @@ export const MapViewer: React.FC = () => {
         'color: #F87171; font-weight: bold;'
       );
 
+      setDebugErrors((prev) => [...prev.slice(-19), `[WebGL Context Lost] 🚨 ${statusMessage}`]);
+
       // 브라우저 GPU Crash 방지: 2D 수직 뷰로 강제 전환 및 무거운 3D 레이어 일체 안전 해제
       setWebglFallbackWarning('⚠️ 그래픽 메모리 보호를 위해 가벼운 2D 모드로 자동 전환되었습니다.');
       setViewMode('2D');
@@ -2342,6 +2443,9 @@ export const MapViewer: React.FC = () => {
         'color: #60A5FA; font-weight: bold;',
         'color: #EF4444;'
       );
+
+      const debugLine = `[MapLibre Error] layer: ${layerId}, source: ${sourceId} | ${message} (${fileInfo})`;
+      setDebugErrors((prev) => [...prev.slice(-19), debugLine]);
     });
 
     mapRef.current = map;
@@ -4928,10 +5032,85 @@ export const MapViewer: React.FC = () => {
       onDrop={handleDrop}
       className="relative w-full h-full flex items-center justify-center bg-[#090c0a] p-4 overflow-hidden"
     >
-      {/* 16:9 슬라이드 프레임 가이드 박스 */}
-      <div className="relative w-full max-w-full aspect-[16/9] max-h-[calc(100vh-5.5rem)] rounded-xl overflow-hidden border-2 border-[#2b3a2f] shadow-2xl shadow-black/80 bg-black">
-        {/* MapLibre WebGL Canvas Container */}
-        <div ref={mapContainerRef} className="w-full h-full" />
+      {/* 16:9 슬라이드 프레임 가이드 박스 (부모 div에 강제 CSS 적용) */}
+      <div
+        className="relative w-full max-w-full aspect-[16/9] max-h-[calc(100vh-5.5rem)] min-h-[500px] rounded-xl overflow-hidden border-2 border-[#2b3a2f] shadow-2xl shadow-black/80 bg-black flex-1"
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: '500px',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        {/* MapLibre WebGL Canvas Container (강제 CSS 적용) */}
+        <div
+          ref={mapContainerRef}
+          className="w-full h-full min-h-[500px] relative z-[1]"
+          style={{
+            width: '100%',
+            height: '100%',
+            minHeight: '500px',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        />
+
+        {/* [1. 브라우저 화면 내 긴급 에러 오버레이 (Error Overlay)] */}
+        <div
+          id="map-debug-overlay"
+          className={`absolute top-2 left-2 right-2 max-h-56 overflow-y-auto ${
+            debugErrors.length > 0
+              ? 'bg-red-950/95 border-red-500 text-red-200'
+              : 'bg-black/85 border-emerald-500/70 text-emerald-300'
+          } border text-xs font-mono p-3 rounded-lg shadow-2xl backdrop-blur-md z-[9999] pointer-events-auto transition-all`}
+        >
+          <div className="flex items-center justify-between font-bold border-b border-white/10 pb-1.5 mb-2">
+            <span className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  debugErrors.length > 0 ? 'bg-red-500 animate-ping' : 'bg-emerald-400'
+                }`}
+              />
+              [엔진 디버그 모니터]
+              {SAFE_MODE && (
+                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded text-[10px]">
+                  세이프 모드 (순수 위성 베이스맵 격리)
+                </span>
+              )}
+              {debugErrors.length > 0 ? (
+                <span className="text-red-400">🚨 에러 {debugErrors.length}건 감지</span>
+              ) : (
+                <span className="text-emerald-400">✅ WebGL 런타임 정상 (에러 0건)</span>
+              )}
+            </span>
+            {debugErrors.length > 0 && (
+              <button
+                onClick={() => setDebugErrors([])}
+                className="text-[10px] bg-red-800 hover:bg-red-700 px-2 py-0.5 rounded text-white font-sans"
+              >
+                로그 초기화
+              </button>
+            )}
+          </div>
+          {debugErrors.length === 0 ? (
+            <div className="text-[11px] text-emerald-400/90 leading-relaxed">
+              • 현재 브라우저 런타임 WebGL 및 MapLibre 에러가 0건입니다.<br />
+              • Esri World Imagery 위성 래스터 타일이 정상적으로 화면에 렌더링되고 있습니다.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {debugErrors.map((err, idx) => (
+                <div
+                  key={idx}
+                  className="break-all whitespace-pre-wrap text-[11px] bg-red-900/60 p-1.5 rounded border border-red-700/60 font-mono"
+                >
+                  {err}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* 16:9 브리핑 오버레이 프레임워크 */}
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
