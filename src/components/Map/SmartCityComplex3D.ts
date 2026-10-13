@@ -157,46 +157,49 @@ function createSmartCityMaterials() {
 // =============================================================================
 // 2. 컴포넌트 1: 첨단 국방·모빌리티 R&D 타워 (지상 18층, 높이 65m)
 // =============================================================================
+// =============================================================================
+// 2. 컴포넌트 1: 국방·첨단 모빌리티 R&D 타워 (15층, 높이 55m, 유리 커튼월 + 옥탑 헬리패드)
+// =============================================================================
 function buildDefenseRDTower(mats: ReturnType<typeof createSmartCityMaterials>): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'defense_rd_tower_65m';
+  group.name = 'defense_rd_tower_55m';
 
-  // 1) 기단부 포디움 (1~3층, 높이 12m, 44m x 34m)
-  const podiumGeo = new THREE.BoxGeometry(44, 12, 34);
+  // 1) 기단부 포디움 (1~2층, 높이 8m, 42m x 32m)
+  const podiumGeo = new THREE.BoxGeometry(42, 8, 32);
   const podium = new THREE.Mesh(podiumGeo, mats.wallPodium);
-  podium.position.y = 6;
+  podium.position.y = 4;
   podium.castShadow = true;
   podium.receiveShadow = true;
   group.add(podium);
 
   // 포디움 1층 대형 투명 글래스 로비 (전면)
-  const lobbyGeo = new THREE.BoxGeometry(38, 5, 1);
+  const lobbyGeo = new THREE.BoxGeometry(36, 4.5, 1);
   const lobby = new THREE.Mesh(lobbyGeo, mats.glassCurtainBlue);
-  lobby.position.set(0, 3.5, 17.1);
+  lobby.position.set(0, 2.5, 16.1);
   group.add(lobby);
 
   // 로비 캐노피
-  const lobbyCanopyGeo = new THREE.BoxGeometry(22, 0.6, 6);
+  const lobbyCanopyGeo = new THREE.BoxGeometry(20, 0.5, 6);
   const lobbyCanopy = new THREE.Mesh(lobbyCanopyGeo, mats.frameDark);
-  lobbyCanopy.position.set(0, 6.5, 19.5);
+  lobbyCanopy.position.set(0, 5.2, 18.5);
   group.add(lobbyCanopy);
 
-  // 2) 메인 타워 본동 (4~18층, 높이 50m, 32m x 24m)
-  // 타워 전체 높이 50m -> 총 높이 12 + 50 = 62m
-  const towerHeight = 50;
-  const towerGeo = new THREE.BoxGeometry(32, towerHeight, 24);
+  // 2) 메인 타워 본동 (3~15층, 13개 층, 높이 43m, 30m x 22m)
+  // 기단 8m + 타워 43m = 51m
+  const towerHeight = 43;
+  const towerGeo = new THREE.BoxGeometry(30, towerHeight, 22);
   const tower = new THREE.Mesh(towerGeo, mats.glassCurtainBlue);
-  tower.position.y = 12 + towerHeight / 2;
+  tower.position.y = 8 + towerHeight / 2;
   tower.castShadow = true;
   tower.receiveShadow = true;
   group.add(tower);
 
-  // 15개 층별 슬래브 밴드 및 멀리언 라인 (3.3m 층고 정밀 시각화)
-  const floorCount = 15;
+  // 13개 층별 슬래브 밴드 및 멀리언 라인 (3.3m 층고 정밀 시각화, 총 15층)
+  const floorCount = 13;
   const floorHeight = towerHeight / floorCount;
   for (let i = 0; i <= floorCount; i++) {
-    const yPos = 12 + i * floorHeight;
-    const slabGeo = new THREE.BoxGeometry(32.6, 0.45, 24.6);
+    const yPos = 8 + i * floorHeight;
+    const slabGeo = new THREE.BoxGeometry(30.6, 0.4, 22.6);
     const slab = new THREE.Mesh(slabGeo, mats.floorSlab);
     slab.position.y = yPos;
     group.add(slab);
@@ -205,64 +208,64 @@ function buildDefenseRDTower(mats: ReturnType<typeof createSmartCityMaterials>):
   // 코너 수직 구조 기둥 프레임 (4각 모서리 엑센트)
   const cornerGeo = new THREE.BoxGeometry(0.8, towerHeight, 0.8);
   const corners = [
-    [-16, -12],
-    [16, -12],
-    [-16, 12],
-    [16, 12],
+    [-15, -11],
+    [15, -11],
+    [-15, 11],
+    [15, 11],
   ];
   corners.forEach(([cx, cz]) => {
     const col = new THREE.Mesh(cornerGeo, mats.frameDark);
-    col.position.set(cx, 12 + towerHeight / 2, cz);
+    col.position.set(cx, 8 + towerHeight / 2, cz);
     group.add(col);
   });
 
-  // 3) 옥탑 기계실 / 엘리베이터 권상기실 코어 (높이 3m)
-  const penthouseGeo = new THREE.BoxGeometry(16, 3, 12);
+  // 3) 옥탑 기계실 / 엘리베이터 권상기실 코어 (높이 3.5m)
+  const penthouseGeo = new THREE.BoxGeometry(14, 3.5, 10);
   const penthouse = new THREE.Mesh(penthouseGeo, mats.wallConcrete);
-  penthouse.position.set(0, 63.5, 0);
+  penthouse.position.set(0, 52.75, 0);
   penthouse.castShadow = true;
   group.add(penthouse);
 
-  // 4) 옥탑 헬리패드 플랫폼 (총 높이 65m)
-  const helipadBaseGeo = new THREE.CylinderGeometry(10, 10, 0.6, 16);
+  // 4) 옥탑 헬리패드 플랫폼 (총 높이 55m)
+  const helipadBaseGeo = new THREE.CylinderGeometry(9.5, 9.5, 0.5, 24);
   const helipadBase = new THREE.Mesh(helipadBaseGeo, mats.helipadDeck);
-  helipadBase.position.set(0, 65, 0);
+  helipadBase.position.set(0, 55, 0);
   group.add(helipadBase);
 
   // 헬리패드 노란색 원형 안전 경계선
-  const ringGeo = new THREE.RingGeometry(8.5, 9.2, 32);
+  const ringGeo = new THREE.RingGeometry(8.0, 8.8, 32);
   const ring = new THREE.Mesh(ringGeo, mats.helipadYellow);
   ring.rotation.x = -Math.PI / 2;
-  ring.position.set(0, 65.35, 0);
+  ring.position.set(0, 55.3, 0);
   group.add(ring);
 
   // 헬리패드 중앙 대형 'H' 마킹 (3개 직사각형 조합)
-  const hBar1Geo = new THREE.PlaneGeometry(1.0, 5.2);
+  const hBar1Geo = new THREE.PlaneGeometry(0.9, 4.8);
   const hBar1 = new THREE.Mesh(hBar1Geo, mats.helipadYellow);
   hBar1.rotation.x = -Math.PI / 2;
-  hBar1.position.set(-1.8, 65.36, 0);
+  hBar1.position.set(-1.6, 55.32, 0);
   group.add(hBar1);
 
-  const hBar2Geo = new THREE.PlaneGeometry(1.0, 5.2);
+  const hBar2Geo = new THREE.PlaneGeometry(0.9, 4.8);
   const hBar2 = new THREE.Mesh(hBar2Geo, mats.helipadYellow);
   hBar2.rotation.x = -Math.PI / 2;
-  hBar2.position.set(1.8, 65.36, 0);
+  hBar2.position.set(1.6, 55.32, 0);
   group.add(hBar2);
 
-  const hBarCrossGeo = new THREE.PlaneGeometry(2.8, 1.0);
+  const hBarCrossGeo = new THREE.PlaneGeometry(2.4, 0.9);
   const hBarCross = new THREE.Mesh(hBarCrossGeo, mats.helipadYellow);
   hBarCross.rotation.x = -Math.PI / 2;
-  hBarCross.position.set(0, 65.36, 0);
+  hBarCross.position.set(0, 55.32, 0);
   group.add(hBarCross);
 
   // 4방향 야간 적색 항공 유도 비콘등
   const beaconGeo = new THREE.SphereGeometry(0.35, 8, 8);
   const beaconAngles = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
   beaconAngles.forEach((angle) => {
-    const bx = Math.cos(angle) * 9.6;
-    const bz = Math.sin(angle) * 9.6;
+    const bx = Math.cos(angle) * 9.2;
+    const bz = Math.sin(angle) * 9.2;
     const beacon = new THREE.Mesh(beaconGeo, mats.beaconRed);
-    beacon.position.set(bx, 65.6, bz);
+    beacon.position.set(bx, 55.5, bz);
     group.add(beacon);
   });
 
@@ -270,90 +273,90 @@ function buildDefenseRDTower(mats: ReturnType<typeof createSmartCityMaterials>):
 }
 
 // =============================================================================
-// 2. 컴포넌트 2: 스마트 지식산업센터 (지상 7층, 높이 28m, 테라스 옥상 조경 + 태양광 그리드)
+// 2. 컴포넌트 2: 스마트 지식산업센터 (6층, 높이 24m, 테라스형 옥상 조경)
 // =============================================================================
 function buildKnowledgeIndustryCenter(mats: ReturnType<typeof createSmartCityMaterials>): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'knowledge_industry_center_28m';
+  group.name = 'knowledge_industry_center_24m';
 
-  // 1단: 1~3층 (높이 12m, 66m x 38m)
-  const tier1Geo = new THREE.BoxGeometry(66, 12, 38);
+  // 1단: 1~2층 (높이 8m, 62m x 36m)
+  const tier1Geo = new THREE.BoxGeometry(62, 8, 36);
   const tier1 = new THREE.Mesh(tier1Geo, mats.wallConcrete);
-  tier1.position.y = 6;
+  tier1.position.y = 4;
   tier1.castShadow = true;
   tier1.receiveShadow = true;
   group.add(tier1);
 
   // 1단 수평 띠창 (Ribbon Glass)
-  for (let floor = 1; floor <= 3; floor++) {
-    const winGeo = new THREE.BoxGeometry(62, 1.8, 38.4);
+  for (let floor = 1; floor <= 2; floor++) {
+    const winGeo = new THREE.BoxGeometry(58, 1.8, 36.4);
     const win = new THREE.Mesh(winGeo, mats.glassCurtainCyan);
     win.position.y = (floor - 0.5) * 4;
     group.add(win);
   }
 
-  // 1단 옥상 테라스 조경 (앞쪽 14m 노출 구간)
-  const terrace1GrassGeo = new THREE.BoxGeometry(64, 0.3, 14);
+  // 1단 옥상 테라스 조경 (앞쪽 12m 노출 구간)
+  const terrace1GrassGeo = new THREE.BoxGeometry(60, 0.3, 12);
   const terrace1Grass = new THREE.Mesh(terrace1GrassGeo, mats.terraceGrass);
-  terrace1Grass.position.set(0, 12.15, 11);
+  terrace1Grass.position.set(0, 8.15, 10);
   group.add(terrace1Grass);
 
-  const terrace1WoodGeo = new THREE.BoxGeometry(62, 0.35, 3.5);
+  const terrace1WoodGeo = new THREE.BoxGeometry(58, 0.35, 3.5);
   const terrace1Wood = new THREE.Mesh(terrace1WoodGeo, mats.terraceWood);
-  terrace1Wood.position.set(0, 12.2, 16);
+  terrace1Wood.position.set(0, 8.2, 15);
   group.add(terrace1Wood);
 
-  // 2단: 4~5층 (높이 8m, 48m x 24m)
-  const tier2Geo = new THREE.BoxGeometry(48, 8, 24);
+  // 2단: 3~4층 (높이 8m, 46m x 24m)
+  const tier2Geo = new THREE.BoxGeometry(46, 8, 24);
   const tier2 = new THREE.Mesh(tier2Geo, mats.wallConcrete);
-  tier2.position.set(0, 16, -6);
+  tier2.position.set(0, 12, -5);
   tier2.castShadow = true;
   tier2.receiveShadow = true;
   group.add(tier2);
 
   for (let floor = 1; floor <= 2; floor++) {
-    const winGeo = new THREE.BoxGeometry(46, 1.8, 24.4);
+    const winGeo = new THREE.BoxGeometry(44, 1.8, 24.4);
     const win = new THREE.Mesh(winGeo, mats.glassCurtainCyan);
-    win.position.set(0, 12 + (floor - 0.5) * 4, -6);
+    win.position.set(0, 8 + (floor - 0.5) * 4, -5);
     group.add(win);
   }
 
   // 2단 옥상 테라스 조경 (앞쪽 8m 노출 구간)
-  const terrace2GrassGeo = new THREE.BoxGeometry(46, 0.3, 8);
+  const terrace2GrassGeo = new THREE.BoxGeometry(44, 0.3, 8);
   const terrace2Grass = new THREE.Mesh(terrace2GrassGeo, mats.terraceGrass);
-  terrace2Grass.position.set(0, 20.15, 2);
+  terrace2Grass.position.set(0, 16.15, 3);
   group.add(terrace2Grass);
 
-  // 3단: 6~7층 (높이 8m, 34m x 16m) -> 총 높이 28m
-  const tier3Geo = new THREE.BoxGeometry(34, 8, 16);
+  // 3단: 5~6층 (높이 8m, 32m x 16m) -> 총 6층, 총 높이 24m!
+  const tier3Geo = new THREE.BoxGeometry(32, 8, 16);
   const tier3 = new THREE.Mesh(tier3Geo, mats.wallConcrete);
-  tier3.position.set(0, 24, -10);
+  tier3.position.set(0, 20, -9);
   tier3.castShadow = true;
   tier3.receiveShadow = true;
   group.add(tier3);
 
-  // 7층 최상단 옥상 태양광 패널 그리드 (Solar PV Array, 15도 남향 경사)
-  const pvWidth = 4.5;
-  const pvLength = 2.4;
-  const pvCols = 5;
+  // 6층 최상단 옥상 태양광 패널 그리드 (Solar PV Array, 15도 남향 경사)
+  const pvWidth = 4.2;
+  const pvLength = 2.2;
+  const pvCols = 4;
   const pvRows = 2;
   const pvTilt = (18 * Math.PI) / 180;
 
   for (let c = 0; c < pvCols; c++) {
     for (let r = 0; r < pvRows; r++) {
-      const px = (c - (pvCols - 1) / 2) * 5.8;
-      const pz = -10 + (r - (pvRows - 1) / 2) * 4.2;
+      const px = (c - (pvCols - 1) / 2) * 5.4;
+      const pz = -9 + (r - (pvRows - 1) / 2) * 3.8;
 
       // 패널 지지대
-      const frameGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
+      const frameGeo = new THREE.BoxGeometry(0.2, 0.7, 0.2);
       const frame = new THREE.Mesh(frameGeo, mats.solarFrame);
-      frame.position.set(px, 28.4, pz);
+      frame.position.set(px, 24.35, pz);
       group.add(frame);
 
       // PV 모듈
       const panelGeo = new THREE.BoxGeometry(pvWidth, 0.08, pvLength);
       const panel = new THREE.Mesh(panelGeo, mats.solarPV);
-      panel.position.set(px, 28.8, pz);
+      panel.position.set(px, 24.7, pz);
       panel.rotation.x = -pvTilt;
       panel.castShadow = true;
       group.add(panel);
@@ -362,26 +365,27 @@ function buildKnowledgeIndustryCenter(mats: ReturnType<typeof createSmartCityMat
 
   // 옥상 테라스 수목 화단 큐브 (Low-poly)
   const treeOffsets = [
-    [-24, 12.5, 13],
-    [0, 12.5, 13],
-    [24, 12.5, 13],
-    [-16, 20.5, 3],
-    [16, 20.5, 3],
+    [-22, 8.5, 12],
+    [0, 8.5, 12],
+    [22, 8.5, 12],
+    [-14, 16.5, 4],
+    [14, 16.5, 4],
   ];
   treeOffsets.forEach(([tx, ty, tz]) => {
-    const planterGeo = new THREE.BoxGeometry(2.4, 0.6, 2.4);
+    const planterGeo = new THREE.BoxGeometry(2.2, 0.6, 2.2);
     const planter = new THREE.Mesh(planterGeo, mats.floorSlab);
     planter.position.set(tx, ty + 0.3, tz);
     group.add(planter);
 
-    const bushGeo = new THREE.DodecahedronGeometry(1.2);
+    const bushGeo = new THREE.DodecahedronGeometry(1.1);
     const bush = new THREE.Mesh(bushGeo, mats.treeFoliage);
-    bush.position.set(tx, ty + 1.6, tz);
+    bush.position.set(tx, ty + 1.5, tz);
     group.add(bush);
   });
 
   return group;
 }
+
 
 // =============================================================================
 // 3. 컴포넌트 3: 민·군 상생 복합 문화컨벤션 (곡선 아치형 지붕 + 개방형 캐노피 로비)
