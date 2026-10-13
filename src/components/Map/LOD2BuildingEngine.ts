@@ -2,19 +2,16 @@
  * LOD2BuildingEngine.ts
  *
  * MapLibre fill-extrusion을 대체하는 Three.js 기반 한국형 실감 3D 건축물 렌더링 엔진
- * - [1. 한국 도심 특화 텍스처 및 PBR 파사드 파이프라인 (koreanBuildingTextures.ts)]:
- *   1) 한국형 판상형 아파트 (층고 3m 기준 발코니 난간, 이중창 화이트 섀시, 층간 슬래브, 에어컨 거치대)
- *   2) 상업 오피스 빌딩 (알루미늄 루버 멀리언, 반사 유리 커튼월, 딥블루 스카이 반사광)
- *   3) 저층 근린생활시설 (1층 쇼윈도 통유리, 간판 띠장, 상층부 석재 타일 외장재)
- * - [2. 실측 미터(m) 단위 기반 정밀 UV 매핑]:
- *   - 가로 3.0m x 세로 3.0m(층고 3m) 비례 정규화로 왜곡 없는 무한 반복 타일링(THREE.RepeatWrapping)
- *   - 옥상 상단면: 짙은 차콜 그레이(#334155) 방수 우레탄 재질과 1.2m 돌출 난간(Parapet) 분리 마감
- * - [3. 3D DEM 지형 표고 정밀 밀착 (Terrain Elevation Clamping)]:
- *   - 외곽선 정점별 DEM 고도 샘플링 및 최저 지표면 고도(minElev)에 맞춘 기초 옹벽(Foundation) 생성
- * - [4. 렌더링 최적화 & LOD 줌 제어 (60fps)]:
- *   - BufferGeometryUtils.mergeGeometries 기반 드로우 콜 극소화 (수백 동 -> 8개 이하 Draw Calls)
- *   - 줌 14 이상에서만 고해상도 세부 텍스처 메쉬가 표시되도록 LOD 필터 적용
- *   - 카메라 Frustum 컬링 활성화
+ * - [1. 한국 도심 특화 실감 옥상 구조물(Roof Structures) 절차적 생성]:
+ *   1) 아파트 단지 옥상: 1.2m 차콜 그레이 난간(Parapet), 엘리베이터 권상기실, 옥상 STS 물탱크, 환기 벤트 메쉬
+ *   2) 대형 빌딩/공공청사: 옥상 헬리패드(녹색 원형 바탕 + 백색 'H' 마킹 + 황색 안전 링) 및 사각 태양광 패널 그리드
+ *   3) 저층 단독/군사 시설: 용마루 선이 살아있는 20도 각도의 입체 박공 지붕(Gabled Roof) 메쉬
+ * - [2. 층고 비례(3.0m) 정밀 창문/베란다 텍스처 매핑]:
+ *   - 실측 미터 단위(가로 3m x 세로 3m) UV 매핑 (RepeatWrapping)으로 왜곡 없는 무한 반복 타일링
+ *   - 창문 유리면 은은한 하늘빛 반사(Roughness: 0.2, Metalness: 0.8) 하이라이트
+ * - [3. 메모리 최적화 및 인스턴싱(Instancing)]:
+ *   - 지붕 난간, 엘리베이터 옥탑, 물탱크, 벤트, 태양광 패널을 THREE.InstancedMesh로 일괄 병합 렌더링 (60fps 유지)
+ * - [4. 3D DEM 지형 표고 정밀 밀착 (Terrain Elevation Clamping)]
  */
 
 import maplibregl from 'maplibre-gl';
@@ -27,7 +24,7 @@ import {
 } from '@/utils/koreanBuildingTextures';
 
 // =============================================================================
-// 1. OBB (Oriented Bounding Box) 및 박공/모임 중심축 산출 유틸리티
+// 1. OBB (Oriented Bounding Box) 및 지붕 중심축 산출 유틸리티
 // =============================================================================
 interface OBBResult {
   centroid: THREE.Vector2;
@@ -218,22 +215,34 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private fillLight: THREE.DirectionalLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
 
-  // 병합 메쉬 노드 (한국형 건축 파사드 유형별 병합 메쉬)
+  // 병합 메쉬 노드 (벽체, 슬래브, 지형 옹벽)
   private aptWallMesh: THREE.Mesh | null = null;
   private comWallMesh: THREE.Mesh | null = null;
   private neighWallMesh: THREE.Mesh | null = null;
-  private landmarkWallMesh: THREE.Mesh | null = null; // [신규] 반사 유리 고층 타워
-  private helipadBaseMesh: THREE.Mesh | null = null;  // [신규] 옥상 헬리패드 데크
-  private helipadMarkMesh: THREE.Mesh | null = null;  // [신규] 옥상 헬리패드 H & 링 마킹
-  private terracottaRoofMesh: THREE.Mesh | null = null;
-  private slateRoofMesh: THREE.Mesh | null = null;
-  private parapetMesh: THREE.Mesh | null = null;
-  private penthouseMesh: THREE.Mesh | null = null;
+  private landmarkWallMesh: THREE.Mesh | null = null;
+  private helipadBaseMesh: THREE.Mesh | null = null;  // 녹색 우레탄 원형 바탕 데크
+  private helipadRingMesh: THREE.Mesh | null = null;  // 노란색 안전 경계 링
+  private helipadMarkMesh: THREE.Mesh | null = null;  // 백색 'H' 마킹
+  private gabledRoofMesh: THREE.Mesh | null = null;   // 20도 입체 박공 지붕
+  private slateRoofMesh: THREE.Mesh | null = null;    // 옥상 방수 슬래브 (#334155)
   private foundationMesh: THREE.Mesh | null = null;
+
+  // [신규] 인스턴싱 메쉬 노드 (THREE.InstancedMesh - 일괄 렌더링 & 60fps 보장)
+  private parapetInstancedMesh: THREE.InstancedMesh | null = null;    // 1.2m 돌출 난간
+  private penthouseInstancedMesh: THREE.InstancedMesh | null = null;  // 엘리베이터 권상기실
+  private waterTankInstancedMesh: THREE.InstancedMesh | null = null;  // 옥상 STS 원통형 물탱크
+  private ventInstancedMesh: THREE.InstancedMesh | null = null;       // 옥상 환기 벤트
+  private solarPanelInstancedMesh: THREE.InstancedMesh | null = null; // 사각 태양광 패널 그리드
+
+  // 재사용 단위 지오메트리 캐시
+  private static unitParapetGeo: THREE.BoxGeometry | null = null;
+  private static unitPenthouseGeo: THREE.BoxGeometry | null = null;
+  private static unitWaterTankGeo: THREE.CylinderGeometry | null = null;
+  private static unitVentGeo: THREE.CylinderGeometry | null = null;
+  private static unitSolarGeo: THREE.BoxGeometry | null = null;
 
   // PBR 재질 팔레트
   private materials: KoreanBuildingMaterials | null = null;
-  private roofTerracottaMaterial: THREE.MeshStandardMaterial | null = null;
 
   private originLngLat: [number, number] = [127.9358, 37.3592]; // 기본: 원주 거점
   private clampedAltitude = 0;
@@ -241,7 +250,34 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private buildingCount = 0;
 
   constructor() {
+    this.initGeometries();
     this.initMaterials();
+  }
+
+  /**
+   * 인스턴싱용 단위 지오메트리 초기화
+   */
+  private initGeometries(): void {
+    if (!LOD2BuildingEngine.unitParapetGeo) {
+      // 1.2m 난간 빔 (폭 1.0m, 높이 1.2m, 두께 0.25m, 바닥 Y=0)
+      LOD2BuildingEngine.unitParapetGeo = new THREE.BoxGeometry(1.0, 1.2, 0.25);
+      LOD2BuildingEngine.unitParapetGeo.translate(0, 0.6, 0);
+
+      // 엘리베이터 권상기실 (1m x 1m x 1m, 바닥 Y=0)
+      LOD2BuildingEngine.unitPenthouseGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+      LOD2BuildingEngine.unitPenthouseGeo.translate(0, 0.5, 0);
+
+      // STS 원통형 물탱크 (반경 0.5m = 직경 1m, 높이 1m, 바닥 Y=0)
+      LOD2BuildingEngine.unitWaterTankGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.0, 16);
+      LOD2BuildingEngine.unitWaterTankGeo.translate(0, 0.5, 0);
+
+      // 옥상 환기 벤트 (버섯/원통형, 반경 0.35m, 높이 1.0m, 바닥 Y=0)
+      LOD2BuildingEngine.unitVentGeo = new THREE.CylinderGeometry(0.3, 0.38, 1.0, 12);
+      LOD2BuildingEngine.unitVentGeo.translate(0, 0.5, 0);
+
+      // 사각 태양광 패널 모듈 (가로 2.4m, 두께 0.08m, 세로 1.4m)
+      LOD2BuildingEngine.unitSolarGeo = new THREE.BoxGeometry(2.4, 0.08, 1.4);
+    }
   }
 
   /**
@@ -249,15 +285,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    */
   private initMaterials(): void {
     this.materials = getKoreanBuildingMaterials();
-
-    // 단독/연립 주택 및 군 막사용 테라코타 적갈색 지붕
-    this.roofTerracottaMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8b4513, // 테라코타 새들브라운
-      roughness: 0.5,
-      metalness: 0.15,
-      flatShading: true,
-      side: THREE.DoubleSide,
-    });
   }
 
   public setVisible(visible: boolean): void {
@@ -299,9 +326,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     const center = map.getCenter();
     this.originLngLat = [center.lng, center.lat];
 
-    // 1. [입체 조명 명암비 극대화] Directional Sun Light (position: [1.4, 125, 45], intensity: 0.95 기반 고대비 조명)
-    // - 방위각 125°, 고도각 45°(polar 45°)에 맞춘 Three.js 광원 위치 (X: 116, Y: 141, Z: 81)
-    // - 건물의 햇빛 받는 면과 그림자 면의 명암비가 사진처럼 선명하게 드러나도록 세팅
+    // 1. [입체 조명 명암비 극대화] Directional Sun Light
     this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
     this.directionalLight.position.set(116, 141, 81).normalize();
     this.directionalLight.castShadow = true;
@@ -314,7 +339,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.fillLight.position.set(-80, 100, 80).normalize();
     this.scene.add(this.fillLight);
 
-    // 환경광(Ambient) 강도를 낮추어(0.42) 그림자 면의 입체감과 엣지 대비를 극대화
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.42);
     this.scene.add(this.ambientLight);
 
@@ -336,10 +360,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   }
 
   /**
-   * 수신된 GeoJSON 피처 컬렉션을 파싱하여 한국형 실감 파사드 메쉬를 일괄 생성합니다.
-   * - 가로 3.0m x 세로 3.0m 실측 정밀 UV 타일링
-   * - 판상형 아파트, 상업 오피스 빌딩, 저층 근린생활시설 3종 텍스처 분리 적용
-   * - BufferGeometryUtils.mergeGeometries를 활용해 8개 이하 메쉬로 병합하여 60fps 유지
+   * 수신된 GeoJSON 피처 컬렉션을 파싱하여 한국형 실감 파사드 & 옥상 구조물 메쉬를 생성합니다.
+   * - 층고 3.0m 정밀 창문/베란다 UV 매핑 (RepeatWrapping, Roughness: 0.2, Metalness: 0.8)
+   * - 옥상 난간, 권상기실, 물탱크, 벤트, 태양광 패널 -> THREE.InstancedMesh 일괄 인스턴싱
+   * - 대형 빌딩 옥상 헬리패드 (녹색 원형 바탕 + 백색 'H' 마킹)
+   * - 저층 단독/군사 시설 20도 입체 박공 지붕 (Gabled Roof)
    */
   public updateBuildings(
     features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
@@ -364,22 +389,35 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.initMaterials();
     }
 
-    // 외벽 지오메트리 수집 버퍼 (한국형 파사드 4종 분리: 아파트, 상업, 근생, 랜드마크 고층)
+    // 외벽 지오메트리 수집 버퍼
     const aptWallGeometries: THREE.BufferGeometry[] = [];
     const comWallGeometries: THREE.BufferGeometry[] = [];
     const neighWallGeometries: THREE.BufferGeometry[] = [];
     const landmarkWallGeometries: THREE.BufferGeometry[] = [];
 
-    // 헬리패드 버퍼 (원형 베이스 데크, H 마킹 및 노란색 링)
+    // 헬리패드 버퍼 (녹색 원형 데크, 노란색 안전 링, 백색 'H' 마킹)
     const helipadBaseGeometries: THREE.BufferGeometry[] = [];
+    const helipadRingGeometries: THREE.BufferGeometry[] = [];
     const helipadMarkGeometries: THREE.BufferGeometry[] = [];
 
-    // 지붕 및 부속 구조물 버퍼
-    const terracottaRoofGeometries: THREE.BufferGeometry[] = [];
+    // 지붕 및 기초 옹벽 버퍼
+    const gabledRoofGeometries: THREE.BufferGeometry[] = [];
     const slateRoofGeometries: THREE.BufferGeometry[] = [];
-    const parapetGeometries: THREE.BufferGeometry[] = [];
-    const penthouseGeometries: THREE.BufferGeometry[] = [];
     const foundationGeometries: THREE.BufferGeometry[] = [];
+
+    // [신규] 인스턴싱 행렬 수집 배열 (THREE.InstancedMesh용)
+    const parapetMatrices: THREE.Matrix4[] = [];
+    const penthouseMatrices: THREE.Matrix4[] = [];
+    const waterTankMatrices: THREE.Matrix4[] = [];
+    const ventMatrices: THREE.Matrix4[] = [];
+    const solarMatrices: THREE.Matrix4[] = [];
+
+    // 변환 계산용 임시 객체
+    const tempPos = new THREE.Vector3();
+    const tempQuat = new THREE.Quaternion();
+    const tempScale = new THREE.Vector3();
+    const tempMat = new THREE.Matrix4();
+    const tempEuler = new THREE.Euler();
 
     let count = 0;
 
@@ -402,16 +440,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         ''
       ).toLowerCase();
 
-      // 한국 건축물 유형 판별:
-      // 1) 랜드마크 및 15층 이상 고층 빌딩 / 주요 공공청사
-      // 2) 판상형 아파트: apartment
-      // 3) 상업 오피스: commercial
-      // 4) 저층 근린생활시설 / 일반: residential, house, villa, general
       const floorCount = Math.max(
         Number(props.levels) || 0,
         Number(props['building:levels']) || 0,
         Number(props.GRND_FLR_CNT) || 0,
-        Math.round(totalH / 3.2)
+        Math.round(totalH / 3.0)
       );
 
       const isPublicOffice =
@@ -419,24 +452,42 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         usageType.includes('government') ||
         (props.name && /(청사|시청|도청|법원|검찰청|경찰서|소방서|정부|공단|공사|센터|의회|본부)/.test(String(props.name)));
 
-      // 15층 이상 고층 빌딩 및 주요 공공청사 판별 -> 독립 랜드마크 고층 반사 유리 타워
+      // 1) 15층 이상 고층 빌딩 및 주요 공공청사 -> 랜드마크 커튼월 타워
       const isLandmarkTower =
         floorCount >= 15 ||
         totalH >= 45.0 ||
         (isPublicOffice && totalH >= 20.0);
 
+      // 2) 한국형 아파트: 아파트 키워드 or 주거용 5층 이상
       const isApartment =
         !isLandmarkTower &&
         (usageType.includes('apartment') ||
           usageType.includes('apt') ||
-          (props.name && String(props.name).includes('아파트')));
+          (props.name && String(props.name).includes('아파트')) ||
+          (usageType.includes('residential') && (floorCount >= 5 || totalH >= 15.0)));
 
+      // 3) 상업 오피스 빌딩
       const isCommercial =
         !isLandmarkTower &&
         !isApartment &&
         (usageType.includes('commercial') ||
           usageType.includes('office') ||
-          (props.name && (String(props.name).includes('타워') || String(props.name).includes('빌딩'))));
+          usageType.includes('retail') ||
+          (props.name && (String(props.name).includes('타워') || String(props.name).includes('빌딩') || String(props.name).includes('센터'))));
+
+      // 4) 저층 단독/군사 시설 박공 지붕 판별
+      const isPitchedRoof =
+        !isLandmarkTower &&
+        !isApartment &&
+        !isCommercial &&
+        (usageType.includes('house') ||
+          usageType.includes('villa') ||
+          usageType.includes('military') ||
+          usageType.includes('barracks') ||
+          usageType.includes('detached') ||
+          usageType.includes('warehouse') ||
+          (usageType.includes('residential') && totalH <= 14.0)) &&
+        totalH <= 18.0;
 
       const rings: [number, number][][] = [];
       if (feat.geometry.type === 'Polygon') {
@@ -453,7 +504,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const pts = projectCoordsToLocalMeters(ring, this.originLngLat);
         if (pts.length < 3) continue;
 
-        // 1. [3D DEM 지형 표고 정밀 밀착 (Terrain Elevation Clamping)]
+        // 1. [3D DEM 지형 표고 정밀 밀착]
         const elevations: number[] = [];
         for (const coord of ring) {
           let elev = 0;
@@ -468,6 +519,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
         const minElev = Math.min(...elevations);
         const maxElev = Math.max(...elevations);
+        const wallTop = minElev + totalH;
 
         // 2. [기초 옹벽 (Adaptive Foundation Clamping) 메쉬 생성]
         if (maxElev - minElev > 0.2) {
@@ -505,15 +557,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 3. [벽체 (Wall) 메쉬 및 실제 미터(m) 단위 기반 UV 텍스처 매핑]
-        // 실제 축척: 가로 3.0m x 세로 3.0m(층고 3.0m) 기준으로 정확히 반복 타일링
+        // 3. [벽체 (Wall) 메쉬 및 층고 3.0m 비례 정밀 UV 텍스처 매핑]
+        // 벽면 길이 / 3.0m, 높이 / 3.0m 비율로 UV 좌표가 균일하게 RepeatWrapping 되도록 보정
         const wallPositions: number[] = [];
         const wallNormals: number[] = [];
         const wallUvs: number[] = [];
 
         let cumDist = 0;
         const N = pts.length;
-        const wallTop = minElev + totalH;
 
         for (let i = 0; i < N; i++) {
           const p0 = pts[i];
@@ -521,7 +572,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const segLen = p0.distanceTo(p1);
           if (segLen < 0.05) continue;
 
-          // 실제 미터 단위 UV 매핑: 가로 3m x 세로 3m
+          // 실제 미터(3.0m) 단위 정밀 UV 매핑
           const u0 = cumDist / 3.0;
           const u1 = (cumDist + segLen) / 3.0;
           cumDist += segLen;
@@ -569,28 +620,23 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 4. [입체 지붕 및 옥상 마감]
+        // 4. [한국 도심 특화 실감 옥상 구조물(Roof Structures) 생성]
         const obb = computeOBB(pts);
-        const isPitchedRoof =
-          !isLandmarkTower &&
-          (usageType.includes('house') ||
-            usageType.includes('villa') ||
-            usageType.includes('military')) &&
-          totalH <= 12;
 
         if (isPitchedRoof) {
-          // [유형 1: 단독/연립 주택 & 군 막사 -> 22도 입체 박공/모임 경사 지붕 (테라코타)]
-          const ridgeHeight = Math.min(obb.lenV * 0.5 * Math.tan((22 * Math.PI) / 180), 5.5);
+          // [유형 1: 저층 단독/군사 시설 -> 용마루 선이 살아있는 20도 각도의 입체 박공 지붕(Gabled Roof)]
+          const ridgeAngleRad = (20 * Math.PI) / 180;
+          const ridgeHeight = Math.max(1.4, Math.min(5.5, (obb.lenV * 0.5) * Math.tan(ridgeAngleRad)));
           const ridgeTop = wallTop + ridgeHeight;
 
-          const halfU = Math.max(0.1, obb.lenU * 0.38);
+          const halfRidgeU = Math.max(0.1, obb.lenU * 0.48);
           const rP0 = new THREE.Vector2(
-            obb.obbCenter.x - obb.dirU.x * halfU,
-            obb.obbCenter.y - obb.dirU.y * halfU
+            obb.obbCenter.x - obb.dirU.x * halfRidgeU,
+            obb.obbCenter.y - obb.dirU.y * halfRidgeU
           );
           const rP1 = new THREE.Vector2(
-            obb.obbCenter.x + obb.dirU.x * halfU,
-            obb.obbCenter.y + obb.dirU.y * halfU
+            obb.obbCenter.x + obb.dirU.x * halfRidgeU,
+            obb.obbCenter.y + obb.dirU.y * halfRidgeU
           );
 
           const rPositions: number[] = [];
@@ -600,18 +646,46 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const p0 = pts[i];
             const p1 = pts[(i + 1) % N];
 
-            const d0_0 = p0.distanceToSquared(rP0);
-            const d0_1 = p0.distanceToSquared(rP1);
-            const rMid = (d0_0 + d0_1 < p1.distanceToSquared(rP0) + p1.distanceToSquared(rP1)) ? rP0 : rP1;
+            // 용마루 선 투영 계산
+            const d0 = (p0.x - obb.obbCenter.x) * obb.dirU.x + (p0.y - obb.obbCenter.y) * obb.dirU.y;
+            const d1 = (p1.x - obb.obbCenter.x) * obb.dirU.x + (p1.y - obb.obbCenter.y) * obb.dirU.y;
+            const cd0 = Math.max(-halfRidgeU, Math.min(halfRidgeU, d0));
+            const cd1 = Math.max(-halfRidgeU, Math.min(halfRidgeU, d1));
 
+            const proj0 = new THREE.Vector2(
+              obb.obbCenter.x + obb.dirU.x * cd0,
+              obb.obbCenter.y + obb.dirU.y * cd0
+            );
+            const proj1 = new THREE.Vector2(
+              obb.obbCenter.x + obb.dirU.x * cd1,
+              obb.obbCenter.y + obb.dirU.y * cd1
+            );
+
+            // 경사면 사각 패널 (2개 삼각형)
             rPositions.push(
               p0.x, wallTop, p0.y,
               p1.x, wallTop, p1.y,
-              rMid.x, ridgeTop, rMid.y
+              proj1.x, ridgeTop, proj1.y,
+              p0.x, wallTop, p0.y,
+              proj1.x, ridgeTop, proj1.y,
+              proj0.x, ridgeTop, proj0.y
             );
-            rNormals.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+
+            // 법선 벡터 산출 (경사각 20도 반영)
+            const vA = new THREE.Vector3(p0.x, wallTop, p0.y);
+            const vB = new THREE.Vector3(p1.x, wallTop, p1.y);
+            const vC = new THREE.Vector3(proj1.x, ridgeTop, proj1.y);
+            const cb = new THREE.Vector3().subVectors(vC, vB);
+            const ab = new THREE.Vector3().subVectors(vA, vB);
+            const fn = new THREE.Vector3().crossVectors(cb, ab).normalize();
+            if (fn.y < 0) fn.negate();
+
+            for (let k = 0; k < 6; k++) {
+              rNormals.push(fn.x, fn.y, fn.z);
+            }
           }
 
+          // 전/후면 삼각 박공벽 (Gable Triangles) 마감
           rPositions.push(
             rP0.x, ridgeTop, rP0.y,
             rP1.x, ridgeTop, rP1.y,
@@ -623,11 +697,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const rGeom = new THREE.BufferGeometry();
             rGeom.setAttribute('position', new THREE.Float32BufferAttribute(rPositions, 3));
             rGeom.setAttribute('normal', new THREE.Float32BufferAttribute(rNormals, 3));
-            terracottaRoofGeometries.push(rGeom);
+            gabledRoofGeometries.push(rGeom);
           }
         } else {
-          // [유형 2: 판상형 아파트 & 상업 빌딩 & 고층 타워 -> 옥상 슬래브(#334155) + 1.2m 돌출 난간 + 엘리베이터 옥탑]
-          // (a) 옥상 방수 슬래브 바닥면 (짙은 차콜 그레이 #334155)
+          // [유형 2: 평지붕 건물 - 아파트, 대형 빌딩, 공공청사, 상업, 근생]
+
+          // (a) 옥상 방수 슬래브 (차콜 그레이 #334155)
           const roofTriangles = triangulatePolygon2D(pts);
           if (roofTriangles.length > 0) {
             const slabPos: number[] = [];
@@ -643,67 +718,102 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             slateRoofGeometries.push(slabGeom);
           }
 
-          // (b) 옥상 1.2m 돌출 난간 (Parapet)
-          const pPositions: number[] = [];
-          const pNormals: number[] = [];
-          const parapetTop = wallTop + 1.2;
-
+          // (b) [인스턴싱] 옥상 테두리를 따라 높이 1.2m의 차콜 그레이 난간(Parapet) 자동 생성
           for (let i = 0; i < N; i++) {
             const p0 = pts[i];
             const p1 = pts[(i + 1) % N];
-            const len = p0.distanceTo(p1);
-            if (len < 0.05) continue;
+            const segLen = p0.distanceTo(p1);
+            if (segLen < 0.1) continue;
 
-            const dx = p1.x - p0.x;
-            const dz = p1.y - p0.y;
-            const nx = dz / len;
-            const nz = -dx / len;
+            const midX = (p0.x + p1.x) * 0.5;
+            const midZ = (p0.y + p1.y) * 0.5;
+            const angleY = -Math.atan2(p1.y - p0.y, p1.x - p0.x);
 
-            pPositions.push(
-              p0.x, wallTop, p0.y,
-              p1.x, parapetTop, p1.y,
-              p1.x, wallTop, p1.y,
-              p0.x, wallTop, p0.y,
-              p0.x, parapetTop, p0.y,
-              p1.x, parapetTop, p1.y
+            tempPos.set(midX, wallTop, midZ);
+            tempEuler.set(0, angleY, 0, 'YXZ');
+            tempQuat.setFromEuler(tempEuler);
+            tempScale.set(segLen, 1.0, 1.0);
+            tempMat.compose(tempPos, tempQuat, tempScale);
+            parapetMatrices.push(tempMat.clone());
+          }
+
+          // (c) [인스턴싱] 중앙에 솟아오른 엘리베이터 기계실(권상기실) 큐브
+          const coreW = Math.max(3.8, obb.lenU * (isLandmarkTower ? 0.28 : 0.22));
+          const coreD = Math.max(3.8, obb.lenV * (isLandmarkTower ? 0.28 : 0.22));
+          const coreH = isLandmarkTower ? 4.2 : 3.4;
+
+          tempPos.set(obb.obbCenter.x, wallTop, obb.obbCenter.y);
+          const phi = Math.atan2(obb.dirU.y, obb.dirU.x);
+          tempEuler.set(0, -phi, 0, 'YXZ');
+          tempQuat.setFromEuler(tempEuler);
+          tempScale.set(coreW, coreH, coreD);
+          tempMat.compose(tempPos, tempQuat, tempScale);
+          penthouseMatrices.push(tempMat.clone());
+
+          // (d) [아파트 전용 인스턴싱]: 옥상 STS 원통형 물탱크 + 환기 벤트 메쉬
+          if (isApartment) {
+            // 원통형 STS 물탱크
+            const tankRadius = Math.max(1.0, Math.min(1.8, obb.lenV * 0.12));
+            const tankHeight = 2.4;
+            const tankOffsetX = obb.dirU.x * (coreW * 0.5 + tankRadius * 1.3);
+            const tankOffsetZ = obb.dirU.y * (coreW * 0.5 + tankRadius * 1.3);
+
+            tempPos.set(
+              obb.obbCenter.x + tankOffsetX,
+              wallTop,
+              obb.obbCenter.y + tankOffsetZ
             );
-            for (let k = 0; k < 6; k++) pNormals.push(nx, 0, nz);
+            tempQuat.identity();
+            tempScale.set(tankRadius * 2, tankHeight, tankRadius * 2);
+            tempMat.compose(tempPos, tempQuat, tempScale);
+            waterTankMatrices.push(tempMat.clone());
+
+            // 18층 이상 대단지는 보조 물탱크 1기 추가
+            if (floorCount >= 18 || totalH >= 50.0) {
+              tempPos.set(
+                obb.obbCenter.x - tankOffsetX,
+                wallTop,
+                obb.obbCenter.y - tankOffsetZ
+              );
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              waterTankMatrices.push(tempMat.clone());
+            }
+
+            // 옥상 환기 벤트 (4개 균일 분산)
+            const ventCount = 4;
+            for (let v = 0; v < ventCount; v++) {
+              const vAngle = (v / ventCount) * Math.PI * 2;
+              const distU = Math.max(3.0, Math.min(obb.lenU * 0.28, 7.5));
+              const distV = Math.max(2.5, Math.min(obb.lenV * 0.28, 5.5));
+              const vx = obb.obbCenter.x + Math.cos(vAngle) * distU;
+              const vz = obb.obbCenter.y + Math.sin(vAngle) * distV;
+
+              tempPos.set(vx, wallTop, vz);
+              tempQuat.identity();
+              tempScale.set(0.7, 0.95, 0.7);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              ventMatrices.push(tempMat.clone());
+            }
           }
 
-          if (pPositions.length > 0) {
-            const pGeom = new THREE.BufferGeometry();
-            pGeom.setAttribute('position', new THREE.Float32BufferAttribute(pPositions, 3));
-            pGeom.setAttribute('normal', new THREE.Float32BufferAttribute(pNormals, 3));
-            parapetGeometries.push(pGeom);
-          }
-
-          // (c) 사각 권상기실 및 설비 코어 (Penthouse Core)
-          const coreW = Math.max(4.0, obb.lenU * (isLandmarkTower ? 0.28 : 0.22));
-          const coreD = Math.max(4.0, obb.lenV * (isLandmarkTower ? 0.28 : 0.22));
-          const coreH = isLandmarkTower ? 4.2 : 3.2;
-
-          const boxGeom = new THREE.BoxGeometry(coreW, coreH, coreD);
-          boxGeom.translate(obb.obbCenter.x, wallTop + coreH / 2, obb.obbCenter.y);
-          penthouseGeometries.push(boxGeom);
-
-          // (d) [15층 이상 고층 빌딩 및 주요 공공청사 랜드마크 특화] 옥상 헬리패드(H 마킹) 디테일 메쉬
-          if (isLandmarkTower) {
-            const helipadRadius = Math.max(5.0, Math.min(13.0, Math.min(obb.lenU, obb.lenV) * 0.35));
+          // (e) [대형 빌딩 / 공공청사 전용]: 옥상 헬리패드(녹색 원형 바탕 + 백색 'H' 마킹) 및 사각 태양광 패널 그리드
+          if (isLandmarkTower || (isCommercial && totalH >= 30.0) || (isPublicOffice && totalH >= 20.0)) {
+            const helipadRadius = Math.max(5.0, Math.min(12.0, Math.min(obb.lenU, obb.lenV) * 0.35));
             const padDeckH = 0.45;
             const padTop = wallTop + padDeckH;
 
-            // 원형 베이스 플레이트
+            // 1) 헬리패드 녹색 원형 우레탄 바탕 플레이트
             const padGeo = new THREE.CylinderGeometry(helipadRadius, helipadRadius, padDeckH, 24);
             padGeo.translate(obb.obbCenter.x, wallTop + padDeckH / 2, obb.obbCenter.y);
             helipadBaseGeometries.push(padGeo);
 
-            // 노란색 안전 경계 링
+            // 2) 헬리패드 황색 안전 경계 링
             const ringGeo = new THREE.RingGeometry(helipadRadius * 0.78, helipadRadius * 0.90, 32);
             ringGeo.rotateX(-Math.PI / 2);
             ringGeo.translate(obb.obbCenter.x, padTop + 0.05, obb.obbCenter.y);
-            helipadMarkGeometries.push(ringGeo);
+            helipadRingGeometries.push(ringGeo);
 
-            // 중앙 대형 'H' 마킹 (3개 직사각형 조합)
+            // 3) 헬리패드 백색 'H' 마킹 메쉬
             const hSpan = helipadRadius * 0.85;
             const hBarW = helipadRadius * 0.16;
             const hSpacing = helipadRadius * 0.32;
@@ -719,6 +829,33 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const crossBar = new THREE.BoxGeometry(hSpacing * 2, 0.08, hBarW);
             crossBar.translate(obb.obbCenter.x, padTop + 0.08, obb.obbCenter.y);
             helipadMarkGeometries.push(crossBar);
+
+            // 4) [인스턴싱] 사각 태양광 패널 그리드 (헬리패드 반대편 옥상 공간에 남향 15도 경사 배열)
+            if (obb.lenU >= 16.0 && obb.lenV >= 14.0) {
+              const panelCols = Math.max(2, Math.min(4, Math.floor(obb.lenU / 6.0)));
+              const panelRows = 2;
+              const spacingX = 2.8;
+              const spacingZ = 2.0;
+
+              // 헬리패드 반대편 코너로 오프셋
+              const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.28);
+              const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.28);
+
+              tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ'); // 남향 15도 경사
+              tempQuat.setFromEuler(tempEuler);
+              tempScale.set(1.0, 1.0, 1.0);
+
+              for (let r = 0; r < panelRows; r++) {
+                for (let c = 0; c < panelCols; c++) {
+                  const px = solarCenterX + (c - (panelCols - 1) * 0.5) * spacingX;
+                  const pz = solarCenterZ + (r - (panelRows - 1) * 0.5) * spacingZ;
+
+                  tempPos.set(px, wallTop + 0.45 + r * 0.12, pz);
+                  tempMat.compose(tempPos, tempQuat, tempScale);
+                  solarMatrices.push(tempMat.clone());
+                }
+              }
+            }
           }
         }
 
@@ -726,7 +863,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    // 5. [지역 핵심 랜드마크 고층 타워 자동 생성 (공공청사 / 혁신 타워 클러스터)]
+    // 5. [지역 핵심 랜드마크 고층 타워 자동 생성 (원주 시청, 혁신 타워 클러스터 등)]
     const REGIONAL_LANDMARKS = [
       { name: '건강보험심사평가원 본원 타워', lng: 127.9790, lat: 37.3225, floors: 27, height: 115, width: 44, depth: 32 },
       { name: '국민건강보험공단 본부 타워', lng: 127.9735, lat: 37.3255, floors: 30, height: 130, width: 46, depth: 34 },
@@ -739,7 +876,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       const dLng = Math.abs(lm.lng - this.originLngLat[0]);
       const dLat = Math.abs(lm.lat - this.originLngLat[1]);
       if (dLng < 0.15 && dLat < 0.15) {
-        // DEM 지형 고도 샘플링
         let lmElev = 0;
         if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
           const q = (this.map as any).queryTerrainElevation([lm.lng, lm.lat]);
@@ -751,7 +887,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const lmZ = -(lm.lat - this.originLngLat[1]) * (Math.PI / 180) * 6378137;
         const lmWallTop = lmElev + lm.height;
 
-        // 타워 4각 외벽 생성
         const hw = lm.width / 2;
         const hd = lm.depth / 2;
         const corners = [
@@ -790,6 +925,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           );
           for (let k = 0; k < 6; k++) lmWallNorm.push(nx, 0, nz);
           lmWallUvs.push(u0, 0, u1, vTop, u1, 0, u0, 0, u0, vTop, u1, vTop);
+
+          // 난간 인스턴스
+          const midX = (p0.x + p1.x) * 0.5;
+          const midZ = (p0.y + p1.y) * 0.5;
+          const angleY = -Math.atan2(dz, dx);
+          tempPos.set(midX, lmWallTop, midZ);
+          tempEuler.set(0, angleY, 0, 'YXZ');
+          tempQuat.setFromEuler(tempEuler);
+          tempScale.set(segLen, 1.0, 1.0);
+          tempMat.compose(tempPos, tempQuat, tempScale);
+          parapetMatrices.push(tempMat.clone());
         }
 
         const lmWGeom = new THREE.BufferGeometry();
@@ -812,12 +958,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         lmSlabGeom.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
         slateRoofGeometries.push(lmSlabGeom);
 
-        // 옥탑 사각 권상기실
-        const lmPhGeom = new THREE.BoxGeometry(lm.width * 0.35, 4.8, lm.depth * 0.35);
-        lmPhGeom.translate(lmX, lmWallTop + 2.4, lmZ);
-        penthouseGeometries.push(lmPhGeom);
+        // 권상기실 인스턴스
+        tempPos.set(lmX, lmWallTop, lmZ);
+        tempQuat.identity();
+        tempScale.set(lm.width * 0.35, 4.8, lm.depth * 0.35);
+        tempMat.compose(tempPos, tempQuat, tempScale);
+        penthouseMatrices.push(tempMat.clone());
 
-        // 옥상 헬리패드 데크 및 H 마킹
+        // 옥상 헬리패드 (녹색 바탕 + 황색 링 + 백색 H)
         const lmPadR = Math.min(lm.width, lm.depth) * 0.36;
         const lmPadH = 0.45;
         const lmPadTop = lmWallTop + lmPadH;
@@ -829,7 +977,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const lmRingGeo = new THREE.RingGeometry(lmPadR * 0.78, lmPadR * 0.90, 32);
         lmRingGeo.rotateX(-Math.PI / 2);
         lmRingGeo.translate(lmX, lmPadTop + 0.05, lmZ);
-        helipadMarkGeometries.push(lmRingGeo);
+        helipadRingGeometries.push(lmRingGeo);
 
         const lmHSpan = lmPadR * 0.85;
         const lmHBarW = lmPadR * 0.16;
@@ -847,14 +995,30 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         lmCBar.translate(lmX, lmPadTop + 0.08, lmZ);
         helipadMarkGeometries.push(lmCBar);
 
+        // 사각 태양광 패널 그리드 인스턴스 (랜드마크 옥상 남향 배열)
+        const lmSolarCols = 3;
+        const lmSolarRows = 2;
+        tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ');
+        tempQuat.setFromEuler(tempEuler);
+        tempScale.set(1.0, 1.0, 1.0);
+
+        for (let r = 0; r < lmSolarRows; r++) {
+          for (let c = 0; c < lmSolarCols; c++) {
+            const px = lmX + (c - 1) * 3.0;
+            const pz = lmZ + lm.depth * 0.3 + r * 2.2;
+            tempPos.set(px, lmWallTop + 0.5 + r * 0.12, pz);
+            tempMat.compose(tempPos, tempQuat, tempScale);
+            solarMatrices.push(tempMat.clone());
+          }
+        }
+
         count++;
       }
     }
 
     this.buildingCount = count;
 
-    // 6. [동일 텍스처/재질 지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries)]
-    // 전체 씬을 단 11개 이하의 메쉬로 결합하여 Draw Call을 극소화(50회 이하 조건 완벽 충족)
+    // 6. [지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries)]
     if (landmarkWallGeometries.length > 0 && this.materials?.landmarkTowerMaterial) {
       const merged = BufferGeometryUtils.mergeGeometries(landmarkWallGeometries, false);
       if (merged) {
@@ -864,30 +1028,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         this.landmarkWallMesh.receiveShadow = true;
         this.landmarkWallMesh.frustumCulled = true;
         this.scene.add(this.landmarkWallMesh);
-      }
-    }
-
-    if (helipadBaseGeometries.length > 0 && this.materials?.helipadBaseMaterial) {
-      const merged = BufferGeometryUtils.mergeGeometries(helipadBaseGeometries, false);
-      if (merged) {
-        merged.computeBoundingSphere();
-        this.helipadBaseMesh = new THREE.Mesh(merged, this.materials.helipadBaseMaterial);
-        this.helipadBaseMesh.castShadow = true;
-        this.helipadBaseMesh.receiveShadow = true;
-        this.helipadBaseMesh.frustumCulled = true;
-        this.scene.add(this.helipadBaseMesh);
-      }
-    }
-
-    if (helipadMarkGeometries.length > 0 && this.materials?.helipadMarkMaterial) {
-      const merged = BufferGeometryUtils.mergeGeometries(helipadMarkGeometries, false);
-      if (merged) {
-        merged.computeBoundingSphere();
-        this.helipadMarkMesh = new THREE.Mesh(merged, this.materials.helipadMarkMaterial);
-        this.helipadMarkMesh.castShadow = true;
-        this.helipadMarkMesh.receiveShadow = true;
-        this.helipadMarkMesh.frustumCulled = true;
-        this.scene.add(this.helipadMarkMesh);
       }
     }
 
@@ -927,18 +1067,59 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (terracottaRoofGeometries.length > 0 && this.roofTerracottaMaterial) {
-      const mergedRoof = BufferGeometryUtils.mergeGeometries(terracottaRoofGeometries, false);
-      if (mergedRoof) {
-        mergedRoof.computeBoundingSphere();
-        this.terracottaRoofMesh = new THREE.Mesh(mergedRoof, this.roofTerracottaMaterial);
-        this.terracottaRoofMesh.castShadow = true;
-        this.terracottaRoofMesh.receiveShadow = true;
-        this.terracottaRoofMesh.frustumCulled = true;
-        this.scene.add(this.terracottaRoofMesh);
+    // 헬리패드 녹색 바탕 데크
+    if (helipadBaseGeometries.length > 0 && this.materials?.helipadGreenBaseMaterial) {
+      const merged = BufferGeometryUtils.mergeGeometries(helipadBaseGeometries, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        this.helipadBaseMesh = new THREE.Mesh(merged, this.materials.helipadGreenBaseMaterial);
+        this.helipadBaseMesh.castShadow = true;
+        this.helipadBaseMesh.receiveShadow = true;
+        this.helipadBaseMesh.frustumCulled = true;
+        this.scene.add(this.helipadBaseMesh);
       }
     }
 
+    // 헬리패드 황색 링
+    if (helipadRingGeometries.length > 0 && this.materials?.helipadYellowRingMaterial) {
+      const merged = BufferGeometryUtils.mergeGeometries(helipadRingGeometries, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        this.helipadRingMesh = new THREE.Mesh(merged, this.materials.helipadYellowRingMaterial);
+        this.helipadRingMesh.castShadow = true;
+        this.helipadRingMesh.receiveShadow = true;
+        this.helipadRingMesh.frustumCulled = true;
+        this.scene.add(this.helipadRingMesh);
+      }
+    }
+
+    // 헬리패드 백색 'H' 마킹
+    if (helipadMarkGeometries.length > 0 && this.materials?.helipadWhiteMarkMaterial) {
+      const merged = BufferGeometryUtils.mergeGeometries(helipadMarkGeometries, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        this.helipadMarkMesh = new THREE.Mesh(merged, this.materials.helipadWhiteMarkMaterial);
+        this.helipadMarkMesh.castShadow = true;
+        this.helipadMarkMesh.receiveShadow = true;
+        this.helipadMarkMesh.frustumCulled = true;
+        this.scene.add(this.helipadMarkMesh);
+      }
+    }
+
+    // 20도 입체 박공 지붕 (Gabled Roof)
+    if (gabledRoofGeometries.length > 0 && this.materials?.gabledRoofMaterial) {
+      const mergedRoof = BufferGeometryUtils.mergeGeometries(gabledRoofGeometries, false);
+      if (mergedRoof) {
+        mergedRoof.computeBoundingSphere();
+        this.gabledRoofMesh = new THREE.Mesh(mergedRoof, this.materials.gabledRoofMaterial);
+        this.gabledRoofMesh.castShadow = true;
+        this.gabledRoofMesh.receiveShadow = true;
+        this.gabledRoofMesh.frustumCulled = true;
+        this.scene.add(this.gabledRoofMesh);
+      }
+    }
+
+    // 옥상 방수 슬래브 바닥면
     if (slateRoofGeometries.length > 0 && this.materials?.roofSlateMaterial) {
       const mergedSlate = BufferGeometryUtils.mergeGeometries(slateRoofGeometries, false);
       if (mergedSlate) {
@@ -951,30 +1132,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (parapetGeometries.length > 0 && this.materials?.parapetMaterial) {
-      const mergedParapet = BufferGeometryUtils.mergeGeometries(parapetGeometries, false);
-      if (mergedParapet) {
-        mergedParapet.computeBoundingSphere();
-        this.parapetMesh = new THREE.Mesh(mergedParapet, this.materials.parapetMaterial);
-        this.parapetMesh.castShadow = true;
-        this.parapetMesh.receiveShadow = true;
-        this.parapetMesh.frustumCulled = true;
-        this.scene.add(this.parapetMesh);
-      }
-    }
-
-    if (penthouseGeometries.length > 0 && this.materials?.penthouseMaterial) {
-      const mergedPenthouse = BufferGeometryUtils.mergeGeometries(penthouseGeometries, false);
-      if (mergedPenthouse) {
-        mergedPenthouse.computeBoundingSphere();
-        this.penthouseMesh = new THREE.Mesh(mergedPenthouse, this.materials.penthouseMaterial);
-        this.penthouseMesh.castShadow = true;
-        this.penthouseMesh.receiveShadow = true;
-        this.penthouseMesh.frustumCulled = true;
-        this.scene.add(this.penthouseMesh);
-      }
-    }
-
+    // 지형 밀착 기초 옹벽
     if (foundationGeometries.length > 0 && this.materials?.foundationMaterial) {
       const mergedFoundation = BufferGeometryUtils.mergeGeometries(foundationGeometries, false);
       if (mergedFoundation) {
@@ -984,6 +1142,97 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         this.foundationMesh.frustumCulled = true;
         this.scene.add(this.foundationMesh);
       }
+    }
+
+    // 7. [THREE.InstancedMesh 일괄 인스턴싱 렌더링 (Draw Call 극소화 & 60fps 유지)]
+    // (a) 지붕 난간 (Parapet) 인스턴싱
+    if (parapetMatrices.length > 0 && this.materials?.parapetMaterial && LOD2BuildingEngine.unitParapetGeo) {
+      this.parapetInstancedMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitParapetGeo,
+        this.materials.parapetMaterial,
+        parapetMatrices.length
+      );
+      for (let i = 0; i < parapetMatrices.length; i++) {
+        this.parapetInstancedMesh.setMatrixAt(i, parapetMatrices[i]);
+      }
+      this.parapetInstancedMesh.instanceMatrix.needsUpdate = true;
+      this.parapetInstancedMesh.computeBoundingSphere();
+      this.parapetInstancedMesh.castShadow = true;
+      this.parapetInstancedMesh.receiveShadow = true;
+      this.parapetInstancedMesh.frustumCulled = true;
+      this.scene.add(this.parapetInstancedMesh);
+    }
+
+    // (b) 엘리베이터 권상기실 / 기계실 (Penthouse) 인스턴싱
+    if (penthouseMatrices.length > 0 && this.materials?.penthouseMaterial && LOD2BuildingEngine.unitPenthouseGeo) {
+      this.penthouseInstancedMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitPenthouseGeo,
+        this.materials.penthouseMaterial,
+        penthouseMatrices.length
+      );
+      for (let i = 0; i < penthouseMatrices.length; i++) {
+        this.penthouseInstancedMesh.setMatrixAt(i, penthouseMatrices[i]);
+      }
+      this.penthouseInstancedMesh.instanceMatrix.needsUpdate = true;
+      this.penthouseInstancedMesh.computeBoundingSphere();
+      this.penthouseInstancedMesh.castShadow = true;
+      this.penthouseInstancedMesh.receiveShadow = true;
+      this.penthouseInstancedMesh.frustumCulled = true;
+      this.scene.add(this.penthouseInstancedMesh);
+    }
+
+    // (c) 옥상 STS 원통형 물탱크 (Water Tank) 인스턴싱
+    if (waterTankMatrices.length > 0 && this.materials?.waterTankMaterial && LOD2BuildingEngine.unitWaterTankGeo) {
+      this.waterTankInstancedMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitWaterTankGeo,
+        this.materials.waterTankMaterial,
+        waterTankMatrices.length
+      );
+      for (let i = 0; i < waterTankMatrices.length; i++) {
+        this.waterTankInstancedMesh.setMatrixAt(i, waterTankMatrices[i]);
+      }
+      this.waterTankInstancedMesh.instanceMatrix.needsUpdate = true;
+      this.waterTankInstancedMesh.computeBoundingSphere();
+      this.waterTankInstancedMesh.castShadow = true;
+      this.waterTankInstancedMesh.receiveShadow = true;
+      this.waterTankInstancedMesh.frustumCulled = true;
+      this.scene.add(this.waterTankInstancedMesh);
+    }
+
+    // (d) 옥상 환기 벤트 (Vent / HVAC) 인스턴싱
+    if (ventMatrices.length > 0 && this.materials?.ventHvacMaterial && LOD2BuildingEngine.unitVentGeo) {
+      this.ventInstancedMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitVentGeo,
+        this.materials.ventHvacMaterial,
+        ventMatrices.length
+      );
+      for (let i = 0; i < ventMatrices.length; i++) {
+        this.ventInstancedMesh.setMatrixAt(i, ventMatrices[i]);
+      }
+      this.ventInstancedMesh.instanceMatrix.needsUpdate = true;
+      this.ventInstancedMesh.computeBoundingSphere();
+      this.ventInstancedMesh.castShadow = true;
+      this.ventInstancedMesh.receiveShadow = true;
+      this.ventInstancedMesh.frustumCulled = true;
+      this.scene.add(this.ventInstancedMesh);
+    }
+
+    // (e) 사각 태양광 패널 그리드 (Solar Panel) 인스턴싱
+    if (solarMatrices.length > 0 && this.materials?.solarPanelMaterial && LOD2BuildingEngine.unitSolarGeo) {
+      this.solarPanelInstancedMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitSolarGeo,
+        this.materials.solarPanelMaterial,
+        solarMatrices.length
+      );
+      for (let i = 0; i < solarMatrices.length; i++) {
+        this.solarPanelInstancedMesh.setMatrixAt(i, solarMatrices[i]);
+      }
+      this.solarPanelInstancedMesh.instanceMatrix.needsUpdate = true;
+      this.solarPanelInstancedMesh.computeBoundingSphere();
+      this.solarPanelInstancedMesh.castShadow = true;
+      this.solarPanelInstancedMesh.receiveShadow = true;
+      this.solarPanelInstancedMesh.frustumCulled = true;
+      this.scene.add(this.solarPanelInstancedMesh);
     }
 
     if (this.map) {
@@ -1020,7 +1269,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         }
       }
 
-      // 2. Mercator 좌표계 투영 (지형 표고에 정확히 스냅)
+      // 2. Mercator 좌표계 투영
       const mercator = maplibregl.MercatorCoordinate.fromLngLat(
         this.originLngLat,
         this.clampedAltitude
@@ -1062,11 +1311,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.neighWallMesh,
       this.landmarkWallMesh,
       this.helipadBaseMesh,
+      this.helipadRingMesh,
       this.helipadMarkMesh,
-      this.terracottaRoofMesh,
+      this.gabledRoofMesh,
       this.slateRoofMesh,
-      this.parapetMesh,
-      this.penthouseMesh,
       this.foundationMesh,
     ];
 
@@ -1084,12 +1332,33 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.neighWallMesh = null;
     this.landmarkWallMesh = null;
     this.helipadBaseMesh = null;
+    this.helipadRingMesh = null;
     this.helipadMarkMesh = null;
-    this.terracottaRoofMesh = null;
+    this.gabledRoofMesh = null;
     this.slateRoofMesh = null;
-    this.parapetMesh = null;
-    this.penthouseMesh = null;
     this.foundationMesh = null;
+
+    // 인스턴싱 메쉬 해제
+    const instanced = [
+      this.parapetInstancedMesh,
+      this.penthouseInstancedMesh,
+      this.waterTankInstancedMesh,
+      this.ventInstancedMesh,
+      this.solarPanelInstancedMesh,
+    ];
+
+    for (const im of instanced) {
+      if (im) {
+        this.scene.remove(im);
+        im.dispose();
+      }
+    }
+
+    this.parapetInstancedMesh = null;
+    this.penthouseInstancedMesh = null;
+    this.waterTankInstancedMesh = null;
+    this.ventInstancedMesh = null;
+    this.solarPanelInstancedMesh = null;
   }
 
   /**
@@ -1098,16 +1367,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   onRemove(): void {
     this.clearMeshes();
 
-    // 한국형 파사드 텍스처 및 머티리얼 GPU 캐시 완전 해제
     disposeKoreanBuildingMaterials();
     this.materials = null;
 
-    if (this.roofTerracottaMaterial) {
-      this.roofTerracottaMaterial.dispose();
-      this.roofTerracottaMaterial = null;
-    }
-
-    // 조명 해제
     if (this.directionalLight) {
       this.scene.remove(this.directionalLight);
       if (this.directionalLight.shadow?.map) {
