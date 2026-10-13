@@ -17,7 +17,7 @@ export interface Deck3DTilesOverlayCallbacks {
 const MIN_STREAMING_ZOOM = 14; // 줌 14 이상에서만 고해상도 실사 3D 타일 활성화 (줌 13 이하는 MapLibre 경량 베이스)
 const MAX_CONCURRENT_REQUESTS = 6; // 브라우저 네트워크 블로킹 방지 및 60fps 유지를 위한 최대 동시 요청 수
 const MAX_MEMORY_USAGE_MB = 128; // 화면 밖 타일 메모리 즉시 Unload 및 LRU 캐시 한도 최적화 (128MB)
-const CONNECTION_TIMEOUT_MS = 5000; // 5초 연결 타임아웃 (무한 로딩 방지 및 안전 폴백)
+const CONNECTION_TIMEOUT_MS = 2000; // 2초 연결 타임아웃 (원주/강원권 무한 로딩 방지 및 즉시 안전 폴백)
 
 /**
  * MapLibre GL JS 위에서 Deck.gl MapboxOverlay를 통해
@@ -177,6 +177,22 @@ export class Deck3DTilesManager {
     const targetUrl = this.currentState.url;
     if (!targetUrl) return;
 
+    // 0. 원주 1군지사 부지 감지 및 사전 판정:
+    // 브이월드 실사 3D 타일셋은 원주/강원권 데이터가 없으므로 불필요한 무한 대기 없이 즉각 안내 표출 및 LOD2로 안전 대체
+    const center = this.map ? this.map.getCenter() : null;
+    const isWonjuArea = center ? (center.lng >= 127.8 && center.lng <= 128.2 && center.lat >= 37.1 && center.lat <= 37.6) : true;
+    const isVworldUrl = targetUrl.includes('/api/vworld/3dtiles') || targetUrl.includes('vworld');
+
+    if (isWonjuArea && isVworldUrl) {
+      this.cancelPendingRequest();
+      if (this.overlay) {
+        this.overlay.setProps({ layers: [] });
+      }
+      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)', false, 0);
+      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+      return;
+    }
+
     // 1. 기존 진행 중인 타이머 및 요청 정리
     this.cancelPendingRequest();
 
@@ -186,11 +202,11 @@ export class Deck3DTilesManager {
     // 로딩 시작 상태 알림
     this.callbacks.onStatusChange?.('브이월드 실사 3D 스트리밍 연결 중...', true, this.loadedTilesCounter);
 
-    // 2. 5초 연결 안전 타임아웃 타이머 가동
+    // 2. 2초 연결 안전 타임아웃 타이머 가동 (무한 로딩 강제 차단 및 Abort)
     this.connectionTimeoutTimer = setTimeout(() => {
       if (this.isDestroyed || !this.currentState?.enabled) return;
       console.warn(
-        `%c[Deck3DTilesManager TIMEOUT]%c ⚠️ 3D 타일셋 연결 5초 초과: '${targetUrl}'. 무한 로딩을 차단하고 실감 파사드로 자동 폴백합니다.`,
+        `%c[Deck3DTilesManager TIMEOUT]%c ⚠️ 3D 타일셋 연결 2초 초과: '${targetUrl}'. 무한 로딩을 즉시 차단하고 자체 LOD2 모드로 대체합니다.`,
         'background: #78350F; color: #FDE68A; font-weight: bold; padding: 2px 6px; border-radius: 4px;',
         'color: #F59E0B; font-weight: bold;'
       );
@@ -199,11 +215,11 @@ export class Deck3DTilesManager {
       if (this.overlay) {
         this.overlay.setProps({ layers: [] });
       }
-      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨', false, 0);
-      this.callbacks.onFallback?.('5초 타일셋 응답 타임아웃');
+      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)', false, 0);
+      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
     }, CONNECTION_TIMEOUT_MS);
 
-    // 3. 사전 연결 진단 (Pre-flight fetch): 404, 500, CORS, 네트워크 단절 즉시 검출
+    // 3. 사전 연결 진단 (Pre-flight fetch): 404, 500, CORS, 네트워크 단절 즉시 검출 (완전 비동기 격리)
     try {
       const response = await fetch(targetUrl, {
         signal: controller.signal,
@@ -224,7 +240,7 @@ export class Deck3DTilesManager {
 
       this.clearTimeoutTimer();
       console.error(
-        `%c[Deck3DTilesManager ERROR]%c 🚨 3D 타일셋 연결 실패: '${targetUrl}'\n • 상세 에러: ${fetchErr?.message || fetchErr}\n • 조치: LOD2 실감 파사드로 자동 폴백`,
+        `%c[Deck3DTilesManager ERROR]%c 🚨 3D 타일셋 연결 실패: '${targetUrl}'\n • 상세 에러: ${fetchErr?.message || fetchErr}\n • 조치: 자체 LOD2 모드로 대체`,
         'background: #7F1D1D; color: #FCA5A5; font-weight: bold; padding: 2px 6px; border-radius: 4px;',
         'color: #EF4444; font-weight: bold;'
       );
@@ -232,8 +248,8 @@ export class Deck3DTilesManager {
       if (this.overlay) {
         this.overlay.setProps({ layers: [] });
       }
-      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨', false, 0);
-      this.callbacks.onFallback?.(`3D 타일셋 연결 실패 (${fetchErr?.message || '네트워크 오류'})`);
+      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)', false, 0);
+      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
       return;
     }
 
@@ -299,12 +315,12 @@ export class Deck3DTilesManager {
           console.warn('[Deck3DTilesManager] Tile node error:', message, tileHeader?.url);
           this.clearTimeoutTimer();
           this.callbacks.onStatusChange?.(
-            `⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨`,
+            `⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)`,
             false,
             this.loadedTilesCounter
           );
-          // 오프라인 / 미지원 지역에서 타일 로드 실패 시 Three.js 파사드 렌더러로 자동 폴백
-          this.callbacks.onFallback?.(message);
+          // 오프라인 / 미지원 지역에서 타일 로드 실패 시 자체 LOD2 모드로 안전 대체
+          this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
         },
       });
 
@@ -314,8 +330,8 @@ export class Deck3DTilesManager {
     } catch (err: any) {
       this.clearTimeoutTimer();
       console.error('[Deck3DTilesManager] Failed to render Tile3DLayer:', err);
-      this.callbacks.onStatusChange?.(`⚠️ 해당 지역 실사 타일 미지원 - 실감 파사드로 전환됨`, false, 0);
-      this.callbacks.onFallback?.(err.message || '렌더링 실패');
+      this.callbacks.onStatusChange?.(`⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)`, false, 0);
+      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
     }
   }
 

@@ -287,6 +287,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.materials = getKoreanBuildingMaterials();
   }
 
+  private currentZoomLOD = 16;
+  private solidWallMaterial: THREE.MeshStandardMaterial = new THREE.MeshStandardMaterial({
+    color: 0xF1F5F9,
+    roughness: 0.65,
+    metalness: 0.15,
+    side: THREE.DoubleSide,
+  });
+
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
     if (this.map) {
@@ -300,6 +308,43 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
   public getBuildingCount(): number {
     return this.buildingCount;
+  }
+
+  /**
+   * 줌 레벨 최적화 (LOD 제어):
+   * - 줌 14 미만: 경량 단색 음영(Solid Color), 미세 난간/설비 비표출로 60fps 유지
+   * - 줌 14 이상: 실감 파사드 텍스처(창문/베란다 격자) 및 1.2m 돌출 난간 렌더링
+   */
+  public updateZoomLOD(currentZoom: number): void {
+    const isDetailed = currentZoom >= 14;
+    const wasDetailed = this.currentZoomLOD >= 14;
+    this.currentZoomLOD = currentZoom;
+
+    if (isDetailed === wasDetailed) return;
+
+    if (this.aptWallMesh && this.materials) {
+      this.aptWallMesh.material = isDetailed ? this.materials.apartmentMaterial : this.solidWallMaterial;
+    }
+    if (this.comWallMesh && this.materials) {
+      this.comWallMesh.material = isDetailed ? this.materials.commercialMaterial : this.solidWallMaterial;
+    }
+    if (this.neighWallMesh && this.materials) {
+      this.neighWallMesh.material = isDetailed ? this.materials.neighborhoodMaterial : this.solidWallMaterial;
+    }
+
+    if (this.parapetInstancedMesh) {
+      this.parapetInstancedMesh.visible = isDetailed;
+    }
+    if (this.ventInstancedMesh) {
+      this.ventInstancedMesh.visible = isDetailed;
+    }
+    if (this.waterTankInstancedMesh) {
+      this.waterTankInstancedMesh.visible = isDetailed;
+    }
+
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
   }
 
   /**
@@ -1236,6 +1281,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     }
 
     if (this.map) {
+      this.updateZoomLOD(this.map.getZoom());
       this.map.triggerRepaint();
     }
   }

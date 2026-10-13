@@ -3231,10 +3231,18 @@ export const ControlPanel: React.FC = () => {
                       className={`w-2 h-2 rounded-full ${
                         tile3DStream.isLoading
                           ? 'bg-amber-400 animate-ping'
+                          : tile3DStream.statusText?.includes('⚠️')
+                          ? 'bg-amber-500'
                           : 'bg-emerald-400'
                       }`}
                     />
-                    <span className="text-[10px] text-slate-300 font-mono">
+                    <span
+                      className={`text-[10px] font-mono leading-tight ${
+                        tile3DStream.statusText?.includes('⚠️')
+                          ? 'text-amber-300 font-semibold'
+                          : 'text-slate-300'
+                      }`}
+                    >
                       {tile3DStream.statusText || '정상 스트리밍 중'}
                     </span>
                   </div>
