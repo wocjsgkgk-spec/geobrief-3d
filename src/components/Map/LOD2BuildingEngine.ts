@@ -209,6 +209,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private camera: THREE.Camera = new THREE.Camera();
   private scene: THREE.Scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer | null = null;
+  private onErrorCallback?: (err: any) => void;
+  private consecutiveErrors = 0;
+
+  public setOnError(cb: (err: any) => void): void {
+    this.onErrorCallback = cb;
+  }
 
   // 조명 객체
   private directionalLight: THREE.DirectionalLight | null = null;
@@ -1295,6 +1301,15 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       return;
     }
 
+    // WebGL 컨텍스트 손실 감지 시 렌더 즉시 중단 및 에러 통보
+    if (gl && typeof (gl as any).isContextLost === 'function' && (gl as any).isContextLost()) {
+      this.setVisible(false);
+      if (this.onErrorCallback) {
+        this.onErrorCallback(new Error('WebGL context lost'));
+      }
+      return;
+    }
+
     // [LOD 줌 필터]: 줌 14 미만 광역 뷰에서는 세부 실감 텍스처 메쉬 렌더링을 스킵하여 60fps 유지
     if (this.map) {
       const zoom = this.map.getZoom();
@@ -1347,8 +1362,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
         (gl as any).bindFramebuffer(gl.FRAMEBUFFER, null);
       }
+      this.consecutiveErrors = 0;
     } catch (renderErr) {
       console.warn('[LOD2BuildingEngine] render warning:', renderErr);
+      this.consecutiveErrors++;
+      if (this.consecutiveErrors >= 3) {
+        this.setVisible(false);
+        if (this.onErrorCallback) {
+          this.onErrorCallback(renderErr);
+        }
+      }
     }
   }
 

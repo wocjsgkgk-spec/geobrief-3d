@@ -411,7 +411,7 @@ export const ControlPanel: React.FC = () => {
               <div>
                 <span className="text-slate-400 block">태양 고도각</span>
                 <span className="font-bold text-amber-300 font-mono">
-                  {sunInfo.altitudeDeg}°
+                  {Math.max(-90, Math.min(90, sunInfo.altitudeDeg))}°
                 </span>
               </div>
               <div>

@@ -52,7 +52,7 @@ import {
   Target,
   Sparkles,
 } from 'lucide-react';
-import { calculateSunLight } from '@/utils/sunLightCalculator';
+import { calculateSunLight, safeSetLight } from '@/utils/sunLightCalculator';
 import { calculateViewshed } from '@/utils/viewshedAnalysis';
 import { calculate3DMeasurement } from '@/utils/measure3D';
 import { calculateCutFill } from '@/utils/cutFillAnalysis';
@@ -325,6 +325,7 @@ export const MapViewer: React.FC = () => {
     removePlacedFacility,
     setTransformGizmoMode,
     detail3DMode,
+    setDetail3DMode,
     // [3단계 신규: 3D 전술 탐지 돔, 3D 보안 펜스, 입체 LOS 가시선]
     threatDome,
     securityWall,
@@ -1570,14 +1571,14 @@ export const MapViewer: React.FC = () => {
 
       // [3D 건물 고대비 음영을 위한 Directional Light 조명 파라미터 적용 (비스듬한 태양광 각도, 강도 0.85)]
       try {
-        map.setLight({
+        safeSetLight(map, {
           anchor: 'viewport',
           color: '#ffffff',
           intensity: 0.85,
           position: [1.3, 115, 40],
         });
       } catch (lightErr) {
-        console.warn('[MapLibre] map.setLight skipped or not supported:', lightErr);
+        console.warn('[MapLibre] safeSetLight skipped or not supported:', lightErr);
       }
 
       // [물리 기반 대기 산란 (Sky Shader & Atmosphere)] 실시간 하늘 레이어 등록
@@ -2103,6 +2104,11 @@ export const MapViewer: React.FC = () => {
       try {
         const lod2Engine = new LOD2BuildingEngine();
         lod2Engine.setVisible(layers.buildings3D);
+        lod2Engine.setOnError((err) => {
+          console.warn('[MapViewer] LOD2 Building Engine fallback to LOD1:', err);
+          setDetail3DMode('lod1');
+          setWebglFallbackWarning('⚠️ 3D 실감 렌더링 지연/부하 감지로 일반(LOD1) 모드로 안전 전환되었습니다.');
+        });
         map.addLayer(lod2Engine);
         lod2BuildingEngineRef.current = lod2Engine;
         lod2Engine.updateBuildings(SAMPLE_BUILDINGS.features as any);
@@ -2243,6 +2249,7 @@ export const MapViewer: React.FC = () => {
       setViewMode('2D');
       setRenderMode3D('native');
       setTerrainEnabled(false);
+      setDetail3DMode('lod1');
 
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
@@ -3737,14 +3744,14 @@ export const MapViewer: React.FC = () => {
     try {
       if (sunHour === 14) {
         // [오후 고대비 태양광 조명] 비스듬한 태양광 각도로 벽면의 명암 대비 극대화 (강도 0.85)
-        map.setLight({
+        safeSetLight(map, {
           anchor: 'viewport',
           color: '#ffffff',
           intensity: 0.85,
           position: [1.3, 115, 40],
         });
       } else {
-        map.setLight({
+        safeSetLight(map, {
           anchor: 'viewport',
           color: sunConfig.color,
           intensity: sunConfig.intensity,
