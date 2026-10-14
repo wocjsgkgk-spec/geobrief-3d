@@ -13,12 +13,24 @@
 
 import * as THREE from 'three';
 import { createApartmentFacadeCanvas, createCommercialFacadeCanvas } from './facadeTextures';
+import {
+  createApartmentFacadeShaderMaterial,
+  createCommercialFacadeShaderMaterial,
+  createNeighborhoodFacadeShaderMaterial,
+  createLandmarkFacadeShaderMaterial,
+} from '@/shaders/buildingFacadeShader';
 
 export interface KoreanBuildingMaterials {
   apartmentMaterial: THREE.MeshStandardMaterial;
   commercialMaterial: THREE.MeshStandardMaterial;
   neighborhoodMaterial: THREE.MeshStandardMaterial;
   landmarkTowerMaterial: THREE.MeshStandardMaterial; // 반사 유리 고층 타워
+  apartmentShaderMaterial: THREE.ShaderMaterial;     // GLSL 절차적 아파트 파사드
+  commercialShaderMaterial: THREE.ShaderMaterial;    // GLSL 절차적 상업 커튼월
+  neighborhoodShaderMaterial: THREE.ShaderMaterial;  // GLSL 절차적 주택/막사
+  landmarkShaderMaterial: THREE.ShaderMaterial;      // GLSL 절차적 랜드마크 타워
+  apartmentRoofGreenMaterial: THREE.MeshStandardMaterial; // 초록색 우레탄 방수 도색 (#15803d)
+  coolRoofGrayMaterial: THREE.MeshStandardMaterial;       // 쿨루프 그레이 (#475569)
   helipadBaseMaterial: THREE.MeshStandardMaterial;   // 옥상 헬리패드 베이스 (호환용)
   helipadGreenBaseMaterial: THREE.MeshStandardMaterial; // 옥상 헬리패드 녹색 우레탄 원형 바탕
   helipadMarkMaterial: THREE.MeshStandardMaterial;   // 옥상 헬리패드 마킹 (호환용)
@@ -27,10 +39,11 @@ export interface KoreanBuildingMaterials {
   solarPanelMaterial: THREE.MeshStandardMaterial;    // 사각 태양광 패널 그리드
   waterTankMaterial: THREE.MeshStandardMaterial;     // 옥상 STS 원통형 물탱크
   ventHvacMaterial: THREE.MeshStandardMaterial;      // 옥상 환기 벤트 / 공조 덕트
-  roofSlateMaterial: THREE.MeshStandardMaterial;     // 차콜 그레이 옥상 방수 슬래브
-  parapetMaterial: THREE.MeshStandardMaterial;       // 1.2m 돌출 난간 (Parapet)
+  roofSlateMaterial: THREE.MeshStandardMaterial;     // 옥상 방수 슬래브 (초록 우레탄 도색)
+  parapetMaterial: THREE.MeshStandardMaterial;       // 0.4m 두께, 1.2m 돌출 난간 (Parapet)
   penthouseMaterial: THREE.MeshStandardMaterial;     // 엘리베이터 기계실 / 권상기실
-  gabledRoofMaterial: THREE.MeshStandardMaterial;    // 20도 입체 박공 지붕 (Gabled Roof)
+  gabledRoofMaterial: THREE.MeshStandardMaterial;    // 20도 입체 박공 지붕 (적갈색 #7c2d12)
+  gabledRoofSlateMaterial: THREE.MeshStandardMaterial; // 20도 박공 지붕 (슬레이트 #334155)
   foundationMaterial: THREE.MeshStandardMaterial;    // 지형 밀착 기초 옹벽
 }
 
@@ -550,6 +563,30 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       metalness: 0.85,
     }),
 
+    // GLSL 기반 절차적 파사드 셰이더 머티리얼 (OSMBuildings / Streets-GL 오픈소스 아키텍처)
+    apartmentShaderMaterial: createApartmentFacadeShaderMaterial(),
+    commercialShaderMaterial: createCommercialFacadeShaderMaterial(),
+    neighborhoodShaderMaterial: createNeighborhoodFacadeShaderMaterial(),
+    landmarkShaderMaterial: createLandmarkFacadeShaderMaterial(),
+
+    // 아파트 옥상: 초록색 우레탄 방수 도색 (#15803d)
+    apartmentRoofGreenMaterial: new THREE.MeshStandardMaterial({
+      color: 0x15803d,
+      roughness: 0.65,
+      metalness: 0.15,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }),
+
+    // 상업/오피스 옥상: 쿨루프 그레이 (#475569)
+    coolRoofGrayMaterial: new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      roughness: 0.6,
+      metalness: 0.2,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }),
+
     // 10) 옥상 환기 벤트 / 공조 덕트
     ventHvacMaterial: new THREE.MeshStandardMaterial({
       color: 0x475569,
@@ -557,16 +594,16 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       metalness: 0.65,
     }),
 
-    // 11) 옥상 방수 슬래브 (차콜 그레이 #334155)
+    // 11) 옥상 방수 슬래브 (초록색 우레탄 방수 도색 #15803d)
     roofSlateMaterial: new THREE.MeshStandardMaterial({
-      color: 0x334155,
+      color: 0x15803d,
       roughness: 0.65,
-      metalness: 0.2,
+      metalness: 0.15,
       flatShading: true,
       side: THREE.DoubleSide,
     }),
 
-    // 12) 1.2m 돌출 난간 (Parapet) - 차콜 그레이 (#334155)
+    // 12) 0.4m 두께, 1.2m 돌출 난간 (Parapet) - 차콜 그레이 (#334155)
     parapetMaterial: new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.65,
@@ -583,10 +620,19 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       flatShading: true,
     }),
 
-    // 14) 20도 입체 박공 지붕 (Gabled Roof) - 테라코타 기와 적갈색
+    // 14) 20도 입체 박공 지붕 (Gabled Roof) - 테라코타 기와 적갈색 (#7c2d12)
     gabledRoofMaterial: new THREE.MeshStandardMaterial({
-      color: 0x8b4513,
+      color: 0x7c2d12,
       roughness: 0.45,
+      metalness: 0.2,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }),
+
+    // 14-2) 20도 입체 박공 지붕 슬레이트 (#334155)
+    gabledRoofSlateMaterial: new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.5,
       metalness: 0.2,
       flatShading: true,
       side: THREE.DoubleSide,
@@ -610,11 +656,17 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
 export function disposeKoreanBuildingMaterials(): void {
   if (!materialsCache) return;
 
-  const mats = [
+  const mats: any[] = [
     materialsCache.apartmentMaterial,
     materialsCache.commercialMaterial,
     materialsCache.neighborhoodMaterial,
     materialsCache.landmarkTowerMaterial,
+    materialsCache.apartmentShaderMaterial,
+    materialsCache.commercialShaderMaterial,
+    materialsCache.neighborhoodShaderMaterial,
+    materialsCache.landmarkShaderMaterial,
+    materialsCache.apartmentRoofGreenMaterial,
+    materialsCache.coolRoofGrayMaterial,
     materialsCache.helipadBaseMaterial,
     materialsCache.helipadGreenBaseMaterial,
     materialsCache.helipadMarkMaterial,
@@ -627,6 +679,7 @@ export function disposeKoreanBuildingMaterials(): void {
     materialsCache.parapetMaterial,
     materialsCache.penthouseMaterial,
     materialsCache.gabledRoofMaterial,
+    materialsCache.gabledRoofSlateMaterial,
     materialsCache.foundationMaterial,
   ];
 

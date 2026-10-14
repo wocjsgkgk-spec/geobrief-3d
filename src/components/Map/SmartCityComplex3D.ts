@@ -1114,6 +1114,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   private materials: SmartCityMaterials | null = null;
 
   private directionalLight: THREE.DirectionalLight | null = null;
+  private hemisphereLight: THREE.HemisphereLight | null = null;
   private fillLight: THREE.DirectionalLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
 
@@ -1214,18 +1215,21 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       // 1. 공통 머티리얼 팔레트 인스턴스화
       this.materials = createSmartCityMaterials();
 
-      // 2. 조명 설정 (섀도우맵 비활성화로 WebGL FBO 보존)
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
-      this.directionalLight.position.set(116, 141, 81).normalize();
+      // 2. 3점 조명 설정 (Three-Point Lighting)
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
+      this.directionalLight.position.set(120, 180, 100).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.85);
+      this.scene.add(this.hemisphereLight);
+
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      this.scene.add(this.ambientLight);
+
+      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
       this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
-
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
-      this.scene.add(this.ambientLight);
 
       // 3. 현재 거점에 대응하는 스마트 복합단지 절차적 생성
       this.complexMesh = buildComplexForSite(this.currentSiteId, this.materials);
@@ -1343,6 +1347,11 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       this.scene.remove(this.directionalLight);
       this.directionalLight.dispose();
       this.directionalLight = null;
+    }
+    if (this.hemisphereLight) {
+      this.scene.remove(this.hemisphereLight);
+      this.hemisphereLight.dispose();
+      this.hemisphereLight = null;
     }
     if (this.fillLight) {
       this.scene.remove(this.fillLight);

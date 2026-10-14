@@ -65,8 +65,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   // 후처리 파이프라인 (MapLibre WebGL 컨텍스트 보호를 위해 비활성화)
   private isPostProcessingEnabled = false;
 
-  // 조명 객체
+  // 조명 객체 (3-Point Lighting)
   private directionalLight: THREE.DirectionalLight | null = null;
+  private hemisphereLight: THREE.HemisphereLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
   private fillLight: THREE.DirectionalLight | null = null;
 
@@ -83,11 +84,11 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
 
   // [PBR 물리 기반 재질 캐시]
   private materials = {
-    // 1. 벽면(Wall): 연회색 무광 콘크리트 질감 (roughness: 0.7, metalness: 0.1)
+    // 1. 벽면(Wall): 밝은 아이보리/오프화이트 콘크리트 질감 (#F8FAFC)
     wallConcrete: new THREE.MeshStandardMaterial({
-      color: 0xd1d5db, // Slate 300 콘크리트 연회색
-      roughness: 0.7,
-      metalness: 0.1,
+      color: 0xf8fafc, // 밝은 오프화이트/콘크리트 (그늘진 벽면 흑화 방지)
+      roughness: 0.65,
+      metalness: 0.15,
     }),
     // 2. 창문(Window): 반사 하이라이트가 맺히는 글래스 재질 (roughness: 0.2, metalness: 0.8)
     windowGlass: new THREE.MeshStandardMaterial({
@@ -233,19 +234,20 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         this.originLngLat = [c.lng, c.lat];
       }
 
-      // 1. [조명 설정 - 비스듬한 태양광 각도 (intensity: 0.9, position: [1.3, 115, 40])]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 0.9);
-      this.directionalLight.position.set(1.3, 115, 40).normalize();
+      // 1. [검은색 벽면 현상 해결: 3점 조명(Three-Point Lighting)]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
+      this.directionalLight.position.set(120, 180, 100).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      // 환경광 (Ambient Light)
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.85);
+      this.scene.add(this.hemisphereLight);
+
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       this.scene.add(this.ambientLight);
 
-      // 대기 산란 반사 보조광 (Fill Light)
-      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
-      this.fillLight.position.set(-100, 120, 80).normalize();
+      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
+      this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
 
       // 높이 기반 심도 안개 (Depth Fog)
@@ -2010,6 +2012,26 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     if (this.transformControls) {
       this.transformControls.dispose();
       this.transformControls = null;
+    }
+    if (this.directionalLight) {
+      this.scene.remove(this.directionalLight);
+      this.directionalLight.dispose();
+      this.directionalLight = null;
+    }
+    if (this.hemisphereLight) {
+      this.scene.remove(this.hemisphereLight);
+      this.hemisphereLight.dispose();
+      this.hemisphereLight = null;
+    }
+    if (this.ambientLight) {
+      this.scene.remove(this.ambientLight);
+      this.ambientLight.dispose();
+      this.ambientLight = null;
+    }
+    if (this.fillLight) {
+      this.scene.remove(this.fillLight);
+      this.fillLight.dispose();
+      this.fillLight = null;
     }
     if (this.renderer) {
       this.renderer.dispose();

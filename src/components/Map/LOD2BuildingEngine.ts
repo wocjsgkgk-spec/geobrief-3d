@@ -22,6 +22,7 @@ import {
   disposeKoreanBuildingMaterials,
   KoreanBuildingMaterials,
 } from '@/utils/koreanBuildingTextures';
+import { updateFacadeShaderLights } from '@/shaders/buildingFacadeShader';
 
 // =============================================================================
 // 1. OBB (Oriented Bounding Box) 및 지붕 중심축 산출 유틸리티
@@ -216,12 +217,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.onErrorCallback = cb;
   }
 
-  // 조명 객체
+  // 조명 객체 (3점 조명: 태양 직사광 + 하늘 반구광 + 전역 앰비언트)
   private directionalLight: THREE.DirectionalLight | null = null;
+  private hemisphereLight: THREE.HemisphereLight | null = null;
   private fillLight: THREE.DirectionalLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
 
-  // 병합 메쉬 노드 (벽체, 슬래브, 지형 옹벽)
+  // 병합 메쉬 노드 (벽체, 슬래브, 지붕, 지형 옹벽)
   private aptWallMesh: THREE.Mesh | null = null;
   private comWallMesh: THREE.Mesh | null = null;
   private neighWallMesh: THREE.Mesh | null = null;
@@ -229,7 +231,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private helipadBaseMesh: THREE.Mesh | null = null;  // 녹색 우레탄 원형 바탕 데크
   private helipadRingMesh: THREE.Mesh | null = null;  // 노란색 안전 경계 링
   private helipadMarkMesh: THREE.Mesh | null = null;  // 백색 'H' 마킹
-  private gabledRoofMesh: THREE.Mesh | null = null;   // 20도 입체 박공 지붕
+  private gabledRoofMesh: THREE.Mesh | null = null;   // 20도 입체 박공 지붕 (적갈색 #7c2d12)
+  private gabledSlateMesh: THREE.Mesh | null = null;  // 20도 입체 박공 지붕 (슬레이트 #334155)
+  private aptRoofMesh: THREE.Mesh | null = null;      // 아파트 옥상 초록색 우레탄 방수 (#15803d)
+  private coolRoofMesh: THREE.Mesh | null = null;     // 상업/오피스 쿨루프 그레이 (#475569)
   private slateRoofMesh: THREE.Mesh | null = null;    // 옥상 방수 슬래브 (#334155)
   private foundationMesh: THREE.Mesh | null = null;
 
@@ -265,8 +270,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    */
   private initGeometries(): void {
     if (!LOD2BuildingEngine.unitParapetGeo) {
-      // 1.2m 난간 빔 (폭 1.0m, 높이 1.2m, 두께 0.25m, 바닥 Y=0)
-      LOD2BuildingEngine.unitParapetGeo = new THREE.BoxGeometry(1.0, 1.2, 0.25);
+      // [요구사항 3] 옥상 테두리 두께 0.4m, 높이 1.2m의 난간(Parapet) (폭 1.0m, 높이 1.2m, 두께 0.4m, 바닥 Y=0)
+      LOD2BuildingEngine.unitParapetGeo = new THREE.BoxGeometry(1.0, 1.2, 0.4);
       LOD2BuildingEngine.unitParapetGeo.translate(0, 0.6, 0);
 
       // 엘리베이터 권상기실 (1m x 1m x 1m, 바닥 Y=0)
@@ -329,13 +334,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (isDetailed === wasDetailed) return;
 
     if (this.aptWallMesh && this.materials) {
-      this.aptWallMesh.material = isDetailed ? this.materials.apartmentMaterial : this.solidWallMaterial;
+      this.aptWallMesh.material = isDetailed ? this.materials.apartmentShaderMaterial : this.solidWallMaterial;
     }
     if (this.comWallMesh && this.materials) {
-      this.comWallMesh.material = isDetailed ? this.materials.commercialMaterial : this.solidWallMaterial;
+      this.comWallMesh.material = isDetailed ? this.materials.commercialShaderMaterial : this.solidWallMaterial;
     }
     if (this.neighWallMesh && this.materials) {
-      this.neighWallMesh.material = isDetailed ? this.materials.neighborhoodMaterial : this.solidWallMaterial;
+      this.neighWallMesh.material = isDetailed ? this.materials.neighborhoodShaderMaterial : this.solidWallMaterial;
+    }
+    if (this.landmarkWallMesh && this.materials) {
+      this.landmarkWallMesh.material = isDetailed ? this.materials.landmarkShaderMaterial : this.solidWallMaterial;
     }
 
     if (this.parapetInstancedMesh) {
@@ -355,6 +363,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
   /**
    * 태양광 방향각 및 조명 업데이트
+   * - 3-Point Lighting 및 절차적 파사드 셰이더 조명 유니폼 동기화
    */
   public updateSunLight(
     vector: [number, number, number],
@@ -364,7 +373,20 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.directionalLight) {
       this.directionalLight.position.set(vector[0], vector[1], vector[2]).normalize();
       this.directionalLight.color.set(color);
-      this.directionalLight.intensity = intensity * 1.8;
+      this.directionalLight.intensity = Math.max(1.0, intensity * 1.1);
+    }
+    if (this.materials) {
+      updateFacadeShaderLights(
+        [
+          this.materials.apartmentShaderMaterial,
+          this.materials.commercialShaderMaterial,
+          this.materials.neighborhoodShaderMaterial,
+          this.materials.landmarkShaderMaterial,
+        ],
+        vector,
+        color,
+        intensity
+      );
     }
   }
 
@@ -378,18 +400,25 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       const center = map.getCenter();
       this.originLngLat = [center.lng, center.lat];
 
-      // 1. [조명 설정 - 비스듬한 태양광 각도 (intensity: 0.9, position: [1.3, 115, 40])]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.8);
-      this.directionalLight.position.set(115, 40, 1.3).normalize();
+      // 1. [검은색 벽면 현상 해결: 3점 조명(Three-Point Lighting) 및 PBR 환경 구성]
+      // 1) 태양 직사광 (남동쪽 상공 배치, 명암비 형성)
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
+      this.directionalLight.position.set(120, 180, 100).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+      // 2) 밝은 하늘빛 환경광 (Hemisphere Light - 그늘진 벽면 흑화 방지)
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.85);
+      this.scene.add(this.hemisphereLight);
+
+      // 3) 전역 앰비언트 라이트 (밝은 회백색 콘크리트 톤 유지)
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      this.scene.add(this.ambientLight);
+
+      // 보조 채움광 (Fill Light)
+      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
       this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
-
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.42);
-      this.scene.add(this.ambientLight);
 
       // 2. WebGLRenderer 연동 (섀도우맵 비활성화)
       try {
@@ -451,8 +480,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     const helipadRingGeometries: THREE.BufferGeometry[] = [];
     const helipadMarkGeometries: THREE.BufferGeometry[] = [];
 
-    // 지붕 및 기초 옹벽 버퍼
+    // 지붕 및 기초 옹벽 버퍼 (아파트 초록 우레탄 / 상업 쿨루프 / 박공 적갈색 및 슬레이트)
     const gabledRoofGeometries: THREE.BufferGeometry[] = [];
+    const gabledSlateGeometries: THREE.BufferGeometry[] = [];
+    const aptRoofGeometries: THREE.BufferGeometry[] = [];
+    const coolRoofGeometries: THREE.BufferGeometry[] = [];
     const slateRoofGeometries: THREE.BufferGeometry[] = [];
     const foundationGeometries: THREE.BufferGeometry[] = [];
 
@@ -748,12 +780,21 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const rGeom = new THREE.BufferGeometry();
             rGeom.setAttribute('position', new THREE.Float32BufferAttribute(rPositions, 3));
             rGeom.setAttribute('normal', new THREE.Float32BufferAttribute(rNormals, 3));
-            gabledRoofGeometries.push(rGeom);
+            // 군 막사, 창고는 슬레이트 그레이 (#334155), 일반 저층 주택은 적갈색 기와 (#7c2d12)
+            const isMilitaryOrWarehouse =
+              usageType.includes('military') ||
+              usageType.includes('barracks') ||
+              usageType.includes('warehouse');
+            if (isMilitaryOrWarehouse) {
+              gabledSlateGeometries.push(rGeom);
+            } else {
+              gabledRoofGeometries.push(rGeom);
+            }
           }
         } else {
           // [유형 2: 평지붕 건물 - 아파트, 대형 빌딩, 공공청사, 상업, 근생]
 
-          // (a) 옥상 방수 슬래브 (차콜 그레이 #334155)
+          // (a) 옥상 방수 슬래브 (아파트: 초록색 우레탄 도색 #15803d, 오피스/상업: 쿨루프 그레이 #475569)
           const roofTriangles = triangulatePolygon2D(pts);
           if (roofTriangles.length > 0) {
             const slabPos: number[] = [];
@@ -766,7 +807,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const slabGeom = new THREE.BufferGeometry();
             slabGeom.setAttribute('position', new THREE.Float32BufferAttribute(slabPos, 3));
             slabGeom.setAttribute('normal', new THREE.Float32BufferAttribute(slabNorm, 3));
-            slateRoofGeometries.push(slabGeom);
+            if (isApartment) {
+              aptRoofGeometries.push(slabGeom);
+            } else {
+              coolRoofGeometries.push(slabGeom);
+            }
           }
 
           // (b) [인스턴싱] 옥상 테두리를 따라 높이 1.2m의 차콜 그레이 난간(Parapet) 자동 생성
@@ -1007,7 +1052,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const lmSlabGeom = new THREE.BufferGeometry();
         lmSlabGeom.setAttribute('position', new THREE.Float32BufferAttribute(lmSlabPos, 3));
         lmSlabGeom.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-        slateRoofGeometries.push(lmSlabGeom);
+        coolRoofGeometries.push(lmSlabGeom);
 
         // 권상기실 인스턴스
         tempPos.set(lmX, lmWallTop, lmZ);
@@ -1069,12 +1114,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     this.buildingCount = count;
 
-    // 6. [지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries)]
-    if (landmarkWallGeometries.length > 0 && this.materials?.landmarkTowerMaterial) {
+    // 6. [지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries) 및 GLSL 절차적 셰이더/지붕 머티리얼 적용]
+    if (landmarkWallGeometries.length > 0 && this.materials?.landmarkShaderMaterial) {
       const merged = BufferGeometryUtils.mergeGeometries(landmarkWallGeometries, false);
       if (merged) {
         merged.computeBoundingSphere();
-        this.landmarkWallMesh = new THREE.Mesh(merged, this.materials.landmarkTowerMaterial);
+        this.landmarkWallMesh = new THREE.Mesh(merged, this.materials.landmarkShaderMaterial);
         this.landmarkWallMesh.castShadow = true;
         this.landmarkWallMesh.receiveShadow = true;
         this.landmarkWallMesh.frustumCulled = true;
@@ -1082,11 +1127,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (aptWallGeometries.length > 0 && this.materials?.apartmentMaterial) {
+    if (aptWallGeometries.length > 0 && this.materials?.apartmentShaderMaterial) {
       const merged = BufferGeometryUtils.mergeGeometries(aptWallGeometries, false);
       if (merged) {
         merged.computeBoundingSphere();
-        this.aptWallMesh = new THREE.Mesh(merged, this.materials.apartmentMaterial);
+        this.aptWallMesh = new THREE.Mesh(merged, this.materials.apartmentShaderMaterial);
         this.aptWallMesh.castShadow = true;
         this.aptWallMesh.receiveShadow = true;
         this.aptWallMesh.frustumCulled = true;
@@ -1094,11 +1139,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (comWallGeometries.length > 0 && this.materials?.commercialMaterial) {
+    if (comWallGeometries.length > 0 && this.materials?.commercialShaderMaterial) {
       const merged = BufferGeometryUtils.mergeGeometries(comWallGeometries, false);
       if (merged) {
         merged.computeBoundingSphere();
-        this.comWallMesh = new THREE.Mesh(merged, this.materials.commercialMaterial);
+        this.comWallMesh = new THREE.Mesh(merged, this.materials.commercialShaderMaterial);
         this.comWallMesh.castShadow = true;
         this.comWallMesh.receiveShadow = true;
         this.comWallMesh.frustumCulled = true;
@@ -1106,11 +1151,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (neighWallGeometries.length > 0 && this.materials?.neighborhoodMaterial) {
+    if (neighWallGeometries.length > 0 && this.materials?.neighborhoodShaderMaterial) {
       const merged = BufferGeometryUtils.mergeGeometries(neighWallGeometries, false);
       if (merged) {
         merged.computeBoundingSphere();
-        this.neighWallMesh = new THREE.Mesh(merged, this.materials.neighborhoodMaterial);
+        this.neighWallMesh = new THREE.Mesh(merged, this.materials.neighborhoodShaderMaterial);
         this.neighWallMesh.castShadow = true;
         this.neighWallMesh.receiveShadow = true;
         this.neighWallMesh.frustumCulled = true;
@@ -1157,7 +1202,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    // 20도 입체 박공 지붕 (Gabled Roof)
+    // 20도 입체 박공 지붕 (Gabled Roof - 적갈색 #7c2d12)
     if (gabledRoofGeometries.length > 0 && this.materials?.gabledRoofMaterial) {
       const mergedRoof = BufferGeometryUtils.mergeGeometries(gabledRoofGeometries, false);
       if (mergedRoof) {
@@ -1170,7 +1215,46 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    // 옥상 방수 슬래브 바닥면
+    // 20도 입체 박공 지붕 (슬레이트 그레이 #334155 - 군 막사/창고)
+    if (gabledSlateGeometries.length > 0 && this.materials?.gabledRoofSlateMaterial) {
+      const mergedSlate = BufferGeometryUtils.mergeGeometries(gabledSlateGeometries, false);
+      if (mergedSlate) {
+        mergedSlate.computeBoundingSphere();
+        this.gabledSlateMesh = new THREE.Mesh(mergedSlate, this.materials.gabledRoofSlateMaterial);
+        this.gabledSlateMesh.castShadow = true;
+        this.gabledSlateMesh.receiveShadow = true;
+        this.gabledSlateMesh.frustumCulled = true;
+        this.scene.add(this.gabledSlateMesh);
+      }
+    }
+
+    // [요구사항 3] 아파트 옥상 초록색 우레탄 방수 도색 (#15803d)
+    if (aptRoofGeometries.length > 0 && this.materials?.apartmentRoofGreenMaterial) {
+      const mergedAptRoof = BufferGeometryUtils.mergeGeometries(aptRoofGeometries, false);
+      if (mergedAptRoof) {
+        mergedAptRoof.computeBoundingSphere();
+        this.aptRoofMesh = new THREE.Mesh(mergedAptRoof, this.materials.apartmentRoofGreenMaterial);
+        this.aptRoofMesh.castShadow = true;
+        this.aptRoofMesh.receiveShadow = true;
+        this.aptRoofMesh.frustumCulled = true;
+        this.scene.add(this.aptRoofMesh);
+      }
+    }
+
+    // [요구사항 3] 상업/오피스/공공 쿨루프 그레이 (#475569)
+    if (coolRoofGeometries.length > 0 && this.materials?.coolRoofGrayMaterial) {
+      const mergedCoolRoof = BufferGeometryUtils.mergeGeometries(coolRoofGeometries, false);
+      if (mergedCoolRoof) {
+        mergedCoolRoof.computeBoundingSphere();
+        this.coolRoofMesh = new THREE.Mesh(mergedCoolRoof, this.materials.coolRoofGrayMaterial);
+        this.coolRoofMesh.castShadow = true;
+        this.coolRoofMesh.receiveShadow = true;
+        this.coolRoofMesh.frustumCulled = true;
+        this.scene.add(this.coolRoofMesh);
+      }
+    }
+
+    // 기타 옥상 방수 슬래브 바닥면
     if (slateRoofGeometries.length > 0 && this.materials?.roofSlateMaterial) {
       const mergedSlate = BufferGeometryUtils.mergeGeometries(slateRoofGeometries, false);
       if (mergedSlate) {
@@ -1382,6 +1466,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.helipadRingMesh,
       this.helipadMarkMesh,
       this.gabledRoofMesh,
+      this.gabledSlateMesh,
+      this.aptRoofMesh,
+      this.coolRoofMesh,
       this.slateRoofMesh,
       this.foundationMesh,
     ];
@@ -1403,6 +1490,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.helipadRingMesh = null;
     this.helipadMarkMesh = null;
     this.gabledRoofMesh = null;
+    this.gabledSlateMesh = null;
+    this.aptRoofMesh = null;
+    this.coolRoofMesh = null;
     this.slateRoofMesh = null;
     this.foundationMesh = null;
 
@@ -1445,6 +1535,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
       this.directionalLight.dispose();
       this.directionalLight = null;
+    }
+    if (this.hemisphereLight) {
+      this.scene.remove(this.hemisphereLight);
+      this.hemisphereLight.dispose();
+      this.hemisphereLight = null;
     }
     if (this.fillLight) {
       this.scene.remove(this.fillLight);
