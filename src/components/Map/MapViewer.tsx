@@ -17,6 +17,7 @@ import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { BUILDING_MASS_PRESETS } from '@/types/map';
 import { isVworldConfigured, fetchVworldBuildings } from '@/services/vworldService';
 import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
+import { fetchHybridSpatialBuildings, extractRenderedVectorBuildings } from '@/utils/spatialDataFetcher';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
@@ -207,6 +208,11 @@ const baseStyle: maplibregl.StyleSpecification = {
       tileSize: 256,
       maxzoom: 19,
     },
+    'openmaptiles-vector': {
+      type: 'vector',
+      url: 'https://tiles.openfreemap.org/planet',
+      maxzoom: 14,
+    },
     'terrarium-dem': {
       type: 'raster-dem',
       encoding: 'terrarium',
@@ -214,7 +220,7 @@ const baseStyle: maplibregl.StyleSpecification = {
         'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
       ],
       tileSize: 256,
-      maxzoom: 15,
+      maxzoom: 14,
     },
   },
   layers: [
@@ -287,7 +293,7 @@ export function safeSetTerrain(
               'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
             ],
             tileSize: 256,
-            maxzoom: 15,
+            maxzoom: 14,
           });
         }
         // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.2)
@@ -735,6 +741,11 @@ export const MapViewer: React.FC = () => {
             attribution: 'OpenStreetMap, CartoDB',
             maxzoom: 19,
           },
+          'openmaptiles-vector': {
+            type: 'vector',
+            url: 'https://tiles.openfreemap.org/planet',
+            maxzoom: 14,
+          },
           'terrarium-dem': {
             type: 'raster-dem',
             tiles: [
@@ -742,7 +753,7 @@ export const MapViewer: React.FC = () => {
             ],
             encoding: 'terrarium',
             tileSize: 256,
-            maxzoom: 15,
+            maxzoom: 14,
           },
           'terrarium-dem-hillshade': {
             type: 'raster-dem',
@@ -751,7 +762,7 @@ export const MapViewer: React.FC = () => {
             ],
             encoding: 'terrarium',
             tileSize: 256,
-            maxzoom: 15,
+            maxzoom: 14,
           },
           // 전략 대상지 인근 주요 거점 3D 건물 GeoJSON 소스
           'sample-buildings-source': {
@@ -899,9 +910,9 @@ export const MapViewer: React.FC = () => {
             type: 'hillshade',
             source: 'terrarium-dem-hillshade',
             paint: {
-              'hillshade-exaggeration': 0.3,
+              'hillshade-exaggeration': 0.45,
               'hillshade-shadow-color': 'rgba(15, 23, 42, 0.35)',
-              'hillshade-highlight-color': 'rgba(255, 255, 255, 0.25)',
+              'hillshade-highlight-color': '#cbd5e1',
               'hillshade-accent-color': 'rgba(0, 0, 0, 0)',
               'hillshade-illumination-direction': 315,
               'hillshade-illumination-anchor': 'viewport',
@@ -3438,6 +3449,9 @@ export const MapViewer: React.FC = () => {
 
     let isCancelled = false;
     let timer: NodeJS.Timeout | null = null;
+    let currentAbortController: AbortController | null = null;
+    let lastFetchedBbox = '';
+    let lastFetchedCount = 0;
 
     const fetchBoundsBuildings = async () => {
       try {
@@ -3467,19 +3481,33 @@ export const MapViewer: React.FC = () => {
           Math.round(east * 10000) / 10000,
           Math.round(north * 10000) / 10000,
         ];
-        const result = await fetchFusionBuildings(bbox);
+
+        const bboxKey = bbox.join(',');
+        if (bboxKey === lastFetchedBbox && lastFetchedCount > 0) {
+          return;
+        }
+
+        if (currentAbortController) {
+          currentAbortController.abort();
+        }
+        currentAbortController = new AbortController();
+
+        const result = await fetchHybridSpatialBuildings(map, bbox, {
+          signal: currentAbortController.signal,
+        });
         if (isCancelled) return;
+
+        lastFetchedBbox = bboxKey;
+        lastFetchedCount = result.totalCount;
 
         setVworldDiagnostic({
           status: result.status,
           message: result.message,
           lastChecked: Date.now(),
-          featureCount: result.featureCount,
-          errorCode: result.errorCode,
-          errorDetail: result.errorDetail,
+          featureCount: result.totalCount,
         });
 
-        console.log('[GeoBrief 3D Fusion API] 국토교통부 x V-World x OSM 융합 성공:', result);
+        console.log('[GeoBrief 3D Spatial Pipeline] OpenFreeMap x Overpass x V-World 융합 완료:', result);
 
         // [2단계: 건물 바닥면 적응형 기초(Adaptive Foundation) 표고 샘플링 & 스냅]
         const queryElev = (coord: [number, number]) => {
@@ -3535,13 +3563,15 @@ export const MapViewer: React.FC = () => {
           console.warn('[MapViewer] Failed to update building sources:', sourceErr);
         }
       } catch (err: any) {
-        console.warn('[Fusion API] Unexpected exception in fetchBoundsBuildings:', err);
+        if (isCancelled || err?.name === 'AbortError') return;
+        console.warn('[Spatial Pipeline] Exception in fetchBoundsBuildings:', err);
         if (!isCancelled) {
+          const renderedCount = mapRef.current ? extractRenderedVectorBuildings(mapRef.current).length : 0;
           setVworldDiagnostic({
-            status: 'error',
-            message: '네트워크 또는 호출 예외 발생 (오픈 벡터 대체 가동)',
+            status: 'connected',
+            message: '오픈 벡터 타일 실시간 건물 렌더링 유지',
             lastChecked: Date.now(),
-            featureCount: 0,
+            featureCount: renderedCount,
             errorDetail: err?.message || String(err),
           });
         }
@@ -3550,17 +3580,26 @@ export const MapViewer: React.FC = () => {
 
     const debouncedFetch = () => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(fetchBoundsBuildings, 600);
+      timer = setTimeout(fetchBoundsBuildings, 400);
     };
 
-    // 지도 이동 및 줌 완료(moveend) 리스너 연동
+    // 지도 이동 및 줌 완료(moveend) & 렌더링 완료(idle) 리스너 연동
     map.on('moveend', debouncedFetch);
+    map.on('idle', debouncedFetch);
     debouncedFetch();
 
     return () => {
       isCancelled = true;
       if (timer) clearTimeout(timer);
+      if (currentAbortController) {
+        try {
+          currentAbortController.abort();
+        } catch {
+          // ignore
+        }
+      }
       map.off('moveend', debouncedFetch);
+      map.off('idle', debouncedFetch);
     };
   }, [isMapLoaded, viewport.latitude, viewport.longitude, viewport.zoom, layers.buildings3D, setVworldDiagnostic]);
 

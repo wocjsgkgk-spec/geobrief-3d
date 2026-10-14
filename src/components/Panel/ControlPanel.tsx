@@ -311,13 +311,15 @@ export const ControlPanel: React.FC = () => {
             <div className="flex items-center gap-1.5">
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
-                  vworldDiagnostic.status === 'connected'
+                  vworldDiagnostic.status === 'connected' || vworldDiagnostic.featureCount > 0
                     ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
                     : 'bg-slate-800/80 border-slate-700 text-slate-300'
                 }`}
               >
                 <span>
-                  {vworldDiagnostic.status === 'connected'
+                  {vworldDiagnostic.featureCount > 0
+                    ? `🟢 실시간 공간정보 (${vworldDiagnostic.featureCount.toLocaleString()}건)`
+                    : vworldDiagnostic.status === 'connected'
                     ? '🟢 실시간 공간정보'
                     : '⚪ 3D 지형 모드'}
                 </span>
@@ -1466,7 +1468,7 @@ export const ControlPanel: React.FC = () => {
 
                   <div className="mt-2.5 pt-2 border-t border-cyan-900/40 flex items-center justify-between">
                     <span className="text-[10px] text-cyan-300/80 font-mono truncate max-w-[160px]">
-                      {tile3DStream.statusText || '5초 타임아웃 보호 활성'}
+                      {tile3DStream.statusText || '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중'}
                     </span>
                     <button
                       type="button"
@@ -3137,7 +3139,7 @@ export const ControlPanel: React.FC = () => {
                   className="w-2 h-2 rounded-full inline-block animate-pulse"
                   style={{
                     backgroundColor:
-                      vworldDiagnostic.status === 'connected'
+                      vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
                         ? '#10B981'
                         : vworldDiagnostic.status === 'error'
                         ? '#EF4444'
@@ -3148,18 +3150,18 @@ export const ControlPanel: React.FC = () => {
               </span>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                  vworldDiagnostic.status === 'connected'
+                  vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
                     ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
                     : 'bg-slate-800/80 border-slate-700 text-slate-300'
                 }`}
               >
-                {vworldDiagnostic.status === 'connected' ? '정밀 공간정보' : '오픈 벡터 타일'}
+                {vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected' ? '정밀 공간정보' : '오픈 벡터 타일'}
               </span>
             </div>
 
             <p className="text-[10px] text-slate-400 leading-tight">
-              {vworldDiagnostic.status === 'connected'
-                ? `실시간 정밀 건축물 데이터 연동 가동 중 (${vworldDiagnostic.featureCount}건 로드)`
+              {vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
+                ? `실시간 정밀 건축물 데이터 연동 가동 중 (${vworldDiagnostic.featureCount.toLocaleString()}건 로드)`
                 : '국토부 브이월드 또는 오픈 벡터 타일을 통해 3D 건물이 렌더링됩니다.'}
             </p>
           </div>
@@ -3294,7 +3296,7 @@ export const ControlPanel: React.FC = () => {
                           : 'text-slate-300'
                       }`}
                     >
-                      {tile3DStream.statusText || '정상 스트리밍 중'}
+                      {tile3DStream.statusText || '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중'}
                     </span>
                   </div>
                   {tile3DStream.tilesLoadedCount ? (

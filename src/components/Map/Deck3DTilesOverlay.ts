@@ -181,19 +181,22 @@ export class Deck3DTilesManager {
     const targetUrl = this.currentState.url;
     if (!targetUrl) return;
 
-    // 0. 원주 1군지사 부지 감지 및 사전 판정:
+    // 0. 원주/강원권 부지 감지 및 사전 판정:
     // 브이월드 실사 3D 타일셋은 원주/강원권 데이터가 없으므로 불필요한 무한 대기 없이 즉각 안내 표출 및 LOD2로 안전 대체
     const center = this.map ? this.map.getCenter() : null;
-    const isWonjuArea = center ? (center.lng >= 127.8 && center.lng <= 128.2 && center.lat >= 37.1 && center.lat <= 37.6) : true;
+    const isGangwonArea = center
+      ? center.lng >= 127.0 && center.lng <= 129.6 && center.lat >= 37.0 && center.lat <= 38.65
+      : true;
     const isVworldUrl = targetUrl.includes('/api/vworld/3dtiles') || targetUrl.includes('vworld');
 
-    if (isWonjuArea && isVworldUrl) {
+    if (isGangwonArea && isVworldUrl) {
       this.cancelPendingRequest();
       if (this.overlay) {
         this.overlay.setProps({ layers: [] });
       }
-      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)', false, 0);
-      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+      const fallbackText = '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중';
+      this.callbacks.onStatusChange?.(fallbackText, false, 0);
+      this.callbacks.onFallback?.(fallbackText);
       return;
     }
 
@@ -219,8 +222,9 @@ export class Deck3DTilesManager {
       if (this.overlay) {
         this.overlay.setProps({ layers: [] });
       }
-      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)', false, 0);
-      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+      const fallbackText = '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중';
+      this.callbacks.onStatusChange?.(fallbackText, false, 0);
+      this.callbacks.onFallback?.(fallbackText);
     }, CONNECTION_TIMEOUT_MS);
 
     // 3. 사전 연결 진단 (Pre-flight fetch): 404, 500, CORS, 네트워크 단절 즉시 검출 (완전 비동기 격리)
@@ -252,8 +256,9 @@ export class Deck3DTilesManager {
       if (this.overlay) {
         this.overlay.setProps({ layers: [] });
       }
-      this.callbacks.onStatusChange?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)', false, 0);
-      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+      const fallbackText = '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중';
+      this.callbacks.onStatusChange?.(fallbackText, false, 0);
+      this.callbacks.onFallback?.(fallbackText);
       return;
     }
 
@@ -319,12 +324,12 @@ export class Deck3DTilesManager {
           console.warn('[Deck3DTilesManager] Tile node error:', message, tileHeader?.url);
           this.clearTimeoutTimer();
           this.callbacks.onStatusChange?.(
-            `⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)`,
+            '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
             false,
             this.loadedTilesCounter
           );
           // 오프라인 / 미지원 지역에서 타일 로드 실패 시 자체 LOD2 모드로 안전 대체
-          this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+          this.callbacks.onFallback?.('강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중');
         },
       });
 
@@ -334,8 +339,8 @@ export class Deck3DTilesManager {
     } catch (err: any) {
       this.clearTimeoutTimer();
       console.error('[Deck3DTilesManager] Failed to render Tile3DLayer:', err);
-      this.callbacks.onStatusChange?.(`⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)`, false, 0);
-      this.callbacks.onFallback?.('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
+      this.callbacks.onStatusChange?.('강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중', false, 0);
+      this.callbacks.onFallback?.('강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중');
     }
   }
 

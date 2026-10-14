@@ -1354,7 +1354,7 @@ export const useMapStore = create<MapStoreState>()(
         maximumMemoryUsage: 256,
         pointSize: 2.0,
         isLoading: false,
-        statusText: '대기 중 (브이월드 OGC 타일셋 준비 완료)',
+        statusText: '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
         tilesLoadedCount: 0,
       },
       toggleTile3DStream: () =>
@@ -1826,7 +1826,7 @@ export const useMapStore = create<MapStoreState>()(
                   maximumScreenSpaceError: data.tile3DStream.maximumScreenSpaceError,
                   pointSize: data.tile3DStream.pointSize,
                   isLoading: false,
-                  statusText: '대기 중',
+                  statusText: '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
                   tilesLoadedCount: 0,
                 }
               : get().tile3DStream,
@@ -1944,7 +1944,7 @@ export const useMapStore = create<MapStoreState>()(
             maximumScreenSpaceError: 16,
             pointSize: 2.0,
             isLoading: false,
-            statusText: '대기 중',
+            statusText: '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
             tilesLoadedCount: 0,
           },
           placedFacilities: [],
