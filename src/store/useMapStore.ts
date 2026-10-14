@@ -184,9 +184,9 @@ export function createStampPolygon(
   return poly;
 }
 
-export const WONJU_DEFAULT_CENTER: [number, number] = [127.925, 37.342];
-export const WONJU_DEFAULT_POLYGON = createStampPolygon(WONJU_DEFAULT_CENTER, 16529, 'rectangle');
-export const WONJU_DEFAULT_AREA: PolygonArea = { sqm: 16529, pyeong: 5000 };
+export const WONJU_DEFAULT_CENTER: [number, number] = [127.9358, 37.3592];
+export const WONJU_DEFAULT_POLYGON = GANGWON_MILITARY_SITES[0].polygon;
+export const WONJU_DEFAULT_AREA: PolygonArea = { sqm: 310000, pyeong: 93775 };
 
 export const INITIAL_CINEMATIC_FLIGHT: CinematicFlightState = {
   waypoints: [],
@@ -514,9 +514,9 @@ export const useMapStore = create<MapStoreState>()(
   persist(
     (set, get) => ({
       viewport: {
-        longitude: 127.925,
-        latitude: 37.342,
-        zoom: 14.5,
+        longitude: 127.9358,
+        latitude: 37.3592,
+        zoom: 15.6,
         pitch: 55,
         bearing: 20,
       },
@@ -559,7 +559,7 @@ export const useMapStore = create<MapStoreState>()(
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
-        firstLogisticsSmartCity: false, // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
+        firstLogisticsSmartCity: true, // [2단계 신규: 1군지사 및 강원 유휴부지 미래 개발 구상안(3D 입체) 기본 활성화]
       },
       toggleLayer: (key) =>
         set((state) => ({

@@ -85,21 +85,27 @@ export interface SelectedBuildingInfo {
   rawProperties: Record<string, any>;
 }
 
-// [3D 건축물 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
+// [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
     '3d-buildings',
     '3d-buildings-roof',
-    '3d-buildings-edge',
     'vworld-buildings-3d',
     'vworld-buildings-roof',
-    'vworld-buildings-edge',
     'fusion-buildings-3d',
     'fusion-buildings-roof',
-    'fusion-buildings-edge',
     'sample-buildings-3d',
     'sample-buildings-roof',
-    'sample-buildings-edge',
+    'flight-envelope-volume',
+    'flight-ceiling-slab',
+    'building-mass-extrusion',
+    'building-highlight-fill',
+    'smart-city-complex-3d-layer',
+    'lod2-building-engine-layer',
+    'threebox-building-layer',
+    'custom-water-level-layer',
+    'uav-sensor-custom-layer',
+    'tactical-defense-custom-layer',
   ];
   for (const id of bldgLayerIds) {
     if (mapInstance.getLayer(id)) {
@@ -196,6 +202,7 @@ const baseStyle: maplibregl.StyleSpecification = {
       type: 'raster',
       tiles: [
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
       ],
       tileSize: 256,
       maxzoom: 19,
@@ -223,6 +230,10 @@ const baseStyle: maplibregl.StyleSpecification = {
 };
 const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = baseStyle;
 
+// [MapLibre GL v5.2 Raster DEM]
+// MapLibre 네이티브 Web Worker DEM 디코딩 파이프라인을 그대로 사용하여
+// 지형 타일(terrarium-dem)과 위성 레이어(satellite-tiles)를 최적 속도로 렌더링합니다.
+
 /**
  * [MapLibre GL 지형(Terrain) 안전 적용 헬퍼 함수]
  * - 스타일 로드 여부 검증 (isStyleLoaded)
@@ -246,6 +257,7 @@ export function safeSetTerrain(
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
             maxzoom: 19,
@@ -285,6 +297,7 @@ export function safeSetTerrain(
               source: 'terrarium-dem',
               exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.2,
             });
+            map.triggerRepaint();
           } catch (err) {
             console.warn('[MapViewer] setTerrain 호출 중 오류 방어:', err);
           }
@@ -292,6 +305,7 @@ export function safeSetTerrain(
       } else {
         try {
           map.setTerrain(null);
+          map.triggerRepaint();
         } catch (err) {
           console.warn('[MapViewer] setTerrain 해제 중 오류 방어:', err);
         }
@@ -667,8 +681,24 @@ export const MapViewer: React.FC = () => {
       ],
     ];
 
+    // [3단계: 실감 512x512 건축 외벽 파사드 패턴 표현식]
+    const facadePatternExpr: any = [
+      'match',
+      ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+      ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+      'facade-commercial',
+      'facade-apartment',
+    ];
+
     const fullMapStyle: any = {
       version: 8,
+      sky: {
+        'sky-color': '#7dd3fc',
+        'horizon-color': '#bae6fd',
+        'fog-color': '#bae6fd',
+        'fog-ground-blend': 0.5,
+        'atmosphere-blend': 0.6,
+      },
       light: {
           anchor: 'viewport',
           color: '#ffffff',
@@ -680,18 +710,20 @@ export const MapViewer: React.FC = () => {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery',
+            attribution: 'Esri World Imagery, Google Satellite',
             maxzoom: 19,
           },
           'satellite-source': {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery',
+            attribution: 'Esri World Imagery, Google Satellite',
             maxzoom: 19,
           },
           'clean-tiles': {
@@ -854,22 +886,12 @@ export const MapViewer: React.FC = () => {
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
-          // 베이스맵 레이어
+          // 베이스맵 레이어 (클린 벡터)
           {
             id: 'clean-layer',
             type: 'raster',
             source: 'clean-tiles',
             layout: { visibility: baseMap === 'clean' ? 'visible' : 'none' },
-          },
-          {
-            id: 'satellite-layer',
-            type: 'raster',
-            source: 'satellite-tiles',
-            paint: {
-              'raster-opacity': 1.0,
-              'raster-fade-duration': 100,
-            },
-            layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
           // [지형 힐셰이드(Hillshade) 입체 음영 레이어 - 위성 타일 가림 방지를 위해 기본 비활성화]
           {
@@ -920,7 +942,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#F59E0B',
               'fill-opacity': 0.15,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'buffer-1km-line',
@@ -931,7 +953,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2.5,
               'line-dasharray': [3, 2],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // 500m 버퍼
@@ -943,7 +965,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#10B981',
               'fill-opacity': 0.2,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'buffer-500m-line',
@@ -954,7 +976,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2.8,
               'line-dasharray': [2, 1.5],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [접경 안보 관제] 1) DMZ 완충구역 반투명 적색 면 채우기
@@ -1098,7 +1120,7 @@ export const MapViewer: React.FC = () => {
               ],
               'line-opacity': 0.75,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [2. 건물 바닥면 적응형 기초(Adaptive Foundation) - 경사지 옹벽 및 콘크리트 기단]
           {
@@ -1123,7 +1145,8 @@ export const MapViewer: React.FC = () => {
             source: 'fusion-buildings',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#F8FAFC',
+              'fill-extrusion-pattern': facadePatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
@@ -1167,7 +1190,8 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#F8FAFC',
+              'fill-extrusion-pattern': facadePatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
@@ -1210,7 +1234,8 @@ export const MapViewer: React.FC = () => {
             source: 'sample-buildings-source',
             minzoom: 11,
             paint: {
-              'fill-extrusion-color': '#F8FAFC',
+              'fill-extrusion-pattern': facadePatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
@@ -1254,6 +1279,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#3B82F6',
               'fill-opacity': 0.4,
             },
+            layout: { visibility: 'none' },
           },
           // 부지 드로잉 완성 폴리곤 외곽선
           {
@@ -1264,6 +1290,7 @@ export const MapViewer: React.FC = () => {
               'line-color': '#2563EB',
               'line-width': 3,
             },
+            layout: { visibility: 'none' },
           },
           // 부지 드로잉 완성 꼭짓점
           {
@@ -1277,6 +1304,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-color': '#2563EB',
               'circle-stroke-width': 2,
             },
+            layout: { visibility: 'none' },
           },
 
           // [토목·지형 단면 및 3단 경사도 분석 격자 오버레이 레이어]
@@ -1288,7 +1316,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': ['coalesce', ['get', 'fillColor'], '#10B981'],
               'fill-opacity': 0.65,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'slope-analysis-line',
@@ -1299,7 +1327,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 1.2,
               'line-opacity': 0.85,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [3D 가시권(Viewshed/사계) 분석 레이어 - 에메랄드 가시 구역 & 적색 차폐 사각지대]
@@ -1311,7 +1339,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#10B981',
               'fill-opacity': 0.38,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'viewshed-visible-line',
@@ -1322,7 +1350,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 1.0,
               'line-opacity': 0.6,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'viewshed-hidden-fill',
@@ -1332,7 +1360,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#EF4444',
               'fill-opacity': 0.28,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'viewshed-hidden-line',
@@ -1343,7 +1371,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 1.0,
               'line-opacity': 0.5,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'viewshed-origin-circle',
@@ -1355,7 +1383,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-width': 2.5,
               'circle-stroke-color': '#ffffff',
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [정밀 3D 거리 및 고저차 측정 도구 (3D Ruler) 레이어]
@@ -1369,7 +1397,7 @@ export const MapViewer: React.FC = () => {
               'line-blur': 4,
               'line-opacity': 0.45,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'measure-line-main',
@@ -1380,7 +1408,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 3.5,
               'line-dasharray': [3, 2],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'measure-points-circle',
@@ -1392,7 +1420,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-width': 2.5,
               'circle-stroke-color': '#ffffff',
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [3D 계획·접근 축선 전술 화살표 (Tactical Arrow) 3D 지형 표면 밀착 레이어]
@@ -1404,7 +1432,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': ['coalesce', ['get', 'color'], '#06B6D4'],
               'fill-opacity': 0.85,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'tactical-arrows-line',
@@ -1415,7 +1443,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 1.8,
               'line-opacity': 0.95,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [3D 토공량(절토·성토 Cut & Fill) 지형 표면 히트맵 레이어]
@@ -1427,7 +1455,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': ['coalesce', ['get', 'color'], '#10B981'],
               'fill-opacity': 0.62,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'cut-fill-grid-line',
@@ -1438,7 +1466,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 0.8,
               'line-opacity': 0.85,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [국방 규제 및 비행안전] 3D 비행안전 허용 개발 볼륨 (Envelope)
@@ -1453,7 +1481,7 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-base': 0,
               'fill-extrusion-opacity': 0.08,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [국방 규제 및 비행안전] 3D 가상 비행안전 제한고도면 (Ceiling 경고 슬래브)
           {
@@ -1467,7 +1495,7 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-base': ['get', 'min_height'],
               'fill-extrusion-opacity': 0.28,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [국방 규제 및 비행안전] 제한고도면 외곽 테두리 라인
           {
@@ -1480,7 +1508,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2,
               'line-opacity': 0.85,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [3D 개발 구상안(Massing)] 가상 건축 매스 Extrusion 입체 레이어 - 2단 복합 매스 & 옥상 특화
           {
@@ -1494,7 +1522,7 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-opacity': 0.78,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [3D 개발 구상안(Massing)] 건물 모서리 및 옥상 헬리패드 마킹 라인
           {
@@ -1506,7 +1534,7 @@ export const MapViewer: React.FC = () => {
               'line-width': ['coalesce', ['get', 'lineWidth'], 2.0],
               'line-opacity': ['coalesce', ['get', 'lineOpacity'], 0.95],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [클릭된 3D 건물 하이라이트 3D 돌출 및 네온 청록색 엣지 레이어]
@@ -1520,7 +1548,7 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.35,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'building-highlight-edge',
@@ -1531,7 +1559,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 3,
               'line-opacity': 1.0,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [Phase 2 고도화] 부지 회전축 연결선
@@ -1545,6 +1573,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2,
               'line-dasharray': [2, 2],
             },
+            layout: { visibility: 'none' },
           },
           // [Phase 2 고도화] 부지 중심 이동 핸들러
           {
@@ -1558,6 +1587,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-color': '#FFFFFF',
               'circle-stroke-width': 2.5,
             },
+            layout: { visibility: 'none' },
           },
           // [Phase 2 고도화] 부지 회전 핸들러
           {
@@ -1571,6 +1601,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-color': '#FFFFFF',
               'circle-stroke-width': 2,
             },
+            layout: { visibility: 'none' },
           },
 
           // [교통·인프라 접근성] 3D 시각 연결선 (Tie-Line) 하단 네온 글로우
@@ -1585,7 +1616,7 @@ export const MapViewer: React.FC = () => {
               'line-blur': 3,
               'line-opacity': 0.5,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [교통·인프라 접근성] 3D 시각 연결선 (Tie-Line) 상단 대시 라인
           {
@@ -1598,7 +1629,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2.8,
               'line-dasharray': [3, 2],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [교통·인프라 접근성] 3D 연결 대상 인프라 위치 펄스 포인트
           {
@@ -1611,7 +1642,7 @@ export const MapViewer: React.FC = () => {
               'circle-color': '#F59E0B',
               'circle-opacity': 0.35,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'tie-line-point-core',
@@ -1624,7 +1655,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-color': '#FFFFFF',
               'circle-stroke-width': 2,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // 임시 드로잉 라인 (점선)
@@ -1638,6 +1669,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2.5,
               'line-dasharray': [2, 1],
             },
+            layout: { visibility: 'none' },
           },
           // 임시 드로잉 정점
           {
@@ -1651,14 +1683,17 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-color': '#FFFFFF',
               'circle-stroke-width': 2,
             },
+            layout: { visibility: 'none' },
           },
         ],
       };
 
-    // [1단계: 검은색 background 레이어 및 초기 스타일 정적 구성 보장]
-    const initialMapStyle = SAFE_MODE ? baseStyle : fullMapStyle;
+    // [1단계: 검은색 화면 및 RTT 먹통 원천 방지 - 순수 위성 래스터 + 3D DEM 베이스 스타일로 지도 초기화]
+    const initialMapStyle = baseStyle;
     if (initialMapStyle && initialMapStyle.layers) {
-      initialMapStyle.layers = initialMapStyle.layers.filter((l: any) => l.type !== 'background');
+      initialMapStyle.layers = initialMapStyle.layers.filter(
+        (l: any) => l.type !== 'background'
+      );
     }
 
     const map = new maplibregl.Map({
@@ -1807,12 +1842,17 @@ export const MapViewer: React.FC = () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
     });
 
-    map.on('load', () => {
+    let hasInitializedMapLayers = false;
+    const handleMapReady = () => {
+      if (hasInitializedMapLayers) return;
+      hasInitializedMapLayers = true;
       setIsMapLoaded(true);
 
       // [1. 검은색 background 레이어 존재 시 제거하여 위성 타일 가림 방지]
       try {
-        const bgLayers = map.getStyle().layers?.filter((l: any) => l.type === 'background') || [];
+        const bgLayers = map.getStyle().layers?.filter(
+          (l: any) => l.type === 'background'
+        ) || [];
         bgLayers.forEach((l: any) => {
           if (map.getLayer(l.id)) {
             map.removeLayer(l.id);
@@ -1829,6 +1869,21 @@ export const MapViewer: React.FC = () => {
         } catch (err) {
           console.warn('setTerrain 안전 처리:', err);
         }
+      }
+
+      // [대기 및 하늘 환경 (Atmospheric Sky) 안전 적용]
+      try {
+        if (typeof (map as any).setSky === 'function') {
+          (map as any).setSky({
+            'sky-color': '#7dd3fc',
+            'horizon-color': '#bae6fd',
+            'fog-color': '#bae6fd',
+            'fog-ground-blend': 0.5,
+            'atmosphere-blend': 0.6,
+          });
+        }
+      } catch (skyErr) {
+        console.warn('[MapViewer] setSky notice:', skyErr);
       }
 
       // [SAFE_MODE] 순수 위성 래스터 베이스맵 격리: 무거운 비동기 작업 및 커스텀 3D 레이어 주입 일체 바이패스
@@ -2058,7 +2113,7 @@ export const MapViewer: React.FC = () => {
                 'line-offset': ['interpolate', ['linear'], ['zoom'], 14.5, -3.2, 16, -6.5, 18, -11.0],
                 'line-opacity': 0.85,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2078,7 +2133,7 @@ export const MapViewer: React.FC = () => {
                 'line-offset': ['interpolate', ['linear'], ['zoom'], 14.5, 3.2, 16, 6.5, 18, 11.0],
                 'line-opacity': 0.85,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2101,7 +2156,7 @@ export const MapViewer: React.FC = () => {
                 'line-offset': ['interpolate', ['linear'], ['zoom'], 15, -2.2, 16, -4.0, 18, -6.8],
                 'line-opacity': 0.95,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2122,7 +2177,7 @@ export const MapViewer: React.FC = () => {
                 'line-offset': ['interpolate', ['linear'], ['zoom'], 15, 2.2, 16, 4.0, 18, 6.8],
                 'line-opacity': 0.95,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2144,7 +2199,7 @@ export const MapViewer: React.FC = () => {
                 'line-offset': ['interpolate', ['linear'], ['zoom'], 14, -1.0, 16, -1.6, 18, -2.5],
                 'line-opacity': 0.98,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2164,7 +2219,7 @@ export const MapViewer: React.FC = () => {
                 'line-offset': ['interpolate', ['linear'], ['zoom'], 14, 1.0, 16, 1.6, 18, 2.5],
                 'line-opacity': 0.98,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2249,7 +2304,7 @@ export const MapViewer: React.FC = () => {
                 'fill-color': '#FFFFFF',
                 'fill-opacity': 0.95,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2267,7 +2322,7 @@ export const MapViewer: React.FC = () => {
                 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1.5, 16, 3.0, 18, 5.0],
                 'line-opacity': 0.95,
               },
-              layout: { visibility: layers.roads ? 'visible' : 'none' },
+              layout: { visibility: 'none' },
             },
             beforeRoads
           );
@@ -2282,7 +2337,8 @@ export const MapViewer: React.FC = () => {
             'source-layer': 'building',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#F8FAFC',
+              'fill-extrusion-pattern': facadePatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 0.95,
@@ -2304,7 +2360,7 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-color': '#334155',
               'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
-              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-opacity': 0.98,
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
@@ -2313,19 +2369,52 @@ export const MapViewer: React.FC = () => {
 
         // [모서리 엣지(Edge Wireframe) 라인 레이어]
         if (!map.getLayer('3d-buildings-edge')) {
-          map.addLayer({
-            id: '3d-buildings-edge',
-            type: 'line',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 12,
-            paint: {
-              'line-color': '#0F172A',
-              'line-width': 0.8,
-              'line-opacity': 0.5,
+          map.addLayer(
+            {
+              id: '3d-buildings-edge',
+              type: 'line',
+              source: 'openmaptiles-vector',
+              'source-layer': 'building',
+              minzoom: 12,
+              paint: {
+                'line-color': '#0F172A',
+                'line-width': 0.8,
+                'line-opacity': 0.5,
+              },
+              layout: { visibility: 'none' },
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
-          });
+            '3d-buildings'
+          );
+        }
+
+        // [전술·분석 GeoJSON 소스 및 오버레이 레이어 동적 안전 주입]
+        if (fullMapStyle.sources) {
+          for (const [sourceId, sourceDef] of Object.entries(fullMapStyle.sources)) {
+            if (sourceId === 'satellite-tiles' || sourceId === 'terrarium-dem') continue;
+            if (!map.getSource(sourceId)) {
+              try {
+                map.addSource(sourceId, sourceDef as any);
+              } catch (sErr) {
+                console.warn(`[MapViewer] addSource notice (${sourceId}):`, sErr);
+              }
+            }
+          }
+        }
+
+        if (fullMapStyle.layers) {
+          for (const layerDef of fullMapStyle.layers) {
+            if (layerDef.id === 'satellite-base-layer' || layerDef.id === 'satellite-layer') continue;
+            if (!map.getLayer(layerDef.id)) {
+              try {
+                const beforeId = (layerDef.type === 'fill-extrusion' || layerDef.type === 'custom')
+                  ? undefined
+                  : (map.getLayer('3d-buildings') ? '3d-buildings' : undefined);
+                map.addLayer(layerDef as any, beforeId);
+              } catch (lErr) {
+                console.warn(`[MapViewer] addLayer notice (${layerDef.id}):`, lErr);
+              }
+            }
+          }
         }
 
         // 3D 건축물 레이어들을 맵 스타일 최상단으로 강제 승격
@@ -2497,7 +2586,13 @@ export const MapViewer: React.FC = () => {
       } catch (deckErr) {
         console.warn('[MapViewer] Deck3DTilesManager initialization warning:', deckErr);
       }
-    });
+    };
+
+    map.on('load', handleMapReady);
+    map.on('style.load', handleMapReady);
+    if (map.isStyleLoaded() || (map.style && (map.style as any)._loaded)) {
+      setTimeout(handleMapReady, 0);
+    }
 
     // 1. WebGL 컨텍스트 손실(webglcontextlost) 자동 감지 및 가벼운 2D 모드 자동 폴백 리스너
     const canvas = map.getCanvas();
@@ -3105,17 +3200,9 @@ export const MapViewer: React.FC = () => {
     const targetRoadLayers = [
       'roads-asphalt-casing',
       'roads-asphalt-inner',
-      'roads-edge-white-left',
-      'roads-edge-white-right',
-      'roads-lanes-white-dashed-left',
-      'roads-lanes-white-dashed-right',
-      'roads-centerline-yellow-left',
-      'roads-centerline-yellow-right',
       'roads-highways',
       'roads-secondary',
       'roads-local',
-      'crosswalks-fill',
-      'crosswalks-stopline',
     ];
 
     for (const lid of targetRoadLayers) {
@@ -3136,16 +3223,12 @@ export const MapViewer: React.FC = () => {
     const nativeBuildingLayers = [
       '3d-buildings',
       '3d-buildings-roof',
-      '3d-buildings-edge',
       'fusion-buildings-3d',
       'fusion-buildings-roof',
-      'fusion-buildings-edge',
       'vworld-buildings-3d',
       'vworld-buildings-roof',
-      'vworld-buildings-edge',
       'sample-buildings-3d',
       'sample-buildings-roof',
-      'sample-buildings-edge',
     ];
 
     const bldgVis = layers.buildings3D ? 'visible' : 'none';
@@ -5266,15 +5349,14 @@ export const MapViewer: React.FC = () => {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="relative w-full h-full flex items-center justify-center bg-[#090c0a] p-4 overflow-hidden"
+      className="relative w-full h-full bg-[#0b1320] overflow-hidden"
     >
-      {/* 16:9 슬라이드 프레임 가이드 박스 (부모 div에 강제 CSS 적용) */}
+      {/* 3D 맵 뷰포트 메인 컨테이너 */}
       <div
-        className="relative w-full max-w-full aspect-[16/9] max-h-[calc(100vh-5.5rem)] min-h-[500px] rounded-xl overflow-hidden border-2 border-[#2b3a2f] shadow-2xl shadow-black/80 bg-black flex-1"
+        className="relative w-full h-full overflow-hidden flex-1"
         style={{
           width: '100%',
           height: '100%',
-          minHeight: '500px',
           position: 'relative',
           zIndex: 1,
         }}

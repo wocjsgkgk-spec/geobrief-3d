@@ -561,7 +561,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           let elev = 0;
           if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
             const q = (this.map as any).queryTerrainElevation(coord);
-            if (q !== null && q !== undefined && !isNaN(q)) {
+            if (q !== null && q !== undefined && !isNaN(q) && Number.isFinite(q)) {
               elev = q;
             }
           }

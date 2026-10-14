@@ -911,20 +911,41 @@ export function buildComplexForSite(siteId: string, mats: SmartCityMaterials): T
     // 1) 원주 1군지사 이전부지 (첨단 국방·반도체 R&D 밸리 & 스마트 모빌리티 복합단지)
     case 'first-logistics-wonju':
     case 'wonju-1st-logistics': {
+      // 1) 첨단 국방·반도체 R&D 메인 타워 (15층, 55m, 커튼월 + 옥탑 헬리패드)
       const rdTower = buildDefenseRDTower(mats);
-      rdTower.position.set(-85, 0, -45);
+      rdTower.position.set(-75, 0, -45);
       rdTower.rotation.y = (-12 * Math.PI) / 180;
       root.add(rdTower);
 
+      // 2) 스마트 지식산업센터 (6층, 24m, 테라스 정원 + 태양광)
       const knowledgeCenter = buildKnowledgeIndustryCenter(mats);
-      knowledgeCenter.position.set(80, 0, -55);
+      knowledgeCenter.position.set(65, 0, -50);
       knowledgeCenter.rotation.y = (15 * Math.PI) / 180;
       root.add(knowledgeCenter);
 
+      // 3) 스마트 군수·모빌리티 물류 데포 (아치 지붕 + 하역 셔터 도어)
+      const depot = buildLogisticsDepot(mats);
+      depot.position.set(-60, 0, 65);
+      depot.rotation.y = (10 * Math.PI) / 180;
+      root.add(depot);
+
+      // 4) 민·군 상생 복합 문화컨벤션 (곡선 아치 루프 + 캐노피)
       const convention = buildCivicConventionHall(mats);
-      convention.position.set(75, 0, 70);
+      convention.position.set(70, 0, 60);
       convention.rotation.y = (-8 * Math.PI) / 180;
       root.add(convention);
+
+      // 5) 청년 창업 & 연구인력 지원 주거단지 (4층 박공형)
+      const residential = buildStandardResidentialSupport(mats);
+      residential.position.set(130, 0, 5);
+      residential.rotation.y = (8 * Math.PI) / 180;
+      root.add(residential);
+
+      // 6) 스마트 부지 관제/통신 감시 타워 (18m 철골 트러스 + 레이더)
+      const watchTower = buildTacticalWatchTower(mats);
+      watchTower.position.set(-140, 0, 0);
+      watchTower.rotation.y = (-15 * Math.PI) / 180;
+      root.add(watchTower);
       break;
     }
 
@@ -1101,7 +1122,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   private centerLngLat: [number, number] = FIRST_LOGISTICS_WONJU_CENTER;
   private clampedAltitude = 0;
   private rotationDeg = -12; // 부지 주축 각도
-  private scaleY = 0; // 솟아오르는(Rise-Up) 보간 진행률 (0 -> 1)
+  private scaleY = 1; // 3D 건축물 즉각 100% 온전 렌더링
   private targetScaleY = 1;
 
   constructor(initialSiteId = 'first-logistics-wonju') {
@@ -1116,8 +1137,8 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
     this.targetScaleY = visible ? 1 : 0;
-    if (visible && this.scaleY < 0.05) {
-      this.scaleY = 0.05;
+    if (visible) {
+      this.scaleY = 1.0;
     }
     if (this.map) {
       this.map.triggerRepaint();
@@ -1160,8 +1181,8 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       this.scene.add(this.complexMesh);
     }
 
-    // 솟아오름(Rise-Up) 애니메이션 초기화
-    this.scaleY = 0.05;
+    // 솟아오름(Rise-Up) 보간 즉각 완료
+    this.scaleY = 1.0;
     this.targetScaleY = 1.0;
     this.isVisible = true;
 
@@ -1259,9 +1280,13 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       // 1. [3D 지형 DEM 표고 밀착 (Terrain Clamping)]
       if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
         const queried = (this.map as any).queryTerrainElevation(this.centerLngLat);
-        if (queried !== null && queried !== undefined && !Number.isNaN(queried)) {
-          this.clampedAltitude = Math.max(0, queried);
+        if (queried !== null && queried !== undefined && !Number.isNaN(queried) && Number.isFinite(queried)) {
+          this.clampedAltitude = queried;
+        } else {
+          this.clampedAltitude = 0;
         }
+      } else {
+        this.clampedAltitude = 0;
       }
 
       // 2. Mercator 좌표계 투영 (부지 표고에 정확히 스냅)

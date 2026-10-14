@@ -97,9 +97,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       transparent: true,
       opacity: 0.82,
     }),
-    // 3. 옥상(Roof): 방수 우레탄 짙은 청회색 마감 (#1e293b, roughness: 0.9)
+    // 3. 옥상(Roof): 방수 우레탄 짙은 차콜 그레이 마감 (#334155, roughness: 0.9)
     roofWaterproof: new THREE.MeshStandardMaterial({
-      color: 0x1e293b, // 방수 우레탄 짙은 청회색
+      color: 0x334155, // 방수 우레탄 짙은 차콜 그레이 (#334155)
       roughness: 0.9,
       metalness: 0.15,
     }),
@@ -233,9 +233,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         this.originLngLat = [c.lng, c.lat];
       }
 
-      // 1. [조명 설정 - 섀도우맵 바이패스로 WebGL FBO 충돌 원천 방지]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
-      this.directionalLight.position.set(116, 141, 81).normalize();
+      // 1. [조명 설정 - 비스듬한 태양광 각도 (intensity: 0.9, position: [1.3, 115, 40])]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 0.9);
+      this.directionalLight.position.set(1.3, 115, 40).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
@@ -311,10 +311,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       const rawMatrix = options?.modelViewProjectionMatrix || options;
       if (!rawMatrix) return;
 
-      // [LOD 뷰포트 레벨 체크] 브라우저 부하 방지: 줌 레벨 15 이상에서만 Threebox 정밀 입체 지붕(LOD2) 렌더링, 원거리에서는 MapLibre 네이티브 레이어로 자동 스위칭 (60fps 유지)
+      // [LOD 뷰포트 레벨 체크] 줌 13.5 이상에서 Threebox 정밀 입체 지붕 및 절차적 실감 외벽(LOD2) 렌더링 활성화 (기본 뷰포트 14.5 지원)
       if (this.map) {
         const zoom = this.map.getZoom();
-        const isHighDetailZoom = zoom >= 15.0 && this.lodMode === 'lod2';
+        const isHighDetailZoom = zoom >= 13.5 && this.lodMode === 'lod2';
         if (this.roofsGroup.visible !== isHighDetailZoom) {
           this.roofsGroup.visible = isHighDetailZoom;
         }
@@ -518,7 +518,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     }
 
     const currentZoom = this.map ? this.map.getZoom() : 16;
-    const isHighDetailZoom = currentZoom >= 15.0 && this.lodMode === 'lod2';
+    const isHighDetailZoom = currentZoom >= 13.5 && this.lodMode === 'lod2';
     this.roofsGroup.visible = isHighDetailZoom;
     this.facadesGroup.visible = isHighDetailZoom;
     this.isVisible = true;
