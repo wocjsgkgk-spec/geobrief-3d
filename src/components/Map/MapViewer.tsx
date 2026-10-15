@@ -23,6 +23,7 @@ import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
 import { LOD2BuildingEngine } from './LOD2BuildingEngine';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
+import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
 import { generateContourLines } from '@/utils/contourGenerator';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
@@ -106,6 +107,7 @@ function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
     'building-mass-extrusion',
     'building-highlight-fill',
     'smart-city-complex-3d-layer',
+    'procedural-trees-3d-layer',
     'lod2-building-engine-layer',
     'threebox-building-layer',
     'custom-water-level-layer',
@@ -344,6 +346,7 @@ export const MapViewer: React.FC = () => {
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
   const lod2BuildingEngineRef = useRef<LOD2BuildingEngine | null>(null);
   const smartCityComplexLayerRef = useRef<SmartCityComplex3DLayer | null>(null);
+  const proceduralTreesLayerRef = useRef<ProceduralTrees3DLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
   const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
@@ -2238,6 +2241,16 @@ export const MapViewer: React.FC = () => {
         console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
       }
 
+      // [4단계 신규: 3D 입체 수목(식생 InstancedMesh) 및 가로수 고성능 렌더러]
+      try {
+        const treesLayer = new ProceduralTrees3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
+        treesLayer.setVisible(!!layers.proceduralTrees);
+        map.addLayer(treesLayer);
+        proceduralTreesLayerRef.current = treesLayer;
+      } catch (treeErr) {
+        console.warn('[ProceduralTrees3DLayer] registration notice:', treeErr);
+      }
+
       // [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어 등록]
       try {
         const wlLayer = new WaterLevelLayer();
@@ -3151,6 +3164,16 @@ export const MapViewer: React.FC = () => {
       smartCityComplexLayerRef.current.setVisible(!!layers.firstLogisticsSmartCity);
     }
   }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
+
+  // 8-0-4. [4단계: 3D 식생·가로수(InstancedMesh) 가시성 및 거점 전환 동기화]
+  useEffect(() => {
+    if (proceduralTreesLayerRef.current) {
+      if (selectedIdleSiteId) {
+        proceduralTreesLayerRef.current.setSite(selectedIdleSiteId);
+      }
+      proceduralTreesLayerRef.current.setVisible(!!layers.proceduralTrees);
+    }
+  }, [layers.proceduralTrees, selectedIdleSiteId]);
 
   // 8-0-2-1. [3D 디테일 LOD (LOD1 일반 / LOD2+ 실감) 모드 Threebox 동기화]
   useEffect(() => {

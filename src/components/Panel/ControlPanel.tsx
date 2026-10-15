@@ -3131,6 +3131,28 @@ export const ControlPanel: React.FC = () => {
             </label>
           </div>
 
+          {/* [4단계 신규] 🌲 3D 식생·가로수 표시 토글 스위치 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-emerald-500/40">
+            <div className="flex items-center space-x-2">
+              <span className="text-emerald-400 text-sm">🌲</span>
+              <div>
+                <span className="text-slate-200 font-medium">3D 식생·가로수 표시</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                  (1,000+ 그루 Instanced)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.proceduralTrees}
+                onChange={() => toggleLayer('proceduralTrees')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
           {/* [V-World API 연결 상태 실시간 진단 카드] */}
           <div className="p-2.5 rounded-lg bg-[#111713] border border-[#243328] space-y-2 text-[11px]">
             <div className="flex items-center justify-between">

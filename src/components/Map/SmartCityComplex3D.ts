@@ -207,6 +207,43 @@ export function createSmartCityMaterials() {
       color: 0x78350f,
       roughness: 0.9,
     }),
+    // 12) 랜드마크 고도화: 스카이블루 커튼월, 수직 알루미늄 핀, 발광 포인트 및 주차 구획선
+    glassCurtainSkyBlue: new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.08,
+      metalness: 0.92,
+      transparent: true,
+      opacity: 0.88,
+    }),
+    finAluminum: new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      roughness: 0.18,
+      metalness: 0.95,
+    }),
+    glowCyan: new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+    }),
+    glowGold: new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+    }),
+    pedestrianDeck: new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      roughness: 0.55,
+      metalness: 0.35,
+    }),
+    parkingAsphalt: new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.92,
+      metalness: 0.1,
+    }),
+    parkingLineWhite: new THREE.MeshBasicMaterial({
+      color: 0xf8fafc,
+    }),
+    parkingEvGreen: new THREE.MeshStandardMaterial({
+      color: 0x10b981,
+      roughness: 0.5,
+      metalness: 0.2,
+    }),
   };
 }
 
@@ -217,7 +254,7 @@ export type SmartCityMaterials = ReturnType<typeof createSmartCityMaterials>;
 // =============================================================================
 export function buildDefenseRDTower(mats: SmartCityMaterials): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'defense_rd_tower_55m';
+  group.name = 'defense_rd_tower_55m_landmark';
 
   // 1) 기단부 포디움 (1~2층, 높이 8m, 42m x 32m)
   const podiumGeo = new THREE.BoxGeometry(42, 8, 32);
@@ -229,7 +266,7 @@ export function buildDefenseRDTower(mats: SmartCityMaterials): THREE.Group {
 
   // 포디움 1층 대형 투명 글래스 로비 (전면)
   const lobbyGeo = new THREE.BoxGeometry(36, 4.5, 1);
-  const lobby = new THREE.Mesh(lobbyGeo, mats.glassCurtainBlue);
+  const lobby = new THREE.Mesh(lobbyGeo, mats.glassCurtainSkyBlue);
   lobby.position.set(0, 2.5, 16.1);
   group.add(lobby);
 
@@ -240,13 +277,49 @@ export function buildDefenseRDTower(mats: SmartCityMaterials): THREE.Group {
   group.add(lobbyCanopy);
 
   // 2) 메인 타워 본동 (3~15층, 13개 층, 높이 43m, 30m x 22m)
+  // [요구사항 2] 반사율이 높은 스카이 블루 유리 커튼월
   const towerHeight = 43;
   const towerGeo = new THREE.BoxGeometry(30, towerHeight, 22);
-  const tower = new THREE.Mesh(towerGeo, mats.glassCurtainBlue);
+  const tower = new THREE.Mesh(towerGeo, mats.glassCurtainSkyBlue);
   tower.position.y = 8 + towerHeight / 2;
   tower.castShadow = true;
   tower.receiveShadow = true;
   group.add(tower);
+
+  // [요구사항 2] 외벽 수직 알루미늄 핀 (Vertical Aluminum Fins, 3.0m 간격)
+  // 전면(+Z) 및 후면(-Z) 수직 알루미늄 루버 핀
+  const finFrontBackGeo = new THREE.BoxGeometry(0.18, towerHeight, 0.45);
+  for (let x = -13.5; x <= 13.5; x += 3.0) {
+    if (Math.abs(x) < 0.5) continue;
+    // 전면 (+Z)
+    const finFront = new THREE.Mesh(finFrontBackGeo, mats.finAluminum);
+    finFront.position.set(x, 8 + towerHeight / 2, 11.23);
+    finFront.castShadow = true;
+    group.add(finFront);
+
+    // 후면 (-Z)
+    const finBack = new THREE.Mesh(finFrontBackGeo, mats.finAluminum);
+    finBack.position.set(x, 8 + towerHeight / 2, -11.23);
+    finBack.castShadow = true;
+    group.add(finBack);
+  }
+
+  // 측면(+X, -X) 수직 알루미늄 루버 핀
+  const finSideGeo = new THREE.BoxGeometry(0.45, towerHeight, 0.18);
+  for (let z = -9.0; z <= 9.0; z += 3.0) {
+    if (Math.abs(z) < 0.5) continue;
+    // 좌측 (-X)
+    const finLeft = new THREE.Mesh(finSideGeo, mats.finAluminum);
+    finLeft.position.set(-15.23, 8 + towerHeight / 2, z);
+    finLeft.castShadow = true;
+    group.add(finLeft);
+
+    // 우측 (+X)
+    const finRight = new THREE.Mesh(finSideGeo, mats.finAluminum);
+    finRight.position.set(15.23, 8 + towerHeight / 2, z);
+    finRight.castShadow = true;
+    group.add(finRight);
+  }
 
   // 13개 층별 슬래브 밴드 및 멀리언 라인 (3.3m 층고 시각화)
   const floorCount = 13;
@@ -273,6 +346,36 @@ export function buildDefenseRDTower(mats: SmartCityMaterials): THREE.Group {
     group.add(col);
   });
 
+  // [요구사항 2] 야간/주간 발광 포인트: 옥상 크라운 및 코너 엣지 발광 스트립
+  const crownGlowGeoX = new THREE.BoxGeometry(30.6, 0.35, 0.35);
+  const crownGlowGeoZ = new THREE.BoxGeometry(0.35, 0.35, 22.6);
+
+  const crownGlowFront = new THREE.Mesh(crownGlowGeoX, mats.glowCyan);
+  crownGlowFront.position.set(0, 51.2, 11.1);
+  group.add(crownGlowFront);
+
+  const crownGlowBack = new THREE.Mesh(crownGlowGeoX, mats.glowCyan);
+  crownGlowBack.position.set(0, 51.2, -11.1);
+  group.add(crownGlowBack);
+
+  const crownGlowLeft = new THREE.Mesh(crownGlowGeoZ, mats.glowCyan);
+  crownGlowLeft.position.set(-15.1, 51.2, 0);
+  group.add(crownGlowLeft);
+
+  const crownGlowRight = new THREE.Mesh(crownGlowGeoZ, mats.glowCyan);
+  crownGlowRight.position.set(15.1, 51.2, 0);
+  group.add(crownGlowRight);
+
+  // 수직 코너 모서리 네온 발광 라인 (4개 코너)
+  const edgeGlowGeo = new THREE.BoxGeometry(0.2, towerHeight, 0.2);
+  corners.forEach(([cx, cz]) => {
+    const edgeGlow = new THREE.Mesh(edgeGlowGeo, mats.glowCyan);
+    const ox = cx > 0 ? cx + 0.42 : cx - 0.42;
+    const oz = cz > 0 ? cz + 0.42 : cz - 0.42;
+    edgeGlow.position.set(ox, 8 + towerHeight / 2, oz);
+    group.add(edgeGlow);
+  });
+
   // 3) 옥탑 기계실 코어 (높이 3.5m)
   const penthouseGeo = new THREE.BoxGeometry(14, 3.5, 10);
   const penthouse = new THREE.Mesh(penthouseGeo, mats.wallConcrete);
@@ -281,6 +384,7 @@ export function buildDefenseRDTower(mats: SmartCityMaterials): THREE.Group {
   group.add(penthouse);
 
   // 4) 옥탑 헬리패드 플랫폼 (총 높이 55m)
+  // [요구사항 2] 옥상 헬리패드 ('H' 마킹 및 정밀 테두리)
   const helipadBaseGeo = new THREE.CylinderGeometry(9.5, 9.5, 0.5, 24);
   const helipadBase = new THREE.Mesh(helipadBaseGeo, mats.helipadDeck);
   helipadBase.position.set(0, 55, 0);
@@ -312,14 +416,25 @@ export function buildDefenseRDTower(mats: SmartCityMaterials): THREE.Group {
   hBarCross.position.set(0, 55.32, 0);
   group.add(hBarCross);
 
+  // 헬리패드 둘레 야간 유도등 (8개 골드 LED 포인트)
+  const padLightGeo = new THREE.SphereGeometry(0.24, 6, 6);
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const lx = Math.cos(angle) * 8.4;
+    const lz = Math.sin(angle) * 8.4;
+    const padLight = new THREE.Mesh(padLightGeo, mats.glowGold);
+    padLight.position.set(lx, 55.36, lz);
+    group.add(padLight);
+  }
+
   // 4방향 야간 적색 항공 유도 비콘등
-  const beaconGeo = new THREE.SphereGeometry(0.35, 8, 8);
+  const beaconGeo = new THREE.SphereGeometry(0.38, 8, 8);
   const beaconAngles = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
   beaconAngles.forEach((angle) => {
     const bx = Math.cos(angle) * 9.2;
     const bz = Math.sin(angle) * 9.2;
     const beacon = new THREE.Mesh(beaconGeo, mats.beaconRed);
-    beacon.position.set(bx, 55.5, bz);
+    beacon.position.set(bx, 55.55, bz);
     group.add(beacon);
   });
 
@@ -869,22 +984,105 @@ export function buildSmartRoadAndGreenPlaza(mats: SmartCityMaterials): THREE.Gro
   water.position.set(0, 0.8, -10);
   group.add(water);
 
-  // 가로수 식재
-  const treeCount = 18;
+  // 3) [요구사항 2] 단지 입체 보행자 데크 (Pedestrian Skybridge & Deck, 2층 레벨 y = 5.2m)
+  // - 메인 R&D 타워와 지식산업센터, 컨벤션을 연결하는 현대적 스카이워크
+  const bridgeEastWestGeo = new THREE.BoxGeometry(110, 0.45, 3.8);
+  const bridgeEW = new THREE.Mesh(bridgeEastWestGeo, mats.pedestrianDeck);
+  bridgeEW.position.set(-5, 5.2, -45);
+  bridgeEW.castShadow = true;
+  group.add(bridgeEW);
+
+  // 남북 연결 지선 브릿지 (컨벤션/광장 방향)
+  const bridgeNorthSouthGeo = new THREE.BoxGeometry(3.8, 0.45, 60);
+  const bridgeNS = new THREE.Mesh(bridgeNorthSouthGeo, mats.pedestrianDeck);
+  bridgeNS.position.set(25, 5.2, -15);
+  bridgeNS.castShadow = true;
+  group.add(bridgeNS);
+
+  // 보행 데크 투명 유리 난간 (양측)
+  const glassRailingGeoEW = new THREE.BoxGeometry(110, 1.1, 0.1);
+  const glassRailingEW1 = new THREE.Mesh(glassRailingGeoEW, mats.railingGlass);
+  glassRailingEW1.position.set(-5, 5.95, -46.8);
+  group.add(glassRailingEW1);
+
+  const glassRailingEW2 = new THREE.Mesh(glassRailingGeoEW, mats.railingGlass);
+  glassRailingEW2.position.set(-5, 5.95, -43.2);
+  group.add(glassRailingEW2);
+
+  // 보행 데크 하부 콘크리트 원형 교각 (20m 간격)
+  const pierGeo = new THREE.CylinderGeometry(0.4, 0.5, 5.2, 12);
+  const pierXs = [-50, -30, -10, 10, 30, 50];
+  pierXs.forEach((px) => {
+    const pier = new THREE.Mesh(pierGeo, mats.wallPodium);
+    pier.position.set(px, 2.6, -45);
+    pier.castShadow = true;
+    group.add(pier);
+  });
+
+  // 4) [요구사항 2] 단지 전용 주차장 및 정밀 주차 구획선 (Parking Bays)
+  const parkingWidth = 46;
+  const parkingLength = 26;
+  const parkingLotGeo = new THREE.PlaneGeometry(parkingWidth, parkingLength);
+  const parkingLot = new THREE.Mesh(parkingLotGeo, mats.parkingAsphalt);
+  parkingLot.rotation.x = -Math.PI / 2;
+  parkingLot.position.set(45, 0.07, 24);
+  parkingLot.receiveShadow = true;
+  group.add(parkingLot);
+
+  // 백색 주차 구획선 (2.5m x 5.0m 규격 스톨 라인 16개)
+  const pLineGeo = new THREE.PlaneGeometry(0.15, 5.0);
+  for (let s = -18; s <= 18; s += 2.6) {
+    // 북측 스톨 라인
+    const pLineNorth = new THREE.Mesh(pLineGeo, mats.parkingLineWhite);
+    pLineNorth.rotation.x = -Math.PI / 2;
+    pLineNorth.position.set(45 + s, 0.09, 15.5);
+    group.add(pLineNorth);
+
+    // 남측 스톨 라인
+    const pLineSouth = new THREE.Mesh(pLineGeo, mats.parkingLineWhite);
+    pLineSouth.rotation.x = -Math.PI / 2;
+    pLineSouth.position.set(45 + s, 0.09, 32.5);
+    group.add(pLineSouth);
+  }
+
+  // 친환경 전기차(EV) 전용 초록색 주차면 4개소
+  const evBayGeo = new THREE.PlaneGeometry(2.3, 4.8);
+  for (let ev = 0; ev < 4; ev++) {
+    const evBay = new THREE.Mesh(evBayGeo, mats.parkingEvGreen);
+    evBay.rotation.x = -Math.PI / 2;
+    evBay.position.set(45 - 15.6 + ev * 2.6, 0.085, 15.5);
+    group.add(evBay);
+
+    // EV 급속 충전기 키오스크 (큐브)
+    const chargerGeo = new THREE.BoxGeometry(0.5, 1.4, 0.4);
+    const charger = new THREE.Mesh(chargerGeo, mats.wallConcrete);
+    charger.position.set(45 - 15.6 + ev * 2.6, 0.7, 12.8);
+    group.add(charger);
+
+    const chargerScreenGeo = new THREE.BoxGeometry(0.3, 0.3, 0.05);
+    const chargerScreen = new THREE.Mesh(chargerScreenGeo, mats.glowCyan);
+    chargerScreen.position.set(45 - 15.6 + ev * 2.6, 1.0, 13.02);
+    group.add(chargerScreen);
+  }
+
+  // 5) [요구사항 2] 단지 내부 가로수 및 조경수 (28그루 식재)
+  const treeCount = 28;
   for (let i = 0; i < treeCount; i++) {
     const angle = (i / treeCount) * Math.PI * 2;
-    const tx = Math.cos(angle) * 34;
-    const tz = -10 + Math.sin(angle) * 26;
+    const tx = Math.cos(angle) * 36;
+    const tz = -10 + Math.sin(angle) * 28;
 
-    const trunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 2.5, 6);
+    const trunkGeo = new THREE.CylinderGeometry(0.28, 0.38, 2.6, 6);
     const trunk = new THREE.Mesh(trunkGeo, mats.treeTrunk);
-    trunk.position.set(tx, 1.25, tz);
+    trunk.position.set(tx, 1.3, tz);
     trunk.castShadow = true;
     group.add(trunk);
 
-    const foliageGeo = new THREE.ConeGeometry(2.2, 4.5, 7);
+    const foliageGeo = i % 2 === 0
+      ? new THREE.DodecahedronGeometry(2.1, 1) // 활엽수
+      : new THREE.ConeGeometry(2.0, 4.2, 6);    // 침엽수/소나무
     const foliage = new THREE.Mesh(foliageGeo, mats.treeFoliage);
-    foliage.position.set(tx, 4.2, tz);
+    foliage.position.set(tx, 3.8, tz);
     foliage.castShadow = true;
     group.add(foliage);
   }
@@ -1179,6 +1377,9 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
     // 신규 부지 전용 LOD2 복합단지 메쉬 절차적 생성
     if (this.materials) {
       this.complexMesh = buildComplexForSite(targetId, this.materials);
+      this.complexMesh.traverse((child) => {
+        child.frustumCulled = false;
+      });
       this.scene.add(this.complexMesh);
     }
 
@@ -1211,6 +1412,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     try {
       this.map = map;
+      this.camera.matrixAutoUpdate = false;
 
       // 1. 공통 머티리얼 팔레트 인스턴스화
       this.materials = createSmartCityMaterials();
@@ -1233,6 +1435,9 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
 
       // 3. 현재 거점에 대응하는 스마트 복합단지 절차적 생성
       this.complexMesh = buildComplexForSite(this.currentSiteId, this.materials);
+      this.complexMesh.traverse((child) => {
+        child.frustumCulled = false;
+      });
       this.scene.add(this.complexMesh);
 
       // 4. WebGLRenderer 연동
@@ -1260,7 +1465,10 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
     }
 
     try {
-      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      const rawMatrix =
+        options?.defaultProjectionData?.mainMatrix ||
+        options?.modelViewProjectionMatrix ||
+        options;
       if (!rawMatrix) return;
 
       // 0. 부드러운 솟아오름(Rise-Up) 보간 애니메이션 (0.05 -> 1.0)
