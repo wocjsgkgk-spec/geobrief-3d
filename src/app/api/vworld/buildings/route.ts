@@ -339,7 +339,7 @@ export async function GET(request: NextRequest) {
 
         return {
           type: 'Feature',
-          id: props.bd_mgt_sn || props.buld_se_cd || `vworld-bld-${idx}`,
+          id: `vworld-bld-${idx}-${props.bd_mgt_sn || idx}`,
           properties: {
             ...props,
             name: bldName,

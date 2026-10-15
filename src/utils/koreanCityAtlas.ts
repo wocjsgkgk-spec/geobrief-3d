@@ -27,9 +27,11 @@ export type AtlasSlot =
   | 'apartment_front'
   | 'apartment_side'
   | 'commercial_mid'
+  | 'commercial_ground'
   | 'curtainwall_high'
   | 'villa_residential'
   | 'public_facility'
+  | 'foundation_stone'
   | 'roof_green_urethane'
   | 'roof_blue_zinc'
   | 'roof_brown_shingle'
@@ -62,6 +64,9 @@ export const ATLAS_SLOT_COORDS: Record<AtlasSlot, SlotCoords> = {
   roof_concrete_cool: { col: 1, row: 2 },
   penthouse_wall: { col: 2, row: 2 },
   parapet_concrete: { col: 3, row: 2 },
+
+  commercial_ground: { col: 0, row: 3 },
+  foundation_stone: { col: 1, row: 3 },
 };
 
 export interface UVRect {
@@ -91,105 +96,101 @@ export function getAtlasSlotUV(slot: AtlasSlot): UVRect {
 // =============================================================================
 
 function drawApartmentFront(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 외벽 베이스: 밝은 아이보리/크림색 콘크리트 외벽 (#f5f5f0)
-  ctx.fillStyle = '#f5f5f0';
+  // 1) 외벽 베이스: 밝은 크림/아이보리색 콘크리트 외벽 (#f8fafc)
+  ctx.fillStyle = '#f8fafc';
   ctx.fillRect(x, y, s, s);
 
   // 미세 콘크리트 결
-  ctx.fillStyle = 'rgba(218, 222, 229, 0.45)';
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.35)';
   for (let i = 0; i < s; i += 6) {
-    ctx.fillRect(x, y + i, s, 1.5);
+    ctx.fillRect(x, y + i, s, 1.2);
   }
 
-  // 2) 층간 콘크리트 슬래브 가로 밴드 (2개 층 표현)
-  const halfH = s * 0.5;
-  const slabH = 14;
+  // 2) 층간 콘크리트 슬래브 (상단 & 하단 마감: 1개 층 3.0m 기준)
+  const slabH = 22;
+  // 상단 슬래브
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(x, y, s, slabH);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(x, y + slabH - 4, s, 4);
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(x, y + slabH, s, 2);
 
-  const drawSlab = (sy: number) => {
-    ctx.fillStyle = '#cbd5e1';
-    ctx.fillRect(x, sy, s, slabH);
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillRect(x, sy + slabH - 3, s, 3);
-    ctx.fillStyle = '#475569';
-    ctx.fillRect(x, sy + slabH, s, 2);
-  };
+  // 하단 슬래브
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(x, y + s - slabH, s, slabH);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(x, y + s - slabH, s, 3);
 
-  drawSlab(y);
-  drawSlab(y + halfH - slabH * 0.5);
-  drawSlab(y + s - slabH);
-
-  // 3) 세대 간 수직 콘크리트 날개벽 (Pillars)
-  const pillarW = Math.round(s * 0.08);
-  ctx.fillStyle = '#e2e8f0';
+  // 3) 세대 간 수직 콘크리트 기둥 (Pillars)
+  const pillarW = Math.round(s * 0.07);
+  ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(x, y, pillarW, s);
   ctx.fillRect(x + s - pillarW, y, pillarW, s);
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x + pillarW - 2, y, 2, s);
   ctx.fillRect(x + s - pillarW, y, 2, s);
 
-  // 4) 층별 대형 베란다 이중창 및 안전 난간, 실외기 루버
+  // 4) 1개 층(3.0m) 대형 베란다 이중창 및 안전 난간, 실외기 루버 (폭 2.8m 1베이)
   const winW = s - (pillarW + 12) * 2;
   const winX = x + pillarW + 12;
+  const floorY = y + slabH + 6;
+  const availH = s - slabH * 2 - 12;
+  const windowH = Math.round(availH * 0.58);
+  const balconyH = availH - windowH - 6;
 
-  for (let f = 0; f < 2; f++) {
-    const floorY = y + f * halfH + slabH + 4;
-    const availH = halfH - slabH - 8;
-    const windowH = Math.round(availH * 0.58);
-    const balconyH = availH - windowH - 4;
+  // (a) 다크 그레이 창문 섀시 프레임 (#1e293b)
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(winX - 3, floorY - 3, winW + 6, windowH + 6);
 
-    // (a) 다크 그레이 창문 섀시 프레임 (#1e293b)
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(winX - 3, floorY - 3, winW + 6, windowH + 6);
+  // (b) 하늘 반사 유리 그라데이션 (#7dd3fc ~ #0f172a)
+  const glassGrad = ctx.createLinearGradient(winX, floorY, winX, floorY + windowH);
+  glassGrad.addColorStop(0, '#7dd3fc');
+  glassGrad.addColorStop(0.3, '#38bdf8');
+  glassGrad.addColorStop(0.7, '#0284c7');
+  glassGrad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = glassGrad;
+  ctx.fillRect(winX, floorY, winW, windowH);
 
-    // (b) 하늘 반사 유리 그라데이션 (#38bdf8 ~ #1e293b)
-    const glassGrad = ctx.createLinearGradient(winX, floorY, winX, floorY + windowH);
-    glassGrad.addColorStop(0, '#7dd3fc');
-    glassGrad.addColorStop(0.3, '#38bdf8');
-    glassGrad.addColorStop(0.7, '#0284c7');
-    glassGrad.addColorStop(1, '#0f172a');
-    ctx.fillStyle = glassGrad;
-    ctx.fillRect(winX, floorY, winW, windowH);
+  // 창호 화이트 4분할 섀시
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(winX + winW * 0.5 - 2, floorY, 4, windowH);
+  ctx.fillRect(winX + winW * 0.25 - 1.5, floorY, 3, windowH);
+  ctx.fillRect(winX + winW * 0.75 - 1.5, floorY, 3, windowH);
+  ctx.fillRect(winX, floorY + windowH * 0.45 - 1.5, winW, 3);
 
-    // 창호 중앙 세로/가로 화이트 분할 섀시
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillRect(winX + winW * 0.5 - 2, floorY, 4, windowH);
-    ctx.fillRect(winX + winW * 0.25 - 1.5, floorY, 3, windowH);
-    ctx.fillRect(winX + winW * 0.75 - 1.5, floorY, 3, windowH);
-    ctx.fillRect(winX, floorY + windowH * 0.45 - 1.5, winW, 3);
+  // (c) 베란다 하단 안전 난간 (철제 세로살 격자)
+  const balcY = floorY + windowH + 6;
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillRect(winX, balcY, winW, balconyH);
 
-    // (c) 베란다 하단 안전 난간 (철제 세로살 격자)
-    const balcY = floorY + windowH + 4;
-    ctx.fillStyle = '#f1f5f9';
-    ctx.fillRect(winX, balcY, winW, balconyH);
+  // 난간 상단 핸드레일
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(winX, balcY, winW, 4);
 
-    // 난간 상단 핸드레일
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(winX, balcY, winW, 3);
+  // 세로 난간 살 (Balusters)
+  ctx.fillStyle = '#94a3b8';
+  for (let bx = winX + 8; bx < winX + winW - 8; bx += 14) {
+    ctx.fillRect(bx, balcY + 4, 2, balconyH - 4);
+  }
 
-    // 세로 난간 살 (Balusters)
-    ctx.fillStyle = '#94a3b8';
-    for (let bx = winX + 6; bx < winX + winW - 6; bx += 10) {
-      ctx.fillRect(bx, balcY + 3, 2, balconyH - 3);
-    }
+  // (d) 세대별 에어컨 실외기 루버 (오른쪽 28% 폭)
+  const acW = Math.round(winW * 0.28);
+  const acX = winX + winW - acW - 4;
+  const acY = balcY + 3;
+  const acH = balconyH - 6;
 
-    // (d) 세대별 에어컨 실외기 루버 (오른쪽 25% 폭)
-    const acW = Math.round(winW * 0.28);
-    const acX = winX + winW - acW - 4;
-    const acY = balcY + 2;
-    const acH = balconyH - 4;
-
-    ctx.fillStyle = '#475569';
-    ctx.fillRect(acX, acY, acW, acH);
-    ctx.fillStyle = '#94a3b8';
-    for (let ly = acY + 2; ly < acY + acH - 2; ly += 4) {
-      ctx.fillRect(acX + 2, ly, acW - 4, 1.5);
-    }
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(acX, acY, acW, acH);
+  ctx.fillStyle = '#cbd5e1';
+  for (let ly = acY + 3; ly < acY + acH - 3; ly += 6) {
+    ctx.fillRect(acX + 2, ly, acW - 4, 2);
   }
 }
 
 function drawApartmentSide(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 외벽 베이스: 밝은 회백색/아이보리 콘크리트 외벽
-  ctx.fillStyle = '#f1f5f9';
+  // 1) 외벽 베이스: 밝은 크림/아이보리 콘크리트 외벽 (#f8fafc)
+  ctx.fillStyle = '#f8fafc';
   ctx.fillRect(x, y, s, s);
 
   // 콘크리트 수직 패널 줄눈
@@ -241,11 +242,19 @@ function drawApartmentSide(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 function drawCommercialMid(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 화강석/대리석 석재 타일 베이스
-  ctx.fillStyle = '#e2e8f0';
+  // 1) 밝은 화강석/대리석 석재 타일 베이스 (#f1f5f9 / #e2e8f0)
+  ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(x, y, s, s);
 
-  // 석재 타일 조적 줄눈 (#94a3b8)
+  // 화강석 질감 미세 반점
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+  for (let i = 0; i < s; i += 16) {
+    for (let j = 0; j < s; j += 16) {
+      if ((i + j) % 32 === 0) ctx.fillRect(x + i, y + j, 2, 2);
+    }
+  }
+
+  // 석재 타일 조적 줄눈 (#cbd5e1)
   ctx.fillStyle = '#cbd5e1';
   for (let px = x; px < x + s; px += 64) {
     ctx.fillRect(px, y, 1.5, s);
@@ -254,74 +263,106 @@ function drawCommercialMid(ctx: CanvasRenderingContext2D, x: number, y: number, 
     ctx.fillRect(x, py, s, 1.5);
   }
 
-  // 2) 가로형 연속 유리창 밴드 (Ribbon Windows, 상단 2개 층)
-  const floorH = s * 0.32;
-  for (let f = 0; f < 2; f++) {
-    const fy = y + f * floorH + 16;
-    const winH = floorH - 32;
+  // 2) 가로형 연속 유리창 (Ribbon Window, 높이 52% 영역)
+  const winTop = y + s * 0.22;
+  const winH = s * 0.52;
 
-    // 프레임 (#1e293b)
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(x + 10, fy - 2, s - 20, winH + 4);
+  // 창틀 다크 프레임 (#1e293b)
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(x, winTop - 3, s, winH + 6);
 
-    // 유리창 반사 그라데이션
-    const winGrad = ctx.createLinearGradient(x, fy, x, fy + winH);
-    winGrad.addColorStop(0, '#93c5fd');
-    winGrad.addColorStop(0.5, '#3b82f6');
-    winGrad.addColorStop(1, '#1e3a8a');
-    ctx.fillStyle = winGrad;
-    ctx.fillRect(x + 12, fy, s - 24, winH);
+  // 유리창 daylight 반사 그라데이션 (#93c5fd ~ #1e3a8a)
+  const winGrad = ctx.createLinearGradient(x, winTop, x, winTop + winH);
+  winGrad.addColorStop(0, '#bae6fd');
+  winGrad.addColorStop(0.3, '#60a5fa');
+  winGrad.addColorStop(0.7, '#2563eb');
+  winGrad.addColorStop(1, '#1e3a8a');
+  ctx.fillStyle = winGrad;
+  ctx.fillRect(x, winTop, s, winH);
 
-    // 알루미늄 멀리언 수직 바
-    ctx.fillStyle = '#cbd5e1';
-    for (let mx = x + 40; mx < x + s - 30; mx += 48) {
-      ctx.fillRect(mx, fy, 2, winH);
-    }
-  }
-
-  // 3) 1층 상가 간판 컬러 띠장 및 쇼윈도 통유리 (하단 35%)
-  const gY = y + s * 0.65;
-  const gH = s * 0.35;
-
-  // 1층 캐노피
-  ctx.fillStyle = '#334155';
-  ctx.fillRect(x, gY, s, 8);
-
-  // 상가 간판 컬러 띠 (다채로운 상권 표현: 오렌지, 블루, 에메랄드)
-  const signH = 34;
-  const sW1 = s * 0.36;
-  const sW2 = s * 0.32;
-  const sW3 = s - sW1 - sW2;
-
-  ctx.fillStyle = '#059669'; // 약국/베이커리 녹색
-  ctx.fillRect(x, gY + 8, sW1, signH);
-  ctx.fillStyle = '#ea580c'; // 식당/카페 주황색
-  ctx.fillRect(x + sW1, gY + 8, sW2, signH);
-  ctx.fillStyle = '#2563eb'; // 편의점/은행 파란색
-  ctx.fillRect(x + sW1 + sW2, gY + 8, sW3, signH);
-
-  // 간판 텍스트 실루엣
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x + 16, gY + 20, sW1 - 32, 8);
-  ctx.fillRect(x + sW1 + 16, gY + 20, sW2 - 32, 8);
-  ctx.fillRect(x + sW1 + sW2 + 16, gY + 20, sW3 - 32, 8);
-
-  // 1층 대형 쇼윈도 통유리
-  const showY = gY + 8 + signH + 4;
-  const showH = gH - 8 - signH - 8;
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(x + 8, showY, s - 16, showH);
-
-  const showGrad = ctx.createLinearGradient(x, showY, x, showY + showH);
-  showGrad.addColorStop(0, '#60a5fa');
-  showGrad.addColorStop(0.4, '#1e293b');
-  showGrad.addColorStop(1, '#020617');
-  ctx.fillStyle = showGrad;
-  ctx.fillRect(x + 10, showY + 2, s - 20, showH - 4);
-
-  // 1층 자동문 프레임
+  // 알루미늄 멀리언 수직 바 (창문 분할)
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(x + s * 0.5 - 2, winTop, 4, winH);
+  ctx.fillRect(x + s * 0.25 - 1.5, winTop, 3, winH);
+  ctx.fillRect(x + s * 0.75 - 1.5, winTop, 3, winH);
   ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(x + s * 0.5 - 20, showY, 40, showH);
+  ctx.fillRect(x, winTop + winH * 0.5 - 1.5, s, 3);
+
+  // 상단 스팬드럴 및 하단 창대석 마감
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(x, winTop + winH + 3, s, 4);
+}
+
+function drawCommercialGround(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
+  // 1) 1층 화강석 베이스
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(x, y, s, s);
+
+  // 2) 1층 상가 간판 컬러 띠장 (상단 32% 높이)
+  const signH = Math.round(s * 0.32);
+  const signY = y + 12;
+
+  // 간판 외곽 블랙 프레임 & 캐노피
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(x + 4, signY - 2, s - 8, signH + 4);
+
+  // 상가 간판 컬러 (오렌지/에메랄드/블루 그라데이션)
+  const signGrad = ctx.createLinearGradient(x, signY, x + s, signY);
+  signGrad.addColorStop(0, '#059669'); // 약국/베이커리 녹색
+  signGrad.addColorStop(0.5, '#ea580c'); // 카페/식당 주황색
+  signGrad.addColorStop(1, '#2563eb'); // 편의점/은행 파란색
+  ctx.fillStyle = signGrad;
+  ctx.fillRect(x + 8, signY + 2, s - 16, signH - 4);
+
+  // 간판 텍스트 실루엣 및 로고 마킹
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('STORE • MART', x + s * 0.5, signY + signH * 0.5);
+
+  // 3) 1층 상가 쇼윈도 통유리 및 자동 출입문 (하단 60% 높이)
+  const shopY = signY + signH + 8;
+  const shopH = s - (signY + signH + 16);
+
+  // 통유리 프레임
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(x + 6, shopY - 2, s - 12, shopH + 4);
+
+  // 쇼윈도 글래스 반사
+  const shopGrad = ctx.createLinearGradient(x, shopY, x, shopY + shopH);
+  shopGrad.addColorStop(0, '#7dd3fc');
+  shopGrad.addColorStop(0.3, '#1e293b');
+  shopGrad.addColorStop(1, '#020617');
+  ctx.fillStyle = shopGrad;
+  ctx.fillRect(x + 8, shopY, s - 16, shopH);
+
+  // 중앙 자동문 프레임
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(x + s * 0.5 - 24, shopY, 48, shopH);
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillRect(x + s * 0.5 - 20, shopY + 6, 40, shopH - 12);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(x + s * 0.5 - 2, shopY + 6, 4, shopH - 12);
+}
+
+function drawFoundationStone(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
+  // 지하 및 기단부 매립용 다크 그레이 화강석 기초
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(x, y, s, s);
+
+  // 석재 조적 블록
+  const bW = 64;
+  const bH = 32;
+  let row = 0;
+  for (let py = y; py < y + s; py += bH) {
+    const shift = (row % 2) * (bW * 0.5);
+    for (let px = x - bW + shift; px < x + s; px += bW) {
+      ctx.fillStyle = (row + px) % 2 === 0 ? '#475569' : '#334155';
+      ctx.fillRect(px + 1, py + 1, bW - 2, bH - 2);
+    }
+    row++;
+  }
 }
 
 function drawCurtainwallHigh(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
@@ -334,35 +375,27 @@ function drawCurtainwallHigh(ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.fillStyle = bgGrad;
   ctx.fillRect(x, y, s, s);
 
-  // 2) 층간 스팬드럴 패널 수평 밴드
-  const bandH = 64;
-  for (let py = y; py < y + s; py += bandH) {
-    ctx.fillStyle = 'rgba(2, 132, 199, 0.5)';
-    ctx.fillRect(x, py + bandH - 12, s, 12);
-  }
+  // 2) 층간 스팬드럴 패널 수평 밴드 (상단 16%)
+  const bandH = Math.round(s * 0.16);
+  ctx.fillStyle = 'rgba(2, 132, 199, 0.6)';
+  ctx.fillRect(x, y, s, bandH);
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillRect(x, y + bandH - 3, s, 3);
 
   // 3) 알루미늄 커튼월 수직 멀리언 & 수평 트랜섬 그리드
-  ctx.fillStyle = '#94a3b8';
-  for (let px = x; px < x + s; px += 32) {
-    ctx.fillRect(px, y, 1.5, s);
-  }
-  for (let py = y; py < y + s; py += 32) {
-    ctx.fillRect(x, py, s, 1.5);
-  }
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(x + s * 0.5 - 1.5, y, 3, s);
+  ctx.fillRect(x + s * 0.25 - 1.5, y, 3, s);
+  ctx.fillRect(x + s * 0.75 - 1.5, y, 3, s);
+  ctx.fillRect(x, y + s * 0.55 - 1.5, s, 3);
 
-  // 주요 기둥 강조선
-  ctx.fillStyle = '#e2e8f0';
-  for (let px = x; px < x + s; px += 128) {
-    ctx.fillRect(px - 1, y, 3, s);
-  }
-
-  // 4) 대각선 하늘 반사 광택 (Sky Reflection Glare)
+  // 4) 대각선 daylight 하늘 반사 광택 (Sky Reflection Glare)
   ctx.save();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
   ctx.beginPath();
   ctx.moveTo(x + s * 0.2, y);
-  ctx.lineTo(x + s * 0.55, y);
-  ctx.lineTo(x + s * 0.35, y + s);
+  ctx.lineTo(x + s * 0.6, y);
+  ctx.lineTo(x + s * 0.4, y + s);
   ctx.lineTo(x, y + s);
   ctx.closePath();
   ctx.fill();
@@ -370,74 +403,65 @@ function drawCurtainwallHigh(ctx: CanvasRenderingContext2D, x: number, y: number
 }
 
 function drawVillaResidential(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 한국 빌라 특유의 붉은 적벽돌 조적 (#7c2d12, #991b1b)
+  // 1) 한국 빌라/단독주택 특유의 붉은 적벽돌 조적 (#7c2d12, #991b1b)
   ctx.fillStyle = '#7c2d12';
   ctx.fillRect(x, y, s, s);
 
-  // 벽돌 패턴 (개별 벽돌 음영)
-  const bW = 28;
-  const bH = 12;
-  ctx.fillStyle = '#991b1b';
+  // 벽돌 패턴
+  const bW = 32;
+  const bH = 14;
   let row = 0;
   for (let py = y; py < y + s; py += bH + 2) {
     const shift = (row % 2) * (bW * 0.5);
     for (let px = x - bW + shift; px < x + s; px += bW + 2) {
+      ctx.fillStyle = '#991b1b';
       ctx.fillRect(px, py, bW, bH);
     }
     row++;
   }
 
-  // 줄눈 모르타르
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.35)';
+  // 줄눈 모르타르 (#e2e8f0)
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.4)';
   for (let py = y; py < y + s; py += bH + 2) {
     ctx.fillRect(x, py + bH, s, 2);
   }
 
-  // 2) 1층 및 코너 화강석 마감 (#f1f5f9)
-  const cornerW = 32;
+  // 2) 좌우 모서리 화강석 마감 (#f1f5f9)
+  const cornerW = 28;
   ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(x, y, cornerW, s);
   ctx.fillRect(x + s - cornerW, y, cornerW, s);
   ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(x + cornerW, y, 2, s);
-  ctx.fillRect(x + s - cornerW - 2, y, 2, s);
+  ctx.fillRect(x + cornerW - 2, y, 2, s);
+  ctx.fillRect(x + s - cornerW, y, 2, s);
 
-  // 1층 하단 대리석 기단
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(x, y + s - 60, s, 60);
-  ctx.fillStyle = '#64748b';
-  ctx.fillRect(x, y + s - 60, s, 4);
+  // 3) 1개 층(3.0m) 직사각형 이중 창문 (화이트 PVC 프레임)
+  const winW = s - (cornerW + 36) * 2;
+  const winX = x + cornerW + 36;
+  const winY = y + s * 0.22;
+  const winH = s * 0.54;
 
-  // 3) 직사각형 창문 6개 (화이트 PVC 프레임)
-  const cols = 2;
-  const rows = 3;
-  const winW = 64;
-  const winH = 72;
-  const startX = x + cornerW + 36;
-  const gapX = (s - (cornerW * 2 + 72 + winW * cols)) / (cols - 1 || 1);
+  // 화이트 PVC 외곽 프레임
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(winX - 6, winY - 6, winW + 12, winH + 12);
+  // 창틀 하단 화강석 창대석
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(winX - 10, winY + winH + 6, winW + 20, 8);
 
-  for (let r = 0; r < rows; r++) {
-    const wy = y + 24 + r * (winH + 48);
-    for (let c = 0; c < cols; c++) {
-      const wx = startX + c * (winW + gapX);
+  // 다크 글래스 & 하늘 반사
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(winX, winY, winW, winH);
+  const vGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+  vGrad.addColorStop(0, '#7dd3fc');
+  vGrad.addColorStop(0.4, '#0284c7');
+  vGrad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = vGrad;
+  ctx.fillRect(winX + 2, winY + 2, winW - 4, winH - 4);
 
-      // 화이트 PVC 프레임
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(wx - 4, wy - 4, winW + 8, winH + 8);
-      // 창틀 하단 화강석 창대석
-      ctx.fillStyle = '#cbd5e1';
-      ctx.fillRect(wx - 6, wy + winH + 4, winW + 12, 6);
-
-      // 다크 글래스
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(wx, wy, winW, winH);
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillRect(wx + 2, wy + 2, winW - 4, winH * 0.45);
-      // 창살
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(wx + winW * 0.5 - 1.5, wy, 3, winH);
-    }
-  }
+  // 화이트 PVC 십자 섀시 창살
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(winX + winW * 0.5 - 2, winY, 4, winH);
+  ctx.fillRect(winX, winY + winH * 0.45 - 2, winW, 4);
 }
 
 function drawPublicFacility(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
@@ -690,9 +714,9 @@ export function generateKoreanCityAtlasCanvas(): HTMLCanvasElement | null {
   drawPenthouseWall(ctx, 2 * s, 2 * s, s);
   drawParapetConcrete(ctx, 3 * s, 2 * s, s);
 
-  // Row 3: 예비 확장 슬롯 (변형 패턴 복제)
-  drawApartmentFront(ctx, 0 * s, 3 * s, s);
-  drawRoofGreenUrethane(ctx, 1 * s, 3 * s, s);
+  // Row 3: 상가 1층 간판/쇼윈도 + 기초 화강석 석재 + 보조 슬롯
+  drawCommercialGround(ctx, 0 * s, 3 * s, s);
+  drawFoundationStone(ctx, 1 * s, 3 * s, s);
   drawCommercialMid(ctx, 2 * s, 3 * s, s);
   drawCurtainwallHigh(ctx, 3 * s, 3 * s, s);
 
@@ -736,8 +760,8 @@ export function getKoreanCityAtlasMaterial(): THREE.MeshStandardMaterial | null 
 
   cachedMasterMaterial = new THREE.MeshStandardMaterial({
     map: tex,
-    roughness: 0.65,
-    metalness: 0.15,
+    roughness: 0.50,
+    metalness: 0.10,
     side: THREE.DoubleSide,
   });
 
@@ -763,7 +787,7 @@ export function disposeKoreanCityAtlas(): void {
 // =============================================================================
 
 export interface BuildingClassification {
-  category: 'apartment' | 'curtainwall' | 'commercial' | 'villa' | 'public';
+  category: 'apartment' | 'curtainwall' | 'commercial' | 'villa' | 'public' | 'military';
   wallFrontSlot: AtlasSlot;
   wallSideSlot: AtlasSlot;
   roofSlot: AtlasSlot;
@@ -822,35 +846,52 @@ export function classifyBuilding(
 
   const rnd = pseudoRandom(cx, cy);
 
-  // 1) [규칙 1]: 높이 30m 이상 & 긴 직사각형 폴리곤 -> '한국형 대단지 아파트'
-  // (또는 이름에 '아파트' 포함되거나 주거용 15m 이상)
+  // 1) [규칙 1]: 아파트 (높이 30m 이상 또는 아파트 명칭/용도)
+  // 외벽: 밝은 크림/아이보리색(#f8fafc) + 세대별 베란다 유리창 격자 + 측벽 동 번호 라인
+  // 옥상: 회색 콘크리트 옥상 및 엘리베이터 옥탑방 돌출
   const isAptByName = name.includes('아파트') || usageType.includes('apartment');
   if (
-    (totalH >= 30.0 && aspectRatio >= 1.5) ||
+    (totalH >= 30.0 && aspectRatio >= 1.35) ||
     (isAptByName && totalH >= 15.0) ||
     (usageType.includes('residential') && totalH >= 24.0)
   ) {
-    const isGreenRoof = rnd < 0.75;
     return {
       category: 'apartment',
       wallFrontSlot: 'apartment_front',
       wallSideSlot: 'apartment_side',
-      roofSlot: isGreenRoof ? 'roof_green_urethane' : 'roof_concrete_cool',
+      roofSlot: 'roof_concrete_cool', // 회색 콘크리트 옥상 슬래브
       hasParapet: true,
       parapetHeight: 1.0,
+      hasPenthouse: true, // 엘리베이터 옥탑방 돌출
+      isPitchedRoof: false,
+    };
+  }
+
+  // 2) [규칙 2]: 중·저층 상가 및 일반 빌딩 (높이 10m~28m)
+  // 외벽: 밝은 화강석/타일 외벽 + 가로형 창문 프레임 + 1층 상가 간판
+  // 옥상: 한국 특유의 초록색 우레탄 방수 옥상(#15803d) + 1.0m 옥상 테두리 난간(Parapet)
+  if (totalH >= 10.0 && totalH < 28.0) {
+    const isPublic = usageType.includes('public') || name.includes('청사') || name.includes('센터');
+    return {
+      category: isPublic ? 'public' : 'commercial',
+      wallFrontSlot: isPublic ? 'public_facility' : 'commercial_mid',
+      wallSideSlot: isPublic ? 'public_facility' : 'commercial_mid',
+      roofSlot: 'roof_green_urethane', // 한국 특유의 초록색 우레탄 방수 옥상 100%
+      hasParapet: true,
+      parapetHeight: 1.0, // 1.0m 옥상 테두리 난간
       hasPenthouse: true,
       isPitchedRoof: false,
     };
   }
 
-  // 2) [규칙 2]: 높이 25m 이상 & 넓은 면적 -> '유리 커튼월 오피스 타워' 또는 '화이트 석재 빌딩'
-  if (totalH >= 25.0) {
+  // 3) [규칙 3]: 초고층 타워 (높이 28m 이상 일반/업무 타워)
+  if (totalH >= 28.0) {
     const isCurtain = totalH >= 40.0 || rnd < 0.6 || name.includes('타워') || usageType.includes('office');
     return {
       category: isCurtain ? 'curtainwall' : 'commercial',
       wallFrontSlot: isCurtain ? 'curtainwall_high' : 'commercial_mid',
       wallSideSlot: isCurtain ? 'curtainwall_high' : 'commercial_mid',
-      roofSlot: 'roof_concrete_cool', // 고층 빌딩 콘크리트 설비 옥상
+      roofSlot: 'roof_concrete_cool',
       hasParapet: true,
       parapetHeight: 1.0,
       hasPenthouse: true,
@@ -858,41 +899,27 @@ export function classifyBuilding(
     };
   }
 
-  // 3) [규칙 3]: 높이 10m~24m 중층 건물 -> '중층 상가 빌딩'
-  // 70% 확률로 초록색 우레탄 방수 옥상, 30% 확률로 회색/청색 지붕 적용
-  if (totalH >= 10.0 && totalH < 25.0) {
-    const isPublic = usageType.includes('public') || name.includes('청사') || name.includes('센터');
-    let roofSlot: AtlasSlot = 'roof_green_urethane'; // 70% 초록 우레탄
-    if (rnd >= 0.70 && rnd < 0.90) {
-      roofSlot = 'roof_concrete_cool'; // 20% 회색 콘크리트
-    } else if (rnd >= 0.90) {
-      roofSlot = 'roof_blue_zinc'; // 10% 청색 징크
-    }
+  // 4) [규칙 4]: 저층 주택 및 군부대 시설 (높이 10m 미만)
+  // 외벽: 베이지/적벽돌 외벽 + 초록색 방수 지붕 또는 적갈색/청색 박공 경사 지붕
+  const isMilitary =
+    usageType.includes('military') ||
+    usageType.includes('barracks') ||
+    name.includes('부대') ||
+    name.includes('군') ||
+    name.includes('대대') ||
+    name.includes('사령부') ||
+    name.includes('막사');
 
-    return {
-      category: isPublic ? 'public' : 'commercial',
-      wallFrontSlot: isPublic ? 'public_facility' : 'commercial_mid',
-      wallSideSlot: isPublic ? 'public_facility' : 'commercial_mid',
-      roofSlot,
-      hasParapet: true,
-      parapetHeight: 1.0,
-      hasPenthouse: true,
-      isPitchedRoof: false,
-    };
-  }
-
-  // 4) [규칙 4]: 높이 10m 미만 저층 건물 -> '적벽돌/화강석 빌라'
-  // 초록 우레탄 옥상(65%) 또는 경사 지붕(35%)
-  const isPitched = rnd >= 0.65 || usageType.includes('house');
-  let roofSlot: AtlasSlot = 'roof_green_urethane';
+  const isPitched = !isMilitary && (rnd >= 0.55 || usageType.includes('house'));
+  let roofSlot: AtlasSlot = 'roof_green_urethane'; // 기본 초록색 방수 지붕
   if (isPitched) {
-    roofSlot = rnd < 0.82 ? 'roof_brown_shingle' : 'roof_blue_zinc';
+    roofSlot = rnd < 0.75 ? 'roof_brown_shingle' : 'roof_blue_zinc'; // 적갈색 슁글 또는 청색 징크
   }
 
   return {
-    category: 'villa',
-    wallFrontSlot: 'villa_residential',
-    wallSideSlot: 'villa_residential',
+    category: isMilitary ? 'military' : 'villa',
+    wallFrontSlot: isMilitary ? 'public_facility' : 'villa_residential',
+    wallSideSlot: isMilitary ? 'public_facility' : 'villa_residential',
     roofSlot,
     hasParapet: !isPitched,
     parapetHeight: 1.0,

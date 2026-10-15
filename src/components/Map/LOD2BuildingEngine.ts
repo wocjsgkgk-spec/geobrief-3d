@@ -379,7 +379,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.directionalLight) {
       this.directionalLight.position.set(vector[0], vector[1], vector[2]).normalize();
       this.directionalLight.color.set(color);
-      this.directionalLight.intensity = Math.max(1.0, intensity * 1.15);
+      this.directionalLight.intensity = Math.max(1.25, intensity * 1.25);
+    }
+    if (this.hemisphereLight) {
+      this.hemisphereLight.intensity = 0.90;
+    }
+    if (this.ambientLight) {
+      this.ambientLight.intensity = 0.75;
+    }
+    if (this.fillLight) {
+      this.fillLight.intensity = 0.45;
     }
     if (this.materials) {
       updateFacadeShaderLights(
@@ -402,19 +411,19 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       const center = map.getCenter();
       this.originLngLat = [center.lng, center.lat];
 
-      // 1. [검은색 벽면 방지 3점 조명 시스템]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.2);
+      // 1. [화사한 주간 태양광 3점 조명 시스템 - 검은색 벽면 방지 & 아이보리 톤 극대화]
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.25);
       this.directionalLight.position.set(120, 180, 100).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.85);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 0.90);
       this.scene.add(this.hemisphereLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
       this.scene.add(this.ambientLight);
 
-      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
+      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
       this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
 
@@ -591,10 +600,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const rangeX = Math.max(0.1, maxX - minX);
         const rangeY = Math.max(0.1, maxY - minY);
 
-        // 1. [외벽 (Wall) 지오메트리 & 아틀라스 UV 매핑]
+        // 1. [외벽 (Wall) 지오메트리 & 아틀라스 정밀 UV 매핑]
         const N = pts.length;
         const wallBaseY = relElev - 2.5; // 경사지 및 기단부 밀착용 2.5m 지하 매립 기초
-        const totalWallH = wallTop - wallBaseY;
+        const aboveGroundH = Math.max(2.8, wallTop - relElev); // 지상 실측 높이
+
+        // 정밀 UV 규격: 1개 층(높이 3.0m) x 창문 1칸(폭 2.8m)
+        const BAY_WIDTH = 2.8;
+        const STORY_HEIGHT = 3.0;
 
         for (let i = 0; i < N; i++) {
           const p0 = pts[i];
@@ -607,6 +620,25 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const nx = -dz / segLen;
           const nz = dx / segLen;
 
+          // (0) 지하/기단부 매립 기초 (wallBaseY ~ relElev: 2.5m 다크 화강석 기초)
+          const fndUV = getAtlasSlotUV('foundation_stone');
+          addQuad(
+            masterPositions, masterNormals, masterUvs,
+            { x: p0.x, y: wallBaseY, z: p0.y },
+            { x: p1.x, y: wallBaseY, z: p1.y },
+            { x: p1.x, y: relElev, z: p1.y },
+            { x: p0.x, y: relElev, z: p0.y },
+            nx, 0, nz,
+            { u: fndUV.u0, v: fndUV.v0 },
+            { u: fndUV.u1, v: fndUV.v0 },
+            { u: fndUV.u1, v: fndUV.v1 },
+            { u: fndUV.u0, v: fndUV.v1 }
+          );
+
+          // (1) 지상 벽체: 1개 층(3.0m) x 창문 1칸(2.8m) 정밀 UV 타일링
+          const nBays = Math.max(1, Math.round(segLen / BAY_WIDTH));
+          const nStories = Math.max(1, Math.round(aboveGroundH / STORY_HEIGHT));
+
           if (cls.category === 'apartment') {
             // 아파트 측벽 판별: OBB 단축(dirV)과의 방향 일치율 > 0.65
             const isNarrowSide = Math.abs(dx * obb.dirV.x + dz * obb.dirV.y) / segLen > 0.65;
@@ -616,8 +648,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               const sideUV = getAtlasSlotUV('apartment_side');
               addQuad(
                 masterPositions, masterNormals, masterUvs,
-                { x: p0.x, y: wallBaseY, z: p0.y },
-                { x: p1.x, y: wallBaseY, z: p1.y },
+                { x: p0.x, y: relElev, z: p0.y },
+                { x: p1.x, y: relElev, z: p1.y },
                 { x: p1.x, y: wallTop, z: p1.y },
                 { x: p0.x, y: wallTop, z: p0.y },
                 nx, 0, nz,
@@ -627,10 +659,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 { u: sideUV.u0, v: sideUV.v1 }
               );
             } else {
-              // (2) 한국형 아파트 전/후면: 세대별 베란다 창문 격자 및 실외기 루버 (가로 6m x 2개층 6m 타일링)
+              // (2) 한국형 아파트 전/후면: 세대별 베란다 창문 격자 및 실외기 루버 (정확히 1개 층 3.0m x 창문 1칸 2.8m)
               const frontUV = getAtlasSlotUV('apartment_front');
-              const nBays = Math.max(1, Math.round(segLen / 6.0));
-              const nStories = Math.max(1, Math.round(totalWallH / 6.0));
 
               for (let b = 0; b < nBays; b++) {
                 const t0 = b / nBays;
@@ -641,8 +671,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 const bz1 = p0.y + dz * t1;
 
                 for (let s = 0; s < nStories; s++) {
-                  const y0 = wallBaseY + (totalWallH * s) / nStories;
-                  const y1 = wallBaseY + (totalWallH * (s + 1)) / nStories;
+                  const y0 = relElev + (aboveGroundH * s) / nStories;
+                  const y1 = relElev + (aboveGroundH * (s + 1)) / nStories;
 
                   addQuad(
                     masterPositions, masterNormals, masterUvs,
@@ -661,12 +691,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             }
           } else {
             // (3) 상업/오피스, 커튼월 타워, 다세대 빌라, 공공청사
-            const wallUV = getAtlasSlotUV(cls.wallFrontSlot);
-            const modW = cls.category === 'villa' ? 4.5 : 6.0;
-            const modH = cls.category === 'villa' ? 3.0 : 6.0;
-            const nBays = Math.max(1, Math.round(segLen / modW));
-            const nStories = Math.max(1, Math.round(totalWallH / modH));
-
             for (let b = 0; b < nBays; b++) {
               const t0 = b / nBays;
               const t1 = (b + 1) / nBays;
@@ -676,8 +700,15 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               const bz1 = p0.y + dz * t1;
 
               for (let s = 0; s < nStories; s++) {
-                const y0 = wallBaseY + (totalWallH * s) / nStories;
-                const y1 = wallBaseY + (totalWallH * (s + 1)) / nStories;
+                const y0 = relElev + (aboveGroundH * s) / nStories;
+                const y1 = relElev + (aboveGroundH * (s + 1)) / nStories;
+
+                // 상업 빌딩 1층(s === 0)은 다채로운 상가 간판 및 쇼윈도 슬롯 적용
+                let slot = cls.wallFrontSlot;
+                if (cls.category === 'commercial' && s === 0) {
+                  slot = 'commercial_ground';
+                }
+                const wallUV = getAtlasSlotUV(slot);
 
                 addQuad(
                   masterPositions, masterNormals, masterUvs,
@@ -1046,7 +1077,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         this.masterCityMesh = new THREE.Mesh(masterGeo, this.masterAtlasMaterial);
         this.masterCityMesh.castShadow = true;
         this.masterCityMesh.receiveShadow = true;
-        this.masterCityMesh.frustumCulled = true;
+        this.masterCityMesh.frustumCulled = false;
         this.scene.add(this.masterCityMesh);
         console.log('[LOD2BuildingEngine] masterCityMesh successfully created and added to scene! Vertices =', masterPositions.length / 3);
       } else {
@@ -1073,7 +1104,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (merged) {
         merged.computeBoundingSphere();
         this.helipadBaseMesh = new THREE.Mesh(merged, this.materials.helipadGreenBaseMaterial);
-        this.helipadBaseMesh.frustumCulled = true;
+        this.helipadBaseMesh.frustumCulled = false;
         this.scene.add(this.helipadBaseMesh);
       }
     }
@@ -1082,7 +1113,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (merged) {
         merged.computeBoundingSphere();
         this.helipadRingMesh = new THREE.Mesh(merged, this.materials.helipadYellowRingMaterial);
-        this.helipadRingMesh.frustumCulled = true;
+        this.helipadRingMesh.frustumCulled = false;
         this.scene.add(this.helipadRingMesh);
       }
     }
@@ -1091,7 +1122,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (merged) {
         merged.computeBoundingSphere();
         this.helipadMarkMesh = new THREE.Mesh(merged, this.materials.helipadWhiteMarkMaterial);
-        this.helipadMarkMesh.frustumCulled = true;
+        this.helipadMarkMesh.frustumCulled = false;
         this.scene.add(this.helipadMarkMesh);
       }
     }
@@ -1108,7 +1139,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
       this.waterTankInstancedMesh.instanceMatrix.needsUpdate = true;
       this.waterTankInstancedMesh.computeBoundingSphere();
-      this.waterTankInstancedMesh.frustumCulled = true;
+      this.waterTankInstancedMesh.frustumCulled = false;
       this.scene.add(this.waterTankInstancedMesh);
     }
 
@@ -1124,7 +1155,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
       this.ventInstancedMesh.instanceMatrix.needsUpdate = true;
       this.ventInstancedMesh.computeBoundingSphere();
-      this.ventInstancedMesh.frustumCulled = true;
+      this.ventInstancedMesh.frustumCulled = false;
       this.scene.add(this.ventInstancedMesh);
     }
 
@@ -1140,7 +1171,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
       this.solarPanelInstancedMesh.instanceMatrix.needsUpdate = true;
       this.solarPanelInstancedMesh.computeBoundingSphere();
-      this.solarPanelInstancedMesh.frustumCulled = true;
+      this.solarPanelInstancedMesh.frustumCulled = false;
       this.scene.add(this.solarPanelInstancedMesh);
     }
 
@@ -1213,6 +1244,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         .multiply(rotationX);
 
       this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();

@@ -594,7 +594,7 @@ export async function GET(request: NextRequest) {
 
       return {
         type: 'Feature',
-        id: props.bd_mgt_sn || props.buld_se_cd || `fusion-bld-${idx}`,
+        id: `fusion-bld-${idx}-${props.bd_mgt_sn || idx}`,
         properties: {
           ...props,
           // [실측 GIS건물통합정보 및 융합 표준 속성]

@@ -684,21 +684,24 @@ export const MapViewer: React.FC = () => {
       0.15,
     ];
 
-    // [한국 도시 특화 옥상 컬러: 초록 우레탄 방수 옥상, 청색 징크 강판, 차콜 슬래브]
+    // [한국 도시 특화 옥상 컬러: 아파트 콘크리트 #475569, 상가 초록 우레탄 #15803d, 산업 시설 청색 #1e40af]
     const buildingRoofColorExpr: any = [
       'coalesce',
       ['get', 'roofColour'],
       ['get', 'roof_color'],
       [
-        'match',
-        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
-        ['apartment', 'apartments', 'residential', 'house', 'villa', 'detached'],
-        '#15803d', // 한국 특유의 초록색 우레탄 방수 옥상
-        ['commercial', 'commercial_tower', 'office', 'retail', 'bank'],
-        '#334155', // 상업 빌딩 차콜 슬래브
-        ['industrial', 'warehouse'],
-        '#1e40af', // 산업 시설 청색 강판 지붕
-        '#15803d', // 기본 초록 우레탄
+        'case',
+        ['>=', buildingHeightExpr, 30],
+        '#475569', // 대형 아파트 및 고층 타워: 쿨루프 회색 콘크리트 슬래브
+        [
+          'match',
+          ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+          ['apartment', 'apartments'],
+          '#475569',
+          ['industrial', 'warehouse'],
+          '#1e40af', // 산업 시설 청색 강판 지붕
+          '#15803d', // 중저층 상가 및 일반 빌딩: 한국 특유의 초록색 우레탄 방수 옥상
+        ],
       ],
     ];
 
@@ -750,11 +753,11 @@ export const MapViewer: React.FC = () => {
         'atmosphere-blend': 0.8,
       },
       light: {
-          anchor: 'viewport',
-          color: '#ffffff',
-          intensity: 0.85,
-          position: [1.3, 115, 40],
-        },
+        anchor: 'viewport',
+        color: '#ffffff',
+        intensity: 0.90,
+        position: [1.3, 115, 40],
+      },
         sources: {
           'satellite-tiles': {
             type: 'raster',
@@ -3076,12 +3079,11 @@ export const MapViewer: React.FC = () => {
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
       }
-      // [2단계: 전역 실제 건물 폴리곤 100% 표출]
-      // OpenFreeMap 오픈 벡터 타일 및 V-World 건물 레이어가 화면 전체(원주 우산동·학성동·단계동·태장동·무실동 등)의
-      // 모든 실제 바닥 다각형을 100% 3D로 표출하도록 레이어 가시성을 항상 유지합니다.
+      // [실감 파사드 모드] LOD2 Three.js 실감 파사드 렌더러와 MapLibre 단색 박스의 Z-Fighting/가림 방지:
+      // 네이티브 단색 박스 레이어를 숨겨 Three.js 실사 아틀라스 파사드와 옥상이 선명하게 돋보이도록 설정
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
-          map.setLayoutProperty(lyr, 'visibility', bldgVis);
+          map.setLayoutProperty(lyr, 'visibility', 'none');
         }
       }
     } else if (renderMode3D === 'tiles3d') {

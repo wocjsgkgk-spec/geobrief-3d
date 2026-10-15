@@ -97,9 +97,12 @@ export class BuildingSpatialCache {
    */
   private getFeatureId(f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, idx: number): string {
     const props = (f.properties || {}) as Record<string, any>;
-    if (props.bd_mgt_sn) return String(props.bd_mgt_sn);
-    if (props.buld_se_cd) return String(props.buld_se_cd);
-    if (f.id !== undefined && f.id !== null) return String(f.id);
+    if (props.bd_mgt_sn) return `bld_${props.bd_mgt_sn}`;
+    if (props.buld_se_cd) return `bld_${props.buld_se_cd}`;
+    if (f.id !== undefined && f.id !== null) {
+      const s = String(f.id);
+      return s.startsWith('bld_') ? s : `bld_${s}`;
+    }
 
     try {
       const geom = f.geometry;

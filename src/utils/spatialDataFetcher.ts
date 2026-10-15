@@ -369,7 +369,16 @@ export async function fetchHybridSpatialBuildings(
     combinedMap.set(key, f as any);
   }
 
-  const mergedFeatures = Array.from(combinedMap.values());
+  const mergedFeatures = Array.from(combinedMap.values()).map((f, idx) => {
+    let safeId = f.id !== undefined && f.id !== null ? String(f.id) : `bld_${idx}`;
+    if (!safeId.startsWith('bld_') && !safeId.startsWith('fusion-') && !safeId.startsWith('vworld-')) {
+      safeId = `bld_${safeId}`;
+    }
+    return {
+      ...f,
+      id: safeId,
+    };
+  });
   const totalCount = Math.max(mergedFeatures.length, ofmCount, vworldCount);
 
   return {
