@@ -25,6 +25,7 @@ import { LOD2BuildingEngine } from './LOD2BuildingEngine';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
+import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { generateContourLines } from '@/utils/contourGenerator';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
 import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
@@ -616,28 +617,38 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // [2단계: 건물 실제 층수(Floor Count) 및 높이 속성 바인딩 - 층당 3.2m 정규화 동적 계산식 (MapLibre 표준 규격)]
+    // [2단계: 건물 실제 층수(Floor Count) 및 높이 속성 바인딩 - 국토교통부 GIS건물통합정보 grnd_flr * 3.2m 및 hei 반영]
     const buildingHeightExpr: any = [
       'coalesce',
       ['get', 'adaptive_height'],
+      ['get', 'hei'],
+      ['get', 'HEI'],
       ['get', 'render_height'],
       ['get', 'height'],
       ['get', 'bld_hgt'],
       ['get', 'BD_HGT'],
       [
         'case',
-        ['has', 'building:levels'],
-        ['*', ['to-number', ['get', 'building:levels'], 1], 3.2],
-        ['has', 'GRND_FLR_CNT'],
-        ['*', ['to-number', ['get', 'GRND_FLR_CNT'], 1], 3.2],
+        ['has', 'grnd_flr'],
+        ['*', ['to-number', ['get', 'grnd_flr'], 1], 3.2],
+        ['has', 'GRND_FLR'],
+        ['*', ['to-number', ['get', 'GRND_FLR'], 1], 3.2],
         ['has', 'gro_flo_co'],
         ['*', ['to-number', ['get', 'gro_flo_co'], 1], 3.2],
+        ['has', 'GRO_FLO_CO'],
+        ['*', ['to-number', ['get', 'GRO_FLO_CO'], 1], 3.2],
+        ['has', 'grnd_flr_cnt'],
+        ['*', ['to-number', ['get', 'grnd_flr_cnt'], 1], 3.2],
+        ['has', 'GRND_FLR_CNT'],
+        ['*', ['to-number', ['get', 'GRND_FLR_CNT'], 1], 3.2],
+        ['has', 'building:levels'],
+        ['*', ['to-number', ['get', 'building:levels'], 1], 3.2],
+        ['has', 'levels'],
+        ['*', ['to-number', ['get', 'levels'], 1], 3.2],
         ['has', 'flr_cnt'],
         ['*', ['to-number', ['get', 'flr_cnt'], 1], 3.2],
         ['has', 'FLR_CNT'],
         ['*', ['to-number', ['get', 'FLR_CNT'], 1], 3.2],
-        ['has', 'levels'],
-        ['*', ['to-number', ['get', 'levels'], 1], 3.2],
         ['has', 'floor'],
         ['*', ['to-number', ['get', 'floor'], 1], 3.2],
         ['has', 'floors'],
@@ -646,13 +657,13 @@ export const MapViewer: React.FC = () => {
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          60.0, // 판상형/타워형 아파트 단지: 15~25층 (45m~75m)
+          60.0, // 판상형/타워형 아파트 단지: 15~25층 (48m~80m)
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          22.0, // 대로변 상업/업무 빌딩: 4~8층 (15m~28m)
+          16.0, // 상가: 3~5층 (9.6m~16m)
           ['residential', 'house', 'detached', 'villa'],
-          7.5, // 일반 주택: 1~3층 (4m~10m)
+          6.4, // 단독/연립 주택: 1~2층 (3.2m~6.4m)
           ['military', 'public', 'government', 'public_military', 'barracks'],
-          8.0, // 막사 및 공공: 1~3층 (4m~10m)
+          4.8, // 단층 막사 및 공공: 1~2층 (3.2m~6.4m)
           8.0, // 기본
         ],
       ],
@@ -3296,6 +3307,41 @@ export const MapViewer: React.FC = () => {
           return;
         }
 
+        // [2단계 최적화: 메모리 공간 격자 캐시 선확인 - 회전/피치 조작/3D 지형 토글 시 0ms 즉각 바인딩]
+        if (buildingSpatialCache.isAreaLoaded(bbox)) {
+          const cachedCollection = buildingSpatialCache.getFeatureCollection(bbox);
+          if (cachedCollection.features.length > 0) {
+            const queryElev = (coord: [number, number]) => {
+              return elevationCache.getFromMap(map, coord);
+            };
+            const finalFeatures = applyAdaptiveFoundationToFeatures(cachedCollection, queryElev);
+
+            try {
+              const fusionSource = map.getSource('fusion-buildings') as maplibregl.GeoJSONSource;
+              if (fusionSource && typeof fusionSource.setData === 'function') {
+                fusionSource.setData(finalFeatures);
+              }
+              const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
+              if (vworldSource && typeof vworldSource.setData === 'function') {
+                vworldSource.setData(finalFeatures);
+              }
+              if (lod2BuildingEngineRef.current) {
+                const extra = (finalFeatures.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+                lod2BuildingEngineRef.current.updateBuildings(extra);
+              }
+              if (threeboxLayerRef.current) {
+                const extra = (finalFeatures.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+                threeboxLayerRef.current.syncRoofs(extra);
+              }
+            } catch (cacheErr) {
+              console.warn('[MapViewer] Failed to update from buildingSpatialCache:', cacheErr);
+            }
+            lastFetchedBbox = bboxKey;
+            lastFetchedCount = finalFeatures.features.length;
+            return;
+          }
+        }
+
         if (currentAbortController) {
           currentAbortController.abort();
         }
@@ -3305,6 +3351,11 @@ export const MapViewer: React.FC = () => {
           signal: currentAbortController.signal,
         });
         if (isCancelled) return;
+
+        // 수신된 피처들을 공간 격자 캐시에 보관
+        if (result.features?.features) {
+          buildingSpatialCache.putFeatures(result.features.features as any, bbox);
+        }
 
         lastFetchedBbox = bboxKey;
         lastFetchedCount = result.totalCount;
@@ -3870,11 +3921,17 @@ export const MapViewer: React.FC = () => {
         props.bld_nm_dc ||
         '일반 건축물';
 
-      const rawLevels = parseInt(props.levels || props.gro_flo_co || props.grnd_flr_cnt || '3', 10);
+      const rawLevels = parseInt(
+        String(props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.levels || props.grnd_flr_cnt || '3'),
+        10
+      );
       const levels = Math.max(1, isNaN(rawLevels) ? 3 : rawLevels);
-      const height = parseFloat(props.height) || levels * 3.3;
+      const rawHei = parseFloat(props.hei || props.HEI || props.height);
+      const height = !isNaN(rawHei) && rawHei > 0 ? rawHei : Math.round(levels * 3.2 * 10) / 10;
 
       const category =
+        props.main_purps_cd_nm ||
+        props.usage_nm ||
         props.bld_category_label ||
         (props.usageType === 'residential' || props.bld_category === 'apartment'
           ? '공동주택·아파트'

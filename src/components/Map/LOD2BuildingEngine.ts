@@ -512,13 +512,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         props.usageType || props.bld_category || props.type || props.class || ''
       ).toLowerCase();
 
-      const explicitH = Number(
-        props.height ||
-        props.render_height ||
-        (props.levels ? props.levels * 3.0 : 0) ||
-        (props['building:levels'] ? Number(props['building:levels']) * 3.0 : 0) ||
-        0
+      const rawFlr = Number(
+        props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || props.levels || 0
       );
+      const rawHei = Number(
+        props.hei || props.HEI || props.height || props.render_height || props.bld_hgt || 0
+      );
+
+      const explicitH = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.2 : 0);
 
       const rings: [number, number][][] = [];
       if (feat.geometry.type === 'Polygon') {
@@ -539,30 +540,30 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const approxArea = Math.max(10, obb.lenU * obb.lenV);
         const aspectRatio = obb.lenU / Math.max(1.0, obb.lenV);
 
-        // [3단계 신규] 높이 값이 없는 저층 건물 2~4층(7m~14m) 자동 복원 및 아파트 단지 15~25층(45m~75m) 스카이라인 적용
+        // [2단계 신규] 실측 지상층수(grnd_flr) 및 건물높이(hei) 최우선 반영, 누락 시 실제 유형별 정밀 높이 산출
         let totalH = explicitH;
         const isApt = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
         const isComm = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
 
-        if (!totalH || totalH <= 0 || (totalH === 12 && !props.height && !props.levels && !props['building:levels'] && !props.gro_flo_co)) {
+        if (!totalH || totalH <= 0 || (totalH === 12 && !props.height && !props.levels && !props['building:levels'] && !props.gro_flo_co && !props.grnd_flr)) {
           if (isApt) {
-            // 판상형/타워형 아파트 단지 구역: 15층~25층 (45m~75m)
+            // 판상형/타워형 아파트 단지 구역: 15층~25층 (48m~80m)
             const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
             const aptStories = Math.round(15 + seed * 10);
-            totalH = aptStories * 3.0; // 45m ~ 75m
+            totalH = aptStories * 3.2; // 48m ~ 80m
           } else if (isComm) {
-            // 대로변 상업/업무 빌딩: 4층~8층 (15m~28m)
+            // 대로변 상업/업무 빌딩: 3층~5층 (9.6m~16m, 대형은 4~8층)
             const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
-            const commStories = Math.round(4 + seed * 4);
-            totalH = commStories * 3.5; // 14m ~ 28m
+            const commStories = Math.round(3 + seed * 3);
+            totalH = commStories * 3.2; // 9.6m ~ 19.2m
           } else {
-            // 일반 주택 및 군 막사: 1층~3층 (4m~10m)
-            if (approxArea < 120) {
-              totalH = 4.0; // 1층 (4m)
-            } else if (approxArea < 240) {
-              totalH = 7.0; // 2층 (7m)
+            // 일반 주택 및 군 막사: 1층~2층 (3.2m~6.4m)
+            if (approxArea < 150) {
+              totalH = 3.2; // 1층 (3.2m)
+            } else if (approxArea < 300) {
+              totalH = 6.4; // 2층 (6.4m)
             } else {
-              totalH = 10.0; // 3층 (10m)
+              totalH = 9.6; // 3층 (9.6m)
             }
           }
         }

@@ -341,6 +341,11 @@ async function fetchPublicDataBuildingRegistry(
   return registryMap;
 }
 
+// 서버 사이드 인메모리 융합 BBOX 공간 쿼리 캐시 (TTL 15분, 최대 300개 영역)
+const serverFusionCache = new Map<string, { timestamp: number; data: any }>();
+const SERVER_CACHE_TTL_MS = 15 * 60 * 1000;
+const MAX_SERVER_CACHE_ENTRIES = 300;
+
 /**
  * GET /api/buildings/fusion?bbox=minLng,minLat,maxLng,maxLat
  *
@@ -408,6 +413,13 @@ export async function GET(request: NextRequest) {
     maxLng = Math.round((centerLng + halfSpan) * 10000) / 10000;
     minLat = Math.round((centerLat - halfSpan) * 10000) / 10000;
     maxLat = Math.round((centerLat + halfSpan) * 10000) / 10000;
+  }
+
+  // 서버 사이드 메모리 캐시 검사 (양자화 키 적용: 회전/이동 시 0ms 응답)
+  const cacheKey = `${minLng.toFixed(3)}_${minLat.toFixed(3)}_${maxLng.toFixed(3)}_${maxLat.toFixed(3)}`;
+  const cached = serverFusionCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL_MS) {
+    return NextResponse.json(cached.data);
   }
 
   // 2. 인증키 확인
@@ -513,36 +525,52 @@ export async function GET(request: NextRequest) {
         publicData?.bdtypCd || bdtypCd
       );
 
-      // [4] 실제 층고 높낮이 다변화
-      const parsedLevels = parseInt(
-        String(publicData?.levels || props.gro_flo_co || props.grnd_flr_cnt || ''),
+      // [4] 실측 지상층수(grnd_flr / gro_flo_co) 및 건물높이(hei) 정밀 추출 및 층당 3.2m 계산
+      const parsedGrndFlr = parseInt(
+        String(props.grnd_flr || props.GRND_FLR || publicData?.levels || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || ''),
         10
       );
+      const hasGrndFlr = !isNaN(parsedGrndFlr) && parsedGrndFlr > 0;
 
-      let levels = !isNaN(parsedLevels) && parsedLevels > 0 ? parsedLevels : 0;
-      if (levels === 0) {
+      const parsedHei = parseFloat(
+        String(props.hei || props.HEI || publicData?.height || props.bld_hgt || props.height || '')
+      );
+      const hasHei = !isNaN(parsedHei) && parsedHei > 0;
+
+      let levels = 0;
+      let height = 0;
+
+      if (hasHei) {
+        height = Math.round(parsedHei * 10) / 10;
+        levels = hasGrndFlr ? parsedGrndFlr : Math.max(1, Math.round(parsedHei / 3.2));
+      } else if (hasGrndFlr) {
+        // 지상층수가 존재하면 층수 * 3.2m 적용
+        levels = parsedGrndFlr;
+        height = Math.round(parsedGrndFlr * 3.2 * 10) / 10;
+      } else {
         // 실제 도시 스카이라인 유형별 자연스러운 층고 다변화:
         if (category === 'apartment') {
-          // 아파트 단지: 15 ~ 24층 (동별 고유 해시 기반 자연스러운 스카이라인)
-          levels = 15 + ((idx * 7) % 10);
+          // 아파트 단지: 15 ~ 25층 (48 ~ 80m)
+          levels = 15 + ((idx * 7) % 11);
         } else if (usageType === 'commercial') {
-          // 상가/업무 빌딩: 5 ~ 8층 (16 ~ 25m)
-          levels = 5 + ((idx * 3) % 4);
-        } else if (usageType === 'military' || usageType === 'public') {
-          // 공공/국방 청사: 3 ~ 5층 (10 ~ 16m)
-          levels = 3 + (idx % 3);
+          // 상가/업무 빌딩: 3 ~ 5층 (9.6 ~ 16m)
+          levels = 3 + ((idx * 2) % 3);
+        } else if (usageType === 'military' || isMilitaryOrPublic) {
+          // 군 막사 및 공공청사: 1 ~ 2층 (3.2 ~ 6.4m)
+          levels = 1 + (idx % 2);
         } else if (usageType === 'residential') {
-          // 단독/연립 주택: 2 ~ 3층 (6 ~ 9m)
-          levels = 2 + (idx % 2);
+          // 단독/연립 주택: 1 ~ 2층 (3.2 ~ 6.4m)
+          levels = 1 + (idx % 2);
         } else {
-          levels = 3 + (idx % 3);
+          levels = 2 + (idx % 2);
         }
+        height = Math.round(levels * 3.2 * 10) / 10;
       }
 
-      // 실측 높이(HEI) 우선 적용 -> 없을 시 층수 * 3.2m
-      const height = publicData?.height
-        ? publicData.height
-        : Math.round(levels * 3.2 * 10) / 10;
+      // 건물용도명 추출
+      const usageName = String(
+        props.main_purps_cd_nm || props.bdtyp_cd_nm || (publicData as any)?.mainPurpsCdNm || props.usage_nm || usageType
+      ).trim();
 
       // 건축 외장재 컬러 팔레트:
       // 아파트: #F8FAFC, 상업: #BAE6FD, 주택: #FDE68A, 공공/국방: #93C5FD, 일반: #F1F5F9
@@ -566,15 +594,20 @@ export async function GET(request: NextRequest) {
 
       return {
         type: 'Feature',
-        id: props.buld_se_cd || `fusion-bld-${idx}`,
+        id: props.bd_mgt_sn || props.buld_se_cd || `fusion-bld-${idx}`,
         properties: {
           ...props,
-          // [필수 표준 융합 속성 7종]
+          // [실측 GIS건물통합정보 및 융합 표준 속성]
+          grnd_flr: levels,
+          gro_flo_co: String(levels),
+          hei: height,
           height: Math.round(height * 10) / 10,
           levels,
           roofShape,
           roofColour: osmData?.roofColour || roofColour,
           buildingName: bldName,
+          main_purps_cd_nm: usageName,
+          usage_nm: usageName,
           usageType,
           isMilitaryOrPublic,
 
@@ -595,9 +628,9 @@ export async function GET(request: NextRequest) {
     })
     .filter(Boolean);
 
-  return NextResponse.json({
+  const responsePayload = {
     success: true,
-    status: 'connected',
+    status: 'connected' as const,
     fusionSources: {
       vworld: hasVworld,
       dataGoKr: hasDataGoKr,
@@ -606,8 +639,17 @@ export async function GET(request: NextRequest) {
     featureCount: fusedFeatures.length,
     message: `융합 완료 (총 ${fusedFeatures.length}건 / 국토교통부·V-World·OSM 결합)`,
     features: {
-      type: 'FeatureCollection',
+      type: 'FeatureCollection' as const,
       features: fusedFeatures,
     },
-  });
+  };
+
+  // 서버 사이드 메모리 캐시 저장 (LRU 관리)
+  if (serverFusionCache.size >= MAX_SERVER_CACHE_ENTRIES) {
+    const oldestKey = serverFusionCache.keys().next().value;
+    if (oldestKey) serverFusionCache.delete(oldestKey);
+  }
+  serverFusionCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });
+
+  return NextResponse.json(responsePayload);
 }

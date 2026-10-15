@@ -4,6 +4,8 @@
  * 국토교통부 건물통합정보(공공데이터포털) x V-World x OpenStreetMap 융합 데이터 클라이언트 서비스
  */
 
+import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
+
 export interface FusionBuildingProperties {
   height: number;
   levels: number;
@@ -41,12 +43,27 @@ export interface FusionBuildingsFetchResult {
 /**
  * 뷰포트 BBOX 영역에 대해 /api/buildings/fusion 엔드포인트를 호출하여
  * 국토교통부 x V-World x OSM 융합 GeoJSON을 비동기 조회합니다.
+ * - [2단계 최적화] 메모리 공간 격자 캐시를 선조회하여 이미 로드된 구역은 0ms 무지연 즉시 반환
  */
 export async function fetchFusionBuildings(
   bbox: [number, number, number, number],
   options?: { signal?: AbortSignal }
 ): Promise<FusionBuildingsFetchResult> {
   const [minLng, minLat, maxLng, maxLat] = bbox;
+
+  // 1. 메모리 공간 격자 캐시 선조회 (지도 회전, 3D 지형 토글 시 0ms 즉시 반환)
+  if (buildingSpatialCache.isAreaLoaded(bbox)) {
+    const cachedCollection = buildingSpatialCache.getFeatureCollection(bbox);
+    return {
+      success: true,
+      status: 'connected',
+      fusionSources: { vworld: true, dataGoKr: true, osm: true },
+      featureCount: cachedCollection.features.length,
+      message: `메모리 캐시 즉시 적중 (${cachedCollection.features.length}동 / 0ms 응답)`,
+      features: cachedCollection,
+    };
+  }
+
   const url = `/api/buildings/fusion?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
 
   const controller = new AbortController();
@@ -90,6 +107,12 @@ export async function fetchFusionBuildings(
     }
 
     const data = await res.json();
+
+    // 2. 수신된 건물 피처를 공간 격자 캐시에 저장
+    if (data.features?.features) {
+      buildingSpatialCache.putFeatures(data.features.features, bbox);
+    }
+
     return {
       success: !!data.success,
       status: data.status || 'connected',

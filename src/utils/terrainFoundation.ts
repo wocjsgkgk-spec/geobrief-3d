@@ -83,7 +83,18 @@ export function applyAdaptiveFoundationToFeatures<
     }
 
     const props = (feature.properties || {}) as Record<string, any>;
-    const nominalHeight = parseFloat(props.height) || (props.levels ? props.levels * 3.3 : 12);
+    const rawFlr = Number(
+      props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || props.levels || 0
+    );
+    const rawHei = Number(
+      props.hei || props.HEI || props.height || props.render_height || props.bld_hgt || 0
+    );
+    const nominalHeight =
+      rawHei > 0
+        ? rawHei
+        : rawFlr > 0
+        ? Math.round(rawFlr * 3.2 * 10) / 10
+        : 12.0;
 
     const foundation = calculateAdaptiveFoundation(
       (feature.geometry as any).coordinates,
@@ -95,6 +106,11 @@ export function applyAdaptiveFoundationToFeatures<
       ...feature,
       properties: {
         ...props,
+        grnd_flr: rawFlr || Math.max(1, Math.round(nominalHeight / 3.2)),
+        gro_flo_co: props.gro_flo_co || String(rawFlr || Math.max(1, Math.round(nominalHeight / 3.2))),
+        hei: rawHei > 0 ? rawHei : nominalHeight,
+        height: nominalHeight,
+        levels: rawFlr || Math.max(1, Math.round(nominalHeight / 3.2)),
         adaptive_base: foundation.adaptiveBase,
         adaptive_height: foundation.adaptiveHeight,
         foundation_depth: foundation.foundationDepth,

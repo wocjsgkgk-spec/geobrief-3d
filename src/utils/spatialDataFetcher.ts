@@ -115,9 +115,14 @@ export function extractRenderedVectorBuildings(
       const isApartment = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
       const isCommercial = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
 
-      let renderHeight = Number(
-        props.render_height || props.height || (props.levels ? props.levels * 3.2 : 0) || (props.gro_flo_co ? Number(props.gro_flo_co) * 3.2 : 0)
+      const rawFlr = Number(
+        props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || props.levels || 0
       );
+      const rawHei = Number(
+        props.hei || props.HEI || props.render_height || props.height || props.bld_hgt || 0
+      );
+
+      let renderHeight = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.2 : 0);
 
       if (!renderHeight || renderHeight <= 0) {
         if (isApartment) {

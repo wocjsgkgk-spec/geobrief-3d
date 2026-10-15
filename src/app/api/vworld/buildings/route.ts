@@ -109,6 +109,11 @@ function classifyBuilding(name = '', detailName = '') {
   };
 }
 
+// 서버 사이드 인메모리 BBOX 공간 쿼리 캐시 (TTL 15분, 최대 300개 영역)
+const serverVworldCache = new Map<string, { timestamp: number; data: any }>();
+const SERVER_CACHE_TTL_MS = 15 * 60 * 1000;
+const MAX_SERVER_CACHE_ENTRIES = 300;
+
 /**
  * GET /api/vworld/buildings?bbox=minLng,minLat,maxLng,maxLat&customKey=...
  * 브라우저 CORS 회피 및 안정적 통신을 위한 서버 사이드 V-World Data API 프록시
@@ -195,9 +200,15 @@ export async function GET(request: NextRequest) {
     maxLat = Math.round((centerLat + halfSpan) * 10000) / 10000;
   }
 
+  // 서버 사이드 메모리 캐시 검사 (양자화 키 적용: 회전/이동 시 0ms 응답)
+  const cacheKey = `${cleanKey.slice(0, 6)}_${minLng.toFixed(3)}_${minLat.toFixed(3)}_${maxLng.toFixed(3)}_${maxLat.toFixed(3)}`;
+  const cached = serverVworldCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SERVER_CACHE_TTL_MS) {
+    return NextResponse.json(cached.data);
+  }
+
   // 3. V-World Data 2.0 API 호출 (서버 사이드)
   // LT_C_SPBD: 건축물일반공간정보 (V-World Data 2.0 규격: geomFilter=BOX(minX,minY,maxX,maxY))
-  // 발급된 인증키의 도메인(localhost 기본값)을 최우선으로 사용하여 Vercel 클라우드에서도 도메인 불일치 에러 방지
   const preferredDomain = process.env.VWORLD_DOMAIN || 'localhost';
 
   const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
@@ -254,7 +265,7 @@ export async function GET(request: NextRequest) {
 
     const rawFeatures = data.response?.result?.featureCollection?.features || [];
 
-    // 피처 정규화 및 3D 속성 매핑
+    // 피처 정규화 및 3D 속성 매핑 (지상층수 grnd_flr, 건물높이 hei, 건물용도명 추출)
     const features = rawFeatures
       .map((item: any, idx: number) => {
         if (!item.geometry || !item.properties) return null;
@@ -266,7 +277,7 @@ export async function GET(request: NextRequest) {
         const buldNo = (props.buld_no || '').trim();
         const gu = (props.gu || '').trim();
 
-        // 가장 식별력 높은 명칭 조합
+        // 식별 명칭 조합
         let bldName = buldNm;
         if (!bldName && rdNm && buldNo) {
           bldName = `${rdNm} ${buldNo}`;
@@ -283,32 +294,64 @@ export async function GET(request: NextRequest) {
           buldNmDc
         );
 
-        // 지상 층수 파싱 및 실제 도시 스카이라인 유형별 자연스러운 층고 다변화
-        const rawLevels = parseInt(props.gro_flo_co || props.grnd_flr_cnt || '', 10);
-        let levels = !isNaN(rawLevels) && rawLevels > 2 ? rawLevels : 0;
-        if (levels === 0) {
+        // 건물용도명 추출
+        const usageName = String(
+          props.main_purps_cd_nm || props.bdtyp_cd_nm || props.usage_nm || bld_category_label || ''
+        ).trim();
+
+        // 1. 실측 지상층수(grnd_flr / gro_flo_co) 및 건물높이(hei) 정밀 추출
+        const rawGrndFlr = parseInt(
+          String(props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || props.levels || ''),
+          10
+        );
+        const hasGrndFlr = !isNaN(rawGrndFlr) && rawGrndFlr > 0;
+
+        const rawHei = parseFloat(
+          String(props.hei || props.HEI || props.bld_hgt || props.height || '')
+        );
+        const hasHei = !isNaN(rawHei) && rawHei > 0;
+
+        let levels = 0;
+        let height = 0;
+
+        if (hasHei) {
+          height = Math.round(rawHei * 10) / 10;
+          levels = hasGrndFlr ? rawGrndFlr : Math.max(1, Math.round(rawHei / 3.2));
+        } else if (hasGrndFlr) {
+          // 지상층수가 존재하면 층수 * 3.2m 적용
+          levels = rawGrndFlr;
+          height = Math.round(rawGrndFlr * 3.2 * 10) / 10;
+        } else {
+          // 지상층수 미제공 시: 실제 아파트(15~25층), 상가(3~5층), 단층/2층 막사(1~2층)
           if (bld_category === 'apartment') {
-            levels = 15 + ((idx * 7) % 10); // 15 ~ 24층 (48 ~ 76m)
+            levels = 15 + ((idx * 7) % 11); // 15 ~ 25층 (48 ~ 80m)
           } else if (bld_category === 'commercial') {
-            levels = 5 + ((idx * 3) % 4); // 5 ~ 8층 (16 ~ 25m)
+            levels = 3 + ((idx * 2) % 3); // 3 ~ 5층 (9.6 ~ 16m)
           } else if (bld_category === 'public_military') {
-            levels = 3 + (idx % 3); // 3 ~ 5층 (10 ~ 16m)
+            levels = 1 + (idx % 2); // 1 ~ 2층 막사 (3.2 ~ 6.4m)
           } else if (bld_category === 'residential') {
-            levels = 2 + (idx % 2); // 2 ~ 3층 (6 ~ 9m)
+            levels = 1 + (idx % 2); // 1 ~ 2층 주택 (3.2 ~ 6.4m)
           } else {
-            levels = 3 + (idx % 3);
+            levels = 2 + (idx % 2);
           }
+          height = Math.round(levels * 3.2 * 10) / 10;
         }
-        const height = Math.round(levels * 3.2 * 10) / 10;
 
         return {
           type: 'Feature',
+          id: props.bd_mgt_sn || props.buld_se_cd || `vworld-bld-${idx}`,
           properties: {
             ...props,
             name: bldName,
-            levels,
+            buildingName: bldName,
+            grnd_flr: levels,
+            gro_flo_co: String(levels),
+            hei: height,
             height,
+            levels,
             min_height: 0,
+            main_purps_cd_nm: usageName,
+            usage_nm: usageName,
             bld_category,
             bld_category_label,
             color,
@@ -319,16 +362,25 @@ export async function GET(request: NextRequest) {
       })
       .filter(Boolean);
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       status: 'connected',
       featureCount: features.length,
-      message: `정상 연동 (실시간 건물 ${features.length}건 수신)`,
+      message: `정상 연동 (실시간 건물 ${features.length}건 수신 / V-World LT_C_SPBD)`,
       features: {
         type: 'FeatureCollection',
         features,
       },
-    });
+    };
+
+    // 서버 메모리 캐시 저장 (LRU 관리)
+    if (serverVworldCache.size >= MAX_SERVER_CACHE_ENTRIES) {
+      const oldestKey = serverVworldCache.keys().next().value;
+      if (oldestKey) serverVworldCache.delete(oldestKey);
+    }
+    serverVworldCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });
+
+    return NextResponse.json(responsePayload);
   } catch (err: any) {
     clearTimeout(timeoutId);
     const isTimeout = err.name === 'AbortError';
