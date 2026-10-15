@@ -855,8 +855,29 @@ export function generateLOD2RoofsGroup(
   }
 
   // [최적화 2] 5개 이하의 통합 메쉬로 단일 드로우콜 병합 (GPU Draw Call < 5)
+  const safeMerge = (geoms: THREE.BufferGeometry[]): THREE.BufferGeometry | null => {
+    if (geoms.length === 0) return null;
+    try {
+      const nonIndexed = geoms.map((g) => {
+        const geo = g.index ? g.toNonIndexed() : g.clone();
+        if (!geo.attributes.uv && geo.attributes.position) {
+          const count = geo.attributes.position.count;
+          geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+        }
+        if (!geo.attributes.normal && geo.attributes.position) {
+          geo.computeVertexNormals();
+        }
+        return geo;
+      });
+      return BufferGeometryUtils.mergeGeometries(nonIndexed, false);
+    } catch (e) {
+      console.warn('[roofGeometryBuilder] safeMerge notice:', e);
+      return null;
+    }
+  };
+
   if (roofGeoms.length > 0) {
-    const merged = BufferGeometryUtils.mergeGeometries(roofGeoms, false);
+    const merged = safeMerge(roofGeoms);
     if (merged) {
       merged.computeVertexNormals();
       merged.computeBoundingSphere();
@@ -869,7 +890,7 @@ export function generateLOD2RoofsGroup(
   }
 
   if (wallGeoms.length > 0) {
-    const merged = BufferGeometryUtils.mergeGeometries(wallGeoms, false);
+    const merged = safeMerge(wallGeoms);
     if (merged) {
       merged.computeVertexNormals();
       merged.computeBoundingSphere();
@@ -881,7 +902,7 @@ export function generateLOD2RoofsGroup(
   }
 
   if (parapetFloorGeoms.length > 0) {
-    const merged = BufferGeometryUtils.mergeGeometries(parapetFloorGeoms, false);
+    const merged = safeMerge(parapetFloorGeoms);
     if (merged) {
       merged.computeVertexNormals();
       merged.computeBoundingSphere();
@@ -894,7 +915,7 @@ export function generateLOD2RoofsGroup(
   }
 
   if (coreGeoms.length > 0) {
-    const merged = BufferGeometryUtils.mergeGeometries(coreGeoms, false);
+    const merged = safeMerge(coreGeoms);
     if (merged) {
       merged.computeVertexNormals();
       merged.computeBoundingSphere();
@@ -906,7 +927,7 @@ export function generateLOD2RoofsGroup(
   }
 
   if (beaconGeoms.length > 0) {
-    const merged = BufferGeometryUtils.mergeGeometries(beaconGeoms, false);
+    const merged = safeMerge(beaconGeoms);
     if (merged) {
       merged.computeBoundingSphere();
       const mesh = new THREE.Mesh(

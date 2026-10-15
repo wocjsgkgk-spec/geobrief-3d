@@ -2234,6 +2234,7 @@ export const MapViewer: React.FC = () => {
         });
         map.addLayer(lod2Engine);
         lod2BuildingEngineRef.current = lod2Engine;
+        (window as any).__lod2Engine = lod2Engine;
         lod2Engine.updateBuildings(SAMPLE_BUILDINGS.features as any);
       } catch (lod2Err) {
         console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
@@ -3032,20 +3033,19 @@ export const MapViewer: React.FC = () => {
         lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
       }
       if (threeboxLayerRef.current) {
-        threeboxLayerRef.current.setLodMode('lod2');
-        threeboxLayerRef.current.setVisible(layers.buildings3D);
+        threeboxLayerRef.current.setLodMode('lod1');
+        threeboxLayerRef.current.clearRoofsGroup();
+        threeboxLayerRef.current.clearFacadesGroup();
+        threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
       }
-      // 광역 오픈 벡터 건물 및 융합 건물은 유지하되, LOD2 엔진과 겹치는 sample-buildings는 숨겨 중복 충돌 차단
+      // [2단계: 실감 파사드 모드] LOD2 Three.js 엔진이 실사 아틀라스(초록 우레탄 옥상, 베란다 격자, 상가 등)로 전담 렌더링
+      // MapLibre 네이티브 fill-extrusion 박스가 Three.js 텍스처를 덮어쓰거나 z-fighting하지 않도록 네이티브 레이어는 숨김 처리
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
-          if (lyr.startsWith('sample-buildings')) {
-            map.setLayoutProperty(lyr, 'visibility', 'none');
-          } else {
-            map.setLayoutProperty(lyr, 'visibility', bldgVis);
-          }
+          map.setLayoutProperty(lyr, 'visibility', 'none');
         }
       }
     } else if (renderMode3D === 'tiles3d') {
