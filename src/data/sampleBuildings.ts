@@ -371,7 +371,200 @@ export const SAMPLE_BUILDINGS: GeoJSON.FeatureCollection<GeoJSON.Polygon> = {
       },
     },
 
-    // 6. 춘천시 온의·퇴계·약사동 도심 아파트 및 메디컬/비즈니스 타워
+    // 5-1. 원주시 우산동·학성동 (1군지사 이전부지 배후 도심 고층 아파트 & 비즈니스 센터)
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 우산 센트럴파크 101동',
+        height: 72,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9372, 37.3615],
+            [127.9390, 37.3615],
+            [127.9390, 37.3604],
+            [127.9372, 37.3604],
+            [127.9372, 37.3615],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 우산 센트럴파크 102동',
+        height: 68,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9375, 37.3630],
+            [127.9393, 37.3630],
+            [127.9393, 37.3619],
+            [127.9375, 37.3619],
+            [127.9375, 37.3630],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 학성 e편한세상 103동',
+        height: 65,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9342, 37.3562],
+            [127.9360, 37.3562],
+            [127.9360, 37.3551],
+            [127.9342, 37.3551],
+            [127.9342, 37.3562],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '우산 첨단스마트물류 비즈니스타워',
+        height: 46,
+        min_height: 0,
+        type: 'commercial_tower',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9395, 37.3595],
+            [127.9412, 37.3595],
+            [127.9412, 37.3582],
+            [127.9395, 37.3582],
+            [127.9395, 37.3595],
+          ],
+        ],
+      },
+    },
+
+    // 5-2. 원주시 태장동 (캠프 롱 이전부지 배후 도심 대단지 아파트 & 문화센터)
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 태장 대원칸타빌 201동',
+        height: 75,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9592, 37.3768],
+            [127.9610, 37.3768],
+            [127.9610, 37.3756],
+            [127.9592, 37.3756],
+            [127.9592, 37.3768],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '원주 태장 대원칸타빌 202동',
+        height: 68,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9595, 37.3785],
+            [127.9613, 37.3785],
+            [127.9613, 37.3773],
+            [127.9595, 37.3773],
+            [127.9595, 37.3785],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '태장 복합문화체육행정타워',
+        height: 38,
+        min_height: 0,
+        type: 'public_office',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.9635, 37.3772],
+            [127.9652, 37.3772],
+            [127.9652, 37.3760],
+            [127.9635, 37.3760],
+            [127.9635, 37.3772],
+          ],
+        ],
+      },
+    },
+
+    // 6. 춘천시 온의·퇴계·약사·근화·석사동 도심 아파트 및 메디컬/비즈니스 타워
+    {
+      type: 'Feature',
+      properties: {
+        name: '춘천 근화 스마트에코시티 301동',
+        height: 78,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.7175, 37.8905],
+            [127.7193, 37.8905],
+            [127.7193, 37.8893],
+            [127.7175, 37.8893],
+            [127.7175, 37.8905],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        name: '춘천 석사 현진에버빌 101동',
+        height: 69,
+        min_height: 0,
+        type: 'residential',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [127.7392, 37.8652],
+            [127.7410, 37.8652],
+            [127.7410, 37.8640],
+            [127.7392, 37.8640],
+            [127.7392, 37.8652],
+          ],
+        ],
+      },
+    },
     {
       type: 'Feature',
       properties: {
