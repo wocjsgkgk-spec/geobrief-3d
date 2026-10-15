@@ -47,9 +47,15 @@ export function extractRenderedVectorBuildings(
   if (!map) return [];
 
   try {
-    let rendered: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = map.queryRenderedFeatures(undefined, {
-      layers: ['3d-buildings', '3d-buildings-roof'].filter((l) => map.getLayer(l)),
-    });
+    const targetLayers = ['3d-buildings', '3d-buildings-roof', 'fusion-buildings-3d', 'fusion-buildings-roof'].filter((l) => map.getLayer(l));
+    let rendered: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = [];
+    if (targetLayers.length > 0) {
+      try {
+        rendered = map.queryRenderedFeatures(undefined, { layers: targetLayers });
+      } catch {
+        // ignore
+      }
+    }
 
     if ((!rendered || rendered.length === 0) && map.getSource('openmaptiles-vector')) {
       try {
@@ -82,8 +88,8 @@ export function extractRenderedVectorBuildings(
       seen.add(key);
 
       const props = feat.properties || {};
-      const name = String(props.name || props.name_ko || '');
-      const usageType = String(props.type || props.class || props.building || 'general').toLowerCase();
+      const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '');
+      const usageType = String(props.type || props.class || props.building || props.usageType || props.bld_category || 'general').toLowerCase();
 
       // 건물 면적 및 종횡비 계산으로 누락된 층고/높이 지능형 복원
       let approxArea = 0;
@@ -110,27 +116,28 @@ export function extractRenderedVectorBuildings(
       const isCommercial = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
 
       let renderHeight = Number(
-        props.render_height || props.height || (props.levels ? props.levels * 3.2 : 0)
+        props.render_height || props.height || (props.levels ? props.levels * 3.2 : 0) || (props.gro_flo_co ? Number(props.gro_flo_co) * 3.2 : 0)
       );
 
       if (!renderHeight || renderHeight <= 0) {
         if (isApartment) {
-          // 아파트 단지는 15~25층(45m~75m) 스카이라인으로 웅장하게 솟아오름
+          // 판상형/타워형 아파트 단지: 15층~25층 (45m~75m)
           const seed = Math.abs(Math.sin(approxArea * 17.13 + (feat.id ? Number(feat.id) : 42))) % 1;
           const aptStories = Math.round(15 + seed * 10);
           renderHeight = aptStories * 3.0; // 45m ~ 75m
         } else if (isCommercial) {
+          // 대로변 상업/업무 빌딩: 4층~8층 (15m~28m)
           const seed = Math.abs(Math.sin(approxArea * 23.41 + 19)) % 1;
-          const commStories = Math.round(4 + seed * 6);
-          renderHeight = commStories * 3.5; // 14m ~ 35m
+          const commStories = Math.round(4 + seed * 4);
+          renderHeight = commStories * 3.5; // 14m ~ 28m
         } else {
-          // 저층 건물들은 면적에 비례해 2~4층(7m~14m) 높이 자동 부여
+          // 일반 주택 및 군 막사: 1층~3층 (4m~10m)
           if (approxArea < 120) {
-            renderHeight = 7.0; // 2층
+            renderHeight = 4.0; // 1층 (4m)
           } else if (approxArea < 240) {
-            renderHeight = 10.5; // 3층
+            renderHeight = 7.0; // 2층 (7m)
           } else {
-            renderHeight = 14.0; // 4층
+            renderHeight = 10.0; // 3층 (10m)
           }
         }
       }

@@ -1095,13 +1095,17 @@ export function buildSmartRoadAndGreenPlaza(mats: SmartCityMaterials): THREE.Gro
 // =============================================================================
 // 9. 강원 6대 거점별 맞춤형 3D 스마트 복합단지(LOD2) 절차적 생성 라우터
 // =============================================================================
-export function buildComplexForSite(siteId: string, mats: SmartCityMaterials): THREE.Group {
+export function buildComplexForSite(siteId: string, _mats: SmartCityMaterials): THREE.Group {
   const root = new THREE.Group();
   root.name = `complex_root_${siteId}`;
+  // [1단계: 비정상적인 거대 가상 박스(더미 메쉬) 전면 삭제]
+  // 실제 GIS 데이터(건물 외곽선 폴리곤)에 기반하지 않은 임의의 3D 박스 생성을 전면 중단
+  return root;
+}
 
-  // 공통: 스마트 도로망 & 중앙 녹지 광장
-  const roadsAndPlaza = buildSmartRoadAndGreenPlaza(mats);
-  root.add(roadsAndPlaza);
+function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials): THREE.Group {
+  const root = new THREE.Group();
+  root.name = `complex_root_${siteId}`;
 
   // 사이트 식별
   const targetSite = getGangwonMilitarySiteById(siteId);
@@ -1603,7 +1607,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if ((!this.isVisible && this.scaleY <= 0.001) || !this.renderer) {
+    if (!this.isVisible || !this.renderer || !this.complexMesh || this.complexMesh.children.length === 0) {
       return;
     }
 

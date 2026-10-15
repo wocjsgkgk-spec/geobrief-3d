@@ -630,6 +630,8 @@ export const MapViewer: React.FC = () => {
         ['*', ['to-number', ['get', 'building:levels'], 1], 3.2],
         ['has', 'GRND_FLR_CNT'],
         ['*', ['to-number', ['get', 'GRND_FLR_CNT'], 1], 3.2],
+        ['has', 'gro_flo_co'],
+        ['*', ['to-number', ['get', 'gro_flo_co'], 1], 3.2],
         ['has', 'flr_cnt'],
         ['*', ['to-number', ['get', 'flr_cnt'], 1], 3.2],
         ['has', 'FLR_CNT'],
@@ -644,17 +646,17 @@ export const MapViewer: React.FC = () => {
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          60.0, // 20층 * 3.0m (45m~75m 고층 아파트 스카이라인)
+          60.0, // 판상형/타워형 아파트 단지: 15~25층 (45m~75m)
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          28.0, // 8층 * 3.5m
+          22.0, // 대로변 상업/업무 빌딩: 4~8층 (15m~28m)
           ['residential', 'house', 'detached', 'villa'],
-          10.5, // 3층 * 3.5m (7m~14m 저층 주택)
-          ['military', 'public', 'government', 'public_military'],
-          18.0, // 5층 * 3.6m
-          10.5, // 기본 3층 (10.5m)
+          7.5, // 일반 주택: 1~3층 (4m~10m)
+          ['military', 'public', 'government', 'public_military', 'barracks'],
+          8.0, // 막사 및 공공: 1~3층 (4m~10m)
+          8.0, // 기본
         ],
       ],
-      10.5, // 기본 최소 10.5m
+      8.0,
     ];
 
     // [1단계: 옥상 분리 마감 슬래브 바닥 높이 표현식]
@@ -669,6 +671,24 @@ export const MapViewer: React.FC = () => {
       '+',
       buildingHeightExpr,
       0.15,
+    ];
+
+    // [한국 도시 특화 옥상 컬러: 초록 우레탄 방수 옥상, 청색 징크 강판, 차콜 슬래브]
+    const buildingRoofColorExpr: any = [
+      'coalesce',
+      ['get', 'roofColour'],
+      ['get', 'roof_color'],
+      [
+        'match',
+        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+        ['apartment', 'apartments', 'residential', 'house', 'villa', 'detached'],
+        '#15803d', // 한국 특유의 초록색 우레탄 방수 옥상
+        ['commercial', 'commercial_tower', 'office', 'retail', 'bank'],
+        '#334155', // 상업 빌딩 차콜 슬래브
+        ['industrial', 'warehouse'],
+        '#1e40af', // 산업 시설 청색 강판 지붕
+        '#15803d', // 기본 초록 우레탄
+      ],
     ];
 
     // [3단계: 건물 기초 지반 밀착 표현식 (Foundation Clamping)]
@@ -1171,7 +1191,6 @@ export const MapViewer: React.FC = () => {
             source: 'fusion-buildings',
             minzoom: 12,
             paint: {
-              'fill-extrusion-pattern': facadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
@@ -1187,7 +1206,7 @@ export const MapViewer: React.FC = () => {
             source: 'fusion-buildings',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#334155',
+              'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.95,
@@ -1216,7 +1235,6 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-pattern': facadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
@@ -1232,7 +1250,7 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-buildings-source',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#334155',
+              'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.95,
@@ -2041,7 +2059,6 @@ export const MapViewer: React.FC = () => {
           map.addSource('openmaptiles-vector', {
             type: 'vector',
             url: 'https://tiles.openfreemap.org/planet',
-            tiles: ['https://tiles.openfreemap.org/planet/20261004_113936_pt/{z}/{x}/{y}.pbf'],
             maxzoom: 14,
           });
         }
@@ -2114,7 +2131,6 @@ export const MapViewer: React.FC = () => {
             'source-layer': 'building',
             minzoom: 12,
             paint: {
-              'fill-extrusion-pattern': facadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
@@ -2134,7 +2150,7 @@ export const MapViewer: React.FC = () => {
             'source-layer': 'building',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#334155',
+              'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
               'fill-extrusion-opacity': 0.98,
@@ -2249,11 +2265,10 @@ export const MapViewer: React.FC = () => {
         console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
       }
 
-      // [2단계 신규: 원주 1군지사 및 강원 다중 거점 스마트 3D 복합단지(LOD2) 자동 안착 레이어]
+      // [1단계: 비정상적인 거대 가상 박스(더미 메쉬) 전면 삭제 - 임의 3D 박스 생성 중단]
       try {
         const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
-        smartCityLayer.setVisible(!!layers.firstLogisticsSmartCity);
-        map.addLayer(smartCityLayer);
+        smartCityLayer.setVisible(false);
         smartCityComplexLayerRef.current = smartCityLayer;
       } catch (scErr) {
         console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
@@ -3050,11 +3065,12 @@ export const MapViewer: React.FC = () => {
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
       }
-      // [2단계: 실감 파사드 모드] LOD2 Three.js 엔진이 실사 아틀라스(초록 우레탄 옥상, 베란다 격자, 상가 등)로 전담 렌더링
-      // MapLibre 네이티브 fill-extrusion 박스가 Three.js 텍스처를 덮어쓰거나 z-fighting하지 않도록 네이티브 레이어는 숨김 처리
+      // [2단계: 전역 실제 건물 폴리곤 100% 표출]
+      // OpenFreeMap 오픈 벡터 타일 및 V-World 건물 레이어가 화면 전체(원주 우산동·학성동·단계동·태장동·무실동 등)의
+      // 모든 실제 바닥 다각형을 100% 3D로 표출하도록 레이어 가시성을 항상 유지합니다.
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
-          map.setLayoutProperty(lyr, 'visibility', 'none');
+          map.setLayoutProperty(lyr, 'visibility', bldgVis);
         }
       }
     } else if (renderMode3D === 'tiles3d') {
@@ -3257,8 +3273,8 @@ export const MapViewer: React.FC = () => {
         let east = bounds.getEast();
         let north = bounds.getNorth();
 
-        // 뷰포트가 넓을 경우 중심 좌표 기준 0.10도 서브 영역으로 안전 클램핑
-        const MAX_QUERY_SPAN = 0.10;
+        // 뷰포트가 넓을 경우 중심 좌표 기준 0.25도 영역으로 안전 클램핑
+        const MAX_QUERY_SPAN = 0.25;
         if (east - west > MAX_QUERY_SPAN) {
           west = center.lng - MAX_QUERY_SPAN / 2;
           east = center.lng + MAX_QUERY_SPAN / 2;
@@ -3331,23 +3347,16 @@ export const MapViewer: React.FC = () => {
             }
           }
 
-          // 3) 주력 Three.js LOD2 절차적 실감 3D 건축물 엔진 동기화 (박공/모임지붕, 난간, UV타일링 벽체, 지형 밀착)
+          // 3) 주력 Three.js LOD2 절차적 실감 3D 건축물 엔진 동기화 (실제 GIS 폴리곤만 전달)
           if (lod2BuildingEngineRef.current) {
             const extra = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-            const allFeatures = [
-              ...SAMPLE_BUILDINGS.features,
-              ...extra,
-            ];
-            lod2BuildingEngineRef.current.updateBuildings(allFeatures);
+            lod2BuildingEngineRef.current.updateBuildings(extra);
           }
 
           // 4) Threebox LOD2 입체 지붕 동기화 (기즈모 및 시설물 연동용)
           if (threeboxLayerRef.current) {
             const extra = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-            threeboxLayerRef.current.syncRoofs([
-              ...SAMPLE_BUILDINGS.features,
-              ...extra,
-            ]);
+            threeboxLayerRef.current.syncRoofs(extra);
           }
         } catch (sourceErr) {
           console.warn('[MapViewer] Failed to update building sources:', sourceErr);

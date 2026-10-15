@@ -544,24 +544,25 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const isApt = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
         const isComm = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
 
-        if (!totalH || totalH <= 0 || (totalH === 12 && !props.height && !props.levels && !props['building:levels'])) {
+        if (!totalH || totalH <= 0 || (totalH === 12 && !props.height && !props.levels && !props['building:levels'] && !props.gro_flo_co)) {
           if (isApt) {
-            // 아파트 단지는 15~25층(45m~75m) 스카이라인으로 웅장하게 솟아오름
+            // 판상형/타워형 아파트 단지 구역: 15층~25층 (45m~75m)
             const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
             const aptStories = Math.round(15 + seed * 10);
             totalH = aptStories * 3.0; // 45m ~ 75m
           } else if (isComm) {
+            // 대로변 상업/업무 빌딩: 4층~8층 (15m~28m)
             const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
-            const commStories = Math.round(4 + seed * 6);
-            totalH = commStories * 3.5; // 14m ~ 35m
+            const commStories = Math.round(4 + seed * 4);
+            totalH = commStories * 3.5; // 14m ~ 28m
           } else {
-            // 높이 값이 없는 저층 건물들은 면적에 비례해 2~4층(7m~14m) 높이 자동 부여
+            // 일반 주택 및 군 막사: 1층~3층 (4m~10m)
             if (approxArea < 120) {
-              totalH = 7.0; // 2층
+              totalH = 4.0; // 1층 (4m)
             } else if (approxArea < 240) {
-              totalH = 10.5; // 3층
+              totalH = 7.0; // 2층 (7m)
             } else {
-              totalH = 14.0; // 4층
+              totalH = 10.0; // 3층 (10m)
             }
           }
         }
@@ -1021,170 +1022,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    // 7. [강원권 핵심 랜드마크 고층 타워 (원주시청, 심평원, 건강보험공단 등)]
-    const REGIONAL_LANDMARKS = [
-      { name: '건강보험심사평가원 본원 타워', lng: 127.9790, lat: 37.3225, floors: 27, height: 115, width: 44, depth: 32 },
-      { name: '국민건강보험공단 본부 타워', lng: 127.9735, lat: 37.3255, floors: 30, height: 130, width: 46, depth: 34 },
-      { name: '원주시청 행정복합타워', lng: 127.9295, lat: 37.3422, floors: 16, height: 68, width: 52, depth: 36 },
-      { name: '원주 1군지사 첨단 R&D 타워', lng: 127.9545, lat: 37.3778, floors: 18, height: 65, width: 38, depth: 28 },
-      { name: '강원특별자치도청 본관 타워', lng: 127.7298, lat: 37.8853, floors: 16, height: 65, width: 48, depth: 32 },
-    ];
-
-    for (const lm of REGIONAL_LANDMARKS) {
-      const dLng = Math.abs(lm.lng - this.originLngLat[0]);
-      const dLat = Math.abs(lm.lat - this.originLngLat[1]);
-      if (dLng < 0.15 && dLat < 0.15) {
-        const lmElev = elevationCache.getFromMap(this.map, [lm.lng, lm.lat]);
-        const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
-        const lmX = (lm.lng - this.originLngLat[0]) * (Math.PI / 180) * 6378137 * cosLat;
-        const lmZ = -(lm.lat - this.originLngLat[1]) * (Math.PI / 180) * 6378137;
-        const lmWallTop = lmElev + lm.height;
-
-        const hw = lm.width / 2;
-        const hd = lm.depth / 2;
-        const corners = [
-          { x: lmX - hw, z: lmZ - hd },
-          { x: lmX + hw, z: lmZ - hd },
-          { x: lmX + hw, z: lmZ + hd },
-          { x: lmX - hw, z: lmZ + hd },
-        ];
-
-        const cwUV = getAtlasSlotUV('curtainwall_high');
-        const parapetUV = getAtlasSlotUV('parapet_concrete');
-        const coolUV = getAtlasSlotUV('roof_concrete_cool');
-
-        // 외벽 4면
-        for (let i = 0; i < 4; i++) {
-          const p0 = corners[i];
-          const p1 = corners[(i + 1) % 4];
-          const dx = p1.x - p0.x;
-          const dz = p1.z - p0.z;
-          const segLen = Math.sqrt(dx * dx + dz * dz);
-          const nx = -dz / segLen;
-          const nz = dx / segLen;
-
-          const nBays = Math.max(1, Math.round(segLen / 6.0));
-          const nStories = Math.max(1, Math.round(lm.height / 6.0));
-
-          for (let b = 0; b < nBays; b++) {
-            const t0 = b / nBays;
-            const t1 = (b + 1) / nBays;
-            const bx0 = p0.x + dx * t0;
-            const bz0 = p0.z + dz * t0;
-            const bx1 = p0.x + dx * t1;
-            const bz1 = p0.z + dz * t1;
-
-            for (let s = 0; s < nStories; s++) {
-              const y0 = lmElev + (lm.height * s) / nStories;
-              const y1 = lmElev + (lm.height * (s + 1)) / nStories;
-
-              addQuad(
-                masterPositions, masterNormals, masterUvs,
-                { x: bx0, y: y0, z: bz0 },
-                { x: bx1, y: y0, z: bz1 },
-                { x: bx1, y: y1, z: bz1 },
-                { x: bx0, y: y1, z: bz0 },
-                nx, 0, nz,
-                { u: cwUV.u0, v: cwUV.v0 },
-                { u: cwUV.u1, v: cwUV.v0 },
-                { u: cwUV.u1, v: cwUV.v1 },
-                { u: cwUV.u0, v: cwUV.v1 }
-              );
-            }
-          }
-
-          // 1.0m 난간
-          const p0i_x = p0.x - nx * 0.35;
-          const p0i_z = p0.z - nz * 0.35;
-          const p1i_x = p1.x - nx * 0.35;
-          const p1i_z = p1.z - nz * 0.35;
-
-          addQuad(
-            masterPositions, masterNormals, masterUvs,
-            { x: p0.x, y: lmWallTop, z: p0.z },
-            { x: p1.x, y: lmWallTop, z: p1.z },
-            { x: p1.x, y: lmWallTop + 1.0, z: p1.z },
-            { x: p0.x, y: lmWallTop + 1.0, z: p0.z },
-            nx, 0, nz,
-            { u: parapetUV.u0, v: parapetUV.v0 },
-            { u: parapetUV.u1, v: parapetUV.v0 },
-            { u: parapetUV.u1, v: parapetUV.v1 },
-            { u: parapetUV.u0, v: parapetUV.v1 }
-          );
-          addQuad(
-            masterPositions, masterNormals, masterUvs,
-            { x: p0.x, y: lmWallTop + 1.0, z: p0.z },
-            { x: p0i_x, y: lmWallTop + 1.0, z: p0i_z },
-            { x: p1i_x, y: lmWallTop + 1.0, z: p1i_z },
-            { x: p1.x, y: lmWallTop + 1.0, z: p1.z },
-            0, 1, 0,
-            { u: parapetUV.u0, v: parapetUV.v0 },
-            { u: parapetUV.u0, v: parapetUV.v1 },
-            { u: parapetUV.u1, v: parapetUV.v1 },
-            { u: parapetUV.u1, v: parapetUV.v0 }
-          );
-          addQuad(
-            masterPositions, masterNormals, masterUvs,
-            { x: p1i_x, y: lmWallTop, z: p1i_z },
-            { x: p0i_x, y: lmWallTop, z: p0i_z },
-            { x: p0i_x, y: lmWallTop + 1.0, z: p0i_z },
-            { x: p1i_x, y: lmWallTop + 1.0, z: p1i_z },
-            -nx, 0, -nz,
-            { u: parapetUV.u0, v: parapetUV.v0 },
-            { u: parapetUV.u1, v: parapetUV.v0 },
-            { u: parapetUV.u1, v: parapetUV.v1 },
-            { u: parapetUV.u0, v: parapetUV.v1 }
-          );
-        }
-
-        // 랜드마크 옥상 슬래브 (쿨루프 그레이)
-        addQuad(
-          masterPositions, masterNormals, masterUvs,
-          { x: corners[0].x, y: lmWallTop, z: corners[0].z },
-          { x: corners[1].x, y: lmWallTop, z: corners[1].z },
-          { x: corners[2].x, y: lmWallTop, z: corners[2].z },
-          { x: corners[3].x, y: lmWallTop, z: corners[3].z },
-          0, 1, 0,
-          { u: coolUV.u0, v: coolUV.v0 },
-          { u: coolUV.u1, v: coolUV.v0 },
-          { u: coolUV.u1, v: coolUV.v1 },
-          { u: coolUV.u0, v: coolUV.v1 }
-        );
-
-        // 랜드마크 헬리패드
-        const lmPadR = Math.min(lm.width, lm.depth) * 0.36;
-        const lmPadH = 0.45;
-        const lmPadTop = lmWallTop + lmPadH;
-
-        const lmPadGeo = new THREE.CylinderGeometry(lmPadR, lmPadR, lmPadH, 24);
-        lmPadGeo.translate(lmX, lmWallTop + lmPadH / 2, lmZ);
-        helipadBaseGeometries.push(lmPadGeo);
-
-        const lmRingGeo = new THREE.RingGeometry(lmPadR * 0.78, lmPadR * 0.90, 32);
-        lmRingGeo.rotateX(-Math.PI / 2);
-        lmRingGeo.translate(lmX, lmPadTop + 0.05, lmZ);
-        helipadRingGeometries.push(lmRingGeo);
-
-        const lmHSpan = lmPadR * 0.85;
-        const lmHBarW = lmPadR * 0.16;
-        const lmHSpace = lmPadR * 0.32;
-
-        const lmLBar = new THREE.BoxGeometry(lmHBarW, 0.08, lmHSpan);
-        lmLBar.translate(lmX - lmHSpace, lmPadTop + 0.08, lmZ);
-        helipadMarkGeometries.push(lmLBar);
-
-        const lmRBar = new THREE.BoxGeometry(lmHBarW, 0.08, lmHSpan);
-        lmRBar.translate(lmX + lmHSpace, lmPadTop + 0.08, lmZ);
-        helipadMarkGeometries.push(lmRBar);
-
-        const lmCBar = new THREE.BoxGeometry(lmHSpace * 2, 0.08, lmHBarW);
-        lmCBar.translate(lmX, lmPadTop + 0.08, lmZ);
-        helipadMarkGeometries.push(lmCBar);
-
-        count++;
-      }
-    }
-
+    // [1단계: 가상 더미 박스 삭제 및 전역 실제 건물 폴리곤 동기화]
+    // 실제 GIS 데이터(건물 외곽선 폴리곤)에 기반하지 않은 임의의 사각 박스 생성을 완전히 배제하고,
+    // 오직 실제 GeoJSON 폴리곤 피처들만 렌더링합니다.
     this.buildingCount = count;
 
     console.log('[LOD2BuildingEngine] masterPositions count =', masterPositions.length, 'buildingCount =', count);

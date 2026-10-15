@@ -396,10 +396,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 뷰포트가 넓을 경우(줌 12~13 등) 중심 좌표 기준 0.12도 서브 영역으로 자동 클램핑하여 400 에러 차단
+  // 뷰포트가 넓을 경우(줌 12~13 등) 중심 좌표 기준 0.25도 영역으로 자동 클램핑하여 400 에러 차단
   const lngSpan = maxLng - minLng;
   const latSpan = maxLat - minLat;
-  const MAX_SPAN = 0.12;
+  const MAX_SPAN = 0.25;
   if (lngSpan > MAX_SPAN || latSpan > MAX_SPAN) {
     const centerLng = (minLng + maxLng) / 2;
     const centerLat = (minLat + maxLat) / 2;

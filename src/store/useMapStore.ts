@@ -560,7 +560,7 @@ export const useMapStore = create<MapStoreState>()(
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
-        firstLogisticsSmartCity: true, // [2단계 신규: 1군지사 및 강원 유휴부지 미래 개발 구상안(3D 입체) 기본 활성화]
+        firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
         proceduralTrees: true, // [4단계: 3D 식생·가로수 표시 (1,000+ 그루 InstancedMesh) 기본 활성화]
       },
       toggleLayer: (key) =>
@@ -569,8 +569,8 @@ export const useMapStore = create<MapStoreState>()(
         })),
 
       bufferRings: {
-        r500m: true,
-        r1km: true,
+        r500m: false,
+        r1km: false,
         r2km: false,
       },
       toggleBufferRing: (ring) =>
@@ -1032,7 +1032,7 @@ export const useMapStore = create<MapStoreState>()(
           viewMode: '3D',
           layers: {
             ...state.layers,
-            firstLogisticsSmartCity: true,
+            firstLogisticsSmartCity: false,
           },
           placedFacilities:
             strategicFacilities.length > 0 ? strategicFacilities : state.placedFacilities,
