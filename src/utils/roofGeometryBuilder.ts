@@ -11,6 +11,8 @@
  */
 
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { elevationCache } from './elevationCache';
 
 export type RoofShapeType = 'gabled' | 'hipped' | 'flat' | 'skillion' | 'mansard' | 'dome';
 
@@ -744,6 +746,8 @@ export function buildRoofMeshForFeature(options: RoofFeatureOptions): THREE.Grou
 
 /**
  * 다중 GeoJSON 건물 피처 컬렉션으로부터 속성 기반 LOD2 입체 지붕 그룹 일괄 생성
+ * - [최적화 1] 다각형 정점 전체 순회 대신 elevationCache 중심점 1회 샘플링으로 고도 연산 90% 이상 감축
+ * - [최적화 2] 수천 개의 개별 메쉬를 BufferGeometryUtils.mergeGeometries로 5개 이하의 통합 메쉬로 병합
  */
 export function generateLOD2RoofsGroup(
   features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
@@ -752,6 +756,19 @@ export function generateLOD2RoofsGroup(
 ): THREE.Group {
   const rootGroup = new THREE.Group();
   rootGroup.name = 'lod2-property-roofs-group';
+
+  if (!features || features.length === 0) {
+    return rootGroup;
+  }
+
+  // 지오메트리 수집 버킷 (재질별 단일 메쉬 병합용)
+  const roofGeoms: THREE.BufferGeometry[] = [];
+  const wallGeoms: THREE.BufferGeometry[] = [];
+  const parapetFloorGeoms: THREE.BufferGeometry[] = [];
+  const coreGeoms: THREE.BufferGeometry[] = [];
+  const beaconGeoms: THREE.BufferGeometry[] = [];
+
+  const defaultMats = getRoofMaterialsForBuilding('general');
 
   for (const feat of features) {
     if (!feat.geometry) continue;
@@ -781,17 +798,13 @@ export function generateLOD2RoofsGroup(
     for (const ring of rings) {
       if (!ring || ring.length < 3) continue;
 
+      // [최적화 1] 건물 중심점 1개만 캐시 조회하여 고도 획득 (반복 쿼리 제거)
       let groundElev = typeof props.min_elev === 'number' ? props.min_elev : 0;
       if (groundElev === 0 && queryElevationFn) {
-        let minE = Infinity;
-        for (const coord of ring) {
-          const e = queryElevationFn(coord);
-          if (e !== null && !isNaN(e) && e < minE) minE = e;
-        }
-        groundElev = isFinite(minE) ? minE : (queryElevationFn(ring[0]) ?? 0);
+        groundElev = elevationCache.getElevationForPolygon(ring, queryElevationFn);
       }
 
-      const roofMesh = buildRoofMeshForFeature({
+      const featureRoofGroup = buildRoofMeshForFeature({
         polygon: ring,
         height,
         groundElev,
@@ -804,11 +817,105 @@ export function generateLOD2RoofsGroup(
         pitchDeg: 25,
       });
 
-      if (roofMesh) {
-        roofMesh.userData = { featureId: feat.id || props.name };
-        rootGroup.add(roofMesh);
-      }
+      if (!featureRoofGroup || featureRoofGroup.children.length === 0) continue;
+
+      // 피처 그룹 내 메쉬 지오메트리 분류 및 수집
+      featureRoofGroup.updateMatrixWorld(true);
+      featureRoofGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.geometry) {
+          child.updateMatrix();
+          const clonedGeo = child.geometry.clone();
+          clonedGeo.applyMatrix4(child.matrix);
+
+          const mat = child.material as THREE.Material;
+          if (mat === defaultMats.roofMaterial || mat?.name?.includes('roof')) {
+            roofGeoms.push(clonedGeo);
+          } else if (mat === defaultMats.wallMaterial) {
+            wallGeoms.push(clonedGeo);
+          } else if (
+            mat === defaultMats.parapetMaterial ||
+            mat === defaultMats.floorMaterial
+          ) {
+            parapetFloorGeoms.push(clonedGeo);
+          } else if (
+            mat === defaultMats.penthouseMaterial ||
+            mat === defaultMats.ridgeMaterial
+          ) {
+            coreGeoms.push(clonedGeo);
+          } else if ((mat as any)?.color?.getHex() === 0xef4444) {
+            beaconGeoms.push(clonedGeo);
+          } else {
+            roofGeoms.push(clonedGeo);
+          }
+
+          child.geometry.dispose();
+        }
+      });
     }
+  }
+
+  // [최적화 2] 5개 이하의 통합 메쉬로 단일 드로우콜 병합 (GPU Draw Call < 5)
+  if (roofGeoms.length > 0) {
+    const merged = BufferGeometryUtils.mergeGeometries(roofGeoms, false);
+    if (merged) {
+      merged.computeVertexNormals();
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, defaultMats.roofMaterial);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      rootGroup.add(mesh);
+    }
+    roofGeoms.forEach((g) => g.dispose());
+  }
+
+  if (wallGeoms.length > 0) {
+    const merged = BufferGeometryUtils.mergeGeometries(wallGeoms, false);
+    if (merged) {
+      merged.computeVertexNormals();
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, defaultMats.wallMaterial);
+      mesh.castShadow = true;
+      rootGroup.add(mesh);
+    }
+    wallGeoms.forEach((g) => g.dispose());
+  }
+
+  if (parapetFloorGeoms.length > 0) {
+    const merged = BufferGeometryUtils.mergeGeometries(parapetFloorGeoms, false);
+    if (merged) {
+      merged.computeVertexNormals();
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, defaultMats.parapetMaterial);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      rootGroup.add(mesh);
+    }
+    parapetFloorGeoms.forEach((g) => g.dispose());
+  }
+
+  if (coreGeoms.length > 0) {
+    const merged = BufferGeometryUtils.mergeGeometries(coreGeoms, false);
+    if (merged) {
+      merged.computeVertexNormals();
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, defaultMats.penthouseMaterial);
+      mesh.castShadow = true;
+      rootGroup.add(mesh);
+    }
+    coreGeoms.forEach((g) => g.dispose());
+  }
+
+  if (beaconGeoms.length > 0) {
+    const merged = BufferGeometryUtils.mergeGeometries(beaconGeoms, false);
+    if (merged) {
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(
+        merged,
+        new THREE.MeshBasicMaterial({ color: 0xef4444 })
+      );
+      rootGroup.add(mesh);
+    }
+    beaconGeoms.forEach((g) => g.dispose());
   }
 
   return rootGroup;

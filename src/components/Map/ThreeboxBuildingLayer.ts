@@ -13,6 +13,7 @@ import {
 } from '@/types/map';
 import { generateLOD2RoofsGroup, disposeRoofMaterialsCache } from '@/utils/roofGeometryBuilder';
 import { generateBuildingFacadesGroup, disposeFacadeMaterialsCache } from '@/utils/proceduralFacades';
+import { elevationCache } from '@/utils/elevationCache';
 
 /**
  * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
@@ -76,6 +77,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   private currentPreset: BuildingMassPresetId = 'defense_rd';
   private originLngLat: [number, number] | null = null;
   private clampedAltitude = 0;
+  private terrainDirty = true;
   private scaleRatio = 1;
   private rotationDeg = 0;
   private customGltfUrl: string | null = null;
@@ -325,25 +327,13 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         }
       }
 
-      // 1. [지형 밀착 (Terrain Clamping)] 3D DEM 지형 표고 실시간 조회
-      if (this.map && this.map.queryTerrainElevation) {
-        const elev = this.map.queryTerrainElevation(this.originLngLat);
+      // 1. [지형 밀착 (Terrain Clamping)] 지형 변경 또는 원점 변경 시 1회만 캐시 조회 (매 프레임 연산 제거)
+      if (this.terrainDirty && this.map && this.originLngLat) {
+        const elev = elevationCache.getFromMap(this.map, this.originLngLat);
         if (elev !== null && elev !== undefined) {
           this.clampedAltitude = elev;
         }
-
-        // [시설물 개별 정밀 지형 밀착 (Per-facility Terrain Clamping)]
-        if (!this.isDraggingGizmo) {
-          for (const facility of this.currentFacilities) {
-            const mesh = this.facilityMeshes.get(facility.id);
-            if (mesh && facility.id !== this.currentGizmoFacilityId) {
-              const queried = this.map.queryTerrainElevation(facility.coords);
-              if (queried !== null && queried !== undefined) {
-                mesh.position.y = queried - this.clampedAltitude;
-              }
-            }
-          }
-        }
+        this.terrainDirty = false;
       }
 
       // 2. Mercator 좌표계 투영 (지형 표고 상에 정확히 안착)
@@ -401,10 +391,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.rotationDeg = rotationDeg;
     this.customGltfUrl = customUrl || null;
 
-    // 지형 표고 즉시 쿼리
-    if (this.map && this.map.queryTerrainElevation) {
-      const elev = this.map.queryTerrainElevation(center);
-      this.clampedAltitude = elev !== null && elev !== undefined ? Math.max(0, elev) : 0;
+    // 지형 표고 캐시 쿼리
+    if (this.map) {
+      const elev = elevationCache.getFromMap(this.map, center);
+      this.clampedAltitude = Number.isFinite(elev) ? Math.max(0, elev) : 0;
     }
 
     // 기존 3D 모델 클리어
@@ -474,6 +464,19 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   }
 
   /**
+   * 3D DEM 지형 표고 변경/토글 시 캐시 갱신 마킹
+   */
+  public markTerrainDirty(): void {
+    this.terrainDirty = true;
+    if (this.map && this.originLngLat) {
+      const elev = elevationCache.getFromMap(this.map, this.originLngLat);
+      if (elev !== null && elev !== undefined) {
+        this.clampedAltitude = elev;
+      }
+    }
+  }
+
+  /**
    * [2단계 & 3단계] GeoJSON 건축물 외곽선 기반 LOD2 실측 외벽(1F로비/기준층) 및 입체 지붕 동기화
    */
   public syncRoofs(
@@ -483,9 +486,11 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.currentRoofsFeatures = features;
     if (origin) {
       this.originLngLat = origin;
+      this.terrainDirty = true;
     } else if (!this.originLngLat && this.map) {
       const c = this.map.getCenter();
       this.originLngLat = [c.lng, c.lat];
+      this.terrainDirty = true;
     }
 
     this.clearRoofsGroup();
@@ -493,11 +498,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
 
     if (this.lodMode === 'lod2' && features && features.length > 0 && this.originLngLat) {
       const elevFn = (coord: [number, number]) => {
-        if (this.map && this.map.queryTerrainElevation) {
-          const elev = this.map.queryTerrainElevation(coord);
-          if (elev !== null && elev !== undefined) {
-            return elev - this.clampedAltitude;
-          }
+        if (this.map) {
+          const elev = elevationCache.getFromMap(this.map, coord);
+          return elev - this.clampedAltitude;
         }
         return 0;
       };
@@ -1183,8 +1186,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
 
         // [정밀 지형 밀착 (Terrain Clamping)]
         let groundElev = facility.elevation;
-        if (this.map && this.map.queryTerrainElevation) {
-          const queried = this.map.queryTerrainElevation(facility.coords);
+        if (this.map) {
+          const queried = elevationCache.getFromMap(this.map, facility.coords);
           if (queried !== null && queried !== undefined) {
             groundElev = queried;
           }

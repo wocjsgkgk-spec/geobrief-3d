@@ -16,6 +16,7 @@ import {
   GANGWON_MILITARY_SITES,
   getGangwonMilitarySiteById,
 } from '@/constants/gangwonMilitarySites';
+import { elevationCache } from '@/utils/elevationCache';
 
 export const WONJU_1ST_LOGISTICS_CENTER: [number, number] = [127.9358, 37.3592];
 
@@ -374,8 +375,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       });
     }
 
-    if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
-      const queried = (this.map as any).queryTerrainElevation(this.centerLngLat);
+    if (this.map) {
+      const queried = elevationCache.getFromMap(this.map, this.centerLngLat);
       if (queried !== null && queried !== undefined && !Number.isNaN(queried)) {
         this.clampedAltitude = queried;
       }
@@ -408,8 +409,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       for (let i = 0; i < deciduousList.length; i++) {
         const item = deciduousList[i];
         let treeY = item.y;
-        if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
-          const elev = (this.map as any).queryTerrainElevation([
+        if (this.map) {
+          const elev = elevationCache.getFromMap(this.map, [
             this.centerLngLat[0] + (item.x / 111000) * 1.25,
             this.centerLngLat[1] + (item.z / 111000),
           ]);
@@ -444,8 +445,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       for (let i = 0; i < coniferList.length; i++) {
         const item = coniferList[i];
         let treeY = item.y;
-        if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
-          const elev = (this.map as any).queryTerrainElevation([
+        if (this.map) {
+          const elev = elevationCache.getFromMap(this.map, [
             this.centerLngLat[0] + (item.x / 111000) * 1.25,
             this.centerLngLat[1] + (item.z / 111000),
           ]);
@@ -476,9 +477,9 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         options;
       if (!rawMatrix) return;
 
-      // 1. 지형 DEM 표고 쿼리 (Terrain Elevation Clamping)
-      if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
-        const queried = (this.map as any).queryTerrainElevation(this.centerLngLat);
+      // 1. 지형 DEM 표고 쿼리 (Terrain Elevation Clamping) - 캐시 기반 1회 조회
+      if (this.map) {
+        const queried = elevationCache.getFromMap(this.map, this.centerLngLat);
         if (
           queried !== null &&
           queried !== undefined &&
@@ -491,11 +492,7 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
             this.hasBuiltWithTerrain = true;
             this.rebuildTrees();
           }
-        } else {
-          this.clampedAltitude = 0;
         }
-      } else {
-        this.clampedAltitude = 0;
       }
 
       // 2. Mercator 좌표계 투영 (MapLibre Z-Up -> Three.js Y-Up)

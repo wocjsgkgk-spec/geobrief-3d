@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import { elevationCache } from './elevationCache';
 
 export interface FacadeGenerationOptions {
   polygon: [number, number][]; // GeoJSON 외곽선 좌표 [[lng, lat], ...]
@@ -565,12 +566,7 @@ export function generateBuildingFacadesGroup(
 
       let groundElev = typeof props.min_elev === 'number' ? props.min_elev : 0;
       if (groundElev === 0 && queryElevationFn) {
-        let minE = Infinity;
-        for (const coord of ring) {
-          const e = queryElevationFn(coord);
-          if (e !== null && !isNaN(e) && e < minE) minE = e;
-        }
-        groundElev = isFinite(minE) ? minE : (queryElevationFn(ring[0]) ?? 0);
+        groundElev = elevationCache.getElevationForPolygon(ring, queryElevationFn);
       }
 
       const H_1F = Math.min(totalH, 3.5);

@@ -16,11 +16,13 @@
 
 import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   GANGWON_MILITARY_SITES,
   getGangwonMilitarySiteById,
   GangwonMilitarySite,
 } from '@/constants/gangwonMilitarySites';
+import { elevationCache } from '@/utils/elevationCache';
 
 export const FIRST_LOGISTICS_WONJU_CENTER: [number, number] = [127.9358, 37.3592];
 
@@ -1287,7 +1289,148 @@ export function buildComplexForSite(siteId: string, mats: SmartCityMaterials): T
     }
   }
 
-  return root;
+  return mergeSmartCityGroup(root, mats);
+}
+
+/**
+ * [3단계: 다중 건물 단일 지오메트리 일괄 병합 (BufferGeometryUtils.mergeGeometries)]
+ * - 수백 개로 분산된 개별 건물/도로/광장 메쉬를 5개 통합 메쉬로 압축
+ * - GPU Draw Call을 수백 회에서 5회 이하로 98% 이상 감축
+ */
+export function mergeSmartCityGroup(root: THREE.Group, mats: SmartCityMaterials): THREE.Group {
+  root.updateMatrixWorld(true);
+
+  const wallGeoms: THREE.BufferGeometry[] = [];
+  const glassGeoms: THREE.BufferGeometry[] = [];
+  const groundGeoms: THREE.BufferGeometry[] = [];
+  const greenGeoms: THREE.BufferGeometry[] = [];
+  const accentGeoms: THREE.BufferGeometry[] = [];
+
+  root.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.geometry) return;
+
+      const nonIndexed = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+      nonIndexed.applyMatrix4(mesh.matrixWorld);
+
+      // 속성 일치화 (position 및 normal만 유지하여 병합 무결성 확보)
+      for (const attrName in nonIndexed.attributes) {
+        if (attrName !== 'position' && attrName !== 'normal') {
+          nonIndexed.deleteAttribute(attrName);
+        }
+      }
+      if (!nonIndexed.attributes.normal) {
+        nonIndexed.computeVertexNormals();
+      }
+
+      const mat = mesh.material;
+      if (
+        mat === mats.glassCurtainBlue ||
+        mat === mats.glassCurtainCyan ||
+        mat === mats.glassObservation ||
+        mat === mats.glassCurtainSkyBlue ||
+        mat === mats.waterSurface
+      ) {
+        glassGeoms.push(nonIndexed);
+      } else if (
+        mat === mats.plazaGrass ||
+        mat === mats.terraceGrass ||
+        mat === mats.treeFoliage
+      ) {
+        greenGeoms.push(nonIndexed);
+      } else if (
+        mat === mats.asphaltRoad ||
+        mat === mats.plazaPavement ||
+        mat === mats.pedestrianDeck ||
+        mat === mats.parkingAsphalt ||
+        mat === mats.parkingLineWhite ||
+        mat === mats.roadMarkWhite ||
+        mat === mats.roadMarkYellow
+      ) {
+        groundGeoms.push(nonIndexed);
+      } else if (
+        mat === mats.helipadYellow ||
+        mat === mats.beaconRed ||
+        mat === mats.parkingEvGreen
+      ) {
+        accentGeoms.push(nonIndexed);
+      } else {
+        wallGeoms.push(nonIndexed);
+      }
+    }
+  });
+
+  const mergedGroup = new THREE.Group();
+  mergedGroup.name = 'merged-smart-city-complex';
+
+  // 1) 구조체/외벽/슬래브 병합 메쉬
+  if (wallGeoms.length > 0) {
+    const geom = BufferGeometryUtils.mergeGeometries(wallGeoms, false);
+    if (geom) {
+      geom.computeVertexNormals();
+      geom.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geom, mats.wallConcrete);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mergedGroup.add(mesh);
+    }
+    wallGeoms.forEach((g) => g.dispose());
+  }
+
+  // 2) 블루 커튼월 반사 유리 병합 메쉬
+  if (glassGeoms.length > 0) {
+    const geom = BufferGeometryUtils.mergeGeometries(glassGeoms, false);
+    if (geom) {
+      geom.computeVertexNormals();
+      geom.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geom, mats.glassCurtainBlue);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mergedGroup.add(mesh);
+    }
+    glassGeoms.forEach((g) => g.dispose());
+  }
+
+  // 3) 스마트 도로/노면/보도블록 병합 메쉬
+  if (groundGeoms.length > 0) {
+    const geom = BufferGeometryUtils.mergeGeometries(groundGeoms, false);
+    if (geom) {
+      geom.computeVertexNormals();
+      geom.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geom, mats.asphaltRoad);
+      mesh.receiveShadow = true;
+      mergedGroup.add(mesh);
+    }
+    groundGeoms.forEach((g) => g.dispose());
+  }
+
+  // 4) 중앙 광장 & 테라스 조경 녹지 병합 메쉬
+  if (greenGeoms.length > 0) {
+    const geom = BufferGeometryUtils.mergeGeometries(greenGeoms, false);
+    if (geom) {
+      geom.computeVertexNormals();
+      geom.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geom, mats.terraceGrass);
+      mesh.receiveShadow = true;
+      mergedGroup.add(mesh);
+    }
+    greenGeoms.forEach((g) => g.dispose());
+  }
+
+  // 5) 헬리패드 마킹 & 항공 장애등 액센트 병합 메쉬
+  if (accentGeoms.length > 0) {
+    const geom = BufferGeometryUtils.mergeGeometries(accentGeoms, false);
+    if (geom) {
+      geom.computeVertexNormals();
+      geom.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geom, mats.helipadYellow);
+      mergedGroup.add(mesh);
+    }
+    accentGeoms.forEach((g) => g.dispose());
+  }
+
+  return mergedGroup;
 }
 
 // 하위 호환성을 위한 원주 1군지사 기본 복합단지 빌더 유지
@@ -1489,9 +1632,9 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
         this.complexMesh.scale.set(1, this.scaleY, 1);
       }
 
-      // 1. [3D 지형 DEM 표고 밀착 (Terrain Clamping)]
-      if (this.map && typeof (this.map as any).queryTerrainElevation === 'function') {
-        const queried = (this.map as any).queryTerrainElevation(this.centerLngLat);
+      // 1. [3D 지형 DEM 표고 밀착 (Terrain Clamping)] - 캐시 기반 1회 계산
+      if (this.map) {
+        const queried = elevationCache.getFromMap(this.map, this.centerLngLat);
         if (queried !== null && queried !== undefined && !Number.isNaN(queried) && Number.isFinite(queried)) {
           this.clampedAltitude = queried;
         } else {

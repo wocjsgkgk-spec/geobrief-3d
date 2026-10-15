@@ -80,6 +80,7 @@ import {
   ROAD_LAYER_IDS,
   getRoadNetworkLayerDefinitions,
 } from '@/utils/roadNetworkLayers';
+import { elevationCache, clearElevationCache } from '@/utils/elevationCache';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -226,7 +227,7 @@ const baseStyle: maplibregl.StyleSpecification = {
         'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
       ],
       tileSize: 256,
-      maxzoom: 14,
+      maxzoom: 12,
     },
   },
   layers: [
@@ -262,6 +263,7 @@ export function safeSetTerrain(
 
   const executeSetTerrain = () => {
     try {
+      clearElevationCache();
       if (enableTerrain) {
         // [지형 표면과 위성 텍스처 결합 보장] 위성 소스 부재 시 동적 자동 등록
         if (!map.getSource('satellite-tiles') && !map.getSource('satellite-source')) {
@@ -290,7 +292,7 @@ export function safeSetTerrain(
             firstLayer
           );
         }
-        // DEM 지형 소스 부재 시 동적 자동 등록
+        // DEM 지형 소스 부재 시 동적 자동 등록 (maxzoom 12 경량화)
         if (!map.getSource('terrarium-dem')) {
           map.addSource('terrarium-dem', {
             type: 'raster-dem',
@@ -299,7 +301,7 @@ export function safeSetTerrain(
               'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
             ],
             tileSize: 256,
-            maxzoom: 14,
+            maxzoom: 12,
           });
         }
         // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.2)
@@ -760,7 +762,7 @@ export const MapViewer: React.FC = () => {
             ],
             encoding: 'terrarium',
             tileSize: 256,
-            maxzoom: 14,
+            maxzoom: 12,
           },
           'terrarium-dem-hillshade': {
             type: 'raster-dem',
@@ -769,7 +771,7 @@ export const MapViewer: React.FC = () => {
             ],
             encoding: 'terrarium',
             tileSize: 256,
-            maxzoom: 14,
+            maxzoom: 12,
           },
           // 전략 대상지 인근 주요 거점 3D 건물 GeoJSON 소스
           'sample-buildings-source': {
@@ -1793,35 +1795,41 @@ export const MapViewer: React.FC = () => {
       }
     };
 
+    let moveRafId: number | null = null;
     const handleMove = () => {
-      const bearing = map.getBearing();
-      const pitch = map.getPitch();
-      const zoom = map.getZoom();
-      const center = map.getCenter();
+      if (moveRafId !== null) return;
+      moveRafId = requestAnimationFrame(() => {
+        moveRafId = null;
+        if (!map) return;
+        const bearing = map.getBearing();
+        const pitch = map.getPitch();
+        const zoom = map.getZoom();
+        const center = map.getCenter();
 
-      setCurrentBearing(bearing);
-      setCurrentPitch(pitch);
-      setCurrentZoom(zoom);
-      setCurrentLat(center.lat);
+        setCurrentBearing(bearing);
+        setCurrentPitch(pitch);
+        setCurrentZoom(zoom);
+        setCurrentLat(center.lat);
 
-      // 폴리곤 중심 라벨 위치 추적
-      const storeCenter = useMapStore.getState().polygonCenter;
-      if (storeCenter) {
-        const p = map.project(storeCenter);
-        setLabelScreenPos({ x: p.x, y: p.y });
-      }
+        // 폴리곤 중심 라벨 위치 추적
+        const storeCenter = useMapStore.getState().polygonCenter;
+        if (storeCenter) {
+          const p = map.project(storeCenter);
+          setLabelScreenPos({ x: p.x, y: p.y });
+        }
 
-      // [교통·인프라 접근성] 타깃 인프라 핀 위치 추적
-      const hoveredRow = useMapStore.getState().hoveredInfrastructureRow;
-      if (hoveredRow) {
-        const pt = map.project(hoveredRow.coords);
-        setTieLineMarkerScreenPos((prev) =>
-          prev ? { ...prev, x: pt.x, y: pt.y } : null
-        );
-      }
+        // [교통·인프라 접근성] 타깃 인프라 핀 위치 추적
+        const hoveredRow = useMapStore.getState().hoveredInfrastructureRow;
+        if (hoveredRow) {
+          const pt = map.project(hoveredRow.coords);
+          setTieLineMarkerScreenPos((prev) =>
+            prev ? { ...prev, x: pt.x, y: pt.y } : null
+          );
+        }
 
-      // [줌 레벨 최적화 LOD 제어]: 줌 14 미만 경량 단색, 줌 14 이상 세부 창문 텍스처
-      lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
+        // [줌 레벨 최적화 LOD 제어]: 줌 14 미만 경량 단색, 줌 14 이상 세부 창문 텍스처
+        lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
+      });
     };
 
     // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
@@ -3119,16 +3127,25 @@ export const MapViewer: React.FC = () => {
         }
       };
 
+      const handleContourMoveStart = () => {
+        if (contourTimer) {
+          clearTimeout(contourTimer);
+          contourTimer = null;
+        }
+      };
+
       const debouncedContours = () => {
         if (contourTimer) clearTimeout(contourTimer);
-        contourTimer = setTimeout(updateContours, 300);
+        contourTimer = setTimeout(updateContours, 250);
       };
 
       debouncedContours();
+      map.on('movestart', handleContourMoveStart);
       map.on('moveend', debouncedContours);
       return () => {
         cancelled = true;
         if (contourTimer) clearTimeout(contourTimer);
+        map.off('movestart', handleContourMoveStart);
         map.off('moveend', debouncedContours);
       };
     }
@@ -3278,10 +3295,7 @@ export const MapViewer: React.FC = () => {
 
         // [2단계: 건물 바닥면 적응형 기초(Adaptive Foundation) 표고 샘플링 & 스냅]
         const queryElev = (coord: [number, number]) => {
-          if (map.queryTerrainElevation) {
-            return map.queryTerrainElevation(coord);
-          }
-          return null;
+          return elevationCache.getFromMap(map, coord);
         };
         const finalFeatures = result.features
           ? applyAdaptiveFoundationToFeatures(result.features, queryElev)
@@ -3345,12 +3359,20 @@ export const MapViewer: React.FC = () => {
       }
     };
 
-    const debouncedFetch = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(fetchBoundsBuildings, 400);
+    const handleSpatialMoveStart = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
     };
 
-    // 지도 이동 및 줌 완료(moveend) & 렌더링 완료(idle) 리스너 연동
+    const debouncedFetch = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(fetchBoundsBuildings, 250);
+    };
+
+    // 지도 이동 및 줌 완료(moveend) & 렌더링 완료(idle) 리스너 연동 (250ms 디바운스, movestart 시 일시 정지)
+    map.on('movestart', handleSpatialMoveStart);
     map.on('moveend', debouncedFetch);
     map.on('idle', debouncedFetch);
     debouncedFetch();
@@ -3365,6 +3387,7 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
       }
+      map.off('movestart', handleSpatialMoveStart);
       map.off('moveend', debouncedFetch);
       map.off('idle', debouncedFetch);
     };
@@ -3398,11 +3421,13 @@ export const MapViewer: React.FC = () => {
     }
   }, [baseMap, isMapLoaded]);
 
-  // 10. 3D 지형 On/Off 및 고저차 배율 반영 (소스 존재 검증 및 try-catch 방어)
+  // 10. 3D 지형 On/Off 및 고저차 배율 반영 (소스 존재 검증 및 캐시 초기화)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
+    clearElevationCache();
+    threeboxLayerRef.current?.markTerrainDirty();
     safeSetTerrain(map, terrainEnabled, terrainExaggeration);
   }, [terrainEnabled, terrainExaggeration, isMapLoaded]);
 
@@ -3625,7 +3650,7 @@ export const MapViewer: React.FC = () => {
     try {
       return analyzeSlopeGrid(completedPolygon, (coord: [number, number]) => {
         if (!mapRef.current) return 150;
-        return mapRef.current.queryTerrainElevation(coord) ?? 150;
+        return elevationCache.getFromMap(mapRef.current, coord) || 150;
       });
     } catch (err) {
       console.error('Failed to analyze slope grid:', err);
@@ -3640,7 +3665,7 @@ export const MapViewer: React.FC = () => {
         completedPolygon,
         (coord: [number, number]) => {
           if (!mapRef.current) return 150;
-          return mapRef.current.queryTerrainElevation(coord) ?? 150;
+          return elevationCache.getFromMap(mapRef.current, coord) || 150;
         },
         25
       );
