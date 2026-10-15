@@ -12,13 +12,18 @@ export interface IntersectionPoint {
   name: string;
   coordinates: [number, number]; // [lng, lat]
   arms?: number[]; // 교차로 진입 도로 각도 (기본: [0, 90, 180, 270])
+  isRoundabout?: boolean; // 회전교차로 여부
+  roundaboutRadius?: number; // 회전교차로 반경 (m)
 }
 
 // 강원특별자치도 및 원주시 주요 교차로 레퍼런스 좌표계 (원주 1군지사 부지 인근 및 핵심 도심망)
 export const MAJOR_INTERSECTIONS: IntersectionPoint[] = [
   // 1. 원주 1군지사 부지 주변 핵심 교차로
+  { id: '1st-logistics-main-x', name: '1군지사 정문 진입로 교차로', coordinates: [127.9358, 37.3592], arms: [0, 90, 180, 270] },
+  { id: '1st-logistics-north-x', name: '우산공단입구사거리', coordinates: [127.9405, 37.3630], arms: [15, 105, 195, 285] },
   { id: 'usan-bridge-x', name: '우산철교사거리', coordinates: [127.9485, 37.3685], arms: [15, 105, 195, 285] },
   { id: 'bukwon-x', name: '북원사거리 (1군지사 북측)', coordinates: [127.9520, 37.3820], arms: [0, 90, 180, 270] },
+  { id: 'wonju-ic-x', name: '원주IC 진출입 교차로', coordinates: [127.9540, 37.3870], arms: [0, 90, 180, 270] },
   { id: 'sangji-univ-x', name: '상지대입구사거리', coordinates: [127.9390, 37.3710], arms: [30, 120, 210, 300] },
   { id: 'taejang-x', name: '태장삼거리', coordinates: [127.9580, 37.3740], arms: [45, 165, 285] },
   { id: 'dongbu-transit-x', name: '동부순환로 교차로', coordinates: [127.9650, 37.3790], arms: [10, 100, 190, 280] },
@@ -31,12 +36,14 @@ export const MAJOR_INTERSECTIONS: IntersectionPoint[] = [
   { id: 'dangu-x', name: '단구사거리', coordinates: [127.9490, 37.3290], arms: [25, 115, 205, 295] },
   { id: 'jungang-x', name: '중앙로 문화의거리 교차로', coordinates: [127.9450, 37.3480], arms: [0, 90, 180, 270] },
 
-  // 3. 혁신도시 공공기관 클러스터 교차로
+  // 3. 혁신도시 및 주요 회전교차로 (Roundabouts)
   { id: 'hira-x', name: '심평원·건보공단 앞 교차로', coordinates: [127.9740, 37.3240], arms: [15, 105, 195, 285] },
   { id: 'innovation-center-x', name: '혁신대로 중앙사거리', coordinates: [127.9810, 37.3270], arms: [35, 125, 215, 305] },
+  { id: 'roundabout-innovation', name: '원주 혁신도시 중앙 회전교차로', coordinates: [127.9780, 37.3250], arms: [0, 90, 180, 270], isRoundabout: true, roundaboutRadius: 18 },
+  { id: 'roundabout-enterprise', name: '원주 기업도시 진입 로터리', coordinates: [127.8750, 37.3750], arms: [30, 120, 210, 300], isRoundabout: true, roundaboutRadius: 20 },
 
-  // 4. 강원도청 및 춘천 관문
-  { id: 'gangwon-prov-x', name: '강원도청 중앙로터리 앞', coordinates: [127.7298, 37.8853], arms: [0, 90, 180, 270] },
+  // 4. 강원도청 및 춘천 관문 (중앙로터리)
+  { id: 'gangwon-prov-x', name: '강원도청 중앙로터리 앞', coordinates: [127.7298, 37.8853], arms: [0, 90, 180, 270], isRoundabout: true, roundaboutRadius: 22 },
   { id: 'chuncheon-cityhall-x', name: '춘천시청앞 교차로', coordinates: [127.7315, 37.8812], arms: [45, 135, 225, 315] },
 ];
 
@@ -174,6 +181,59 @@ function buildCrosswalkForArm(
 }
 
 /**
+ * [신규] 회전교차로 (Roundabout) 중앙 교통섬 및 회전 차로 지오메트리 생성
+ */
+function buildRoundaboutFeatures(
+  centerLng: number,
+  centerLat: number,
+  radiusMeters = 16.0
+): GeoJSON.Feature[] {
+  const features: GeoJSON.Feature[] = [];
+  const segments = 36;
+  const islandCoords: [number, number][] = [];
+  const circulatingCoords: [number, number][] = [];
+  const islandR = radiusMeters * 0.55;
+  const circR = radiusMeters * 0.85;
+
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    const dx = Math.cos(angle) * islandR;
+    const dy = Math.sin(angle) * islandR;
+    islandCoords.push(offsetMetersToLngLat(centerLng, centerLat, dx, dy));
+
+    const cx = Math.cos(angle) * circR;
+    const cy = Math.sin(angle) * circR;
+    circulatingCoords.push(offsetMetersToLngLat(centerLng, centerLat, cx, cy));
+  }
+
+  // 1. 중앙 교통섬 (원형 녹지/화단 폴리곤)
+  features.push({
+    type: 'Feature',
+    properties: {
+      type: 'roundabout-island',
+    },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [islandCoords],
+    },
+  });
+
+  // 2. 내부 회전차로 백색 분할 점선
+  features.push({
+    type: 'Feature',
+    properties: {
+      type: 'roundabout-circulating-lane',
+    },
+    geometry: {
+      type: 'LineString',
+      coordinates: circulatingCoords,
+    },
+  });
+
+  return features;
+}
+
+/**
  * 뷰포트 또는 지정 교차로 리스트에 대한 전체 정밀 횡단보도/정지선 FeatureCollection 생성
  */
 export function generateCrosswalksGeoJSON(
@@ -203,6 +263,15 @@ export function generateCrosswalksGeoJSON(
   }
 
   for (const item of targetList) {
+    if (item.isRoundabout) {
+      const rFeatures = buildRoundaboutFeatures(
+        item.coordinates[0],
+        item.coordinates[1],
+        item.roundaboutRadius || 18.0
+      );
+      allFeatures.push(...rFeatures);
+    }
+
     const arms = item.arms && item.arms.length > 0 ? item.arms : [0, 90, 180, 270];
     for (const arm of arms) {
       const armFeatures = buildCrosswalkForArm(item.coordinates[0], item.coordinates[1], arm);
