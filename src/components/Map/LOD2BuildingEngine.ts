@@ -341,7 +341,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   }
 
   public updateZoomLOD(currentZoom: number): void {
-    const isDetailed = currentZoom >= 14;
+    const isDetailed = currentZoom >= 13.0;
     this.currentZoomLOD = currentZoom;
 
     if (this.masterCityMesh) {
@@ -417,6 +417,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
       this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
+
+      // [스카이라인 대기 안개 연동 (Atmospheric Horizon Fog #cbd5e1)]
+      this.scene.fog = new THREE.Fog(0xcbd5e1, 1500, 7500);
 
       try {
         this.renderer = new THREE.WebGLRenderer({
@@ -504,12 +507,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (!feat.geometry) continue;
 
       const props = feat.properties || {};
-      const totalH = Number(
+      const name = String(props.name || props.name_ko || '');
+      const usageType = String(
+        props.usageType || props.bld_category || props.type || props.class || ''
+      ).toLowerCase();
+
+      const explicitH = Number(
         props.height ||
         props.render_height ||
         (props.levels ? props.levels * 3.0 : 0) ||
         (props['building:levels'] ? Number(props['building:levels']) * 3.0 : 0) ||
-        12.0
+        0
       );
 
       const rings: [number, number][][] = [];
@@ -527,14 +535,47 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const pts = projectCoordsToLocalMeters(ring, this.originLngLat);
         if (pts.length < 3) continue;
 
+        const obb = computeOBB(pts);
+        const approxArea = Math.max(10, obb.lenU * obb.lenV);
+        const aspectRatio = obb.lenU / Math.max(1.0, obb.lenV);
+
+        // [3단계 신규] 높이 값이 없는 저층 건물 2~4층(7m~14m) 자동 복원 및 아파트 단지 15~25층(45m~75m) 스카이라인 적용
+        let totalH = explicitH;
+        const isApt = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
+        const isComm = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
+
+        if (!totalH || totalH <= 0 || (totalH === 12 && !props.height && !props.levels && !props['building:levels'])) {
+          if (isApt) {
+            // 아파트 단지는 15~25층(45m~75m) 스카이라인으로 웅장하게 솟아오름
+            const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
+            const aptStories = Math.round(15 + seed * 10);
+            totalH = aptStories * 3.0; // 45m ~ 75m
+          } else if (isComm) {
+            const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
+            const commStories = Math.round(4 + seed * 6);
+            totalH = commStories * 3.5; // 14m ~ 35m
+          } else {
+            // 높이 값이 없는 저층 건물들은 면적에 비례해 2~4층(7m~14m) 높이 자동 부여
+            if (approxArea < 120) {
+              totalH = 7.0; // 2층
+            } else if (approxArea < 240) {
+              totalH = 10.5; // 3층
+            } else {
+              totalH = 14.0; // 4층
+            }
+          }
+        }
+
         // 지형 표고 정합 (중심점 1회 해시 캐시 조회 후 clampedAltitude 기준 상대고도 산출)
         const elev = elevationCache.getElevationForPolygonFromMap(this.map, ring);
         const relElev = elev - this.clampedAltitude;
         const wallTop = relElev + totalH;
 
-        // [2단계: 건물 형태·높이·면적 기반 지능형 재질 자동 매핑]
-        const cls = classifyBuilding(pts, totalH, props);
-        const obb = computeOBB(pts);
+        // [2단계 & 3단계: 건물 형태·높이·면적 기반 지능형 재질 자동 매핑]
+        const cls = classifyBuilding(pts, totalH, {
+          ...props,
+          usageType: isApt ? 'apartment' : usageType,
+        });
 
         // Bounding Box (지붕 UV 매핑용)
         let minX = Infinity, maxX = -Infinity;
@@ -1284,10 +1325,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       return;
     }
 
-    // 줌 14 미만 광역 뷰에서는 렌더링 스킵
+    // 줌 13 미만 광역 뷰에서는 렌더링 스킵 (줌 13부터 도심 건물 100% 고밀도 표출)
     if (this.map) {
       const zoom = this.map.getZoom();
-      if (zoom < 14.0) {
+      if (zoom < 13.0) {
         return;
       }
     }

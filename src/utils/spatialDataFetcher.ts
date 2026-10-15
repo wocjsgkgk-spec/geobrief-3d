@@ -82,10 +82,60 @@ export function extractRenderedVectorBuildings(
       seen.add(key);
 
       const props = feat.properties || {};
-      const renderHeight = Number(
-        props.render_height || props.height || (props.levels ? props.levels * 3.2 : 12)
+      const name = String(props.name || props.name_ko || '');
+      const usageType = String(props.type || props.class || props.building || 'general').toLowerCase();
+
+      // 건물 면적 및 종횡비 계산으로 누락된 층고/높이 지능형 복원
+      let approxArea = 0;
+      let aspectRatio = 1.0;
+      if (feat.geometry.type === 'Polygon' && feat.geometry.coordinates[0]?.length >= 3) {
+        const ring = feat.geometry.coordinates[0];
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const pt of ring) {
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+        const cosLat = Math.cos((((minY + maxY) * 0.5) * Math.PI) / 180);
+        const wMeters = (maxX - minX) * 111319.5 * cosLat;
+        const hMeters = (maxY - minY) * 111319.5;
+        approxArea = Math.max(10, wMeters * hMeters);
+        const maxD = Math.max(wMeters, hMeters);
+        const minD = Math.max(1, Math.min(wMeters, hMeters));
+        aspectRatio = maxD / minD;
+      }
+
+      const isApartment = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
+      const isCommercial = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
+
+      let renderHeight = Number(
+        props.render_height || props.height || (props.levels ? props.levels * 3.2 : 0)
       );
-      const levels = Math.max(1, Math.round(renderHeight / 3.2));
+
+      if (!renderHeight || renderHeight <= 0) {
+        if (isApartment) {
+          // 아파트 단지는 15~25층(45m~75m) 스카이라인으로 웅장하게 솟아오름
+          const seed = Math.abs(Math.sin(approxArea * 17.13 + (feat.id ? Number(feat.id) : 42))) % 1;
+          const aptStories = Math.round(15 + seed * 10);
+          renderHeight = aptStories * 3.0; // 45m ~ 75m
+        } else if (isCommercial) {
+          const seed = Math.abs(Math.sin(approxArea * 23.41 + 19)) % 1;
+          const commStories = Math.round(4 + seed * 6);
+          renderHeight = commStories * 3.5; // 14m ~ 35m
+        } else {
+          // 저층 건물들은 면적에 비례해 2~4층(7m~14m) 높이 자동 부여
+          if (approxArea < 120) {
+            renderHeight = 7.0; // 2층
+          } else if (approxArea < 240) {
+            renderHeight = 10.5; // 3층
+          } else {
+            renderHeight = 14.0; // 4층
+          }
+        }
+      }
+
+      const levels = Math.max(1, Math.round(renderHeight / 3.0));
 
       uniqueFeatures.push({
         type: 'Feature',
@@ -98,10 +148,10 @@ export function extractRenderedVectorBuildings(
           levels,
           roofShape: props['roof:shape'] || props.roof_shape || 'flat',
           roofColour: props['roof:colour'] || '#334155',
-          usageType: (props.type || props.class || 'general').toLowerCase() as any,
+          usageType: isApartment ? 'apartment' : (props.type || props.class || 'general').toLowerCase() as any,
           isMilitaryOrPublic: false,
           color: '#F1F5F9',
-          bld_category: props.class || 'building',
+          bld_category: isApartment ? 'apartment' : (props.class || 'building'),
           source: 'openfreemap',
         },
         geometry: feat.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,

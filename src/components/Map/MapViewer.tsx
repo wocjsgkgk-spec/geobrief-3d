@@ -237,6 +237,8 @@ const baseStyle: maplibregl.StyleSpecification = {
       source: 'satellite-tiles',
       paint: {
         'raster-opacity': 1.0,
+        'raster-saturation': -0.15,
+        'raster-contrast': 0.1,
       },
     },
   ],
@@ -286,6 +288,8 @@ export function safeSetTerrain(
               source: map.getSource('satellite-tiles') ? 'satellite-tiles' : 'satellite-source',
               paint: {
                 'raster-opacity': 1.0,
+                'raster-saturation': -0.15,
+                'raster-contrast': 0.1,
               },
               layout: { visibility: 'visible' },
             },
@@ -640,17 +644,17 @@ export const MapViewer: React.FC = () => {
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          51.2, // 16층 * 3.2m
+          60.0, // 20층 * 3.0m (45m~75m 고층 아파트 스카이라인)
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          28.8, // 9층 * 3.2m
+          28.0, // 8층 * 3.5m
           ['residential', 'house', 'detached', 'villa'],
-          12.8, // 4층 * 3.2m
+          10.5, // 3층 * 3.5m (7m~14m 저층 주택)
           ['military', 'public', 'government', 'public_military'],
-          19.2, // 6층 * 3.2m
-          16.0, // 기본 5층 * 3.2m
+          18.0, // 5층 * 3.6m
+          10.5, // 기본 3층 (10.5m)
         ],
       ],
-      16.0, // 기본 최소 16m
+      10.5, // 기본 최소 10.5m
     ];
 
     // [1단계: 옥상 분리 마감 슬래브 바닥 높이 표현식]
@@ -708,11 +712,11 @@ export const MapViewer: React.FC = () => {
     const fullMapStyle: any = {
       version: 8,
       sky: {
-        'sky-color': '#7dd3fc',
-        'horizon-color': '#bae6fd',
-        'fog-color': '#bae6fd',
-        'fog-ground-blend': 0.5,
-        'atmosphere-blend': 0.6,
+        'sky-color': '#1e3a8a',           // 상단 맑고 깊은 네이비 블루
+        'horizon-color': '#60a5fa',       // 중간 스카이 블루
+        'fog-color': '#cbd5e1',           // 지평선 밝은 슬레이트 안개
+        'fog-ground-blend': 0.65,
+        'atmosphere-blend': 0.8,
       },
       light: {
           anchor: 'viewport',
@@ -903,6 +907,8 @@ export const MapViewer: React.FC = () => {
             source: 'satellite-tiles',
             paint: {
               'raster-opacity': 1.0,
+              'raster-saturation': -0.15,
+              'raster-contrast': 0.1,
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
@@ -1901,11 +1907,11 @@ export const MapViewer: React.FC = () => {
       try {
         if (typeof (map as any).setSky === 'function') {
           (map as any).setSky({
-            'sky-color': '#7dd3fc',
-            'horizon-color': '#bae6fd',
-            'fog-color': '#bae6fd',
-            'fog-ground-blend': 0.5,
-            'atmosphere-blend': 0.6,
+            'sky-color': '#1e3a8a',           // 상단 맑고 깊은 네이비 블루
+            'horizon-color': '#60a5fa',       // 중간 스카이 블루
+            'fog-color': '#cbd5e1',           // 지평선 밝은 슬레이트 안개
+            'fog-ground-blend': 0.65,
+            'atmosphere-blend': 0.8,
           });
         }
       } catch (skyErr) {
@@ -1927,9 +1933,12 @@ export const MapViewer: React.FC = () => {
       try {
         if (typeof (map as any).setFog === 'function') {
           (map as any).setFog({
-            range: [1.5, 12],
-            color: '#bae6fd',
-            'horizon-blend': 0.15,
+            range: [1.2, 11],
+            color: '#cbd5e1',
+            'horizon-blend': 0.22,
+            'high-color': '#1e3a8a',
+            'space-color': '#0f172a',
+            'star-intensity': 0.0,
           });
         }
       } catch (fogErr) {
@@ -3404,6 +3413,8 @@ export const MapViewer: React.FC = () => {
         'visibility',
         baseMap === 'satellite' ? 'visible' : 'none'
       );
+      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.15);
+      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.1);
     }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(
@@ -4023,9 +4034,11 @@ export const MapViewer: React.FC = () => {
     try {
       if (typeof (map as any).setFog === 'function') {
         (map as any).setFog({
-          range: [1.5, 12],
-          color: sunConfig.fogColor || '#bae6fd',
-          'horizon-blend': 0.15,
+          range: [1.2, 11],
+          color: sunConfig.fogColor || '#cbd5e1',
+          'horizon-blend': 0.22,
+          'high-color': '#1e3a8a',
+          'space-color': '#0f172a',
         });
       }
     } catch (e) {
