@@ -307,10 +307,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private masterCityMesh: THREE.Mesh | null = null;
   private masterAtlasMaterial: THREE.MeshStandardMaterial | null = null;
 
-  // 랜드마크 옥상 헬리패드 보조 메쉬 (데크, 황색 링, 백색 H)
-  private helipadBaseMesh: THREE.Mesh | null = null;
-  private helipadRingMesh: THREE.Mesh | null = null;
-  private helipadMarkMesh: THREE.Mesh | null = null;
+  // [단일 배칭 최적화] 랜드마크 옥상 헬리패드 통합 단일 메쉬 (정점 컬러 베이스 + 링 + 백색 H 단일 Draw Call)
+  private helipadUnifiedMesh: THREE.Mesh | null = null;
+  private helipadUnifiedMaterial: THREE.MeshStandardMaterial | null = null;
 
   // 인스턴싱 메쉬 (아파트 옥상 STS 물탱크, 벤트, 태양광 패널, HVAC 냉각탑)
   private waterTankInstancedMesh: THREE.InstancedMesh | null = null;
@@ -419,14 +418,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.solarPanelInstancedMesh) {
       this.solarPanelInstancedMesh.visible = isDetailed;
     }
-    if (this.helipadBaseMesh) {
-      this.helipadBaseMesh.visible = isDetailed;
+    if (this.solarPanelInstancedMesh) {
+      this.solarPanelInstancedMesh.visible = isDetailed;
     }
-    if (this.helipadRingMesh) {
-      this.helipadRingMesh.visible = isDetailed;
-    }
-    if (this.helipadMarkMesh) {
-      this.helipadMarkMesh.visible = isDetailed;
+    if (this.helipadUnifiedMesh) {
+      this.helipadUnifiedMesh.visible = isDetailed;
     }
     if (this.contactShadowMesh) {
       this.contactShadowMesh.visible = isDetailed;
@@ -510,6 +506,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.shadowMap.enabled = false;
+        const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+        this.renderer.setPixelRatio(pr);
       } catch (err) {
         console.warn('[LOD2BuildingEngine] WebGLRenderer setup notice:', err);
       }
@@ -1325,9 +1323,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     // 8. [단일 마스터 메쉬 생성 (BufferGeometry) -> 단 1회의 Draw Call로 도시 전체 렌더링]
     let newMasterMesh: THREE.Mesh | null = null;
-    let newHelipadBaseMesh: THREE.Mesh | null = null;
-    let newHelipadRingMesh: THREE.Mesh | null = null;
-    let newHelipadMarkMesh: THREE.Mesh | null = null;
+    let newHelipadUnifiedMesh: THREE.Mesh | null = null;
     let newWaterTankMesh: THREE.InstancedMesh | null = null;
     let newVentMesh: THREE.InstancedMesh | null = null;
     let newSolarMesh: THREE.InstancedMesh | null = null;
@@ -1382,29 +1378,45 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     };
 
-    // 헬리패드 보조 메쉬
-    if (helipadBaseGeometries.length > 0 && this.materials?.helipadGreenBaseMaterial) {
-      const merged = safeMerge(helipadBaseGeometries);
-      if (merged) {
-        merged.computeBoundingSphere();
-        newHelipadBaseMesh = new THREE.Mesh(merged, this.materials.helipadGreenBaseMaterial);
-        newHelipadBaseMesh.frustumCulled = false;
+    // [단일 배칭 최적화] 헬리패드 베이스/황색 링/백색 H 마크를 정점 컬러 단일 BufferGeometry로 일괄 병합 (Draw Call 1회로 극소화)
+    const helipadParts: THREE.BufferGeometry[] = [];
+    const colorizeGeo = (geo: THREE.BufferGeometry, r: number, g: number, b: number) => {
+      const nonIdx = geo.index ? geo.toNonIndexed() : geo.clone();
+      const count = nonIdx.attributes.position.count;
+      const colors = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        colors[i * 3] = r;
+        colors[i * 3 + 1] = g;
+        colors[i * 3 + 2] = b;
       }
+      nonIdx.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      return nonIdx;
+    };
+
+    for (const bg of helipadBaseGeometries) {
+      helipadParts.push(colorizeGeo(bg, 0.08, 0.45, 0.22));
     }
-    if (helipadRingGeometries.length > 0 && this.materials?.helipadYellowRingMaterial) {
-      const merged = safeMerge(helipadRingGeometries);
-      if (merged) {
-        merged.computeBoundingSphere();
-        newHelipadRingMesh = new THREE.Mesh(merged, this.materials.helipadYellowRingMaterial);
-        newHelipadRingMesh.frustumCulled = false;
-      }
+    for (const rg of helipadRingGeometries) {
+      helipadParts.push(colorizeGeo(rg, 0.92, 0.82, 0.12));
     }
-    if (helipadMarkGeometries.length > 0 && this.materials?.helipadWhiteMarkMaterial) {
-      const merged = safeMerge(helipadMarkGeometries);
-      if (merged) {
-        merged.computeBoundingSphere();
-        newHelipadMarkMesh = new THREE.Mesh(merged, this.materials.helipadWhiteMarkMaterial);
-        newHelipadMarkMesh.frustumCulled = false;
+    for (const mg of helipadMarkGeometries) {
+      helipadParts.push(colorizeGeo(mg, 0.95, 0.95, 0.95));
+    }
+
+    if (helipadParts.length > 0) {
+      const mergedHelipad = safeMerge(helipadParts);
+      if (mergedHelipad) {
+        mergedHelipad.computeBoundingSphere();
+        if (!this.helipadUnifiedMaterial) {
+          this.helipadUnifiedMaterial = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            roughness: 0.55,
+            metalness: 0.2,
+            side: THREE.DoubleSide,
+          });
+        }
+        newHelipadUnifiedMesh = new THREE.Mesh(mergedHelipad, this.helipadUnifiedMaterial);
+        newHelipadUnifiedMesh.frustumCulled = false;
       }
     }
 
@@ -1483,9 +1495,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     // 신규 메쉬가 준비되었을 때만 이전 메쉬를 교체하여 0ms 무깜빡임 유지
     const oldMeshes = [
       this.masterCityMesh,
-      this.helipadBaseMesh,
-      this.helipadRingMesh,
-      this.helipadMarkMesh,
+      this.helipadUnifiedMesh,
       this.waterTankInstancedMesh,
       this.ventInstancedMesh,
       this.solarPanelInstancedMesh,
@@ -1501,17 +1511,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.masterCityMesh = newMasterMesh;
       this.scene.add(this.masterCityMesh);
     }
-    if (newHelipadBaseMesh) {
-      this.helipadBaseMesh = newHelipadBaseMesh;
-      this.scene.add(this.helipadBaseMesh);
-    }
-    if (newHelipadRingMesh) {
-      this.helipadRingMesh = newHelipadRingMesh;
-      this.scene.add(this.helipadRingMesh);
-    }
-    if (newHelipadMarkMesh) {
-      this.helipadMarkMesh = newHelipadMarkMesh;
-      this.scene.add(this.helipadMarkMesh);
+    if (newHelipadUnifiedMesh) {
+      this.helipadUnifiedMesh = newHelipadUnifiedMesh;
+      this.scene.add(this.helipadUnifiedMesh);
     }
     if (newWaterTankMesh) {
       this.waterTankInstancedMesh = newWaterTankMesh;
@@ -1541,9 +1543,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (
         old &&
         old !== this.masterCityMesh &&
-        old !== this.helipadBaseMesh &&
-        old !== this.helipadRingMesh &&
-        old !== this.helipadMarkMesh &&
+        old !== this.helipadUnifiedMesh &&
         old !== this.waterTankInstancedMesh &&
         old !== this.ventInstancedMesh &&
         old !== this.solarPanelInstancedMesh &&
@@ -1681,22 +1681,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.masterCityMesh = null;
     }
 
-    const extraMeshes = [
-      this.helipadBaseMesh,
-      this.helipadRingMesh,
-      this.helipadMarkMesh,
-    ];
-    for (const mesh of extraMeshes) {
-      if (mesh) {
-        this.scene.remove(mesh);
-        if (mesh.geometry) {
-          mesh.geometry.dispose();
-        }
+    if (this.helipadUnifiedMesh) {
+      this.scene.remove(this.helipadUnifiedMesh);
+      if (this.helipadUnifiedMesh.geometry) {
+        this.helipadUnifiedMesh.geometry.dispose();
       }
+      this.helipadUnifiedMesh = null;
     }
-    this.helipadBaseMesh = null;
-    this.helipadRingMesh = null;
-    this.helipadMarkMesh = null;
 
     // 인스턴싱 메쉬 해제
     const instanced = [

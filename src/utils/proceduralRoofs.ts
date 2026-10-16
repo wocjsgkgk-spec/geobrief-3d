@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export type RoofStyle = 'hipped' | 'gabled' | 'parapet_flat';
 
@@ -564,6 +565,27 @@ export function generateBuildingRoofsGroup(
   const rootGroup = new THREE.Group();
   rootGroup.name = 'procedural-building-roofs-group';
 
+  // [단일 배칭 최적화] 개별 수백 개 Mesh 생성 차단 -> 재질별 BufferGeometry 일괄 병합 (Draw Call 1~3회)
+  const materialBuckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+
+  const collectGeometriesFromGroup = (group: THREE.Group) => {
+    group.updateMatrixWorld(true);
+    group.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const m = child as THREE.Mesh;
+        if (!m.geometry) return;
+        const clonedGeo = m.geometry.clone();
+        clonedGeo.applyMatrix4(m.matrixWorld);
+        const nonIdx = clonedGeo.index ? clonedGeo.toNonIndexed() : clonedGeo;
+        const mat = m.material as THREE.Material;
+        if (!materialBuckets.has(mat)) {
+          materialBuckets.set(mat, []);
+        }
+        materialBuckets.get(mat)!.push(nonIdx);
+      }
+    });
+  };
+
   for (const feat of features) {
     if (!feat.geometry) continue;
 
@@ -595,8 +617,7 @@ export function generateBuildingRoofsGroup(
       });
 
       if (roofMesh) {
-        roofMesh.userData = { featureId: feat.id || props.name };
-        rootGroup.add(roofMesh);
+        collectGeometriesFromGroup(roofMesh);
       }
     } else if (feat.geometry.type === 'MultiPolygon') {
       for (const poly of feat.geometry.coordinates) {
@@ -622,10 +643,27 @@ export function generateBuildingRoofsGroup(
         });
 
         if (roofMesh) {
-          roofMesh.userData = { featureId: feat.id || props.name };
-          rootGroup.add(roofMesh);
+          collectGeometriesFromGroup(roofMesh);
         }
       }
+    }
+  }
+
+  // 재질별 단일 BufferGeometry 병합
+  for (const [mat, geoms] of materialBuckets.entries()) {
+    if (geoms.length === 0) continue;
+    try {
+      const merged = BufferGeometryUtils.mergeGeometries(geoms, false);
+      if (merged) {
+        merged.computeBoundingSphere();
+        const batchMesh = new THREE.Mesh(merged, mat);
+        batchMesh.castShadow = true;
+        batchMesh.receiveShadow = true;
+        batchMesh.frustumCulled = false;
+        rootGroup.add(batchMesh);
+      }
+    } catch (e) {
+      console.warn('[proceduralRoofs] Batch merge notice:', e);
     }
   }
 

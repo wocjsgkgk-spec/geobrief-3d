@@ -267,6 +267,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.shadowMap.enabled = false;
+        const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+        this.renderer.setPixelRatio(pr);
 
         // 3. TransformControls 인터랙티브 3D 변환 기즈모 마운트
         try {

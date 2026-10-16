@@ -100,6 +100,8 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
         });
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+        this.renderer.setPixelRatio(pr);
       } catch (err) {
         console.warn('[UavSensorLayer] WebGLRenderer setup error:', err);
       }
@@ -207,7 +209,10 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
         (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
-      this.map.triggerRepaint();
+      // [온디맨드 렌더링 최적화] UAV 비행 시뮬레이션이 활성 비행 중일 때만 지속 리페인트 요청
+      if (this.uavState && this.uavState.isActive) {
+        this.map.triggerRepaint();
+      }
     } catch (renderErr) {
       console.warn('[UavSensorLayer] render error suppressed:', renderErr);
     }

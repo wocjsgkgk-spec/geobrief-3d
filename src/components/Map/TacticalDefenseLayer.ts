@@ -106,6 +106,8 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         });
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+        this.renderer.setPixelRatio(pr);
       } catch (err) {
         console.warn('[TacticalDefenseLayer] WebGLRenderer setup error:', err);
       }
@@ -179,13 +181,9 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
       }
 
-      // 연속 애니메이션이 필요한 경우 지속 리페인트 요청
-      if (
-        this.threatDomeState.enabled ||
-        this.securityWallState.enabled ||
-        this.losBlockedPulseMesh ||
-        this.losClearPulseMesh
-      ) {
+      // [온디맨드 렌더링 최적화] 정적 돔/벽체는 카메라 이동 시 MapLibre가 자동으로 렌더하므로 상시 렌더 루프 중단
+      // (LOS 펄스 빔 애니메이션이 활성화되어 있을 때만 프레임 갱신)
+      if (this.losClearPulseMesh || this.losBlockedPulseMesh) {
         this.map.triggerRepaint();
       }
     } catch (renderErr) {

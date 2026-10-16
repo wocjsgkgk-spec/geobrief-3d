@@ -347,6 +347,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       });
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+      this.renderer.setPixelRatio(pr);
     } catch (err) {
       console.warn('[ProceduralTrees3DLayer] onAdd notice:', err);
     }

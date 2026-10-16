@@ -1880,6 +1880,7 @@ export const MapViewer: React.FC = () => {
       minZoom: 3,
       maxZoom: 20,
       maxPitch: 85,
+      pixelRatio: typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1,
       canvasContextAttributes: {
         preserveDrawingBuffer: true,
       },
@@ -3191,16 +3192,20 @@ export const MapViewer: React.FC = () => {
       '3d-buildings-foundation',
       '3d-buildings',
       '3d-buildings-roof',
+      '3d-buildings-edge',
       'vworld-buildings-contact-shadow',
       'vworld-buildings-foundation',
       'vworld-buildings-3d',
       'vworld-buildings-roof',
+      'vworld-buildings-edge',
       'fusion-buildings-contact-shadow',
       'fusion-buildings-foundation',
       'fusion-buildings-3d',
       'fusion-buildings-roof',
+      'fusion-buildings-edge',
       'sample-buildings-3d',
       'sample-buildings-roof',
+      'sample-buildings-edge',
     ];
 
     const bldgVis = layers.buildings3D ? 'visible' : 'none';
@@ -3222,8 +3227,12 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty(lyr, 'visibility', bldgVis);
         }
       }
+      if (bldgVis === 'visible') {
+        promoteBuildingLayersToTop(map);
+      }
     } else if (renderMode3D === 'facade') {
       // 2. 모드 B: 실감 파사드 모드 (LOD2 Three.js 절차적 외벽/지붕)
+      // [최적화] 네이티브 단색 박스 및 그림자 레이어를 완전히 꺼서(none) 중복 렌더링 및 GPU 오버헤드 차단
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
       }
@@ -3236,8 +3245,6 @@ export const MapViewer: React.FC = () => {
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
       }
-      // [실감 파사드 모드] LOD2 Three.js 실감 파사드 렌더러와 MapLibre 단색 박스의 Z-Fighting/가림 방지:
-      // 네이티브 단색 박스 레이어를 숨겨 Three.js 실사 아틀라스 파사드와 옥상이 선명하게 돋보이도록 설정
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
           map.setLayoutProperty(lyr, 'visibility', 'none');
@@ -3259,10 +3266,6 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty(lyr, 'visibility', 'none');
         }
       }
-    }
-
-    if (bldgVis === 'visible') {
-      promoteBuildingLayersToTop(map);
     }
 
     map.triggerRepaint();
@@ -3427,12 +3430,14 @@ export const MapViewer: React.FC = () => {
     if (!layers.buildings3D) return;
 
     let isCancelled = false;
+    let isCameraMoving = false;
     let timer: NodeJS.Timeout | null = null;
     let currentAbortController: AbortController | null = null;
     let lastFetchedBbox = '';
     let lastFetchedCount = 0;
 
     const fetchBoundsBuildings = async () => {
+      if (isCameraMoving || isCancelled) return;
       try {
         const zoom = map.getZoom();
         if (zoom < 11.8) return; // 11.8 레벨 이상에서 강원 전역 시·군 건물 상세 페칭
@@ -3602,26 +3607,47 @@ export const MapViewer: React.FC = () => {
       }
     };
 
+    // [카메라 이동 중 스레드 블로킹 차단 및 200ms 디바운스]
     const handleSpatialMoveStart = () => {
+      isCameraMoving = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (currentAbortController) {
+        try {
+          currentAbortController.abort();
+        } catch {}
+      }
+    };
+
+    const handleSpatialMove = () => {
+      isCameraMoving = true;
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
     };
 
-    const debouncedFetch = () => {
+    const handleSpatialMoveEnd = () => {
+      isCameraMoving = false;
       if (timer) clearTimeout(timer);
-      timer = setTimeout(fetchBoundsBuildings, 250);
+      timer = setTimeout(() => {
+        if (!isCameraMoving && !isCancelled) {
+          fetchBoundsBuildings();
+        }
+      }, 200);
     };
 
-    // 지도 이동 및 줌 완료(moveend) & 렌더링 완료(idle) 리스너 연동 (250ms 디바운스, movestart 시 일시 정지)
+    // movestart 및 move 중 연산 일시 보류, moveend 200ms 후 디바운스로 신규 건물 추가 생성
     map.on('movestart', handleSpatialMoveStart);
-    map.on('moveend', debouncedFetch);
-    map.on('idle', debouncedFetch);
-    debouncedFetch();
+    map.on('move', handleSpatialMove);
+    map.on('moveend', handleSpatialMoveEnd);
+    handleSpatialMoveEnd();
 
     return () => {
       isCancelled = true;
+      isCameraMoving = false;
       if (timer) clearTimeout(timer);
       if (currentAbortController) {
         try {
@@ -3631,8 +3657,8 @@ export const MapViewer: React.FC = () => {
         }
       }
       map.off('movestart', handleSpatialMoveStart);
-      map.off('moveend', debouncedFetch);
-      map.off('idle', debouncedFetch);
+      map.off('move', handleSpatialMove);
+      map.off('moveend', handleSpatialMoveEnd);
     };
   }, [isMapLoaded, layers.buildings3D, setVworldDiagnostic, mergeIntoPersistentBuildingCache]);
 
@@ -4611,11 +4637,9 @@ export const MapViewer: React.FC = () => {
 
     updatePinPositions();
     map.on('move', updatePinPositions);
-    map.on('render', updatePinPositions);
 
     return () => {
       map.off('move', updatePinPositions);
-      map.off('render', updatePinPositions);
     };
   }, [spatialPins, isMapLoaded]);
 

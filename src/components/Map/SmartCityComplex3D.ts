@@ -1598,6 +1598,8 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.shadowMap.enabled = false;
+        const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+        this.renderer.setPixelRatio(pr);
       } catch (err) {
         console.warn('[SmartCityComplex3DLayer] WebGLRenderer setup notice:', err);
       }
