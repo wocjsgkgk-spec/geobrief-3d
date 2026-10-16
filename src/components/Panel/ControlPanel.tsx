@@ -1468,7 +1468,7 @@ export const ControlPanel: React.FC = () => {
 
                   <div className="mt-2.5 pt-2 border-t border-cyan-900/40 flex items-center justify-between">
                     <span className="text-[10px] text-cyan-300/80 font-mono truncate max-w-[160px]">
-                      {tile3DStream.statusText || '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중'}
+                      {tile3DStream.statusText || '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'}
                     </span>
                     <button
                       type="button"

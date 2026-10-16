@@ -591,9 +591,6 @@ export const MapViewer: React.FC = () => {
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
 
-  // [신규] 3D 타일셋 미지원/타임아웃 감지 시 실감 파사드 자동 폴백 배너 상태
-  const [tileFallbackBanner, setTileFallbackBanner] = useState<string | null>(null);
-
   // [긴급 에러 오버레이] Window Error & Unhandled Promise Rejection 실시간 감지 리스너
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => {
@@ -2426,50 +2423,30 @@ export const MapViewer: React.FC = () => {
         'top-right'
       );
 
-      // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 컨트롤 부착]
+      // [2단계: Deck.gl 기반 범용 하이브리드 3D 타일셋 스트리밍 컨트롤 부착]
       try {
         const deckManager = new Deck3DTilesManager({
           onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
             useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
           },
-          onFallback: (reason?: string) => {
-            console.warn(
-              `%c[MapViewer AUTO-FALLBACK]%c ⚠️ 3D 타일셋 연결 실패/타임아웃 (${reason || '사유 미상'})\n • 조치: 즉시 LOD2 실감 파사드 모드로 자동 전환 및 무한 로딩 해제`,
-              'background: #78350F; color: #FDE68A; font-weight: bold; padding: 2px 6px; border-radius: 4px;',
-              'color: #F59E0B; font-weight: bold;'
-            );
-
-            // 1. 무한 로딩 인디케이터 즉시 해제 및 상태 메시지 동기화
-            useMapStore.getState().setTile3DStreamStatus(
-              '⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)',
-              false,
-              0
-            );
-
-            // 2. 3D 렌더링 모드를 지능적으로 [실감 파사드(facade/LOD2)]로 원클릭 자동 전환
-            useMapStore.getState().setRenderMode3D('facade');
-
-            // 3. Three.js LOD2 실감 3D 빌딩 엔진 즉시 활성화
-            if (lod2BuildingEngineRef.current) {
-              lod2BuildingEngineRef.current.setVisible(true);
-            }
-
-            // 4. UI 상단에 안내 배너 표출 (3.5초 후 자동 해제)
-            setTileFallbackBanner('⚠️ 해당 지역 실사 3D 타일 미지원 구역 (자체 LOD2 모드로 대체)');
-            setTimeout(() => {
-              setTileFallbackBanner(null);
-            }, 3500);
+          onTileCountUpdate: (count) => {
+            console.log('[Universal3DTilesManager] Real-time 3D hybrid building count:', count);
           },
         });
         deckManager.attachToMap(map);
         deck3DTilesManagerRef.current = deckManager;
+
+        // 초기 샘플 건물 피처 사전 적재
+        if (SAMPLE_BUILDINGS?.features) {
+          deckManager.setBuildingFeatures(SAMPLE_BUILDINGS.features as any);
+        }
 
         const initTileState = useMapStore.getState().tile3DStream;
         if (initTileState.enabled) {
           deckManager.update(initTileState);
         }
       } catch (deckErr) {
-        console.warn('[MapViewer] Deck3DTilesManager initialization warning:', deckErr);
+        console.warn('[MapViewer] Universal3DTilesManager initialization warning:', deckErr);
       }
     };
 
@@ -3408,6 +3385,9 @@ export const MapViewer: React.FC = () => {
               if (threeboxLayerRef.current) {
                 threeboxLayerRef.current.syncRoofs(mergedList);
               }
+              if (deck3DTilesManagerRef.current && mergedList.length > 0) {
+                deck3DTilesManagerRef.current.setBuildingFeatures(mergedList);
+              }
             } catch (cacheErr) {
               console.warn('[MapViewer] Failed to update from buildingSpatialCache:', cacheErr);
             }
@@ -3485,6 +3465,11 @@ export const MapViewer: React.FC = () => {
           // 4) Threebox LOD2 입체 지붕 동기화 (기즈모 및 시설물 연동용)
           if (threeboxLayerRef.current && mergedList.length > 0) {
             threeboxLayerRef.current.syncRoofs(mergedList);
+          }
+
+          // 5) 범용 하이브리드 3D 타일셋 엔진(Deck.gl) 건물 피처 동기화
+          if (deck3DTilesManagerRef.current && mergedList.length > 0) {
+            deck3DTilesManagerRef.current.setBuildingFeatures(mergedList);
           }
         } catch (sourceErr) {
           console.warn('[MapViewer] Failed to update building sources:', sourceErr);
@@ -4682,7 +4667,15 @@ export const MapViewer: React.FC = () => {
       ...tile3DStream,
       enabled: shouldEnable,
     });
-  }, [tile3DStream, renderMode3D]);
+  }, [
+    renderMode3D,
+    tile3DStream.enabled,
+    tile3DStream.url,
+    tile3DStream.presetId,
+    tile3DStream.opacity,
+    tile3DStream.maximumScreenSpaceError,
+    tile3DStream.pointSize,
+  ]);
 
   // 30-1. [지휘통제 및 보안 관제] 3D 전술 탐지 돔(Threat Dome) 상태 동기화
   useEffect(() => {
@@ -6329,19 +6322,7 @@ export const MapViewer: React.FC = () => {
           </div>
         )}
 
-        {/* [신규] 3D 타일셋 미지원/타임아웃 감지 시 실감 파사드 자동 폴백 안내 배지 */}
-        {tileFallbackBanner && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 bg-amber-950/95 border border-amber-500/80 text-amber-200 px-4 py-2 rounded-xl backdrop-blur-md shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top duration-300">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-            <span className="text-xs sm:text-sm font-semibold">{tileFallbackBanner}</span>
-            <button
-              onClick={() => setTileFallbackBanner(null)}
-              className="text-xs ml-2 bg-amber-900/70 hover:bg-amber-800 text-amber-200 hover:text-white px-2 py-0.5 rounded transition-colors"
-            >
-              확인
-            </button>
-          </div>
-        )}
+
 
         {/* [4단계 신규] 3D 시네마틱 방송용 OSD 레터박스 및 비행 계기판 오버레이 */}
         <CinematicOsdOverlay

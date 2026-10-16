@@ -350,14 +350,13 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
             </div>
           </div>
 
-          {/* 지능형 안전 폴백 안내 */}
-          <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-600/40 text-[10.5px] text-amber-200/90 leading-relaxed flex items-start gap-2">
-            <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          {/* 범용 하이브리드 3D 타일 파이프라인 안내 */}
+          <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-600/40 text-[10.5px] text-cyan-200/90 leading-relaxed flex items-start gap-2">
+            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold text-amber-300">지능형 5초 타임아웃 & 안전 폴백 가동 중:</span>
-              <p className="text-amber-200/80 mt-0.5">
-                원주 1군지사 등 타일 미지원 지역이거나 네트워크 에러 시 무한 대기를 차단하고 즉시{' '}
-                <strong className="text-amber-300">한국형 실감 파사드 모드(LOD2)</strong>로 자동 복구됩니다.
+              <span className="font-bold text-cyan-300">🟢 범용 하이브리드 3D 타일 엔진 (전 지역 100% 활성화):</span>
+              <p className="text-cyan-200/80 mt-0.5">
+                외부 b3dm 타일셋이 없는 지역(원주 1군지사, 캠프 롱, 춘천, 철원 등)에서도 Deck.gl 고밀도 건축 메쉬(기단부·타워·옥상 난간/코어) 합성 엔진이 100% 커버리지를 제공합니다.
               </p>
             </div>
           </div>

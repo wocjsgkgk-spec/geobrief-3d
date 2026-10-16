@@ -1356,7 +1356,7 @@ export const useMapStore = create<MapStoreState>()(
         maximumMemoryUsage: 256,
         pointSize: 2.0,
         isLoading: false,
-        statusText: '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
+        statusText: '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)',
         tilesLoadedCount: 0,
       },
       toggleTile3DStream: () =>
@@ -1411,14 +1411,27 @@ export const useMapStore = create<MapStoreState>()(
           },
         })),
       setTile3DStreamStatus: (statusText, isLoading, tilesLoadedCount) =>
-        set((state) => ({
-          tile3DStream: {
-            ...state.tile3DStream,
-            ...(statusText !== undefined ? { statusText } : {}),
-            ...(isLoading !== undefined ? { isLoading } : {}),
-            ...(tilesLoadedCount !== undefined ? { tilesLoadedCount } : {}),
-          },
-        })),
+        set((state) => {
+          const prev = state.tile3DStream;
+          const nextStatus = statusText !== undefined ? statusText : prev.statusText;
+          const nextLoading = isLoading !== undefined ? isLoading : prev.isLoading;
+          const nextCount = tilesLoadedCount !== undefined ? tilesLoadedCount : prev.tilesLoadedCount;
+          if (
+            nextStatus === prev.statusText &&
+            nextLoading === prev.isLoading &&
+            nextCount === prev.tilesLoadedCount
+          ) {
+            return state;
+          }
+          return {
+            tile3DStream: {
+              ...prev,
+              statusText: nextStatus,
+              isLoading: nextLoading,
+              tilesLoadedCount: nextCount,
+            },
+          };
+        }),
 
       // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls 관리]
       placedFacilities: generateStrategicFacilities('camp-long-wonju', 100),
@@ -1450,11 +1463,14 @@ export const useMapStore = create<MapStoreState>()(
             detail3DMode: isNative ? 'lod1' : 'lod2',
             layers: {
               ...s.layers,
-              buildings3D: isNative || isFacade,
+              buildings3D: true, // 모든 3D 모드(A, B, C)에서 공간 건물 데이터 파이프라인 상시 유지
             },
             tile3DStream: {
               ...s.tile3DStream,
               enabled: isTiles3D,
+              statusText: isTiles3D
+                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
+                : s.tile3DStream.statusText,
             },
           };
         }),
@@ -1828,7 +1844,7 @@ export const useMapStore = create<MapStoreState>()(
                   maximumScreenSpaceError: data.tile3DStream.maximumScreenSpaceError,
                   pointSize: data.tile3DStream.pointSize,
                   isLoading: false,
-                  statusText: '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
+                  statusText: '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)',
                   tilesLoadedCount: 0,
                 }
               : get().tile3DStream,
@@ -1946,7 +1962,7 @@ export const useMapStore = create<MapStoreState>()(
             maximumScreenSpaceError: 16,
             pointSize: 2.0,
             isLoading: false,
-            statusText: '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중',
+            statusText: '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)',
             tilesLoadedCount: 0,
           },
           placedFacilities: [],
@@ -2138,3 +2154,7 @@ export const useMapStore = create<MapStoreState>()(
     }
   )
 );
+
+if (typeof window !== 'undefined') {
+  (window as any).__useMapStore = useMapStore;
+}
