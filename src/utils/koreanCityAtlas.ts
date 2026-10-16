@@ -1024,25 +1024,25 @@ export function classifyBuilding(
       wallSideSlot: 'apartment_side',
       roofSlot: 'roof_concrete_cool', // 회색 콘크리트 옥상 슬래브
       hasParapet: true,
-      parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
-      hasPenthouse: true, // 엘리베이터 옥탑방 돌출 (3.2m)
+      parapetHeight: 0.8, // 실측 규격 0.8m 날렵한 옥상 난간
+      hasPenthouse: true, // 엘리베이터 옥탑 코어 (다각형 내부 검증 시에만 생성)
       isPitchedRoof: false,
     };
   }
 
-  // 2) [규칙 2]: 중·저층 상가 및 일반 빌딩 (높이 10m~28m)
+  // 2) [규칙 2]: 중·저층 상가 및 일반 빌딩 (높이 9m~28m)
   // 외벽: 밝은 화강석/타일 외벽 + 가로형 창문 프레임 + 1층 상가 간판
-  // 옥상: 한국 특유의 초록색 우레탄 방수 옥상(#15803d) + 1.2m 옥상 테두리 난간(Parapet)
-  if (totalH >= 10.0 && totalH < 28.0) {
+  // 옥상: 한국 특유의 초록색 우레탄 방수 옥상(#15803d) + 0.8m 날렵한 옥상 난간(Parapet)
+  if (totalH >= 9.0 && totalH < 28.0) {
     const isPublic = usageType.includes('public') || name.includes('청사') || name.includes('센터');
     return {
       category: isPublic ? 'public' : 'commercial',
       wallFrontSlot: isPublic ? 'public_facility' : 'commercial_mid',
       wallSideSlot: isPublic ? 'public_facility' : 'commercial_mid',
-      roofSlot: 'roof_green_urethane', // 한국 특유의 초록색 우레탄 방수 옥상 100%
+      roofSlot: 'roof_green_urethane', // 한국 특유의 초록색 우레탄 방수 옥상
       hasParapet: true,
-      parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
-      hasPenthouse: true,
+      parapetHeight: 0.8, // 실측 규격 0.8m 날렵한 옥상 난간
+      hasPenthouse: false, // 일반 상가는 복잡한 사각 박스 돌출 배제하고 깔끔한 평슬래브 유지
       isPitchedRoof: false,
     };
   }
@@ -1056,14 +1056,14 @@ export function classifyBuilding(
       wallSideSlot: isCurtain ? 'curtainwall_high' : 'commercial_mid',
       roofSlot: 'roof_concrete_cool',
       hasParapet: true,
-      parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
+      parapetHeight: 0.8, // 실측 규격 0.8m 날렵한 옥상 난간
       hasPenthouse: true,
       isPitchedRoof: false,
     };
   }
 
-  // 4) [규칙 4]: 저층 주택 및 군부대 시설 (높이 10m 미만)
-  // 외벽: 베이지/적벽돌 외벽 + 초록색 방수 지붕 또는 적갈색/청색 박공 경사 지붕
+  // 4) [규칙 4]: 저층 주택 및 군부대 시설 (높이 9m 미만)
+  // 외벽: 베이지/적벽돌 외벽 + 위성사진 다각형과 1:1로 일치하는 깔끔한 평슬래브 지붕
   const isMilitary =
     usageType.includes('military') ||
     usageType.includes('barracks') ||
@@ -1073,20 +1073,16 @@ export function classifyBuilding(
     name.includes('사령부') ||
     name.includes('막사');
 
-  const isPitched = !isMilitary && (rnd >= 0.55 || usageType.includes('house'));
-  let roofSlot: AtlasSlot = 'roof_green_urethane'; // 기본 초록색 방수 지붕
-  if (isPitched) {
-    roofSlot = rnd < 0.75 ? 'roof_brown_shingle' : 'roof_blue_zinc'; // 적갈색 슁글 또는 청색 징크
-  }
+  const roofSlot: AtlasSlot = rnd < 0.70 ? 'roof_green_urethane' : 'roof_concrete_cool';
 
   return {
     category: isMilitary ? 'military' : 'villa',
     wallFrontSlot: isMilitary ? 'public_facility' : 'villa_residential',
     wallSideSlot: isMilitary ? 'public_facility' : 'villa_residential',
     roofSlot,
-    hasParapet: !isPitched,
-    parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
+    hasParapet: true,
+    parapetHeight: 0.8, // 실측 규격 0.8m 날렵한 옥상 난간
     hasPenthouse: false,
-    isPitchedRoof: isPitched,
+    isPitchedRoof: false, // 실제 GIS 다각형 1:1 수직 압출
   };
 }

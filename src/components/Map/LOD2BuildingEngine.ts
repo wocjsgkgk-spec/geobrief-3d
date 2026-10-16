@@ -160,61 +160,49 @@ function projectCoordsToLocalMeters(
   return pts;
 }
 
+/**
+ * 2D 점이 다각형 내부에 완전히 포함되는지 검사 (Ray-casting Algorithm)
+ */
+function isPointInPolygon2D(x: number, y: number, pts: THREE.Vector2[]): boolean {
+  let inside = false;
+  const n = pts.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y;
+    const xj = pts[j].x, yj = pts[j].y;
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * THREE.ShapeUtils.triangulateShape (표준 Earcut 알고리즘) 기반
+ * ㄱ자, ㄷ자, 요(凹)철형 및 복합 다각형을 1mm 오차 없이 정밀 삼각화
+ */
 function triangulatePolygon2D(pts: THREE.Vector2[]): number[] {
   const n = pts.length;
   if (n < 3) return [];
   if (n === 3) return [0, 1, 2];
 
-  const indices: number[] = [];
-  const V: number[] = [];
-  for (let i = 0; i < n; i++) V.push(i);
-
-  let count = 2 * n;
-  let v = n - 1;
-
-  while (V.length > 2) {
-    if (count-- <= 0) break;
-
-    const u = v >= V.length ? 0 : v;
-    v = (u + 1) % V.length;
-    const w = (v + 1) % V.length;
-
-    const A = pts[V[u]];
-    const B = pts[V[v]];
-    const C = pts[V[w]];
-
-    const cross = (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
-    if (cross <= 1e-5) continue;
-
-    let isEar = true;
-    for (let p = 0; p < V.length; p++) {
-      if (p === u || p === v || p === w) continue;
-      const P = pts[V[p]];
-      const sign1 = (B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x);
-      const sign2 = (C.x - B.x) * (P.y - B.y) - (C.y - B.y) * (P.x - B.x);
-      const sign3 = (A.x - C.x) * (P.y - C.y) - (A.y - C.y) * (P.x - C.x);
-      const hasNeg = sign1 < 0 || sign2 < 0 || sign3 < 0;
-      const hasPos = sign1 > 0 || sign2 > 0 || sign3 > 0;
-      if (!(hasNeg && hasPos)) {
-        isEar = false;
-        break;
-      }
+  try {
+    const faces = THREE.ShapeUtils.triangulateShape(pts, []);
+    const indices: number[] = [];
+    for (const f of faces) {
+      indices.push(f[0], f[1], f[2]);
     }
-
-    if (isEar) {
-      indices.push(V[u], V[v], V[w]);
-      V.splice(v, 1);
-      count = 2 * V.length;
+    if (indices.length > 0) {
+      return indices;
     }
+  } catch (e) {
+    // 폴백
   }
 
-  if (indices.length === 0) {
-    for (let i = 1; i < n - 1; i++) {
-      indices.push(0, i, i + 1);
-    }
+  // 폴백 단순 삼각화
+  const fallbackIndices: number[] = [];
+  for (let i = 1; i < n - 1; i++) {
+    fallbackIndices.push(0, i, i + 1);
   }
-
-  return indices;
+  return fallbackIndices;
 }
 
 /**
@@ -599,13 +587,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       ).toLowerCase();
 
       const rawFlr = Number(
-        props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || props.levels || 0
+        props['building:levels'] || props.building_levels || props.levels || props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || 0
       );
       const rawHei = Number(
-        props.hei || props.HEI || props.height || props.render_height || props.bld_hgt || 0
+        props.height || props.render_height || props.hei || props.HEI || props.bld_hgt || 0
       );
 
-      const explicitH = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.2 : 0);
+      // [3. 실측 층수 기반 정확한 높이 스케일링: 1개 층 = 정확히 3.0m]
+      const explicitH = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.0 : 0);
 
       const rings: [number, number][][] = [];
       if (feat.geometry.type === 'Polygon') {
@@ -626,7 +615,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const approxArea = Math.max(10, obb.lenU * obb.lenV);
         const aspectRatio = obb.lenU / Math.max(1.0, obb.lenV);
 
-        // [Z축 스케일 정밀 복원: 실제 높이(아파트 45~75m, 상가 15~30m, 저층 6~10m) 수직 돌출]
+        // [Z축 스케일 정밀 복원: 1개 층 3.0m 기준 및 실측 비례 매핑]
         let totalH = explicitH;
         const isApt =
           name.includes('아파트') ||
@@ -661,35 +650,30 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           usageType.includes('office') ||
           approxArea >= 500;
 
-        if (isApt) {
-          const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
-          const defaultAptStories = Math.round(15 + seed * 9); // 15~24층 (48m~76.8m)
-          if (!totalH || totalH < 35.0) {
-            totalH = defaultAptStories * 3.2;
+        // [3. 실측 층수 기반 정확한 높이 스케일링: 1개 층 3.0m 엄격 준수]
+        if (!totalH || totalH <= 0) {
+          if (isApt) {
+            // 아파트 단지: 층수 부재 시 실제 동별 층수 15~25층 (45m~75m, 3.0m/층)
+            const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
+            const defaultAptStories = Math.round(15 + seed * 10); // 15~25층
+            totalH = defaultAptStories * 3.0; // 정확히 3.0m/층 (45m~75m)
+          } else if (isComm) {
+            // 일반 시내 상가: 층수 부재 시 3~4층 (9m~12m), 대형 오피스는 5~8층 (15m~24m)
+            const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
+            const stories = approxArea >= 700 ? Math.round(5 + seed * 3) : (seed > 0.5 ? 4 : 3);
+            totalH = stories * 3.0; // 정확히 3.0m/층 (9m 또는 12m)
           } else {
-            totalH = Math.max(48.0, totalH);
-          }
-        } else if (isComm) {
-          const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
-          const defaultCommStories = Math.round(5 + seed * 4); // 5~9층 (16m~28.8m)
-          if (!totalH || totalH < 12.0) {
-            totalH = defaultCommStories * 3.2;
-          } else {
-            totalH = Math.max(16.0, totalH);
-          }
-        } else {
-          // 일반 주택, 빌라, 군 시설: 2~3층 (6m~10m)
-          if (!totalH || totalH < 6.0) {
-            if (approxArea < 150) {
-              totalH = 6.4; // 2층 (6.4m)
+            // 단독주택 / 빌라: 층수 부재 시 1~2층 (3.5m ~ 6.0m)
+            if (approxArea < 130 || usageType.includes('house')) {
+              totalH = 3.5; // 1층 단독주택 (3.5m)
             } else if (approxArea < 350) {
-              totalH = 9.6; // 3층 (9.6m)
+              totalH = 6.0; // 2층 빌라/단독주택 (6.0m)
             } else {
-              totalH = 12.8; // 4층 (12.8m)
+              totalH = 9.0; // 3층 저층 상가주택 (9.0m)
             }
           }
         }
-        totalH = Math.max(6.0, totalH);
+        totalH = Math.max(3.5, totalH);
 
         // 지형 표고 정합 (중심점 1회 해시 캐시 조회 후 clampedAltitude 기준 상대고도 산출)
         const elev = elevationCache.getElevationForPolygonFromMap(this.map, ring);
@@ -733,14 +717,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const segLen = Math.sqrt(dx * dx + dz * dz);
           if (segLen < 0.05) continue;
 
-          const nx = -dz / segLen;
-          const nz = dx / segLen;
+          // Inward normal: (-dz/len, dx/len)
+          // Outward normal: (dz/len, -dx/len)
+          const outNx = dz / segLen;
+          const outNz = -dx / segLen;
 
-          // (1) 지면 접지 그림자 (Contact Shadow Skirt: 2.5m~4.0m, 반투명 차콜 #020617, 알파 0.45 -> 0.0 페이드아웃)
-          const p0_out_x = p0.x + nx * shadowRadius;
-          const p0_out_z = p0.y + nz * shadowRadius;
-          const p1_out_x = p1.x + nx * shadowRadius;
-          const p1_out_z = p1.y + nz * shadowRadius;
+          // (1) 지면 접지 그림자 (Contact Shadow Skirt: 2.5m~4.0m 외곽 방향 전개)
+          const p0_out_x = p0.x + outNx * shadowRadius;
+          const p0_out_z = p0.y + outNz * shadowRadius;
+          const p1_out_x = p1.x + outNx * shadowRadius;
+          const p1_out_z = p1.y + outNz * shadowRadius;
 
           addShadowQuad(
             shadowPositions,
@@ -753,7 +739,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           );
 
           // (2) 실시간 태양광 투영 그림자 (Drop Shadow: 건물 높이에 비례하여 광원 반대 방향으로 연장 투영)
-          if (totalH >= 8.0 && (nx * sX + nz * sZ) < 0.15) {
+          if (totalH >= 8.0 && (outNx * sX + outNz * sZ) < 0.15) {
             addShadowQuad(
               shadowPositions,
               shadowColors,
@@ -787,8 +773,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const segLen = Math.sqrt(dx * dx + dz * dz);
           if (segLen < 0.05) continue;
 
-          const nx = -dz / segLen;
-          const nz = dx / segLen;
+          const outNx = dz / segLen;
+          const outNz = -dx / segLen;
 
           // ===================================================================
           // [Part 1. 저층 기단부 (0m ~ 4m)]
@@ -802,7 +788,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             { x: p1.x, y: wallBaseY, z: p1.y },
             { x: p1.x, y: podiumTopY, z: p1.y },
             { x: p0.x, y: podiumTopY, z: p0.y },
-            nx, 0, nz,
+            outNx, 0, outNz,
             { u: fndUV.u0, v: fndUV.v0 },
             { u: fndUV.u1, v: fndUV.v0 },
             { u: fndUV.u1, v: fndUV.v1 },
@@ -830,7 +816,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                   { x: p1.x, y: podiumTopY, z: p1.y },
                   { x: p1.x, y: wallTop, z: p1.y },
                   { x: p0.x, y: wallTop, z: p0.y },
-                  nx, 0, nz,
+                  outNx, 0, outNz,
                   { u: sideUV.u0, v: sideUV.v0 },
                   { u: sideUV.u1, v: sideUV.v0 },
                   { u: sideUV.u1, v: sideUV.v1 },
@@ -859,7 +845,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                       { x: bx1, y: y0, z: bz1 },
                       { x: bx1, y: y1, z: bz1 },
                       { x: bx0, y: y1, z: bz0 },
-                      nx, 0, nz,
+                      outNx, 0, outNz,
                       { u: frontUV.u0, v: frontUV.v0 },
                       { u: frontUV.u1, v: frontUV.v0 },
                       { u: frontUV.u1, v: frontUV.v1 },
@@ -892,7 +878,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                     { x: bx1, y: y0, z: bz1 },
                     { x: bx1, y: y1, z: bz1 },
                     { x: bx0, y: y1, z: bz0 },
-                    nx, 0, nz,
+                    outNx, 0, outNz,
                     { u: wallUV.u0, v: wallUV.v0 },
                     { u: wallUV.u1, v: wallUV.v0 },
                     { u: wallUV.u1, v: wallUV.v1 },
@@ -905,236 +891,146 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 2. [지붕 (Roof) 지오메트리 & 아틀라스 UV 매핑]
-        if (cls.isPitchedRoof) {
-          // (a) 입체 박공 지붕 (Gabled Roof - 적갈색 슁글 또는 청색 징크)
-          const ridgeAngleRad = (20 * Math.PI) / 180;
-          const ridgeHeight = Math.max(1.4, Math.min(5.5, (obb.lenV * 0.5) * Math.tan(ridgeAngleRad)));
-          const ridgeTop = wallTop + ridgeHeight;
-          const halfRidgeU = Math.max(0.1, obb.lenU * 0.48);
-
-          const rP0 = new THREE.Vector2(
-            obb.obbCenter.x - obb.dirU.x * halfRidgeU,
-            obb.obbCenter.y - obb.dirU.y * halfRidgeU
-          );
-          const rP1 = new THREE.Vector2(
-            obb.obbCenter.x + obb.dirU.x * halfRidgeU,
-            obb.obbCenter.y + obb.dirU.y * halfRidgeU
-          );
-
+        // 2. [지붕 (Roof) 지오메트리 & 아틀라스 UV 매핑 - 실제 GIS 건물 다각형 100% 1:1 Earcut 정밀 수직 압출]
+        // 건물 외곽선 Bounding Box 치환 및 가짜 박공/피라미드 지붕을 완전히 제거하고, 위성사진 지붕 윤곽과 1:1 일치
+        const roofTriangles = triangulatePolygon2D(pts);
+        if (roofTriangles.length > 0) {
           const roofUV = getAtlasSlotUV(cls.roofSlot);
+          for (const idx of roofTriangles) {
+            const p = pts[idx];
+            const u = roofUV.u0 + ((p.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
+            const v = roofUV.v0 + ((p.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
+
+            masterPositions.push(p.x, wallTop, p.y);
+            masterNormals.push(0, 1, 0); // normal.y = 1
+            masterUvs.push(u, v);
+            masterColors.push(1.0, 1.0, 1.0);
+          }
+        }
+
+        // 3. [0.8m 실측 규격 콘크리트 난간(Parapet) - 외곽선 안쪽으로만 0.25m 두께 정밀 모델링]
+        // 두께 0.25m, 높이 0.8m로 얇고 날렵하게 외곽선 안쪽으로만 생성 (과장된 돌출 기둥 및 외측 침범 원천 차단)
+        if (cls.hasParapet && obb.lenV >= 2.5 && approxArea >= 20) {
+          const parapetUV = getAtlasSlotUV('parapet_concrete');
+          const pH = cls.parapetHeight || 0.8;
+          const pThick = 0.25; // 외곽선 안쪽 테두리 두께 0.25m (실측 건축 규격)
 
           for (let i = 0; i < N; i++) {
             const p0 = pts[i];
             const p1 = pts[(i + 1) % N];
+            const dx = p1.x - p0.x;
+            const dz = p1.y - p0.y;
+            const segLen = Math.sqrt(dx * dx + dz * dz);
+            if (segLen < 0.1) continue;
 
-            const d0 = (p0.x - obb.obbCenter.x) * obb.dirU.x + (p0.y - obb.obbCenter.y) * obb.dirU.y;
-            const d1 = (p1.x - obb.obbCenter.x) * obb.dirU.x + (p1.y - obb.obbCenter.y) * obb.dirU.y;
-            const cd0 = Math.max(-halfRidgeU, Math.min(halfRidgeU, d0));
-            const cd1 = Math.max(-halfRidgeU, Math.min(halfRidgeU, d1));
+            // Inward normal (다각형 내부 방향)
+            const inNx = -dz / segLen;
+            const inNz = dx / segLen;
+            // Outward normal (다각형 외부 방향)
+            const outNx = -inNx;
+            const outNz = -inNz;
 
-            const proj0 = new THREE.Vector2(
-              obb.obbCenter.x + obb.dirU.x * cd0,
-              obb.obbCenter.y + obb.dirU.y * cd0
-            );
-            const proj1 = new THREE.Vector2(
-              obb.obbCenter.x + obb.dirU.x * cd1,
-              obb.obbCenter.y + obb.dirU.y * cd1
-            );
+            // 안쪽 내벽 오프셋 좌표 (다각형 내부로 0.25m 이동)
+            const p0i_x = p0.x + inNx * pThick;
+            const p0i_z = p0.y + inNz * pThick;
+            const p1i_x = p1.x + inNx * pThick;
+            const p1i_z = p1.y + inNz * pThick;
 
-            // 경사면 법선 벡터
-            const vA = new THREE.Vector3(p0.x, wallTop, p0.y);
-            const vB = new THREE.Vector3(p1.x, wallTop, p1.y);
-            const vC = new THREE.Vector3(proj1.x, ridgeTop, proj1.y);
-            const cb = new THREE.Vector3().subVectors(vC, vB);
-            const ab = new THREE.Vector3().subVectors(vA, vB);
-            const fn = new THREE.Vector3().crossVectors(cb, ab).normalize();
-            if (fn.y < 0) fn.negate();
-
-            const u0 = roofUV.u0 + ((p0.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-            const v0 = roofUV.v0 + ((p0.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
-            const u1 = roofUV.u0 + ((p1.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-            const v1 = roofUV.v0 + ((p1.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
-            const up0 = roofUV.u0 + ((proj0.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-            const vp0 = roofUV.v0 + ((proj0.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
-            const up1 = roofUV.u0 + ((proj1.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-            const vp1 = roofUV.v0 + ((proj1.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
-
+            // 1) 난간 외벽면 (높이 0.8m, 외벽 라인과 1:1 완벽 정합)
             addQuad(
               masterPositions, masterNormals, masterUvs, masterColors,
               { x: p0.x, y: wallTop, z: p0.y },
               { x: p1.x, y: wallTop, z: p1.y },
-              { x: proj1.x, y: ridgeTop, z: proj1.y },
-              { x: proj0.x, y: ridgeTop, z: proj0.y },
-              fn.x, fn.y, fn.z,
-              { u: u0, v: v0 },
-              { u: u1, v: v1 },
-              { u: up1, v: vp1 },
-              { u: up0, v: vp0 },
+              { x: p1.x, y: wallTop + pH, z: p1.y },
+              { x: p0.x, y: wallTop + pH, z: p0.y },
+              outNx, 0, outNz,
+              { u: parapetUV.u0, v: parapetUV.v0 },
+              { u: parapetUV.u1, v: parapetUV.v0 },
+              { u: parapetUV.u1, v: parapetUV.v1 },
+              { u: parapetUV.u0, v: parapetUV.v1 },
+              0.98, 0.98, 0.99
+            );
+
+            // 2) 난간 상단 코핑 (두께 0.25m 수평 마감)
+            addQuad(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              { x: p0.x, y: wallTop + pH, z: p0.y },
+              { x: p0i_x, y: wallTop + pH, z: p0i_z },
+              { x: p1i_x, y: wallTop + pH, z: p1i_z },
+              { x: p1.x, y: wallTop + pH, z: p1.y },
+              0, 1, 0,
+              { u: parapetUV.u0, v: parapetUV.v0 },
+              { u: parapetUV.u0, v: parapetUV.v1 },
+              { u: parapetUV.u1, v: parapetUV.v1 },
+              { u: parapetUV.u1, v: parapetUV.v0 },
               1.0, 1.0, 1.0
             );
+
+            // 3) 난간 안쪽 내벽 (상단 코핑에서 우레탄 옥상 바닥으로 0.8m 내려가는 내벽)
+            addQuad(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              { x: p1i_x, y: wallTop, z: p1i_z },
+              { x: p0i_x, y: wallTop, z: p0i_z },
+              { x: p0i_x, y: wallTop + pH, z: p0i_z },
+              { x: p1i_x, y: wallTop + pH, z: p1i_z },
+              inNx, 0, inNz,
+              { u: parapetUV.u0, v: parapetUV.v0 },
+              { u: parapetUV.u0, v: parapetUV.v1 },
+              { u: parapetUV.u1, v: parapetUV.v1 },
+              { u: parapetUV.u0, v: parapetUV.v1 },
+              0.98, 0.98, 0.99
+            );
           }
+        }
 
-          // 전/후면 박공벽 삼각형
-          const uA = roofUV.u0 + ((rP0.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-          const vA = roofUV.v0 + ((rP0.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
-          const uB = roofUV.u0 + ((rP1.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-          const vB = roofUV.v0 + ((rP1.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
-          const uC = roofUV.u0 + ((obb.centroid.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-          const vC = roofUV.v0 + ((obb.centroid.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
+        // 4. [엘리베이터 권상기실(Penthouse) 컴팩트화 & 다각형 내부 100% 포함 검증]
+        // 좁거나 오목/복합 다각형(ㄱ자, ㄷ자) 건물 위 억지 사각 옥탑 박스 배제 -> 깔끔한 평슬래브 유지
+        let hasValidPenthouse = false;
+        let pentCX = 0;
+        let pentCZ = 0;
+        let pentW = 0;
+        let pentD = 0;
+        const pentH = 2.4; // 실측 엘리베이터 권상기실 높이 2.4m
 
-          masterPositions.push(
-            rP0.x, ridgeTop, rP0.y,
-            rP1.x, ridgeTop, rP1.y,
-            obb.centroid.x, wallTop, obb.centroid.y
-          );
-          masterNormals.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
-          masterUvs.push(uA, vA, uB, vB, uC, vC);
-          masterColors.push(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+        if (cls.hasPenthouse && totalH >= 18.0 && approxArea >= 150) {
+          const coreW = Math.max(2.8, Math.min(obb.lenU * 0.16, 5.0));
+          const coreD = Math.max(2.4, Math.min(obb.lenV * 0.22, 4.0));
+          const hw = coreW * 0.5 + 0.35; // 외곽 난간과의 0.35m 이격 마진
+          const hd = coreD * 0.5 + 0.35;
+          const cx = obb.obbCenter.x;
+          const cz = obb.obbCenter.y;
+          const u = obb.dirU;
+          const v = obb.dirV;
 
-        } else {
-          // (b) 한국형 평지붕 (초록색 우레탄 방수 옥상 #15803d, 오피스 쿨루프 #475569 등)
-          const roofTriangles = triangulatePolygon2D(pts);
-          if (roofTriangles.length > 0) {
-            const roofUV = getAtlasSlotUV(cls.roofSlot);
-            for (const idx of roofTriangles) {
-              const p = pts[idx];
-              const u = roofUV.u0 + ((p.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
-              const v = roofUV.v0 + ((p.y - minY) / rangeY) * (roofUV.v1 - roofUV.v0);
+          const c0 = { x: cx - u.x * hw - v.x * hd, z: cz - u.y * hw - v.y * hd };
+          const c1 = { x: cx + u.x * hw - v.x * hd, z: cz + u.y * hw - v.y * hd };
+          const c2 = { x: cx + u.x * hw + v.x * hd, z: cz + u.y * hw + v.y * hd };
+          const c3 = { x: cx - u.x * hw + v.x * hd, z: cz - u.y * hw + v.y * hd };
 
-              masterPositions.push(p.x, wallTop, p.y);
-              masterNormals.push(0, 1, 0); // normal.y = 1 (world normal.z >= 0.5)
-              masterUvs.push(u, v);
-              masterColors.push(1.0, 1.0, 1.0);
-            }
-          }
+          // 옥탑 4개 모서리 및 중심점이 실제 GIS 다각형 내부에 완전히 들어있는지 엄격 검증
+          const isInside =
+            isPointInPolygon2D(cx, cz, pts) &&
+            isPointInPolygon2D(c0.x, c0.z, pts) &&
+            isPointInPolygon2D(c1.x, c1.z, pts) &&
+            isPointInPolygon2D(c2.x, c2.z, pts) &&
+            isPointInPolygon2D(c3.x, c3.z, pts);
 
-          // 3. [1.2m 콘크리트 난간(Parapet) 3면 입체 모델링]
-          // 초록색 우레탄 바닥이 1.2m 깊이로 쏙 들어가 보이도록 외벽·코핑·내벽 3면 생성 (테두리 두께 0.5m)
-          if (cls.hasParapet) {
-            const parapetUV = getAtlasSlotUV('parapet_concrete');
-            const pH = cls.parapetHeight || 1.2;
-            const pThick = 0.5; // 외곽 테두리 두께 0.5m
+          if (isInside) {
+            hasValidPenthouse = true;
+            pentCX = cx;
+            pentCZ = cz;
+            pentW = coreW;
+            pentD = coreD;
 
-            for (let i = 0; i < N; i++) {
-              const p0 = pts[i];
-              const p1 = pts[(i + 1) % N];
-              const dx = p1.x - p0.x;
-              const dz = p1.y - p0.y;
-              const segLen = Math.sqrt(dx * dx + dz * dz);
-              if (segLen < 0.1) continue;
-
-              const nx = -dz / segLen;
-              const nz = dx / segLen;
-
-              // 안쪽 내벽 오프셋 좌표 (0.5m 내측)
-              const p0i_x = p0.x - nx * pThick;
-              const p0i_z = p0.y - nz * pThick;
-              const p1i_x = p1.x - nx * pThick;
-              const p1i_z = p1.y - nz * pThick;
-
-              // 1) 난간 외벽면 (높이 1.2m)
-              addQuad(
-                masterPositions, masterNormals, masterUvs, masterColors,
-                { x: p0.x, y: wallTop, z: p0.y },
-                { x: p1.x, y: wallTop, z: p1.y },
-                { x: p1.x, y: wallTop + pH, z: p1.y },
-                { x: p0.x, y: wallTop + pH, z: p0.y },
-                nx, 0, nz,
-                { u: parapetUV.u0, v: parapetUV.v0 },
-                { u: parapetUV.u1, v: parapetUV.v0 },
-                { u: parapetUV.u1, v: parapetUV.v1 },
-                { u: parapetUV.u0, v: parapetUV.v1 },
-                0.98, 0.98, 0.99
-              );
-
-              // 2) 난간 상단 코핑 (두께 0.5m 수평 마감)
-              addQuad(
-                masterPositions, masterNormals, masterUvs, masterColors,
-                { x: p0.x, y: wallTop + pH, z: p0.y },
-                { x: p0i_x, y: wallTop + pH, z: p0i_z },
-                { x: p1i_x, y: wallTop + pH, z: p1i_z },
-                { x: p1.x, y: wallTop + pH, z: p1.y },
-                0, 1, 0,
-                { u: parapetUV.u0, v: parapetUV.v0 },
-                { u: parapetUV.u0, v: parapetUV.v1 },
-                { u: parapetUV.u1, v: parapetUV.v1 },
-                { u: parapetUV.u1, v: parapetUV.v0 },
-                1.0, 1.0, 1.0
-              );
-
-              // 3) 난간 안쪽 내벽 (상단 코핑에서 우레탄 옥상 바닥으로 1.2m 내려가는 벽)
-              addQuad(
-                masterPositions, masterNormals, masterUvs, masterColors,
-                { x: p1i_x, y: wallTop, z: p1i_z },
-                { x: p0i_x, y: wallTop, z: p0i_z },
-                { x: p0i_x, y: wallTop + pH, z: p0i_z },
-                { x: p1i_x, y: wallTop + pH, z: p1i_z },
-                -nx, 0, -nz,
-                { u: parapetUV.u0, v: parapetUV.v0 },
-                { u: parapetUV.u1, v: parapetUV.v0 },
-                { u: parapetUV.u1, v: parapetUV.v1 },
-                { u: parapetUV.u0, v: parapetUV.v1 },
-                0.98, 0.98, 0.99
-              );
-
-              // 4) [한국형 아파트 옥상 난간 코핑 기둥(Coping Piers) 돌출: 0.35m]
-              if (cls.category === 'apartment' && segLen >= BAY_WIDTH) {
-                const nPiers = Math.max(1, Math.round(segLen / BAY_WIDTH));
-                for (let b = 0; b <= nPiers; b++) {
-                  const tb = b / nPiers;
-                  const px = p0.x + dx * tb;
-                  const pz = p0.y + dz * tb;
-                  const pierH = 0.35;
-                  const pierW = 0.22;
-                  const ux = (dx / segLen) * pierW;
-                  const uz = (dz / segLen) * pierW;
-                  const vx = nx * 0.25;
-                  const vz = nz * 0.25;
-
-                  const c0 = { x: px - vx - ux, z: pz - vz - uz };
-                  const c1 = { x: px - vx + ux, z: pz - vz + uz };
-                  const c2 = { x: px + vx + ux, z: pz + vz + uz };
-                  const c3 = { x: px + vx - ux, z: pz + vz - uz };
-
-                  addQuad(
-                    masterPositions, masterNormals, masterUvs, masterColors,
-                    { x: c0.x, y: wallTop + pH + pierH, z: c0.z },
-                    { x: c1.x, y: wallTop + pH + pierH, z: c1.z },
-                    { x: c2.x, y: wallTop + pH + pierH, z: c2.z },
-                    { x: c3.x, y: wallTop + pH + pierH, z: c3.z },
-                    0, 1, 0,
-                    { u: parapetUV.u0, v: parapetUV.v0 },
-                    { u: parapetUV.u1, v: parapetUV.v0 },
-                    { u: parapetUV.u1, v: parapetUV.v1 },
-                    { u: parapetUV.u0, v: parapetUV.v1 },
-                    1.0, 1.0, 1.0
-                  );
-                }
-              }
-            }
-          }
-
-          // 4. [엘리베이터 권상기실(Penthouse) 3.2m 큐브 & 콘크리트/철문 텍스처]
-          if (cls.hasPenthouse && totalH >= 15.0) {
             const pentUV = getAtlasSlotUV('penthouse_wall');
             const coolRoofUV = getAtlasSlotUV('roof_concrete_cool');
-            const coreW = Math.max(4.0, Math.min(obb.lenU * 0.35, 12.0));
-            const coreD = Math.max(3.5, Math.min(obb.lenV * 0.35, 9.0));
-            const coreH = 3.2;
-
-            const hw = coreW * 0.5;
-            const hd = coreD * 0.5;
-            const cx = obb.obbCenter.x;
-            const cz = obb.obbCenter.y;
-            const u = obb.dirU;
-            const v = obb.dirV;
-
-            const c0 = { x: cx - u.x * hw - v.x * hd, z: cz - u.y * hw - v.y * hd };
-            const c1 = { x: cx + u.x * hw - v.x * hd, z: cz + u.y * hw - v.y * hd };
-            const c2 = { x: cx + u.x * hw + v.x * hd, z: cz + u.y * hw + v.y * hd };
-            const c3 = { x: cx - u.x * hw + v.x * hd, z: cz - u.y * hw + v.y * hd };
-            const corners = [c0, c1, c2, c3];
+            const realHw = coreW * 0.5;
+            const realHd = coreD * 0.5;
+            const rc0 = { x: cx - u.x * realHw - v.x * realHd, z: cz - u.y * realHw - v.y * realHd };
+            const rc1 = { x: cx + u.x * realHw - v.x * realHd, z: cz + u.y * realHw - v.y * realHd };
+            const rc2 = { x: cx + u.x * realHw + v.x * realHd, z: cz + u.y * realHw + v.y * realHd };
+            const rc3 = { x: cx - u.x * realHw + v.x * realHd, z: cz - u.y * realHw + v.y * realHd };
+            const corners = [rc0, rc1, rc2, rc3];
 
             // 4면 기계실 벽체 (철문 및 환기 루버 포함)
             for (let k = 0; k < 4; k++) {
@@ -1150,8 +1046,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 masterPositions, masterNormals, masterUvs, masterColors,
                 { x: ca.x, y: wallTop, z: ca.z },
                 { x: cb.x, y: wallTop, z: cb.z },
-                { x: cb.x, y: wallTop + coreH, z: cb.z },
-                { x: ca.x, y: wallTop + coreH, z: ca.z },
+                { x: cb.x, y: wallTop + pentH, z: cb.z },
+                { x: ca.x, y: wallTop + pentH, z: ca.z },
                 cnx, 0, cnz,
                 { u: pentUV.u0, v: pentUV.v0 },
                 { u: pentUV.u1, v: pentUV.v0 },
@@ -1164,10 +1060,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             // 기계실 옥탑 슬래브
             addQuad(
               masterPositions, masterNormals, masterUvs, masterColors,
-              { x: c0.x, y: wallTop + coreH, z: c0.z },
-              { x: c1.x, y: wallTop + coreH, z: c1.z },
-              { x: c2.x, y: wallTop + coreH, z: c2.z },
-              { x: c3.x, y: wallTop + coreH, z: c3.z },
+              { x: rc0.x, y: wallTop + pentH, z: rc0.z },
+              { x: rc1.x, y: wallTop + pentH, z: rc1.z },
+              { x: rc2.x, y: wallTop + pentH, z: rc2.z },
+              { x: rc3.x, y: wallTop + pentH, z: rc3.z },
               0, 1, 0,
               { u: coolRoofUV.u0, v: coolRoofUV.v0 },
               { u: coolRoofUV.u1, v: coolRoofUV.v0 },
@@ -1176,45 +1072,56 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               1.0, 1.0, 1.0
             );
           }
+        }
 
-          // 5. [아파트 부속 설비 인스턴싱: STS 원통 물탱크 & 환기 벤트]
-          if (cls.category === 'apartment') {
-            const coreW = Math.max(3.8, Math.min(obb.lenU * 0.22, 10.0));
-            const tankRadius = Math.max(1.0, Math.min(1.8, obb.lenV * 0.12));
-            const tankHeight = 2.4;
-            const tankOffsetX = obb.dirU.x * (coreW * 0.5 + tankRadius * 1.3);
-            const tankOffsetZ = obb.dirU.y * (coreW * 0.5 + tankRadius * 1.3);
+        // 5. [아파트 부속 설비 인스턴싱: STS 원통 물탱크 & 환기 벤트 - 다각형 내부 검증 시에만 배치]
+        if (cls.category === 'apartment' && hasValidPenthouse) {
+          const tankRadius = Math.max(0.8, Math.min(1.4, obb.lenV * 0.10));
+          const tankHeight = 2.0;
+          const tankOffsetX = obb.dirU.x * (pentW * 0.5 + tankRadius * 1.3);
+          const tankOffsetZ = obb.dirU.y * (pentW * 0.5 + tankRadius * 1.3);
 
-            tempPos.set(
-              obb.obbCenter.x + tankOffsetX,
-              wallTop,
-              obb.obbCenter.y + tankOffsetZ
-            );
+          const tx = pentCX + tankOffsetX;
+          const tz = pentCZ + tankOffsetZ;
+
+          if (isPointInPolygon2D(tx, tz, pts)) {
+            tempPos.set(tx, wallTop, tz);
             tempQuat.identity();
             tempScale.set(tankRadius * 2, tankHeight, tankRadius * 2);
             tempMat.compose(tempPos, tempQuat, tempScale);
             waterTankMatrices.push(tempMat.clone());
+          }
 
-            // 옥상 벤트 4~8기 (무동력 환기 흡출기)
-            const ventCount = Math.max(4, Math.min(8, Math.floor(obb.lenU / 5.5) * 2));
-            for (let v = 0; v < ventCount; v++) {
-              const vAngle = (v / ventCount) * Math.PI * 2;
-              const distU = Math.max(3.0, Math.min(obb.lenU * 0.32, 8.5));
-              const distV = Math.max(2.5, Math.min(obb.lenV * 0.30, 6.0));
-              const vx = obb.obbCenter.x + Math.cos(vAngle) * distU;
-              const vz = obb.obbCenter.y + Math.sin(vAngle) * distV;
+          // 옥상 벤트 2~4기 (다각형 내부 포함점만 선별 배치)
+          const ventCount = Math.max(2, Math.min(4, Math.floor(obb.lenU / 7.0)));
+          for (let v = 0; v < ventCount; v++) {
+            const vAngle = (v / ventCount) * Math.PI * 2;
+            const distU = Math.max(2.0, Math.min(obb.lenU * 0.25, 6.0));
+            const distV = Math.max(1.5, Math.min(obb.lenV * 0.22, 4.0));
+            const vx = pentCX + Math.cos(vAngle) * distU;
+            const vz = pentCZ + Math.sin(vAngle) * distV;
 
+            if (isPointInPolygon2D(vx, vz, pts)) {
               tempPos.set(vx, wallTop, vz);
               tempQuat.identity();
-              tempScale.set(0.75, 1.05, 0.75);
+              tempScale.set(0.65, 0.95, 0.65);
               tempMat.compose(tempPos, tempQuat, tempScale);
               ventMatrices.push(tempMat.clone());
             }
           }
+        }
 
-          // 6. [랜드마크 타워 옥상 헬리패드 & 태양광 패널]
-          if (cls.category === 'curtainwall' && totalH >= 35.0) {
-            const helipadRadius = Math.max(5.0, Math.min(11.0, Math.min(obb.lenU, obb.lenV) * 0.35));
+        // 6. [랜드마크 타워 옥상 헬리패드 & 태양광 패널 - 다각형 내부 포함 검증]
+        if (cls.category === 'curtainwall' && totalH >= 35.0) {
+          const helipadRadius = Math.max(4.0, Math.min(9.0, Math.min(obb.lenU, obb.lenV) * 0.30));
+          const fitsHelipad =
+            isPointInPolygon2D(obb.obbCenter.x, obb.obbCenter.y, pts) &&
+            isPointInPolygon2D(obb.obbCenter.x + helipadRadius, obb.obbCenter.y, pts) &&
+            isPointInPolygon2D(obb.obbCenter.x - helipadRadius, obb.obbCenter.y, pts) &&
+            isPointInPolygon2D(obb.obbCenter.x, obb.obbCenter.y + helipadRadius, pts) &&
+            isPointInPolygon2D(obb.obbCenter.x, obb.obbCenter.y - helipadRadius, pts);
+
+          if (fitsHelipad) {
             const padDeckH = 0.45;
             const padTop = wallTop + padDeckH;
 
@@ -1242,57 +1149,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const crossBar = new THREE.BoxGeometry(hSpacing * 2, 0.08, hBarW);
             crossBar.translate(obb.obbCenter.x, padTop + 0.08, obb.obbCenter.y);
             helipadMarkGeometries.push(crossBar);
-
-            // 남향 태양광 패널 그리드
-            if (obb.lenU >= 16.0 && obb.lenV >= 14.0) {
-              const panelCols = Math.max(2, Math.min(4, Math.floor(obb.lenU / 6.0)));
-              const panelRows = 2;
-              const spacingX = 2.8;
-              const spacingZ = 2.0;
-
-              const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.28);
-              const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.28);
-
-              tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ');
-              tempQuat.setFromEuler(tempEuler);
-              tempScale.set(1.0, 1.0, 1.0);
-
-              for (let r = 0; r < panelRows; r++) {
-                for (let c = 0; c < panelCols; c++) {
-                  const px = solarCenterX + (c - (panelCols - 1) * 0.5) * spacingX;
-                  const pz = solarCenterZ + (r - (panelRows - 1) * 0.5) * spacingZ;
-
-                  tempPos.set(px, wallTop + 0.45 + r * 0.12, pz);
-                  tempMat.compose(tempPos, tempQuat, tempScale);
-                  solarMatrices.push(tempMat.clone());
-                }
-              }
-            }
           }
 
-          // 7. [상업/오피스 옥상: 대형 HVAC 실외기(냉각탑) 유닛 블록 및 태양광 패널 절차적 자동 배치]
-          if ((cls.category === 'commercial' || cls.category === 'curtainwall') && totalH >= 12.0 && approxArea >= 120) {
-            const nHvac = approxArea >= 350 ? 2 : 1;
-            for (let h = 0; h < nHvac; h++) {
-              const hDist = (h - (nHvac - 1) * 0.5) * 4.5;
-              const hx = obb.obbCenter.x + obb.dirU.x * hDist + obb.dirV.x * (obb.lenV * 0.16);
-              const hz = obb.obbCenter.y + obb.dirU.y * hDist + obb.dirV.y * (obb.lenV * 0.16);
-              tempPos.set(hx, wallTop, hz);
-              tempEuler.set(0, Math.atan2(obb.dirU.y, obb.dirU.x), 0, 'YXZ');
-              tempQuat.setFromEuler(tempEuler);
-              tempScale.set(1.0, 1.0, 1.0);
-              tempMat.compose(tempPos, tempQuat, tempScale);
-              hvacMatrices.push(tempMat.clone());
-            }
-          }
-
-          if (cls.category === 'commercial' && totalH >= 15.0 && approxArea >= 220 && obb.lenU >= 14.0) {
+          // 남향 태양광 패널 그리드
+          if (obb.lenU >= 16.0 && obb.lenV >= 14.0) {
             const panelCols = Math.max(2, Math.min(4, Math.floor(obb.lenU / 6.0)));
             const panelRows = 2;
-            const spacingX = 2.6;
-            const spacingZ = 1.8;
-            const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.22);
-            const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.22);
+            const spacingX = 2.8;
+            const spacingZ = 2.0;
+
+            const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.28);
+            const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.28);
 
             tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ');
             tempQuat.setFromEuler(tempEuler);
@@ -1302,6 +1169,53 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               for (let c = 0; c < panelCols; c++) {
                 const px = solarCenterX + (c - (panelCols - 1) * 0.5) * spacingX;
                 const pz = solarCenterZ + (r - (panelRows - 1) * 0.5) * spacingZ;
+
+                if (isPointInPolygon2D(px, pz, pts)) {
+                  tempPos.set(px, wallTop + 0.45 + r * 0.12, pz);
+                  tempMat.compose(tempPos, tempQuat, tempScale);
+                  solarMatrices.push(tempMat.clone());
+                }
+              }
+            }
+          }
+        }
+
+        // 7. [상업/오피스 옥상: 대형 HVAC 실외기(냉각탑) 유닛 블록 절차적 자동 배치]
+        if ((cls.category === 'commercial' || cls.category === 'curtainwall') && totalH >= 12.0 && approxArea >= 120) {
+          const nHvac = approxArea >= 350 ? 2 : 1;
+          for (let h = 0; h < nHvac; h++) {
+            const hDist = (h - (nHvac - 1) * 0.5) * 4.5;
+            const hx = obb.obbCenter.x + obb.dirU.x * hDist + obb.dirV.x * (obb.lenV * 0.16);
+            const hz = obb.obbCenter.y + obb.dirU.y * hDist + obb.dirV.y * (obb.lenV * 0.16);
+            if (isPointInPolygon2D(hx, hz, pts)) {
+              tempPos.set(hx, wallTop, hz);
+              tempEuler.set(0, Math.atan2(obb.dirU.y, obb.dirU.x), 0, 'YXZ');
+              tempQuat.setFromEuler(tempEuler);
+              tempScale.set(1.0, 1.0, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              hvacMatrices.push(tempMat.clone());
+            }
+          }
+        }
+
+        // 8. [상업/오피스 남향 태양광 패널]
+        if (cls.category === 'commercial' && totalH >= 15.0 && approxArea >= 220 && obb.lenU >= 14.0) {
+          const panelCols = Math.max(2, Math.min(4, Math.floor(obb.lenU / 6.0)));
+          const panelRows = 2;
+          const spacingX = 2.6;
+          const spacingZ = 1.8;
+          const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.22);
+          const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.22);
+
+          tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ');
+          tempQuat.setFromEuler(tempEuler);
+          tempScale.set(1.0, 1.0, 1.0);
+
+          for (let r = 0; r < panelRows; r++) {
+            for (let c = 0; c < panelCols; c++) {
+              const px = solarCenterX + (c - (panelCols - 1) * 0.5) * spacingX;
+              const pz = solarCenterZ + (r - (panelRows - 1) * 0.5) * spacingZ;
+              if (isPointInPolygon2D(px, pz, pts)) {
                 tempPos.set(px, wallTop + 0.45 + r * 0.12, pz);
                 tempMat.compose(tempPos, tempQuat, tempScale);
                 solarMatrices.push(tempMat.clone());

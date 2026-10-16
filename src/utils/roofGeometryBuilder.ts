@@ -560,8 +560,8 @@ export function buildFlatRoof(
   const group = new THREE.Group();
   if (pts.length < 3) return group;
 
-  const parapetHeight = 1.2;
-  const parapetThickness = 0.35;
+  const parapetHeight = 0.8;
+  const parapetThickness = 0.25;
   const N = pts.length;
 
   let cx = 0;
@@ -663,7 +663,7 @@ export function buildFlatRoof(
   if (spanX > 6.0 && spanZ > 6.0) {
     const coreW = Math.max(3.5, Math.min(6.5, spanX * 0.28));
     const coreD = Math.max(4.0, Math.min(7.5, spanZ * 0.28));
-    const coreH = 3.2;
+    const coreH = 2.4;
 
     const coreGeom = new THREE.BoxGeometry(coreW, coreH, coreD);
     const coreMesh = new THREE.Mesh(coreGeom, materials.penthouseMaterial);
