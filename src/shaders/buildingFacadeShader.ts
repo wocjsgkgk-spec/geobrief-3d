@@ -87,7 +87,30 @@ const fragmentShader = /* glsl */ `
     bool isVerticalFrame = (hInCell < 0.08) || (hInCell > 0.92);
 
     // -------------------------------------------------------------
-    // 3. 건물 유형별 외벽 및 창문 기하 알베도 합성
+    // 3. 건물 외벽 입면 요철 및 층간 슬래브 하단 드롭 섀도우 연산
+    // -------------------------------------------------------------
+    // 층간 슬래브(3.0m 간격) 하단 0.25m 폭의 미세한 드롭 섀도우 (실제 요철 음영)
+    float shadowSpan = 0.25 / uFloorHeight; // 0.25m / 3.0m = 0.0833
+    float slabShadow = 1.0;
+    if (vInFloor >= (0.96 - shadowSpan) && vInFloor <= 0.96) {
+      float t = (0.96 - vInFloor) / shadowSpan;
+      slabShadow = mix(0.55, 1.0, smoothstep(0.0, 1.0, t));
+    }
+    // 하단 발코니 슬래브 밑면 미세 음영
+    if (vInFloor >= 0.12 && vInFloor <= (0.12 + shadowSpan * 0.7)) {
+      float t = (vInFloor - 0.12) / (shadowSpan * 0.7);
+      slabShadow = min(slabShadow, mix(0.68, 1.0, t));
+    }
+
+    // 외벽 수직 루버(Louver) 및 창문 멀리언 측면 미세 요철 음영
+    float louverShadow = 1.0;
+    if (hInCell >= 0.08 && hInCell <= 0.14) {
+      float lt = (hInCell - 0.08) / 0.06;
+      louverShadow = mix(0.72, 1.0, lt);
+    }
+
+    // -------------------------------------------------------------
+    // 4. 건물 유형별 외벽 및 창문 기하 알베도 합성
     // -------------------------------------------------------------
     vec3 albedo = uBaseColor;
 
@@ -178,10 +201,11 @@ const fragmentShader = /* glsl */ `
           }
         }
       }
-    }
+    // 입면 요철 음영 (슬래브 드롭 섀도우 & 루버 음영) 알베도 반영
+    albedo *= (slabShadow * louverShadow);
 
     // -------------------------------------------------------------
-    // 4. [검은색 벽면 원천 차단] 3점 조명 (Three-Point Lighting) 연산
+    // 5. [검은색 벽면 원천 차단] 3점 조명 (Three-Point Lighting) 연산
     // -------------------------------------------------------------
     // 1) 반구 하늘/지표면 환경광 (Hemisphere Light)
     // 수평 법선(벽면)도 하늘빛(0.85)과 지면 반사(0.55)의 산란광을 균등하게 받음

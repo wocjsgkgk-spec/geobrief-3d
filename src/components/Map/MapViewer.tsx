@@ -96,12 +96,15 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
+    '3d-buildings-contact-shadow',
     '3d-buildings-foundation',
     '3d-buildings',
     '3d-buildings-roof',
+    'vworld-buildings-contact-shadow',
     'vworld-buildings-foundation',
     'vworld-buildings-3d',
     'vworld-buildings-roof',
+    'fusion-buildings-contact-shadow',
     'fusion-buildings-foundation',
     'fusion-buildings-3d',
     'fusion-buildings-roof',
@@ -1220,9 +1223,9 @@ export const MapViewer: React.FC = () => {
             },
           },
 
-          // [3. 지형-건물 앰비언트 오클루전(AO) 음영 합성 - 건물 바닥 지표면 딥 섀도우 라인]
+          // [건물 바닥 외곽 접지 그림자(Ground Contact Shadow) 레이어: 반경 2.5m~4m 부드러운 다크 차콜 #020617, opacity 0.45, blur 3px]
           {
-            id: 'fusion-buildings-ao',
+            id: 'fusion-buildings-contact-shadow',
             type: 'line',
             source: 'fusion-buildings',
             minzoom: 12,
@@ -1232,23 +1235,23 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                12, 2.0,
-                14, 3.5,
-                16, 5.0,
-                18, 6.5,
+                12, 3.5,
+                14, 6.5,
+                16, 12.0,
+                18, 18.0,
               ],
               'line-blur': [
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                12, 1.5,
-                14, 2.5,
-                16, 3.5,
-                18, 4.5,
+                12, 2.5,
+                14, 4.0,
+                16, 7.0,
+                18, 10.0,
               ],
-              'line-opacity': 0.75,
+              'line-opacity': 0.45,
             },
-            layout: { visibility: 'none' },
+            layout: { visibility: 'visible' },
           },
           // [Part 1. 저층 기단부 (0m ~ 4m): 1층 로비 및 상가 외벽 (짙은 화강석 그레이 #94a3b8)]
           {
@@ -1310,6 +1313,36 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
+          // [브이월드 건물 바닥 외곽 접지 그림자(Ground Contact Shadow) 레이어]
+          {
+            id: 'vworld-buildings-contact-shadow',
+            type: 'line',
+            source: 'vworld-buildings-source',
+            minzoom: 12,
+            paint: {
+              'line-color': '#020617',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 3.5,
+                14, 6.5,
+                16, 12.0,
+                18, 18.0,
+              ],
+              'line-blur': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 2.5,
+                14, 4.0,
+                16, 7.0,
+                18, 10.0,
+              ],
+              'line-opacity': 0.45,
+            },
+            layout: { visibility: 'visible' },
+          },
           // [브이월드 건축물 저층 기단부 (0m ~ 4m, #94a3b8)]
           {
             id: 'vworld-buildings-foundation',
@@ -2220,6 +2253,40 @@ export const MapViewer: React.FC = () => {
           }
         }
 
+        // [건물 바닥 외곽 접지 그림자 (Ground Contact Shadow)]
+        if (!map.getLayer('3d-buildings-contact-shadow')) {
+          map.addLayer({
+            id: '3d-buildings-contact-shadow',
+            type: 'line',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12,
+            paint: {
+              'line-color': '#020617',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 3.5,
+                14, 6.5,
+                16, 12.0,
+                18, 18.0,
+              ],
+              'line-blur': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 2.5,
+                14, 4.0,
+                16, 7.0,
+                18, 10.0,
+              ],
+              'line-opacity': 0.45,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
         // [Part 1. 3D 건축물 저층 기단부 (0m ~ 4m, 화강석 그레이 #94a3b8)]
         if (!map.getLayer('3d-buildings-foundation')) {
           map.addLayer({
@@ -3120,12 +3187,15 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const nativeBuildingLayers = [
+      '3d-buildings-contact-shadow',
       '3d-buildings-foundation',
       '3d-buildings',
       '3d-buildings-roof',
+      'vworld-buildings-contact-shadow',
       'vworld-buildings-foundation',
       'vworld-buildings-3d',
       'vworld-buildings-roof',
+      'fusion-buildings-contact-shadow',
       'fusion-buildings-foundation',
       'fusion-buildings-3d',
       'fusion-buildings-roof',
@@ -5329,14 +5399,17 @@ export const MapViewer: React.FC = () => {
         }
         // [요구사항 반영] '건축물 3D 돌출' 레이어가 항상 표출 및 최상단 렌더링
         for (const lyr of [
+          '3d-buildings-contact-shadow',
           '3d-buildings-foundation',
           '3d-buildings',
           '3d-buildings-roof',
           '3d-buildings-edge',
+          'fusion-buildings-contact-shadow',
           'fusion-buildings-foundation',
           'fusion-buildings-3d',
           'fusion-buildings-roof',
           'fusion-buildings-edge',
+          'vworld-buildings-contact-shadow',
           'vworld-buildings-foundation',
           'vworld-buildings-3d',
           'vworld-buildings-roof',

@@ -451,6 +451,34 @@ export class Universal3DTilesManager {
       layers.push(pointCloudLayer);
     } else {
       // -----------------------------------------------------------------------
+      // [Sub-layer 0 (Ground Contact Shadow)]: 건물 바닥 외곽 접지 그림자 (다크 차콜 #020617, opacity 0.45)
+      // -----------------------------------------------------------------------
+      const contactShadowPaths: { path: [number, number, number][]; color: [number, number, number, number] }[] = [];
+      for (const b of buildings) {
+        for (const ring of b.polygon) {
+          const pathGround = ring.map((pt) => [pt[0], pt[1], b.baseElev + 0.05] as [number, number, number]);
+          contactShadowPaths.push({
+            path: pathGround,
+            color: [2, 6, 23, 115], // #020617 opacity 0.45
+          });
+        }
+      }
+
+      if (contactShadowPaths.length > 0) {
+        const contactShadowLayer = new PathLayer({
+          id: 'hybrid-contact-shadow-layer',
+          data: contactShadowPaths,
+          getPath: (d: any) => d.path,
+          getColor: (d: any) => d.color,
+          getWidth: 8.0,
+          widthUnits: 'pixels',
+          jointRounded: true,
+          capRounded: true,
+        });
+        layers.push(contactShadowLayer);
+      }
+
+      // -----------------------------------------------------------------------
       // [Sub-layer 1 (Part 1. 저층 기단부)]: 1층 로비 및 상가 외벽 (0m ~ 4m, 짙은 화강석 그레이 #94a3b8)
       // -----------------------------------------------------------------------
       const podiumData = buildings.map((b) => ({
@@ -622,6 +650,60 @@ export class Universal3DTilesManager {
           wireframe: false,
         });
         layers.push(coreLayer);
+      }
+
+      // -----------------------------------------------------------------------
+      // [Sub-layer 5 (Rooftop Micro-Details)]: 상업·오피스 옥상 대형 HVAC 냉각탑 및 태양광 패널
+      // -----------------------------------------------------------------------
+      const rooftopEquipBoxes: { polygon: [number, number, number][][]; elevation: number; color: [number, number, number, number] }[] = [];
+      for (const b of buildings) {
+        if (b.height >= 12.0 && (b.category === 'commercial' || b.category === 'residential')) {
+          const cLng = b.centroid[0];
+          const cLat = b.centroid[1];
+          const dLng = Math.max(0.00004, (b.bounds.maxLng - b.bounds.minLng) * 0.08);
+          const dLat = Math.max(0.00004, (b.bounds.maxLat - b.bounds.minLat) * 0.08);
+
+          // 1) 대형 HVAC 냉각탑 유닛 (1.6m 높이, 다크 슬레이트 메탈릭 #334155)
+          const hvacRing: [number, number, number][] = [
+            [cLng + dLng * 1.5, cLat + dLat * 1.5, b.totalElev],
+            [cLng + dLng * 3.0, cLat + dLat * 1.5, b.totalElev],
+            [cLng + dLng * 3.0, cLat + dLat * 3.0, b.totalElev],
+            [cLng + dLng * 1.5, cLat + dLat * 3.0, b.totalElev],
+            [cLng + dLng * 1.5, cLat + dLat * 1.5, b.totalElev],
+          ];
+          rooftopEquipBoxes.push({
+            polygon: [hvacRing],
+            elevation: 1.6,
+            color: [51, 65, 85, 255],
+          });
+
+          // 2) 태양광 패널 어레이 (0.35m 틸트 베이스, 감청색 솔라 셀 #1e3a8a)
+          const solarRing: [number, number, number][] = [
+            [cLng - dLng * 3.0, cLat - dLat * 3.0, b.totalElev],
+            [cLng - dLng * 1.2, cLat - dLat * 3.0, b.totalElev],
+            [cLng - dLng * 1.2, cLat - dLat * 1.2, b.totalElev],
+            [cLng - dLng * 3.0, cLat - dLat * 1.2, b.totalElev],
+            [cLng - dLng * 3.0, cLat - dLat * 3.0, b.totalElev],
+          ];
+          rooftopEquipBoxes.push({
+            polygon: [solarRing],
+            elevation: 0.35,
+            color: [30, 58, 138, 255],
+          });
+        }
+      }
+
+      if (rooftopEquipBoxes.length > 0) {
+        const equipLayer = new SolidPolygonLayer({
+          id: 'hybrid-hvac-solar-layer',
+          data: rooftopEquipBoxes,
+          getPolygon: (d: any) => d.polygon,
+          getElevation: (d: any) => d.elevation,
+          getFillColor: (d: any) => d.color,
+          extruded: true,
+          wireframe: false,
+        });
+        layers.push(equipLayer);
       }
     }
 

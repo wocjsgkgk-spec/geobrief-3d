@@ -116,13 +116,21 @@ function drawApartmentFront(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.fillStyle = '#475569';
   ctx.fillRect(x, y + slabH, s, 2);
 
+  // [입면 요철 강화] 층간 슬래브 하단 0.25m 폭(약 36px) 미세한 드롭 섀도우 그라데이션
+  const slabShadow = ctx.createLinearGradient(x, y + slabH + 2, x, y + slabH + 38);
+  slabShadow.addColorStop(0, 'rgba(15, 23, 42, 0.45)');
+  slabShadow.addColorStop(0.5, 'rgba(15, 23, 42, 0.18)');
+  slabShadow.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+  ctx.fillStyle = slabShadow;
+  ctx.fillRect(x, y + slabH + 2, s, 36);
+
   // 하단 슬래브
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x, y + s - slabH, s, slabH);
   ctx.fillStyle = '#94a3b8';
   ctx.fillRect(x, y + s - slabH, s, 3);
 
-  // 3) 세대 간 수직 콘크리트 기둥 (Pillars)
+  // 3) 세대 간 수직 콘크리트 기둥 (Pillars) 및 수직 우수관 (Downspout)
   const pillarW = Math.round(s * 0.07);
   ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(x, y, pillarW, s);
@@ -130,6 +138,12 @@ function drawApartmentFront(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x + pillarW - 2, y, 2, s);
   ctx.fillRect(x + s - pillarW, y, 2, s);
+
+  // 세대별 수직 우수관 (Downspout 라인 및 벽면 그림자)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+  ctx.fillRect(x + pillarW - 6, y, 4, s);
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(x + pillarW - 8, y, 3, s);
 
   // 4) 1개 층(3.0m) 대형 베란다 이중창 및 안전 난간, 실외기 루버 (폭 2.8m 1베이)
   const winW = s - (pillarW + 12) * 2;
@@ -536,14 +550,73 @@ function drawRoofGreenUrethane(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.fillStyle = '#64748b';
   ctx.strokeRect(x + borderW, y + borderW, s - borderW * 2, s - borderW * 2);
 
+  // [입체 마이크로 디테일 1] 1.2m 옥상 난간 테두리 내측 그림자 (Parapet Inner Drop Shadow)
+  // 난간 안쪽 바닥면으로 36px 폭의 부드러운 드롭 섀도우를 부여하여 우레탄 바닥이 1.2m 깊이로 푹 들어간 깊이감 극대화
+  const innerShadowW = 36;
+  // 상단 내측 그림자 (북쪽 난간에 의한 음영)
+  const topInShadow = ctx.createLinearGradient(x, y + borderW, x, y + borderW + innerShadowW);
+  topInShadow.addColorStop(0, 'rgba(2, 6, 23, 0.45)');
+  topInShadow.addColorStop(0.6, 'rgba(2, 6, 23, 0.16)');
+  topInShadow.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  ctx.fillStyle = topInShadow;
+  ctx.fillRect(x + borderW, y + borderW, s - borderW * 2, innerShadowW);
+
+  // 좌측 내측 그림자 (서쪽 난간에 의한 음영)
+  const leftInShadow = ctx.createLinearGradient(x + borderW, y, x + borderW + innerShadowW, y);
+  leftInShadow.addColorStop(0, 'rgba(2, 6, 23, 0.40)');
+  leftInShadow.addColorStop(0.6, 'rgba(2, 6, 23, 0.14)');
+  leftInShadow.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  ctx.fillStyle = leftInShadow;
+  ctx.fillRect(x + borderW, y + borderW, innerShadowW, s - borderW * 2);
+
+  // 우측/하단 앰비언트 오클루전 미세 접촉선
+  ctx.fillStyle = 'rgba(2, 6, 23, 0.22)';
+  ctx.fillRect(x + s - borderW - 8, y + borderW, 8, s - borderW * 2);
+  ctx.fillRect(x + borderW, y + s - borderW - 8, s - borderW * 2, 8);
+
+  // [입체 마이크로 디테일 2] 미세한 배수로 줄눈(Drainage Gutters / Joint Grooves)
+  // 십자형 주 배수 트렌치 홈
+  const trenchW = 4;
+  const midX = x + Math.round(s * 0.5);
+  const midY = y + Math.round(s * 0.5);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(midX - 2, y + borderW, trenchW, s - borderW * 2);
+  ctx.fillRect(x + borderW, midY - 2, s - borderW * 2, trenchW);
+  // 배수 홈 테두리 하이라이트
+  ctx.fillStyle = '#166534';
+  ctx.fillRect(midX + 2, y + borderW, 1.5, s - borderW * 2);
+  ctx.fillRect(x + borderW, midY + 2, s - borderW * 2, 1.5);
+
+  // 사선 집수 구배 줄눈 (모서리 배수구 방향)
+  ctx.strokeStyle = 'rgba(20, 83, 45, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x + borderW, y + borderW);
+  ctx.lineTo(midX, midY);
+  ctx.moveTo(x + s - borderW, y + borderW);
+  ctx.lineTo(midX, midY);
+  ctx.stroke();
+
   // 3) 원형 배수구(Drain) 및 옥상 점검 해치 도어
+  // 좌상단 주 배수구
   ctx.fillStyle = '#1e293b';
   ctx.beginPath();
-  ctx.arc(x + borderW + 32, y + borderW + 32, 12, 0, Math.PI * 2);
+  ctx.arc(x + borderW + 32, y + borderW + 32, 14, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#94a3b8';
   ctx.beginPath();
-  ctx.arc(x + borderW + 32, y + borderW + 32, 6, 0, Math.PI * 2);
+  ctx.arc(x + borderW + 32, y + borderW + 32, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 우하단 보조 배수구
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.arc(x + s - borderW - 32, y + s - borderW - 32, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#94a3b8';
+  ctx.beginPath();
+  ctx.arc(x + s - borderW - 32, y + s - borderW - 32, 6, 0, Math.PI * 2);
   ctx.fill();
 
   // 점검 해치 도어 (스퀘어)
@@ -637,6 +710,67 @@ function drawRoofConcreteCool(ctx: CanvasRenderingContext2D, x: number, y: numbe
     ctx.arc(fx + 30, fy + 30, 10, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // [입체 마이크로 디테일 3] 은색 HVAC 설비 배관 파이프 라인 (Piping Network)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.35)'; // 파이프 하단 그림자
+  ctx.fillRect(x + 190, y + 120, 260, 6);
+  ctx.fillRect(x + 190, y + 120, 6, 120);
+
+  ctx.fillStyle = '#cbd5e1'; // 은색 메탈 파이프
+  ctx.fillRect(x + 190, y + 118, 260, 4);
+  ctx.fillRect(x + 190, y + 118, 4, 120);
+
+  // [입체 마이크로 디테일 4] 태양광 집열판(Solar Panel) 어레이 그리드 (2x3 배열)
+  const solarCols = 3;
+  const solarRows = 2;
+  const pW = 100;
+  const pH = 65;
+  const sStartX = x + 60;
+  const sStartY = y + 270;
+
+  for (let r = 0; r < solarRows; r++) {
+    for (let c = 0; c < solarCols; c++) {
+      const px = sStartX + c * (pW + 24);
+      const py = sStartY + r * (pH + 20);
+
+      // 패널 지면 그림자
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.40)';
+      ctx.fillRect(px + 4, py + 4, pW, pH);
+
+      // 메탈 지지대 프레임
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(px - 2, py - 2, pW + 4, pH + 4);
+
+      // 감청색 고효율 태양광 패널 셀
+      const sGrad = ctx.createLinearGradient(px, py, px + pW, py + pH);
+      sGrad.addColorStop(0, '#1e3a8a');
+      sGrad.addColorStop(0.5, '#1e40af');
+      sGrad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = sGrad;
+      ctx.fillRect(px, py, pW, pH);
+
+      // 솔라 셀 분할 버스바 그리드
+      ctx.fillStyle = 'rgba(203, 213, 225, 0.45)';
+      ctx.fillRect(px + pW * 0.33, py, 1.5, pH);
+      ctx.fillRect(px + pW * 0.66, py, 1.5, pH);
+      ctx.fillRect(px, py + pH * 0.5, pW, 1.5);
+    }
+  }
+
+  // [입체 마이크로 디테일 5] 옥상 테두리 난간 내측 그림자 (Parapet Inner Drop Shadow)
+  const cBorderW = 20;
+  const cInnerShadow = 32;
+  const cTopInShadow = ctx.createLinearGradient(x, y + cBorderW, x, y + cBorderW + cInnerShadow);
+  cTopInShadow.addColorStop(0, 'rgba(2, 6, 23, 0.45)');
+  cTopInShadow.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  ctx.fillStyle = cTopInShadow;
+  ctx.fillRect(x + cBorderW, y + cBorderW, s - cBorderW * 2, cInnerShadow);
+
+  const cLeftInShadow = ctx.createLinearGradient(x + cBorderW, y, x + cBorderW + cInnerShadow, y);
+  cLeftInShadow.addColorStop(0, 'rgba(2, 6, 23, 0.40)');
+  cLeftInShadow.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  ctx.fillStyle = cLeftInShadow;
+  ctx.fillRect(x + cBorderW, y + cBorderW, cInnerShadow, s - cBorderW * 2);
 }
 
 function drawPenthouseWall(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
