@@ -96,10 +96,13 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
+    '3d-buildings-foundation',
     '3d-buildings',
     '3d-buildings-roof',
+    'vworld-buildings-foundation',
     'vworld-buildings-3d',
     'vworld-buildings-roof',
+    'fusion-buildings-foundation',
     'fusion-buildings-3d',
     'fusion-buildings-roof',
     'sample-buildings-3d',
@@ -1247,15 +1250,15 @@ export const MapViewer: React.FC = () => {
             },
             layout: { visibility: 'none' },
           },
-          // [2. 건물 바닥면 적응형 기초(Adaptive Foundation) - 경사지 옹벽 및 콘크리트 기단]
+          // [Part 1. 저층 기단부 (0m ~ 4m): 1층 로비 및 상가 외벽 (짙은 화강석 그레이 #94a3b8)]
           {
             id: 'fusion-buildings-foundation',
             type: 'fill-extrusion',
             source: 'fusion-buildings',
             minzoom: 12,
             paint: {
-              'fill-extrusion-color': '#475569',
-              'fill-extrusion-height': 0.2,
+              'fill-extrusion-color': '#94a3b8',
+              'fill-extrusion-height': ['min', 4.0, buildingHeightExpr],
               'fill-extrusion-base': buildingBaseExpr,
               'fill-extrusion-opacity': 1.0,
               'fill-extrusion-vertical-gradient': true,
@@ -1263,7 +1266,7 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
-          // [국토교통부 x 브이월드 x OSM 융합 3D 건축물 레이어 - 차분한 오프화이트 벽체 및 짙은 슬레이트 옥상]
+          // [Part 2. 본동 외벽 및 창문 파사드 (4m ~ H): 아파트 아이보리, 상업 커튼월, 주택 베이지]
           {
             id: 'fusion-buildings-3d',
             type: 'fill-extrusion',
@@ -1272,13 +1275,13 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-base': ['min', 4.0, buildingHeightExpr],
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
           },
-          // [국토교통부 x 브이월드 x OSM 융합 건축물 옥상 슬래브 레이어]
+          // [Part 3. 옥상 슬래브 레이어: 한국 특유의 초록 우레탄 #15803d / 아파트 콘크리트 #475569]
           {
             id: 'fusion-buildings-roof',
             type: 'fill-extrusion',
@@ -1307,7 +1310,22 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
-          // [브이월드 건축물 공간정보 LT_C_SPBD WFS 연동 3D 레이어]
+          // [브이월드 건축물 저층 기단부 (0m ~ 4m, #94a3b8)]
+          {
+            id: 'vworld-buildings-foundation',
+            type: 'fill-extrusion',
+            source: 'vworld-buildings-source',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': '#94a3b8',
+              'fill-extrusion-height': ['min', 4.0, buildingHeightExpr],
+              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: 'visible' },
+          },
+          // [브이월드 건축물 공간정보 본동 3D 레이어 (4m ~ H)]
           {
             id: 'vworld-buildings-3d',
             type: 'fill-extrusion',
@@ -1316,7 +1334,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-base': ['min', 4.0, buildingHeightExpr],
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1842,6 +1860,7 @@ export const MapViewer: React.FC = () => {
     });
 
     (window as any).__map = map;
+    (window as any).__setRenderMode3D = setRenderMode3D;
 
     // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
     setTimeout(() => {
@@ -2201,7 +2220,26 @@ export const MapViewer: React.FC = () => {
           }
         }
 
-        // [3D 건축물 입체 돌출(3D Extrusion) 레이어 - 위성사진 대비 선명한 모던 베이지/화이트 벽체 및 차콜 옥상]
+        // [Part 1. 3D 건축물 저층 기단부 (0m ~ 4m, 화강석 그레이 #94a3b8)]
+        if (!map.getLayer('3d-buildings-foundation')) {
+          map.addLayer({
+            id: '3d-buildings-foundation',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': '#94a3b8',
+              'fill-extrusion-height': ['min', 4.0, buildingHeightExpr],
+              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-opacity': 1.0,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // [Part 2. 3D 건축물 본동 입체 돌출 (4m ~ H) - 위성사진 대비 선명한 모던 베이지/화이트 벽체 및 차콜 옥상]
         if (!map.getLayer('3d-buildings')) {
           map.addLayer({
             id: '3d-buildings',
@@ -2212,7 +2250,7 @@ export const MapViewer: React.FC = () => {
             paint: {
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-base': ['min', 4.0, buildingHeightExpr],
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
@@ -2435,6 +2473,7 @@ export const MapViewer: React.FC = () => {
         });
         deckManager.attachToMap(map);
         deck3DTilesManagerRef.current = deckManager;
+        (window as any).__deck3DManager = deckManager;
 
         // 초기 샘플 건물 피처 사전 적재
         if (SAMPLE_BUILDINGS?.features) {
@@ -3081,12 +3120,15 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const nativeBuildingLayers = [
+      '3d-buildings-foundation',
       '3d-buildings',
       '3d-buildings-roof',
-      'fusion-buildings-3d',
-      'fusion-buildings-roof',
+      'vworld-buildings-foundation',
       'vworld-buildings-3d',
       'vworld-buildings-roof',
+      'fusion-buildings-foundation',
+      'fusion-buildings-3d',
+      'fusion-buildings-roof',
       'sample-buildings-3d',
       'sample-buildings-roof',
     ];
@@ -5287,12 +5329,15 @@ export const MapViewer: React.FC = () => {
         }
         // [요구사항 반영] '건축물 3D 돌출' 레이어가 항상 표출 및 최상단 렌더링
         for (const lyr of [
+          '3d-buildings-foundation',
           '3d-buildings',
           '3d-buildings-roof',
           '3d-buildings-edge',
+          'fusion-buildings-foundation',
           'fusion-buildings-3d',
           'fusion-buildings-roof',
           'fusion-buildings-edge',
+          'vworld-buildings-foundation',
           'vworld-buildings-3d',
           'vworld-buildings-roof',
           'vworld-buildings-edge',

@@ -153,7 +153,29 @@ export class Universal3DTilesManager {
       let totalH = rawHei > 0 ? rawHei : rawFlr > 0 ? rawFlr * 3.2 : 0;
 
       const isApt =
-        name.includes('아파트') || usageType.includes('apartment') || usageType.includes('residential');
+        name.includes('아파트') ||
+        name.includes('apt') ||
+        name.includes('단지') ||
+        name.includes('푸르지오') ||
+        name.includes('자이') ||
+        name.includes('힐스테이트') ||
+        name.includes('래미안') ||
+        name.includes('e편한') ||
+        name.includes('더샵') ||
+        name.includes('아이파크') ||
+        name.includes('롯데캐슬') ||
+        name.includes('한신') ||
+        name.includes('삼호') ||
+        name.includes('두산') ||
+        name.includes('우성') ||
+        name.includes('현대') ||
+        name.includes('동보') ||
+        name.includes('세경') ||
+        name.includes('코아루') ||
+        name.includes('부영') ||
+        name.includes('주공') ||
+        usageType.includes('apartment');
+
       const isComm =
         name.includes('타워') ||
         name.includes('빌딩') ||
@@ -164,8 +186,10 @@ export class Universal3DTilesManager {
       let category: 'apartment' | 'commercial' | 'residential' | 'other' = 'other';
       if (isApt) {
         category = 'apartment';
-        if (!totalH || totalH < 25.0) {
+        if (!totalH || totalH < 35.0) {
           totalH = 48.0 + (idx % 7) * 4.0; // 48m ~ 72m (15~23층)
+        } else {
+          totalH = Math.max(48.0, totalH);
         }
       } else if (isComm) {
         category = 'commercial';
@@ -427,11 +451,11 @@ export class Universal3DTilesManager {
       layers.push(pointCloudLayer);
     } else {
       // -----------------------------------------------------------------------
-      // [Sub-layer 1 (Podium)]: 1~2층 상가/로비 기단부 메쉬 (석재 그레이 톤, ~6m)
+      // [Sub-layer 1 (Part 1. 저층 기단부)]: 1층 로비 및 상가 외벽 (0m ~ 4m, 짙은 화강석 그레이 #94a3b8)
       // -----------------------------------------------------------------------
       const podiumData = buildings.map((b) => ({
         polygon: b.polygon,
-        elevation: Math.min(b.height, 6.0),
+        elevation: Math.min(b.height, 4.0),
         color: [148, 163, 184, 255] as [number, number, number, number],
       }));
 
@@ -447,27 +471,27 @@ export class Universal3DTilesManager {
       layers.push(podiumLayer);
 
       // -----------------------------------------------------------------------
-      // [Sub-layer 2 (Main Tower)]: 층별 슬래브 홈(Groove)과 창호 그리드 본동 타워
+      // [Sub-layer 2 (Part 2. 본동 타워)]: 4m ~ H 본동 외벽 파사드 및 3m 층별 슬래브 홈
       // -----------------------------------------------------------------------
-      const towerBuildings = buildings.filter((b) => b.height > 6.0);
+      const towerBuildings = buildings.filter((b) => b.height > 4.0);
       const towerData = towerBuildings.map((b) => {
-        // 기단부(6m) 상단에서부터 돌출되는 3D 링 좌표 생성
+        // 기단부(4m) 상단에서부터 돌출되는 3D 링 좌표 생성
         const elevatedPolygon = b.polygon.map((ring) =>
-          ring.map((pt) => [pt[0], pt[1], b.baseElev + 6.0] as [number, number, number])
+          ring.map((pt) => [pt[0], pt[1], b.baseElev + 4.0] as [number, number, number])
         );
 
         let fillColor: [number, number, number, number];
         if (b.category === 'apartment') {
-          fillColor = [248, 250, 252, 255]; // 아이보리 화이트
+          fillColor = [248, 250, 252, 255]; // 크림 아이보리 화이트 (#f8fafc)
         } else if (b.category === 'commercial') {
-          fillColor = [30, 58, 138, 240]; // 커튼월 반사 블루/스틸
+          fillColor = [186, 230, 253, 240]; // 스카이 블루 반사 커튼월 유리 (#bae6fd)
         } else {
-          fillColor = [203, 213, 225, 255]; // 밝은 석재 그레이
+          fillColor = [241, 245, 249, 255]; // 밝은 샌드 베이지 (#f1f5f9)
         }
 
         return {
           polygon: elevatedPolygon,
-          elevation: b.height - 6.0,
+          elevation: b.height - 4.0,
           color: fillColor,
         };
       });
@@ -483,17 +507,17 @@ export class Universal3DTilesManager {
       });
       layers.push(mainTowerLayer);
 
-      // 층별 슬래브 홈(Groove) 및 파사드 수평선 PathLayer
+      // 3.0m 층고 단위 촘촘한 다크 슬레이트 슬래브 홈(Groove) PathLayer
       const slabGroovePaths: { path: [number, number, number][]; color: [number, number, number, number] }[] = [];
       for (const b of towerBuildings) {
-        const floorCount = Math.floor((b.height - 6.0) / 3.2);
+        const floorCount = Math.floor((b.height - 4.0) / 3.0);
         for (let fl = 1; fl <= floorCount; fl++) {
-          const grooveZ = b.baseElev + 6.0 + fl * 3.2;
+          const grooveZ = b.baseElev + 4.0 + fl * 3.0;
           for (const ring of b.polygon) {
             const path3D = ring.map((pt) => [pt[0], pt[1], grooveZ] as [number, number, number]);
             slabGroovePaths.push({
               path: path3D,
-              color: [71, 85, 105, 180],
+              color: [51, 65, 85, 200], // 다크 슬레이트 (#334155)
             });
           }
         }
@@ -512,21 +536,21 @@ export class Universal3DTilesManager {
       }
 
       // -----------------------------------------------------------------------
-      // [Sub-layer 3 (Roof Parapet & Core)]: 옥상 난간 + 초록 우레탄 + 엘리베이터 권상기실
+      // [Sub-layer 3 (Part 3. 옥상 바닥 및 외곽 돌출 난간)]: H ~ H+1.2m
       // -----------------------------------------------------------------------
-      // (a) 옥상 초록색 우레탄 방수 바닥면
+      // (a) 옥상 초록색 우레탄 방수 바닥면 (#15803d) / 콘크리트 그레이 (#475569)
       const roofFloorData = buildings.map((b) => {
         const elevatedPolygon = b.polygon.map((ring) =>
-          ring.map((pt) => [pt[0], pt[1], b.totalElev + 0.1] as [number, number, number])
+          ring.map((pt) => [pt[0], pt[1], b.totalElev + 0.05] as [number, number, number])
         );
         const isCommercialOrVilla = b.category === 'commercial' || b.category === 'residential';
         const roofColor: [number, number, number, number] = isCommercialOrVilla
-          ? [21, 128, 61, 255] // 한국형 초록색 우레탄 방수 (#15803d)
-          : [71, 85, 105, 255]; // 아파트 슬레이트 쿨루프 (#475569)
+          ? [21, 128, 61, 255] // 한국 특유의 초록색 우레탄 방수 도막 (#15803d)
+          : [71, 85, 105, 255]; // 대형 아파트 쿨루프 콘크리트 그레이 (#475569)
 
         return {
           polygon: elevatedPolygon,
-          elevation: 0.2,
+          elevation: 0.15,
           color: roofColor,
         };
       });
@@ -542,11 +566,11 @@ export class Universal3DTilesManager {
       });
       layers.push(roofFloorLayer);
 
-      // (b) 옥상 1.0m 콘크리트 난간 (Parapet) 벽체
+      // (b) 옥상 1.2m 콘크리트 난간 (Parapet, 두께 0.5m 입체 음영)
       const parapetPaths: { path: [number, number, number][]; color: [number, number, number, number] }[] = [];
       for (const b of buildings) {
         for (const ring of b.polygon) {
-          const pathTop = ring.map((pt) => [pt[0], pt[1], b.totalElev + 1.0] as [number, number, number]);
+          const pathTop = ring.map((pt) => [pt[0], pt[1], b.totalElev + 1.2] as [number, number, number]);
           parapetPaths.push({ path: pathTop, color: [148, 163, 184, 255] });
         }
       }
@@ -556,17 +580,20 @@ export class Universal3DTilesManager {
         data: parapetPaths,
         getPath: (d: any) => d.path,
         getColor: (d: any) => d.color,
-        getWidth: 2.0,
+        getWidth: 2.5,
         widthUnits: 'pixels',
       });
       layers.push(parapetLayer);
 
-      // (c) 중앙 엘리베이터 권상기실 / 옥탑방 (Core)
+      // -----------------------------------------------------------------------
+      // [Sub-layer 4 (Part 4. 옥탑 엘리베이터 권상기실)]: H+1.2m ~ H+4.4m (3.2m 옥탑 박스)
+      // -----------------------------------------------------------------------
       const coreBoxes = buildings
-        .filter((b) => b.height >= 12.0)
+        .filter((b) => b.height >= 15.0)
         .map((b) => {
-          const dLng = Math.max(0.00008, (b.bounds.maxLng - b.bounds.minLng) * 0.16);
-          const dLat = Math.max(0.00008, (b.bounds.maxLat - b.bounds.minLat) * 0.16);
+          // 중심부 65% 축소 영역 (중심 35% 폭/깊이)
+          const dLng = Math.max(0.00008, (b.bounds.maxLng - b.bounds.minLng) * 0.175);
+          const dLat = Math.max(0.00008, (b.bounds.maxLat - b.bounds.minLat) * 0.175);
           const cLng = b.centroid[0];
           const cLat = b.centroid[1];
           const coreRing: [number, number, number][] = [
@@ -579,7 +606,7 @@ export class Universal3DTilesManager {
 
           return {
             polygon: [coreRing],
-            elevation: 3.2, // 3.2m 옥탑 돌출
+            elevation: 3.2, // 3.2m 옥탑 기계실 돌출
             color: [226, 232, 240, 255] as [number, number, number, number],
           };
         });

@@ -560,16 +560,46 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
         // [Z축 스케일 정밀 복원: 실제 높이(아파트 45~75m, 상가 15~30m, 저층 6~10m) 수직 돌출]
         let totalH = explicitH;
-        const isApt = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
-        const isComm = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
+        const isApt =
+          name.includes('아파트') ||
+          name.includes('apt') ||
+          name.includes('단지') ||
+          name.includes('푸르지오') ||
+          name.includes('자이') ||
+          name.includes('힐스테이트') ||
+          name.includes('래미안') ||
+          name.includes('e편한') ||
+          name.includes('더샵') ||
+          name.includes('아이파크') ||
+          name.includes('롯데캐슬') ||
+          name.includes('한신') ||
+          name.includes('삼호') ||
+          name.includes('두산') ||
+          name.includes('우성') ||
+          name.includes('현대') ||
+          name.includes('동보') ||
+          name.includes('세경') ||
+          name.includes('코아루') ||
+          name.includes('부영') ||
+          name.includes('주공') ||
+          usageType.includes('apartment') ||
+          (aspectRatio >= 1.4 && approxArea >= 280);
+
+        const isComm =
+          name.includes('타워') ||
+          name.includes('빌딩') ||
+          name.includes('센터') ||
+          usageType.includes('commercial') ||
+          usageType.includes('office') ||
+          approxArea >= 500;
 
         if (isApt) {
           const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
           const defaultAptStories = Math.round(15 + seed * 9); // 15~24층 (48m~76.8m)
-          if (!totalH || totalH < 30.0) {
+          if (!totalH || totalH < 35.0) {
             totalH = defaultAptStories * 3.2;
           } else {
-            totalH = Math.max(45.0, totalH);
+            totalH = Math.max(48.0, totalH);
           }
         } else if (isComm) {
           const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
@@ -577,7 +607,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           if (!totalH || totalH < 12.0) {
             totalH = defaultCommStories * 3.2;
           } else {
-            totalH = Math.max(15.0, totalH);
+            totalH = Math.max(16.0, totalH);
           }
         } else {
           // 일반 주택, 빌라, 군 시설: 2~3층 (6m~10m)
@@ -616,10 +646,15 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const rangeX = Math.max(0.1, maxX - minX);
         const rangeY = Math.max(0.1, maxY - minY);
 
-        // 1. [외벽 (Wall) 지오메트리 & 아틀라스 정밀 UV 매핑]
+        // 1. [외벽 (Wall) 지오메트리 & 4단 입체 구조 아틀라스 정밀 UV 매핑]
         const N = pts.length;
         const wallBaseY = relElev - 2.5; // 경사지 및 기단부 밀착용 2.5m 지하 매립 기초
         const aboveGroundH = Math.max(2.8, wallTop - relElev); // 지상 실측 높이
+
+        // [Part 1. 저층 기단부 (0m ~ 4m)]: 짙은 화강석 그레이 #94a3b8로 지면과 건물의 경계를 단단하게 고정
+        const podiumH = Math.min(4.0, aboveGroundH);
+        const podiumTopY = relElev + podiumH;
+        const towerH = Math.max(0, wallTop - podiumTopY);
 
         // 정밀 UV 규격: 1개 층(높이 3.0m) x 창문 1칸(폭 2.8m)
         const BAY_WIDTH = 2.8;
@@ -636,14 +671,18 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const nx = -dz / segLen;
           const nz = dx / segLen;
 
-          // (0) 지하/기단부 매립 기초 (wallBaseY ~ relElev: 2.5m 다크 화강석 기초)
-          const fndUV = getAtlasSlotUV('foundation_stone');
+          // ===================================================================
+          // [Part 1. 저층 기단부 (0m ~ 4m)]
+          // 지하 매립 기초(wallBaseY)부터 지상 4m(podiumTopY)까지 일체형 화강석 기단부 외벽 구성
+          // ===================================================================
+          const podiumSlot = cls.category === 'commercial' ? 'commercial_ground' : 'foundation_stone';
+          const fndUV = getAtlasSlotUV(podiumSlot);
           addQuad(
             masterPositions, masterNormals, masterUvs, masterColors,
             { x: p0.x, y: wallBaseY, z: p0.y },
             { x: p1.x, y: wallBaseY, z: p1.y },
-            { x: p1.x, y: relElev, z: p1.y },
-            { x: p0.x, y: relElev, z: p0.y },
+            { x: p1.x, y: podiumTopY, z: p1.y },
+            { x: p0.x, y: podiumTopY, z: p0.y },
             nx, 0, nz,
             { u: fndUV.u0, v: fndUV.v0 },
             { u: fndUV.u1, v: fndUV.v0 },
@@ -652,33 +691,69 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             0.98, 0.98, 0.98
           );
 
-          // (1) 지상 벽체: 1개 층(3.0m) x 창문 1칸(2.8m) 정밀 UV 타일링
-          const nBays = Math.max(1, Math.round(segLen / BAY_WIDTH));
-          const nStories = Math.max(1, Math.round(aboveGroundH / STORY_HEIGHT));
+          // ===================================================================
+          // [Part 2. 본동 외벽 및 창문 파사드 (4m ~ H)]
+          // ===================================================================
+          if (towerH > 0.5) {
+            const nBays = Math.max(1, Math.round(segLen / BAY_WIDTH));
+            const nStories = Math.max(1, Math.round(towerH / STORY_HEIGHT));
 
-          if (cls.category === 'apartment') {
-            // 아파트 측벽 판별: OBB 단축(dirV)과의 방향 일치율 > 0.65
-            const isNarrowSide = Math.abs(dx * obb.dirV.x + dz * obb.dirV.y) / segLen > 0.65;
+            if (cls.category === 'apartment') {
+              // 아파트 측벽 판별: OBB 단축(dirV)과의 방향 일치율 > 0.65
+              const isNarrowSide = Math.abs(dx * obb.dirV.x + dz * obb.dirV.y) / segLen > 0.65;
 
-            if (isNarrowSide) {
-              // (1) 한국형 아파트 측벽: 전체 측벽을 1회 매핑하여 동 번호 '101'과 포인트 도색 밴드 상단 표출
-              const sideUV = getAtlasSlotUV('apartment_side');
-              addQuad(
-                masterPositions, masterNormals, masterUvs, masterColors,
-                { x: p0.x, y: relElev, z: p0.y },
-                { x: p1.x, y: relElev, z: p1.y },
-                { x: p1.x, y: wallTop, z: p1.y },
-                { x: p0.x, y: wallTop, z: p0.y },
-                nx, 0, nz,
-                { u: sideUV.u0, v: sideUV.v0 },
-                { u: sideUV.u1, v: sideUV.v0 },
-                { u: sideUV.u1, v: sideUV.v1 },
-                { u: sideUV.u0, v: sideUV.v1 },
-                0.98, 0.98, 0.99
-              );
+              if (isNarrowSide) {
+                // (1) 한국형 아파트 측벽: 밝은 크림 아이보리(#f8fafc) + 측벽 수직 코어 라인 + 상단 동 번호 마킹
+                const sideUV = getAtlasSlotUV('apartment_side');
+                addQuad(
+                  masterPositions, masterNormals, masterUvs, masterColors,
+                  { x: p0.x, y: podiumTopY, z: p0.y },
+                  { x: p1.x, y: podiumTopY, z: p1.y },
+                  { x: p1.x, y: wallTop, z: p1.y },
+                  { x: p0.x, y: wallTop, z: p0.y },
+                  nx, 0, nz,
+                  { u: sideUV.u0, v: sideUV.v0 },
+                  { u: sideUV.u1, v: sideUV.v0 },
+                  { u: sideUV.u1, v: sideUV.v1 },
+                  { u: sideUV.u0, v: sideUV.v1 },
+                  0.98, 0.98, 0.99
+                );
+              } else {
+                // (2) 한국형 아파트 전/후면: 세대별 베란다 창문 격자 및 실외기 루버 (3m 층고 단위 격자)
+                const frontUV = getAtlasSlotUV('apartment_front');
+
+                for (let b = 0; b < nBays; b++) {
+                  const t0 = b / nBays;
+                  const t1 = (b + 1) / nBays;
+                  const bx0 = p0.x + dx * t0;
+                  const bz0 = p0.y + dz * t0;
+                  const bx1 = p0.x + dx * t1;
+                  const bz1 = p0.y + dz * t1;
+
+                  for (let s = 0; s < nStories; s++) {
+                    const y0 = podiumTopY + (towerH * s) / nStories;
+                    const y1 = podiumTopY + (towerH * (s + 1)) / nStories;
+
+                    addQuad(
+                      masterPositions, masterNormals, masterUvs, masterColors,
+                      { x: bx0, y: y0, z: bz0 },
+                      { x: bx1, y: y0, z: bz1 },
+                      { x: bx1, y: y1, z: bz1 },
+                      { x: bx0, y: y1, z: bz0 },
+                      nx, 0, nz,
+                      { u: frontUV.u0, v: frontUV.v0 },
+                      { u: frontUV.u1, v: frontUV.v0 },
+                      { u: frontUV.u1, v: frontUV.v1 },
+                      { u: frontUV.u0, v: frontUV.v1 },
+                      0.98, 0.98, 0.99
+                    );
+                  }
+                }
+              }
             } else {
-              // (2) 한국형 아파트 전/후면: 세대별 베란다 창문 격자 및 실외기 루버 (정확히 1개 층 3.0m x 창문 1칸 2.8m)
-              const frontUV = getAtlasSlotUV('apartment_front');
+              // (3) 상업/오피스 (스카이 블루 반사 커튼월 #bae6fd), 저층 주택/군사 막사 (밝은 샌드 베이지 #f1f5f9)
+              const wallSlot = cls.wallFrontSlot;
+              const wallUV = getAtlasSlotUV(wallSlot);
 
               for (let b = 0; b < nBays; b++) {
                 const t0 = b / nBays;
@@ -689,8 +764,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 const bz1 = p0.y + dz * t1;
 
                 for (let s = 0; s < nStories; s++) {
-                  const y0 = relElev + (aboveGroundH * s) / nStories;
-                  const y1 = relElev + (aboveGroundH * (s + 1)) / nStories;
+                  const y0 = podiumTopY + (towerH * s) / nStories;
+                  const y1 = podiumTopY + (towerH * (s + 1)) / nStories;
 
                   addQuad(
                     masterPositions, masterNormals, masterUvs, masterColors,
@@ -699,49 +774,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                     { x: bx1, y: y1, z: bz1 },
                     { x: bx0, y: y1, z: bz0 },
                     nx, 0, nz,
-                    { u: frontUV.u0, v: frontUV.v0 },
-                    { u: frontUV.u1, v: frontUV.v0 },
-                    { u: frontUV.u1, v: frontUV.v1 },
-                    { u: frontUV.u0, v: frontUV.v1 },
+                    { u: wallUV.u0, v: wallUV.v0 },
+                    { u: wallUV.u1, v: wallUV.v0 },
+                    { u: wallUV.u1, v: wallUV.v1 },
+                    { u: wallUV.u0, v: wallUV.v1 },
                     0.98, 0.98, 0.99
                   );
                 }
-              }
-            }
-          } else {
-            // (3) 상업/오피스, 커튼월 타워, 다세대 빌라, 공공청사
-            for (let b = 0; b < nBays; b++) {
-              const t0 = b / nBays;
-              const t1 = (b + 1) / nBays;
-              const bx0 = p0.x + dx * t0;
-              const bz0 = p0.y + dz * t0;
-              const bx1 = p0.x + dx * t1;
-              const bz1 = p0.y + dz * t1;
-
-              for (let s = 0; s < nStories; s++) {
-                const y0 = relElev + (aboveGroundH * s) / nStories;
-                const y1 = relElev + (aboveGroundH * (s + 1)) / nStories;
-
-                // 상업 빌딩 1층(s === 0)은 다채로운 상가 간판 및 쇼윈도 슬롯 적용
-                let slot = cls.wallFrontSlot;
-                if (cls.category === 'commercial' && s === 0) {
-                  slot = 'commercial_ground';
-                }
-                const wallUV = getAtlasSlotUV(slot);
-
-                addQuad(
-                  masterPositions, masterNormals, masterUvs, masterColors,
-                  { x: bx0, y: y0, z: bz0 },
-                  { x: bx1, y: y0, z: bz1 },
-                  { x: bx1, y: y1, z: bz1 },
-                  { x: bx0, y: y1, z: bz0 },
-                  nx, 0, nz,
-                  { u: wallUV.u0, v: wallUV.v0 },
-                  { u: wallUV.u1, v: wallUV.v0 },
-                  { u: wallUV.u1, v: wallUV.v1 },
-                  { u: wallUV.u0, v: wallUV.v1 },
-                  0.98, 0.98, 0.99
-                );
               }
             }
           }
@@ -851,12 +890,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             }
           }
 
-          // 3. [1.0m 콘크리트 난간(Parapet) 3면 입체 모델링]
-          // 초록색 우레탄 바닥이 1.0m 깊이로 쏙 들어가 보이도록 외벽·코핑·내벽 3면 생성
+          // 3. [1.2m 콘크리트 난간(Parapet) 3면 입체 모델링]
+          // 초록색 우레탄 바닥이 1.2m 깊이로 쏙 들어가 보이도록 외벽·코핑·내벽 3면 생성 (테두리 두께 0.5m)
           if (cls.hasParapet) {
             const parapetUV = getAtlasSlotUV('parapet_concrete');
-            const pH = cls.parapetHeight || 1.0;
-            const pThick = 0.35;
+            const pH = cls.parapetHeight || 1.2;
+            const pThick = 0.5; // 외곽 테두리 두께 0.5m
 
             for (let i = 0; i < N; i++) {
               const p0 = pts[i];
@@ -869,13 +908,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               const nx = -dz / segLen;
               const nz = dx / segLen;
 
-              // 안쪽 내벽 오프셋 좌표 (0.35m 내측)
+              // 안쪽 내벽 오프셋 좌표 (0.5m 내측)
               const p0i_x = p0.x - nx * pThick;
               const p0i_z = p0.y - nz * pThick;
               const p1i_x = p1.x - nx * pThick;
               const p1i_z = p1.y - nz * pThick;
 
-              // 1) 난간 외벽면 (높이 1.0m)
+              // 1) 난간 외벽면 (높이 1.2m)
               addQuad(
                 masterPositions, masterNormals, masterUvs, masterColors,
                 { x: p0.x, y: wallTop, z: p0.y },
@@ -890,7 +929,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 0.98, 0.98, 0.99
               );
 
-              // 2) 난간 상단 코핑 (두께 0.35m 수평 마감)
+              // 2) 난간 상단 코핑 (두께 0.5m 수평 마감)
               addQuad(
                 masterPositions, masterNormals, masterUvs, masterColors,
                 { x: p0.x, y: wallTop + pH, z: p0.y },
@@ -905,7 +944,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 1.0, 1.0, 1.0
               );
 
-              // 3) 난간 안쪽 내벽 (상단 코핑에서 우레탄 옥상 바닥으로 1.0m 내려가는 벽)
+              // 3) 난간 안쪽 내벽 (상단 코핑에서 우레탄 옥상 바닥으로 1.2m 내려가는 벽)
               addQuad(
                 masterPositions, masterNormals, masterUvs, masterColors,
                 { x: p1i_x, y: wallTop, z: p1i_z },
@@ -922,12 +961,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             }
           }
 
-          // 4. [엘리베이터 권상기실(Penthouse) 큐브 & 콘크리트/철문 텍스처]
-          if (cls.hasPenthouse) {
+          // 4. [엘리베이터 권상기실(Penthouse) 3.2m 큐브 & 콘크리트/철문 텍스처]
+          if (cls.hasPenthouse && totalH >= 15.0) {
             const pentUV = getAtlasSlotUV('penthouse_wall');
             const coolRoofUV = getAtlasSlotUV('roof_concrete_cool');
-            const coreW = Math.max(3.8, Math.min(obb.lenU * 0.22, 10.0));
-            const coreD = Math.max(3.8, Math.min(obb.lenV * 0.22, 8.0));
+            const coreW = Math.max(4.0, Math.min(obb.lenU * 0.35, 12.0));
+            const coreD = Math.max(3.5, Math.min(obb.lenV * 0.35, 9.0));
             const coreH = 3.2;
 
             const hw = coreW * 0.5;

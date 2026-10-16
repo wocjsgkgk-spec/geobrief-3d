@@ -852,13 +852,36 @@ export function classifyBuilding(
 
   const rnd = pseudoRandom(cx, cy);
 
-  // 1) [규칙 1]: 아파트 (높이 30m 이상 또는 아파트 명칭/용도)
+  // 1) [규칙 1]: 아파트 (높이 30m 이상 또는 아파트 명칭/브랜드/용도)
   // 외벽: 밝은 크림/아이보리색(#f8fafc) + 세대별 베란다 유리창 격자 + 측벽 동 번호 라인
-  // 옥상: 회색 콘크리트 옥상 및 엘리베이터 옥탑방 돌출
-  const isAptByName = name.includes('아파트') || usageType.includes('apartment');
+  // 옥상: 회색 콘크리트 옥상 및 3.2m 엘리베이터 옥탑방 돌출
+  const isAptByName =
+    name.includes('아파트') ||
+    name.includes('apt') ||
+    name.includes('단지') ||
+    name.includes('푸르지오') ||
+    name.includes('자이') ||
+    name.includes('힐스테이트') ||
+    name.includes('래미안') ||
+    name.includes('e편한') ||
+    name.includes('더샵') ||
+    name.includes('아이파크') ||
+    name.includes('롯데캐슬') ||
+    name.includes('한신') ||
+    name.includes('삼호') ||
+    name.includes('두산') ||
+    name.includes('우성') ||
+    name.includes('현대') ||
+    name.includes('동보') ||
+    name.includes('세경') ||
+    name.includes('코아루') ||
+    name.includes('부영') ||
+    name.includes('주공') ||
+    usageType.includes('apartment');
+
   if (
+    isAptByName ||
     (totalH >= 30.0 && aspectRatio >= 1.35) ||
-    (isAptByName && totalH >= 15.0) ||
     (usageType.includes('residential') && totalH >= 24.0)
   ) {
     return {
@@ -867,15 +890,15 @@ export function classifyBuilding(
       wallSideSlot: 'apartment_side',
       roofSlot: 'roof_concrete_cool', // 회색 콘크리트 옥상 슬래브
       hasParapet: true,
-      parapetHeight: 1.0,
-      hasPenthouse: true, // 엘리베이터 옥탑방 돌출
+      parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
+      hasPenthouse: true, // 엘리베이터 옥탑방 돌출 (3.2m)
       isPitchedRoof: false,
     };
   }
 
   // 2) [규칙 2]: 중·저층 상가 및 일반 빌딩 (높이 10m~28m)
   // 외벽: 밝은 화강석/타일 외벽 + 가로형 창문 프레임 + 1층 상가 간판
-  // 옥상: 한국 특유의 초록색 우레탄 방수 옥상(#15803d) + 1.0m 옥상 테두리 난간(Parapet)
+  // 옥상: 한국 특유의 초록색 우레탄 방수 옥상(#15803d) + 1.2m 옥상 테두리 난간(Parapet)
   if (totalH >= 10.0 && totalH < 28.0) {
     const isPublic = usageType.includes('public') || name.includes('청사') || name.includes('센터');
     return {
@@ -884,7 +907,7 @@ export function classifyBuilding(
       wallSideSlot: isPublic ? 'public_facility' : 'commercial_mid',
       roofSlot: 'roof_green_urethane', // 한국 특유의 초록색 우레탄 방수 옥상 100%
       hasParapet: true,
-      parapetHeight: 1.0, // 1.0m 옥상 테두리 난간
+      parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
       hasPenthouse: true,
       isPitchedRoof: false,
     };
@@ -899,7 +922,7 @@ export function classifyBuilding(
       wallSideSlot: isCurtain ? 'curtainwall_high' : 'commercial_mid',
       roofSlot: 'roof_concrete_cool',
       hasParapet: true,
-      parapetHeight: 1.0,
+      parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
       hasPenthouse: true,
       isPitchedRoof: false,
     };
@@ -928,7 +951,7 @@ export function classifyBuilding(
     wallSideSlot: isMilitary ? 'public_facility' : 'villa_residential',
     roofSlot,
     hasParapet: !isPitched,
-    parapetHeight: 1.0,
+    parapetHeight: 1.2, // 1.2m 옥상 테두리 난간
     hasPenthouse: false,
     isPitchedRoof: isPitched,
   };
