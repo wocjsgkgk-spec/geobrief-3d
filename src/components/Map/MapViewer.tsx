@@ -362,6 +362,74 @@ export const MapViewer: React.FC = () => {
   const cinematicAnimRef = useRef<number | null>(null);
   const cinematicStartTimeRef = useRef<number>(0);
 
+  // [1단계: 무중단 원자적(Atomic) 건물 캐시 및 Double Buffering]
+  // 지도 이동이나 줌 변경 시 기존 렌더링된 건물이 깜빡거리거나 소실되지 않도록 전역 영구 캐시 유지
+  const persistentBuildingCacheRef = useRef<Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>>(new Map());
+
+  const getBuildingFeatureKey = useCallback(
+    (f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, idx: number): string => {
+      const props = (f.properties || {}) as Record<string, any>;
+      if (props.bd_mgt_sn) return `bld_${props.bd_mgt_sn}`;
+      if (props.buld_se_cd) return `bld_${props.buld_se_cd}`;
+      if (f.id !== undefined && f.id !== null) {
+        const s = String(f.id);
+        return s.startsWith('bld_') ? s : `bld_${s}`;
+      }
+      const geom = f.geometry;
+      if (geom?.type === 'Polygon' && geom.coordinates[0]?.[0]) {
+        const pt = geom.coordinates[0][0];
+        return `coord_${pt[0].toFixed(5)}_${pt[1].toFixed(5)}`;
+      }
+      if (geom?.type === 'MultiPolygon' && geom.coordinates[0]?.[0]?.[0]) {
+        const pt = geom.coordinates[0][0][0];
+        return `coord_${pt[0].toFixed(5)}_${pt[1].toFixed(5)}`;
+      }
+      return `idx_${idx}`;
+    },
+    []
+  );
+
+  const mergeIntoPersistentBuildingCache = useCallback(
+    (
+      newFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
+    ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] => {
+      if (!newFeatures || newFeatures.length === 0) {
+        return Array.from(persistentBuildingCacheRef.current.values());
+      }
+
+      const MAX_PERSISTENT_FEATURES = 16000;
+      if (persistentBuildingCacheRef.current.size > MAX_PERSISTENT_FEATURES) {
+        const excess = persistentBuildingCacheRef.current.size - 12000;
+        let removed = 0;
+        for (const k of persistentBuildingCacheRef.current.keys()) {
+          if (removed >= excess) break;
+          persistentBuildingCacheRef.current.delete(k);
+          removed++;
+        }
+      }
+
+      newFeatures.forEach((feat, idx) => {
+        if (!feat || !feat.geometry) return;
+        const key = getBuildingFeatureKey(feat, idx);
+        const existing = persistentBuildingCacheRef.current.get(key);
+        if (!existing) {
+          persistentBuildingCacheRef.current.set(key, feat);
+        } else {
+          const exH = Number(existing.properties?.height || existing.properties?.hei || 0);
+          const newH = Number(feat.properties?.height || feat.properties?.hei || 0);
+          const exFlr = Number(existing.properties?.grnd_flr || existing.properties?.gro_flo_co || 0);
+          const newFlr = Number(feat.properties?.grnd_flr || feat.properties?.gro_flo_co || 0);
+          if (newH > exH || newFlr > exFlr) {
+            persistentBuildingCacheRef.current.set(key, feat);
+          }
+        }
+      });
+
+      return Array.from(persistentBuildingCacheRef.current.values());
+    },
+    [getBuildingFeatureKey]
+  );
+
   const {
     viewport,
     setViewport,
@@ -3316,30 +3384,35 @@ export const MapViewer: React.FC = () => {
             const queryElev = (coord: [number, number]) => {
               return elevationCache.getFromMap(map, coord);
             };
-            const finalFeatures = applyAdaptiveFoundationToFeatures(cachedCollection, queryElev);
+            const adaptedFeatures = applyAdaptiveFoundationToFeatures(cachedCollection, queryElev);
+            const mergedList = mergeIntoPersistentBuildingCache(
+              adaptedFeatures.features as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
+            );
+            const mergedCollection: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
+              type: 'FeatureCollection',
+              features: mergedList,
+            };
 
             try {
               const fusionSource = map.getSource('fusion-buildings') as maplibregl.GeoJSONSource;
               if (fusionSource && typeof fusionSource.setData === 'function') {
-                fusionSource.setData(finalFeatures);
+                fusionSource.setData(mergedCollection);
               }
               const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
               if (vworldSource && typeof vworldSource.setData === 'function') {
-                vworldSource.setData(finalFeatures);
+                vworldSource.setData(mergedCollection);
               }
               if (lod2BuildingEngineRef.current) {
-                const extra = (finalFeatures.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-                lod2BuildingEngineRef.current.updateBuildings(extra);
+                lod2BuildingEngineRef.current.updateBuildings(mergedList);
               }
               if (threeboxLayerRef.current) {
-                const extra = (finalFeatures.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-                threeboxLayerRef.current.syncRoofs(extra);
+                threeboxLayerRef.current.syncRoofs(mergedList);
               }
             } catch (cacheErr) {
               console.warn('[MapViewer] Failed to update from buildingSpatialCache:', cacheErr);
             }
             lastFetchedBbox = bboxKey;
-            lastFetchedCount = finalFeatures.features.length;
+            lastFetchedCount = mergedList.length;
             return;
           }
         }
@@ -3359,57 +3432,59 @@ export const MapViewer: React.FC = () => {
           buildingSpatialCache.putFeatures(result.features.features as any, bbox);
         }
 
-        lastFetchedBbox = bboxKey;
-        lastFetchedCount = result.totalCount;
-
-        setVworldDiagnostic({
-          status: result.status,
-          message: result.message,
-          lastChecked: Date.now(),
-          featureCount: result.totalCount,
-        });
-
-        console.log('[GeoBrief 3D Spatial Pipeline] OpenFreeMap x Overpass x V-World 융합 완료:', result);
-
         // [2단계: 건물 바닥면 적응형 기초(Adaptive Foundation) 표고 샘플링 & 스냅]
         const queryElev = (coord: [number, number]) => {
           return elevationCache.getFromMap(map, coord);
         };
         const finalFeatures = result.features
           ? applyAdaptiveFoundationToFeatures(result.features, queryElev)
-          : result.features;
+          : null;
+
+        // [2) 무중단 원자적(Atomic) 영구 캐시 병합 - 기존 화면 건물 절대로 지우지(clear) 않음]
+        const incomingList = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+        const mergedList = mergeIntoPersistentBuildingCache(incomingList);
+        const mergedCollection: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
+          type: 'FeatureCollection',
+          features: mergedList,
+        };
+
+        lastFetchedBbox = bboxKey;
+        lastFetchedCount = mergedList.length;
+
+        setVworldDiagnostic({
+          status: result.status,
+          message: result.message,
+          lastChecked: Date.now(),
+          featureCount: mergedList.length,
+        });
+
+        console.log('[GeoBrief 3D Spatial Pipeline] OpenFreeMap x Overpass x V-World 융합 완료:', result, '누적 건물 수 =', mergedList.length);
 
         try {
-          // 1) 신규 융합 소스('fusion-buildings') 갱신
+          // 1) 신규 융합 소스('fusion-buildings') 갱신 (빈 배열로 덮어쓰지 않고 항상 누적 피처 유지)
           const fusionSource = map.getSource('fusion-buildings') as maplibregl.GeoJSONSource;
           if (fusionSource && typeof fusionSource.setData === 'function') {
-            if (result.success && finalFeatures && finalFeatures.features.length > 0) {
-              fusionSource.setData(finalFeatures);
-            } else {
-              fusionSource.setData({ type: 'FeatureCollection', features: [] });
+            if (mergedList.length > 0) {
+              fusionSource.setData(mergedCollection);
             }
           }
 
           // 2) 기존 하위 호환 소스('vworld-buildings-source') 갱신
           const vworldSource = map.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource;
           if (vworldSource && typeof vworldSource.setData === 'function') {
-            if (result.success && finalFeatures && finalFeatures.features.length > 0) {
-              vworldSource.setData(finalFeatures);
-            } else {
-              vworldSource.setData({ type: 'FeatureCollection', features: [] });
+            if (mergedList.length > 0) {
+              vworldSource.setData(mergedCollection);
             }
           }
 
-          // 3) 주력 Three.js LOD2 절차적 실감 3D 건축물 엔진 동기화 (실제 GIS 폴리곤만 전달)
-          if (lod2BuildingEngineRef.current) {
-            const extra = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-            lod2BuildingEngineRef.current.updateBuildings(extra);
+          // 3) 주력 Three.js LOD2 절차적 실감 3D 건축물 엔진 동기화 (원자적 더블 버퍼링으로 0ms 무깜빡임 렌더)
+          if (lod2BuildingEngineRef.current && mergedList.length > 0) {
+            lod2BuildingEngineRef.current.updateBuildings(mergedList);
           }
 
           // 4) Threebox LOD2 입체 지붕 동기화 (기즈모 및 시설물 연동용)
-          if (threeboxLayerRef.current) {
-            const extra = (finalFeatures?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
-            threeboxLayerRef.current.syncRoofs(extra);
+          if (threeboxLayerRef.current && mergedList.length > 0) {
+            threeboxLayerRef.current.syncRoofs(mergedList);
           }
         } catch (sourceErr) {
           console.warn('[MapViewer] Failed to update building sources:', sourceErr);
@@ -3418,7 +3493,7 @@ export const MapViewer: React.FC = () => {
         if (isCancelled || err?.name === 'AbortError') return;
         console.warn('[Spatial Pipeline] Exception in fetchBoundsBuildings:', err);
         if (!isCancelled) {
-          const renderedCount = mapRef.current ? extractRenderedVectorBuildings(mapRef.current).length : 0;
+          const renderedCount = persistentBuildingCacheRef.current.size || (mapRef.current ? extractRenderedVectorBuildings(mapRef.current).length : 0);
           setVworldDiagnostic({
             status: 'connected',
             message: '오픈 벡터 타일 실시간 건물 렌더링 유지',
@@ -3462,7 +3537,7 @@ export const MapViewer: React.FC = () => {
       map.off('moveend', debouncedFetch);
       map.off('idle', debouncedFetch);
     };
-  }, [isMapLoaded, viewport.latitude, viewport.longitude, viewport.zoom, layers.buildings3D, setVworldDiagnostic]);
+  }, [isMapLoaded, layers.buildings3D, setVworldDiagnostic, mergeIntoPersistentBuildingCache]);
 
   // 9. 베이스맵 전환
   useEffect(() => {
@@ -5273,7 +5348,7 @@ export const MapViewer: React.FC = () => {
           zIndex: 1,
         }}
       >
-        {/* MapLibre WebGL Canvas Container (강제 CSS 적용) */}
+        {/* MapLibre WebGL Canvas Container (강제 CSS 적용 및 대기 스카이라인 그라데이션) */}
         <div
           ref={mapContainerRef}
           className="w-full h-full min-h-[500px] relative z-[1]"
@@ -5283,6 +5358,7 @@ export const MapViewer: React.FC = () => {
             minHeight: '500px',
             position: 'relative',
             zIndex: 1,
+            background: 'linear-gradient(to bottom, #1e3a8a 0%, #60a5fa 35%, #cbd5e1 65%, #64748b 100%)',
           }}
         />
 

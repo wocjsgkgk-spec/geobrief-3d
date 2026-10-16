@@ -647,6 +647,17 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
     }),
   };
 
+  // 3D 지형(DEM)과의 깊이 버퍼(Z-Fighting) 간섭 원천 해소
+  for (const key of Object.keys(materialsCache) as (keyof KoreanBuildingMaterials)[]) {
+    const mat = materialsCache[key];
+    if (mat && (mat as any).isMaterial) {
+      (mat as any).polygonOffset = true;
+      (mat as any).polygonOffsetFactor = -1;
+      (mat as any).polygonOffsetUnits = -1;
+      (mat as any).depthTest = true;
+    }
+  }
+
   return materialsCache;
 }
 

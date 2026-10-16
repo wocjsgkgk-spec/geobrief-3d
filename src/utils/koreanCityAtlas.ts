@@ -763,6 +763,12 @@ export function getKoreanCityAtlasMaterial(): THREE.MeshStandardMaterial | null 
     roughness: 0.50,
     metalness: 0.10,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+    depthTest: true,
+    depthWrite: true,
+    vertexColors: true,
   });
 
   return cachedMasterMaterial;
