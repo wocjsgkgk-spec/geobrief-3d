@@ -244,13 +244,85 @@ export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
 }
 
 /**
+ * 2-2. 한국형 단독주택 / 빌라 / 다세대 캔버스 텍스처 (512x512)
+ * - 웜 베이지(#F1F5F9) 외벽 베이스
+ * - 층간 슬래브 분할선 및 세대 창문 프레임
+ */
+export function createResidentialFacadeCanvas(size = 512): HTMLCanvasElement {
+  if (typeof document === 'undefined') {
+    return {} as HTMLCanvasElement;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return canvas;
+
+  // 1) 외벽 베이스: 웜 베이지 (#F1F5F9)
+  ctx.fillStyle = '#F1F5F9';
+  ctx.fillRect(0, 0, size, size);
+
+  // 미세 가로 줄눈
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.4)';
+  for (let y = 0; y < size; y += 8) {
+    ctx.fillRect(0, y, size, 1.5);
+  }
+
+  const floors = 4;
+  const floorH = size / floors;
+  const bays = 4;
+  const bayW = size / bays;
+
+  for (let f = 0; f < floors; f++) {
+    const y = f * floorH;
+
+    // 층간 슬래브 밴드
+    ctx.fillStyle = '#CBD5E1';
+    ctx.fillRect(0, y, size, 8);
+    ctx.fillStyle = '#94A3B8';
+    ctx.fillRect(0, y + 6, size, 2);
+
+    for (let b = 0; b < bays; b++) {
+      const x = b * bayW;
+      const marginX = 14;
+      const winW = bayW - marginX * 2;
+      const winH = Math.round(floorH * 0.52);
+      const winY = y + 16;
+
+      // 창호 프레임
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(x + marginX - 2, winY - 2, winW + 4, winH + 4);
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillRect(x + marginX - 1, winY - 1, winW + 2, winH + 2);
+
+      // 유리창 반사 그라데이션
+      const glassGrad = ctx.createLinearGradient(x + marginX, winY, x + marginX + winW, winY + winH);
+      glassGrad.addColorStop(0, '#1E293B');
+      glassGrad.addColorStop(0.4, '#0F172A');
+      glassGrad.addColorStop(0.7, '#0369A1');
+      glassGrad.addColorStop(1, '#0284C7');
+      ctx.fillStyle = glassGrad;
+      ctx.fillRect(x + marginX, winY, winW, winH);
+
+      // 창틀 십자 섀시 분할
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(x + marginX + winW * 0.5 - 1, winY, 2, winH);
+      ctx.fillRect(x + marginX, winY + winH * 0.45 - 1, winW, 2);
+    }
+  }
+
+  return canvas;
+}
+
+/**
  * 3. MapLibre 맵 인스턴스에 512x512 파사드 텍스처 스프라이트 안전 등록
  */
 export function registerFacadeTexturesToMap(map: maplibregl.Map, size = 512): void {
   if (!map || typeof document === 'undefined') return;
 
   try {
-    // 1) 아파트 단지 텍스처 등록
+    // 1) 아파트 단지 텍스처 등록 (밝은 크림 아이보리 #f8fafc)
     if (!map.hasImage('facade-apartment')) {
       const aptCanvas = createApartmentFacadeCanvas(size);
       const ctx = aptCanvas.getContext('2d');
@@ -263,7 +335,7 @@ export function registerFacadeTexturesToMap(map: maplibregl.Map, size = 512): vo
       }
     }
 
-    // 2) 상업/업무 빌딩 커튼월 루버 텍스처 등록
+    // 2) 상업/업무 빌딩 커튼월 루버 텍스처 등록 (쿨 그레이/블루 #cbd5e1)
     if (!map.hasImage('facade-commercial')) {
       const comCanvas = createCommercialFacadeCanvas(size);
       const ctx = comCanvas.getContext('2d');
@@ -272,6 +344,19 @@ export function registerFacadeTexturesToMap(map: maplibregl.Map, size = 512): vo
         map.addImage('facade-commercial', imgData);
         if (!map.hasImage('facade-curtainwall-512')) {
           map.addImage('facade-curtainwall-512', imgData);
+        }
+      }
+    }
+
+    // 3) 일반 단독주택 / 빌라 외벽 텍스처 등록 (웜 베이지 #f1f5f9)
+    if (!map.hasImage('facade-residential')) {
+      const resCanvas = createResidentialFacadeCanvas(size);
+      const ctx = resCanvas.getContext('2d');
+      if (ctx) {
+        const imgData = ctx.getImageData(0, 0, size, size);
+        map.addImage('facade-residential', imgData);
+        if (!map.hasImage('facade-villa')) {
+          map.addImage('facade-villa', imgData);
         }
       }
     }

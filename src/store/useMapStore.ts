@@ -1439,7 +1439,7 @@ export const useMapStore = create<MapStoreState>()(
       transformGizmoMode: 'translate',
 
       // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+) 토글 관리]
-      detail3DMode: 'lod2',
+      detail3DMode: 'lod1',
       setDetail3DMode: (mode) => set({ detail3DMode: mode }),
       toggleDetail3DMode: () =>
         set((s) => {
@@ -1451,7 +1451,7 @@ export const useMapStore = create<MapStoreState>()(
         }),
 
       // [신규] 3D 건축물 상호 배타적 렌더러 모드 (Mutual Exclusion)
-      renderMode3D: 'facade',
+      renderMode3D: 'native',
       setRenderMode3D: (mode) =>
         set((s) => {
           const isNative = mode === 'native';
