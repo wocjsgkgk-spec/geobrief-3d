@@ -3,8 +3,8 @@
 import React from 'react';
 
 interface ScaleBarProps {
-  latitude: number;
-  zoom: number;
+  latitude?: number;
+  zoom?: number;
 }
 
 export function updateScaleBarDOM(latitude: number, zoom: number): void {
@@ -44,7 +44,7 @@ export function updateScaleBarDOM(latitude: number, zoom: number): void {
   }
 }
 
-export const ScaleBar: React.FC<ScaleBarProps> = ({ latitude, zoom }) => {
+export const ScaleBar: React.FC<ScaleBarProps> = React.memo(({ latitude = 37.35, zoom = 15 }) => {
   // Web Mercator 기준 픽셀당 미터 계산:
   // metersPerPixel = 156543.03392 * cos(lat * pi / 180) / (2 ^ zoom)
   const rad = (latitude * Math.PI) / 180;
@@ -104,4 +104,4 @@ export const ScaleBar: React.FC<ScaleBarProps> = ({ latitude, zoom }) => {
       </div>
     </div>
   );
-};
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import {
   MapPin,
   Layers,
@@ -238,6 +238,76 @@ export const ControlPanel: React.FC = () => {
     }
   };
 
+  // [1단계: 비동기 상태 전환 최적화] 탭/메뉴 버튼은 0.01초 즉시 반응하고 무거운 지도 렌더러 전환은 비동기 분리
+  const [localActiveTab, setLocalActiveTab] = useState(activeSidebarTab);
+  const [localRenderMode3D, setLocalRenderMode3D] = useState(renderMode3D);
+
+  useEffect(() => {
+    setLocalActiveTab(activeSidebarTab);
+  }, [activeSidebarTab]);
+
+  useEffect(() => {
+    setLocalRenderMode3D(renderMode3D);
+  }, [renderMode3D]);
+
+  const handleTabChange = (tab: typeof activeSidebarTab) => {
+    setLocalActiveTab(tab);
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        setActiveSidebarTab(tab);
+      });
+    });
+  };
+
+  const handleSelectRenderMode3D = (mode: typeof renderMode3D) => {
+    setLocalRenderMode3D(mode);
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        setRenderMode3D(mode);
+      });
+    });
+  };
+
+  const handleToggleLayer = (key: keyof typeof layers) => {
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        toggleLayer(key);
+      });
+    });
+  };
+
+  const handleToggleFlightCeiling3D = () => {
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        toggleFlightCeiling3D();
+      });
+    });
+  };
+
+  const handleToggleBuildingMass3D = () => {
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        toggleBuildingMass3D();
+      });
+    });
+  };
+
+  const handleToggleSlopeAnalysis = () => {
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        toggleSlopeAnalysis();
+      });
+    });
+  };
+
+  const handleSetTerrainEnabled = (enabled: boolean) => {
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        setTerrainEnabled(enabled);
+      });
+    });
+  };
+
   const handleCreateBookmark = (e: React.FormEvent) => {
     e.preventDefault();
     if (bookmarkInput.trim()) {
@@ -249,12 +319,12 @@ export const ControlPanel: React.FC = () => {
 
   return (
     <aside className="w-full md:w-[360px] md:min-w-[360px] h-full md:h-[calc(100vh-3.5rem)] bg-[#141a16] border-r border-[#242f27] flex flex-col text-slate-200 overflow-y-auto">
-      {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 */}
+      {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 - 0.01초 즉시 반응형 UI */}
       <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
         <button
-          onClick={() => setActiveSidebarTab('terrain_infra')}
+          onClick={() => handleTabChange('terrain_infra')}
           className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
-            activeSidebarTab === 'terrain_infra'
+            localActiveTab === 'terrain_infra'
               ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
@@ -268,9 +338,9 @@ export const ControlPanel: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveSidebarTab('buildings_complex')}
+          onClick={() => handleTabChange('buildings_complex')}
           className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
-            activeSidebarTab === 'buildings_complex'
+            localActiveTab === 'buildings_complex'
               ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
@@ -284,9 +354,9 @@ export const ControlPanel: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveSidebarTab('site_access')}
+          onClick={() => handleTabChange('site_access')}
           className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
-            activeSidebarTab === 'site_access'
+            localActiveTab === 'site_access'
               ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
@@ -1377,9 +1447,9 @@ export const ControlPanel: React.FC = () => {
             <div className="space-y-2 pt-1">
               {/* 모드 A: 경량 네이티브 모드 */}
               <label
-                onClick={() => setRenderMode3D('native')}
+                onClick={() => handleSelectRenderMode3D('native')}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  renderMode3D === 'native'
+                  localRenderMode3D === 'native'
                     ? 'bg-blue-950/40 border-blue-500/80 shadow-md ring-1 ring-blue-500/30'
                     : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
                 }`}
@@ -1387,8 +1457,8 @@ export const ControlPanel: React.FC = () => {
                 <input
                   type="radio"
                   name="renderMode3D"
-                  checked={renderMode3D === 'native'}
-                  onChange={() => setRenderMode3D('native')}
+                  checked={localRenderMode3D === 'native'}
+                  onChange={() => handleSelectRenderMode3D('native')}
                   className="mt-1 accent-blue-500"
                 />
                 <div className="flex-1 min-w-0">
@@ -1408,9 +1478,9 @@ export const ControlPanel: React.FC = () => {
 
               {/* 모드 B: 실감 파사드 모드 (LOD2) */}
               <label
-                onClick={() => setRenderMode3D('facade')}
+                onClick={() => handleSelectRenderMode3D('facade')}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  renderMode3D === 'facade'
+                  localRenderMode3D === 'facade'
                     ? 'bg-amber-950/40 border-amber-500/80 shadow-md ring-1 ring-amber-500/30'
                     : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
                 }`}
@@ -1418,8 +1488,8 @@ export const ControlPanel: React.FC = () => {
                 <input
                   type="radio"
                   name="renderMode3D"
-                  checked={renderMode3D === 'facade'}
-                  onChange={() => setRenderMode3D('facade')}
+                  checked={localRenderMode3D === 'facade'}
+                  onChange={() => handleSelectRenderMode3D('facade')}
                   className="mt-1 accent-amber-500"
                 />
                 <div className="flex-1 min-w-0">
@@ -1439,9 +1509,9 @@ export const ControlPanel: React.FC = () => {
 
               {/* 모드 C: 고정밀 3D 타일셋 스트리밍 */}
               <label
-                onClick={() => setRenderMode3D('tiles3d')}
+                onClick={() => handleSelectRenderMode3D('tiles3d')}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  renderMode3D === 'tiles3d'
+                  localRenderMode3D === 'tiles3d'
                     ? 'bg-cyan-950/40 border-cyan-500/80 shadow-md ring-1 ring-cyan-500/30'
                     : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
                 }`}
@@ -1449,8 +1519,8 @@ export const ControlPanel: React.FC = () => {
                 <input
                   type="radio"
                   name="renderMode3D"
-                  checked={renderMode3D === 'tiles3d'}
-                  onChange={() => setRenderMode3D('tiles3d')}
+                  checked={localRenderMode3D === 'tiles3d'}
+                  onChange={() => handleSelectRenderMode3D('tiles3d')}
                   className="mt-1 accent-cyan-500"
                 />
                 <div className="flex-1 min-w-0">
@@ -2675,7 +2745,7 @@ export const ControlPanel: React.FC = () => {
             <input
               type="checkbox"
               checked={terrainEnabled}
-              onChange={(e) => setTerrainEnabled(e.target.checked)}
+              onChange={(e) => handleSetTerrainEnabled(e.target.checked)}
               className="sr-only peer"
             />
             <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -2699,7 +2769,7 @@ export const ControlPanel: React.FC = () => {
             <input
               type="checkbox"
               checked={layers.demContours}
-              onChange={() => toggleLayer('demContours')}
+              onChange={() => handleToggleLayer('demContours')}
               className="sr-only peer"
             />
             <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
@@ -2738,7 +2808,13 @@ export const ControlPanel: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => setBaseMap('satellite')}
+              onClick={() => {
+                startTransition(() => {
+                  requestAnimationFrame(() => {
+                    setBaseMap('satellite');
+                  });
+                });
+              }}
               className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
                 baseMap === 'satellite'
                   ? 'bg-[#1b3425] border-emerald-400 text-emerald-300 font-bold shadow-md ring-1 ring-emerald-500/40'
@@ -2752,7 +2828,13 @@ export const ControlPanel: React.FC = () => {
               <span className="text-[9.5px] opacity-75 font-normal">Esri 실사 고해상도</span>
             </button>
             <button
-              onClick={() => setBaseMap('clean')}
+              onClick={() => {
+                startTransition(() => {
+                  requestAnimationFrame(() => {
+                    setBaseMap('clean');
+                  });
+                });
+              }}
               className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
                 baseMap === 'clean'
                   ? 'bg-[#1b3425] border-emerald-400 text-emerald-300 font-bold shadow-md ring-1 ring-emerald-500/40'
@@ -2796,7 +2878,7 @@ export const ControlPanel: React.FC = () => {
             <input
               type="checkbox"
               checked={showSlopeAnalysis}
-              onChange={toggleSlopeAnalysis}
+              onChange={handleToggleSlopeAnalysis}
               className="sr-only peer"
             />
             <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -3071,7 +3153,7 @@ export const ControlPanel: React.FC = () => {
               <input
                 type="checkbox"
                 checked={layers.buildings3D}
-                onChange={() => toggleLayer('buildings3D')}
+                onChange={() => handleToggleLayer('buildings3D')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
@@ -3093,7 +3175,7 @@ export const ControlPanel: React.FC = () => {
               <input
                 type="checkbox"
                 checked={layers.ssaoPostProcessing}
-                onChange={() => toggleLayer('ssaoPostProcessing')}
+                onChange={() => handleToggleLayer('ssaoPostProcessing')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
@@ -3117,13 +3199,17 @@ export const ControlPanel: React.FC = () => {
                 checked={layers.firstLogisticsSmartCity}
                 onChange={() => {
                   const nextVal = !layers.firstLogisticsSmartCity;
-                  toggleLayer('firstLogisticsSmartCity');
-                  if (nextVal) {
-                    selectIdleSite('first-logistics-wonju');
-                    setPolygonStyle('emerald');
-                  } else {
-                    setPolygonStyle('blue');
-                  }
+                  startTransition(() => {
+                    requestAnimationFrame(() => {
+                      toggleLayer('firstLogisticsSmartCity');
+                      if (nextVal) {
+                        selectIdleSite('first-logistics-wonju');
+                        setPolygonStyle('emerald');
+                      } else {
+                        setPolygonStyle('blue');
+                      }
+                    });
+                  });
                 }}
                 className="sr-only peer"
               />
@@ -3146,7 +3232,7 @@ export const ControlPanel: React.FC = () => {
               <input
                 type="checkbox"
                 checked={layers.proceduralTrees}
-                onChange={() => toggleLayer('proceduralTrees')}
+                onChange={() => handleToggleLayer('proceduralTrees')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -3197,7 +3283,7 @@ export const ControlPanel: React.FC = () => {
               <input
                 type="checkbox"
                 checked={layers.roads}
-                onChange={() => toggleLayer('roads')}
+                onChange={() => handleToggleLayer('roads')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
@@ -3219,7 +3305,7 @@ export const ControlPanel: React.FC = () => {
               <input
                 type="checkbox"
                 checked={layers.cadastral}
-                onChange={() => toggleLayer('cadastral')}
+                onChange={() => handleToggleLayer('cadastral')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
@@ -3241,7 +3327,14 @@ export const ControlPanel: React.FC = () => {
               <input
                 type="checkbox"
                 checked={borderSecurityVisible}
-                onChange={(e) => setBorderSecurityVisible(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  startTransition(() => {
+                    requestAnimationFrame(() => {
+                      setBorderSecurityVisible(val);
+                    });
+                  });
+                }}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-rose-600"></div>

@@ -252,6 +252,18 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
     }
   }
 
+  private isInteracting = false;
+
+  public setInteracting(interacting: boolean): void {
+    this.isInteracting = interacting;
+  }
+
+  public setPixelRatio(ratio: number): void {
+    if (this.renderer) {
+      this.renderer.setPixelRatio(ratio);
+    }
+  }
+
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
     if (this.unifiedTreeMesh) this.unifiedTreeMesh.visible = visible;
@@ -422,8 +434,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         options;
       if (!rawMatrix) return;
 
-      // 1. 지형 DEM 표고 쿼리 (Terrain Elevation Clamping) - 캐시 기반 1회 조회
-      if (this.map) {
+      // 1. 지형 DEM 표고 쿼리 (Terrain Elevation Clamping) - 인터랙션 중에는 스킵
+      if (!this.isInteracting && this.map) {
         const queried = elevationCache.getFromMap(this.map, this.centerLngLat);
         if (
           queried !== null &&

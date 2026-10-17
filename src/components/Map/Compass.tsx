@@ -4,9 +4,9 @@ import React from 'react';
 import { Compass as CompassIcon, Navigation, Eye } from 'lucide-react';
 
 interface CompassProps {
-  bearing: number;
-  pitch: number;
-  zoom: number;
+  bearing?: number;
+  pitch?: number;
+  zoom?: number;
   onResetNorth: () => void;
   onAdjustPitch: (delta: number) => void;
 }
@@ -32,10 +32,10 @@ export function updateCompassDOM(bearing: number, pitch: number, zoom: number): 
   }
 }
 
-export const Compass: React.FC<CompassProps> = ({
-  bearing,
-  pitch,
-  zoom,
+export const Compass: React.FC<CompassProps> = React.memo(({
+  bearing = 0,
+  pitch = 0,
+  zoom = 15,
   onResetNorth,
   onAdjustPitch,
 }) => {
@@ -54,10 +54,10 @@ export const Compass: React.FC<CompassProps> = ({
           {/* Compass Ring markings */}
           <div className="absolute inset-0.5 rounded-full border border-dashed border-slate-700/60 pointer-events-none" />
 
-          {/* Rotating True North Needle */}
+          {/* Rotating True North Needle (Zero transition lag for instant 60fps tracking) */}
           <div
             id="compass-needle"
-            className="w-9 h-9 flex items-center justify-center transition-transform duration-75 ease-out"
+            className="w-9 h-9 flex items-center justify-center will-change-transform"
             style={{ transform: `rotate(${-bearing}deg)` }}
           >
             <div className="relative flex flex-col items-center">
@@ -117,4 +117,4 @@ export const Compass: React.FC<CompassProps> = ({
       </div>
     </div>
   );
-};
+});

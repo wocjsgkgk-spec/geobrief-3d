@@ -12,6 +12,18 @@ import type maplibregl from 'maplibre-gl';
 export class ElevationCache {
   private cache = new Map<string, number>();
   private maxCacheSize = 20000;
+  private isInteractionLocked = false;
+
+  /**
+   * 회전/이동 인터랙션 중 무거운 지형 표고 쿼리 잠금 제어
+   */
+  public setInteractionLock(locked: boolean): void {
+    this.isInteractionLocked = locked;
+  }
+
+  public isLocked(): boolean {
+    return this.isInteractionLocked;
+  }
 
   /**
    * 경위도 좌표를 정밀도 5자리(약 1m 오차) 문자열 키로 변환
@@ -35,6 +47,11 @@ export class ElevationCache {
     const cached = this.cache.get(key);
     if (cached !== undefined) {
       return cached;
+    }
+
+    // [인터랙션 잠금] 회전/이동 중에는 비캐시 신규 고도 쿼리(queryTerrainElevation) 일체 차단
+    if (this.isInteractionLocked) {
+      return 0;
     }
 
     let elevation = 0;

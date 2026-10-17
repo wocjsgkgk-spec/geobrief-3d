@@ -433,6 +433,27 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.realisticCityMaterial.needsUpdate = true;
   }
 
+  private isInteracting = false;
+  private pendingFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] | null = null;
+  private pendingOriginLngLat?: [number, number];
+
+  public setInteracting(interacting: boolean): void {
+    this.isInteracting = interacting;
+    if (!interacting && this.pendingFeatures) {
+      const feats = this.pendingFeatures;
+      const origin = this.pendingOriginLngLat;
+      this.pendingFeatures = null;
+      this.pendingOriginLngLat = undefined;
+      this.updateBuildings(feats, origin);
+    }
+  }
+
+  public setPixelRatio(ratio: number): void {
+    if (this.renderer) {
+      this.renderer.setPixelRatio(ratio);
+    }
+  }
+
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
     if (this.map) {
@@ -575,6 +596,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
     newOriginLngLat?: [number, number]
   ): void {
+    if (this.isInteracting) {
+      this.pendingFeatures = features;
+      this.pendingOriginLngLat = newOriginLngLat;
+      return;
+    }
+
     if (!features || features.length === 0) {
       if (this.masterCityMesh) {
         // [무중단 원자적 캐시] 기존에 렌더링된 메쉬를 유지하여 깜빡임/소실 원천 차단
@@ -1678,8 +1705,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         options;
       if (!rawMatrix) return;
 
-      // DEM 표고 실시간 적응 (초기 로드 후 DEM 타일 수신 시 자동 재스냅)
-      if (this.map) {
+      // DEM 표고 실시간 적응 (초기 로드 후 DEM 타일 수신 시 자동 재스냅 - 회전/이동 중에는 고도 쿼리 스킵)
+      if (!this.isInteracting && this.map) {
         // [3단계: GPU Terrain Clamping] DEM 과장율 실시간 동기화
         if (this.realisticCityMaterial) {
           const terrain = (this.map as any)?.painter?.terrain;

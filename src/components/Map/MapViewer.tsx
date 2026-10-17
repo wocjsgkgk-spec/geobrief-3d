@@ -677,7 +677,14 @@ export const MapViewer: React.FC = () => {
     lng: viewport.longitude,
   });
 
-  // 오버레이 실시간 렌더링용 로컬 상태 (moveend 시 300ms 디바운스 동기화)
+  // [1단계: 인터랙션 잠금(Interaction Lock)] 회전/피치/이동 중 연산 및 리렌더링 완전 차단 플래그
+  const isInteractingRef = useRef<boolean>(false);
+  const interactionEndTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const selectedBuildingCenterRef = useRef<[number, number] | null>(null);
+  const spatialPinsRef = useRef(spatialPins);
+  spatialPinsRef.current = spatialPins;
+
+  // 오버레이 실시간 렌더링용 로컬 상태 (시네마틱 모드 등에서만 필요시 동기화)
   const [currentBearing, setCurrentBearing] = useState<number>(viewport.bearing);
   const [currentPitch, setCurrentPitch] = useState<number>(viewport.pitch);
   const [currentZoom, setCurrentZoom] = useState<number>(viewport.zoom);
@@ -2143,9 +2150,30 @@ export const MapViewer: React.FC = () => {
 
     let moveRafId: number | null = null;
     let moveEndThrottleTimer: NodeJS.Timeout | null = null;
+    const targetPixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
 
-    // [2단계: 메인 스레드 병목 제거 및 React 리렌더링 차단]
-    // 지도를 드래그/회전/줌할 때 React setState를 전면 차단하고 DOM 직접 조작으로 리렌더링 횟수 0회 달성
+    // [1단계: 인터랙션 시작 - Interaction Lock 및 동적 해상도 스케일링]
+    const handleInteractionStart = () => {
+      isInteractingRef.current = true;
+      elevationCache.setInteractionLock(true);
+      lod2BuildingEngineRef.current?.setInteracting(true);
+      proceduralTreesLayerRef.current?.setInteracting(true);
+
+      // 회전/이동 시작 시 캔버스 픽셀 비율을 1.0으로 낮추어 60fps 무결점 회전 보장
+      try {
+        map.setPixelRatio(1.0);
+        lod2BuildingEngineRef.current?.setPixelRatio(1.0);
+        proceduralTreesLayerRef.current?.setPixelRatio(1.0);
+      } catch {}
+
+      if (moveEndThrottleTimer) {
+        clearTimeout(moveEndThrottleTimer);
+        moveEndThrottleTimer = null;
+      }
+    };
+
+    // [2단계: 메인 스레드 병목 제거 및 React 리렌더링 0회 달성]
+    // 지도를 드래그/회전/피치할 때 React setState를 전면 차단하고 DOM 직접 조작으로 리렌더링 횟수 0회 유지
     const handleMove = () => {
       if (moveRafId !== null) return;
       moveRafId = requestAnimationFrame(() => {
@@ -2156,7 +2184,7 @@ export const MapViewer: React.FC = () => {
         const zoom = map.getZoom();
         const center = map.getCenter();
 
-        // 1. Ref 텔레메트리 최신화 (리렌더링 없음)
+        // 1. Ref 텔레메트리 최신화 (리렌더링 0회)
         cameraTelemetryRef.current = {
           bearing,
           pitch,
@@ -2196,32 +2224,73 @@ export const MapViewer: React.FC = () => {
           }
         }
 
-        // 5. [줌 레벨 최적화 LOD 제어]
+        // 5. 3D 건물 상세 정보 팝업 DOM 직접 조작
+        if (selectedBuildingCenterRef.current) {
+          const bldgPopupEl = document.getElementById('building-popup-wrap');
+          if (bldgPopupEl) {
+            const p = map.project(selectedBuildingCenterRef.current);
+            bldgPopupEl.style.left = `${p.x}px`;
+            bldgPopupEl.style.top = `${p.y}px`;
+          }
+        }
+
+        // 6. 3D 공간 주석 핀 DOM 직접 조작
+        if (spatialPinsRef.current && spatialPinsRef.current.length > 0) {
+          for (const pin of spatialPinsRef.current) {
+            const pinEl = document.getElementById(`pin-marker-wrap-${pin.id}`);
+            if (pinEl) {
+              const pt = map.project(pin.coords);
+              pinEl.style.left = `${pt.x}px`;
+              pinEl.style.top = `${pt.y}px`;
+            }
+          }
+        }
+
+        // 7. [줌 레벨 최적화 LOD 제어]
         lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
       });
     };
 
-    // [지도 정지 후 300ms 디바운스] 카메라가 완전히 멈췄을 때만 1회 백그라운드 상태 동기화
-    const handleMoveEndSync = () => {
+    // [1단계: 인터랙션 종료 - 350ms 디바운스 후 해상도 복원 및 지연 연산 실행]
+    const handleInteractionEnd = () => {
       if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       moveEndThrottleTimer = setTimeout(() => {
+        isInteractingRef.current = false;
+        elevationCache.setInteractionLock(false);
+        lod2BuildingEngineRef.current?.setInteracting(false);
+        proceduralTreesLayerRef.current?.setInteracting(false);
+
+        // 회전/이동 정지 시 원래 고해상도로 안전 복원
+        try {
+          map.setPixelRatio(targetPixelRatio);
+          lod2BuildingEngineRef.current?.setPixelRatio(targetPixelRatio);
+          proceduralTreesLayerRef.current?.setPixelRatio(targetPixelRatio);
+          map.triggerRepaint();
+        } catch {}
+
         if (!map) return;
         const bearing = map.getBearing();
         const pitch = map.getPitch();
         const zoom = map.getZoom();
         const center = map.getCenter();
 
-        setCurrentBearing(bearing);
-        setCurrentPitch(pitch);
-        setCurrentZoom(zoom);
-        setCurrentLat(center.lat);
+        // 시네마틱 방송 OSD가 활성 상태일 때만 React 상태 동기화
+        const isCinematicActive =
+          useMapStore.getState().cinematicFlight.isPlaying ||
+          useMapStore.getState().cinematicFlight.isRecording;
+        if (isCinematicActive) {
+          setCurrentBearing(bearing);
+          setCurrentPitch(pitch);
+          setCurrentZoom(zoom);
+          setCurrentLat(center.lat);
+        }
 
         const storeCenter = useMapStore.getState().polygonCenter;
         if (storeCenter) {
           const p = map.project(storeCenter);
           setLabelScreenPos({ x: p.x, y: p.y });
         }
-      }, 300);
+      }, 350);
     };
 
     // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
@@ -2255,8 +2324,23 @@ export const MapViewer: React.FC = () => {
       }
     };
 
+    // 인터랙션 잠금(Interaction Lock) 이벤트 바인딩
+    map.on('movestart', handleInteractionStart);
+    map.on('rotatestart', handleInteractionStart);
+    map.on('pitchstart', handleInteractionStart);
+    map.on('dragstart', handleInteractionStart);
+    map.on('zoomstart', handleInteractionStart);
+
     map.on('move', handleMove);
-    map.on('moveend', handleMoveEndSync);
+    map.on('rotate', handleMove);
+    map.on('pitch', handleMove);
+
+    map.on('moveend', handleInteractionEnd);
+    map.on('rotateend', handleInteractionEnd);
+    map.on('pitchend', handleInteractionEnd);
+    map.on('dragend', handleInteractionEnd);
+    map.on('zoomend', handleInteractionEnd);
+
     map.on('zoom', () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
     });
@@ -3068,10 +3152,21 @@ export const MapViewer: React.FC = () => {
       }
       if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       try {
+        map.off('movestart', handleInteractionStart);
+        map.off('rotatestart', handleInteractionStart);
+        map.off('pitchstart', handleInteractionStart);
+        map.off('dragstart', handleInteractionStart);
+        map.off('zoomstart', handleInteractionStart);
+
         map.off('move', handleMove);
-        map.off('moveend', handleMoveEndSync);
-        map.off('movestart', handleMoveStart);
-        map.off('moveend', handleMoveEnd);
+        map.off('rotate', handleMove);
+        map.off('pitch', handleMove);
+
+        map.off('moveend', handleInteractionEnd);
+        map.off('rotateend', handleInteractionEnd);
+        map.off('pitchend', handleInteractionEnd);
+        map.off('dragend', handleInteractionEnd);
+        map.off('zoomend', handleInteractionEnd);
       } catch {}
       resizeObserver.disconnect();
       map.remove();
@@ -3204,12 +3299,25 @@ export const MapViewer: React.FC = () => {
     const ceilingSource = map.getSource('flight-ceiling-source') as maplibregl.GeoJSONSource;
     if (!ceilingSource) return;
 
-    if (
+    const isVisible = !!(
       completedPolygon &&
       showFlightCeiling3D &&
       defenseAnalysisResult &&
       defenseAnalysisResult.hasFlightSafetyZone
-    ) {
+    );
+    const visStr = isVisible ? 'visible' : 'none';
+
+    if (map.getLayer('flight-ceiling-slab')) {
+      map.setLayoutProperty('flight-ceiling-slab', 'visibility', visStr);
+    }
+    if (map.getLayer('flight-envelope-volume')) {
+      map.setLayoutProperty('flight-envelope-volume', 'visibility', visStr);
+    }
+    if (map.getLayer('flight-ceiling-border')) {
+      map.setLayoutProperty('flight-ceiling-border', 'visibility', visStr);
+    }
+
+    if (isVisible) {
       const height = defenseAnalysisResult.maxSurfaceHeight;
       const slabMinHeight = Math.max(0, height - 2);
 
@@ -3253,7 +3361,17 @@ export const MapViewer: React.FC = () => {
     const massSource = map.getSource('building-mass-source') as maplibregl.GeoJSONSource;
     if (!massSource) return;
 
-    if (completedPolygon && showBuildingMass3D) {
+    const isVisible = !!(completedPolygon && showBuildingMass3D);
+    const massVis = isVisible ? 'visible' : 'none';
+
+    if (map.getLayer('building-mass-extrusion')) {
+      map.setLayoutProperty('building-mass-extrusion', 'visibility', massVis);
+    }
+    if (map.getLayer('building-mass-edges')) {
+      map.setLayoutProperty('building-mass-edges', 'visibility', massVis);
+    }
+
+    if (isVisible) {
       try {
         const preset =
           BUILDING_MASS_PRESETS[buildingMassPreset] || BUILDING_MASS_PRESETS.defense_rd;
@@ -3734,7 +3852,7 @@ export const MapViewer: React.FC = () => {
     let lastFetchedCount = 0;
 
     const fetchBoundsBuildings = async () => {
-      if (isCameraMoving || isCancelled) return;
+      if (isCameraMoving || isCancelled || isInteractingRef.current) return;
       try {
         const zoom = map.getZoom();
         if (zoom < 11.8) return; // 11.8 레벨 이상에서 강원 전역 시·군 건물 상세 페칭
@@ -3930,16 +4048,29 @@ export const MapViewer: React.FC = () => {
       isCameraMoving = false;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        if (!isCameraMoving && !isCancelled) {
+        if (!isCameraMoving && !isCancelled && !isInteractingRef.current) {
           fetchBoundsBuildings();
         }
-      }, 200);
+      }, 350);
     };
 
-    // movestart 및 move 중 연산 일시 보류, moveend 200ms 후 디바운스로 신규 건물 추가 생성
+    // movestart/rotatestart 및 회전 중 연산 일시 보류, 인터랙션 종료 350ms 후 디바운스로 신규 건물 추가 생성
     map.on('movestart', handleSpatialMoveStart);
+    map.on('rotatestart', handleSpatialMoveStart);
+    map.on('pitchstart', handleSpatialMoveStart);
+    map.on('dragstart', handleSpatialMoveStart);
+    map.on('zoomstart', handleSpatialMoveStart);
+
     map.on('move', handleSpatialMove);
+    map.on('rotate', handleSpatialMove);
+    map.on('pitch', handleSpatialMove);
+
     map.on('moveend', handleSpatialMoveEnd);
+    map.on('rotateend', handleSpatialMoveEnd);
+    map.on('pitchend', handleSpatialMoveEnd);
+    map.on('dragend', handleSpatialMoveEnd);
+    map.on('zoomend', handleSpatialMoveEnd);
+
     handleSpatialMoveEnd();
 
     return () => {
@@ -3954,8 +4085,20 @@ export const MapViewer: React.FC = () => {
         }
       }
       map.off('movestart', handleSpatialMoveStart);
+      map.off('rotatestart', handleSpatialMoveStart);
+      map.off('pitchstart', handleSpatialMoveStart);
+      map.off('dragstart', handleSpatialMoveStart);
+      map.off('zoomstart', handleSpatialMoveStart);
+
       map.off('move', handleSpatialMove);
+      map.off('rotate', handleSpatialMove);
+      map.off('pitch', handleSpatialMove);
+
       map.off('moveend', handleSpatialMoveEnd);
+      map.off('rotateend', handleSpatialMoveEnd);
+      map.off('pitchend', handleSpatialMoveEnd);
+      map.off('dragend', handleSpatialMoveEnd);
+      map.off('zoomend', handleSpatialMoveEnd);
     };
   }, [isMapLoaded, layers.buildings3D, setVworldDiagnostic, mergeIntoPersistentBuildingCache]);
 
@@ -4506,45 +4649,28 @@ export const MapViewer: React.FC = () => {
     losAnalysis.isActive,
   ]);
 
-  // 지도 이동 시 건물 팝업 화면 좌표 동기화 (원시 좌표 기반 안정화)
+  // 지도 이동 시 건물 팝업 화면 좌표 동기화 (DOM 직접 조작 방식으로 리렌더링 차단)
   const selectedBuildingCenterLng = selectedBuilding?.center[0];
   const selectedBuildingCenterLat = selectedBuilding?.center[1];
 
   useEffect(() => {
-    const map = mapRef.current;
     if (
-      !map ||
-      !isMapLoaded ||
       selectedBuildingCenterLng === undefined ||
       selectedBuildingCenterLat === undefined
     ) {
+      selectedBuildingCenterRef.current = null;
       return;
     }
 
-    const targetCoords: [number, number] = [
+    selectedBuildingCenterRef.current = [
       selectedBuildingCenterLng,
       selectedBuildingCenterLat,
     ];
-
-    const updateScreenPos = () => {
-      try {
-        const p = map.project(targetCoords);
-        setSelectedBuilding((prev) =>
-          prev ? { ...prev, screenPos: { x: p.x, y: p.y } } : null
-        );
-      } catch {
-        // ignore during map disposal
-      }
-    };
-
-    map.on('move', updateScreenPos);
-    return () => {
-      map.off('move', updateScreenPos);
-    };
-  }, [selectedBuildingCenterLng, selectedBuildingCenterLat, isMapLoaded]);
+  }, [selectedBuildingCenterLng, selectedBuildingCenterLat]);
 
   // 건물 팝업 닫기 및 하이라이트 해제
   const handleCloseBuildingPopup = useCallback(() => {
+    selectedBuildingCenterRef.current = null;
     setSelectedBuilding(null);
     const map = mapRef.current;
     if (map) {
@@ -4943,11 +5069,6 @@ export const MapViewer: React.FC = () => {
     };
 
     updatePinPositions();
-    map.on('move', updatePinPositions);
-
-    return () => {
-      map.off('move', updatePinPositions);
-    };
   }, [spatialPins, isMapLoaded]);
 
   // 26. [3D 토공량(절토·성토 Cut & Fill) 산출 엔진 & 지형 히트맵 동기화]
@@ -5873,17 +5994,17 @@ export const MapViewer: React.FC = () => {
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
         <BriefingHeader />
 
-        {/* 좌측 상단 카메라 연동 동적 방위표 (North Arrow) */}
+        {/* 좌측 상단 카메라 연동 동적 방위표 (North Arrow - React 리렌더링 차단 및 DOM 직접 조작) */}
         <Compass
-          bearing={currentBearing}
-          pitch={currentPitch}
-          zoom={currentZoom}
+          bearing={viewport.bearing}
+          pitch={viewport.pitch}
+          zoom={viewport.zoom}
           onResetNorth={handleResetNorth}
           onAdjustPitch={handleAdjustPitch}
         />
 
-        {/* 좌측 하단 인쇄 규격 동적 축척 바 (Scale Bar) */}
-        <ScaleBar latitude={currentLat} zoom={currentZoom} />
+        {/* 좌측 하단 인쇄 규격 동적 축척 바 (Scale Bar - React 리렌더링 차단 및 DOM 직접 조작) */}
+        <ScaleBar latitude={viewport.latitude} zoom={viewport.zoom} />
 
         {/* [교통·인프라 접근성] 16:9 슬라이드 삽입용 정량 분석 표(Table) 오버레이 */}
         <AccessibilityTableOverlay />
@@ -6001,6 +6122,7 @@ export const MapViewer: React.FC = () => {
         {/* [신규] 3D 건물 상세 정보 인터랙티브 팝업 */}
         {selectedBuilding && (
           <div
+            id="building-popup-wrap"
             className="absolute z-40 transform -translate-x-1/2 -translate-y-full mb-6 select-none animate-fade-in"
             style={{
               left: `${selectedBuilding.screenPos.x}px`,
@@ -6506,7 +6628,8 @@ export const MapViewer: React.FC = () => {
           return (
             <div
               key={pin.id}
-              className="absolute pointer-events-auto z-30 transition-transform duration-75 select-none"
+              id={`pin-marker-wrap-${pin.id}`}
+              className="absolute pointer-events-auto z-30 select-none will-change-transform"
               style={{
                 left: `${pos.x}px`,
                 top: `${pos.y}px`,

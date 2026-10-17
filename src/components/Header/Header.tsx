@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, startTransition } from 'react';
 import {
   Mountain,
   FolderPlus,
@@ -150,13 +150,17 @@ export const Header: React.FC = () => {
 
   // 3D 렌더 모드 3단계 원클릭 순환: 실감 파사드 -> 고정밀 3D 타일셋 -> 경량 네이티브
   const cycleRenderMode3D = () => {
-    if (renderMode3D === 'facade') {
-      setRenderMode3D('tiles3d');
-    } else if (renderMode3D === 'tiles3d') {
-      setRenderMode3D('native');
-    } else {
-      setRenderMode3D('facade');
-    }
+    startTransition(() => {
+      requestAnimationFrame(() => {
+        if (renderMode3D === 'facade') {
+          setRenderMode3D('tiles3d');
+        } else if (renderMode3D === 'tiles3d') {
+          setRenderMode3D('native');
+        } else {
+          setRenderMode3D('facade');
+        }
+      });
+    });
   };
 
   return (
