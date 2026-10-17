@@ -78,9 +78,9 @@ import { registerFacadeImagesToMap } from '@/utils/facadeGenerator';
 import { registerFacadeTexturesToMap } from '@/utils/facadeTextures';
 import { generateCrosswalksGeoJSON } from '@/utils/crosswalkGenerator';
 import {
-  ROAD_LAYER_IDS,
-  getRoadNetworkLayerDefinitions,
-} from '@/utils/roadNetworkLayers';
+  STREETS_GL_ROAD_LAYER_IDS,
+  getStreetsGlRoadLayerDefinitions,
+} from '@/lib/vendor/streetsGlRoadLayers';
 import { elevationCache, clearElevationCache } from '@/utils/elevationCache';
 
 export interface SelectedBuildingInfo {
@@ -2605,7 +2605,7 @@ export const MapViewer: React.FC = () => {
         }
 
         // 2) Streets-GL 기반 실측 폭 아스팔트 노면·차선·중앙선·연석 레이어 일괄 등록
-        const roadLayerDefs = getRoadNetworkLayerDefinitions(
+        const roadLayerDefs = getStreetsGlRoadLayerDefinitions(
           'openmaptiles-vector',
           'transportation',
           'crosswalks-source'
@@ -3632,7 +3632,7 @@ export const MapViewer: React.FC = () => {
 
     const roadVis = layers.roads ? 'visible' : 'none';
 
-    for (const lid of ROAD_LAYER_IDS) {
+    for (const lid of STREETS_GL_ROAD_LAYER_IDS) {
       if (map.getLayer(lid)) {
         map.setLayoutProperty(lid, 'visibility', roadVis);
       }

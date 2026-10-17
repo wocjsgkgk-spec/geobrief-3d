@@ -47,6 +47,7 @@ import {
 import { buildingMeshWorkerClient, OSMGeometryResult } from '@/workers/buildingMeshWorkerClient';
 import { geometryWorkerClient, BuildBuildingsResult } from '@/workers/geometryWorkerClient';
 import { createRealisticCityMaterial } from '@/shaders/realisticCityShader';
+import { createStreetsGlBuildingMaterial } from '@/lib/vendor/streetsGlBuildingShader';
 
 // =============================================================================
 // 1. 기하 유틸리티 (OBB, 좌표 변환, 삼각화, 쿼드 버퍼)
@@ -354,7 +355,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.materials = getKoreanBuildingMaterials();
     this.masterAtlasMaterial = getKoreanCityAtlasMaterial();
     if (!this.realisticCityMaterial) {
-      this.realisticCityMaterial = createRealisticCityMaterial({
+      this.realisticCityMaterial = createStreetsGlBuildingMaterial({
         sunDirection: this.sunLightDirection,
       });
     }
