@@ -409,15 +409,15 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.isVisible || !this.renderer) return;
 
-    // 줌 14.5 미만 시 렌더링 스킵 & 줌 14.5~15.5 거리 페이드 (Distance Fade)
+    // [근접 상세 뷰 (Zoom 15.2 이상)] 3D 수목 및 식생 활성화 & 줌 15.2~16.0 거리 페이드 (Distance Fade)
     if (this.map) {
       const zoom = this.map.getZoom();
-      if (zoom < 14.5) {
+      if (zoom < 15.2) {
         if (this.unifiedTreeMesh) this.unifiedTreeMesh.visible = false;
         return;
       }
 
-      const fade = Math.min(1.0, Math.max(0.0, (zoom - 14.5) / 1.0));
+      const fade = Math.min(1.0, Math.max(0.0, (zoom - 15.2) / 0.8));
       if (this.treeMaterial) {
         this.treeMaterial.transparent = fade < 1.0;
         this.treeMaterial.opacity = fade;

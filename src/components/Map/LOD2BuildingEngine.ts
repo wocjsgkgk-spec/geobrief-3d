@@ -469,33 +469,40 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     return this.buildingCount;
   }
 
+  /**
+   * [1. 카메라 거리에 따른 3단계 자동 LOD 시스템]
+   * - 광역 뷰 (Zoom < 13.5): 옥탑/난간/파사드 메쉬 연산 스킵, 초경량 GPU Extrusion으로만 렌더링
+   * - 표준 조감도 뷰 (Zoom 13.5 ~ 15.2): 파사드 텍스처 및 옥상 우레탄/콘크리트 색상 분리 활성화
+   * - 근접 상세 뷰 (Zoom >= 15.2): 입체 옥상 난간, 옥탑 코어, 인스턴싱 설비 활성화
+   */
   public updateZoomLOD(currentZoom: number): void {
-    const isDetailed = currentZoom >= 13.0;
+    const isStandardOrAbove = currentZoom >= 13.5; // Zoom 13.5 이상
+    const isNearDetail = currentZoom >= 15.2;      // Zoom 15.2 이상
     this.currentZoomLOD = currentZoom;
 
+    // 1) 건물 본체 파사드 및 접지 그림자: Zoom 13.5 이상 표준 조감도 뷰에서 활성화
     if (this.masterCityMesh) {
-      this.masterCityMesh.visible = isDetailed;
-    }
-    if (this.waterTankInstancedMesh) {
-      this.waterTankInstancedMesh.visible = isDetailed;
-    }
-    if (this.ventInstancedMesh) {
-      this.ventInstancedMesh.visible = isDetailed;
-    }
-    if (this.solarPanelInstancedMesh) {
-      this.solarPanelInstancedMesh.visible = isDetailed;
-    }
-    if (this.solarPanelInstancedMesh) {
-      this.solarPanelInstancedMesh.visible = isDetailed;
-    }
-    if (this.helipadUnifiedMesh) {
-      this.helipadUnifiedMesh.visible = isDetailed;
+      this.masterCityMesh.visible = isStandardOrAbove;
     }
     if (this.contactShadowMesh) {
-      this.contactShadowMesh.visible = isDetailed;
+      this.contactShadowMesh.visible = isStandardOrAbove;
+    }
+
+    // 2) 옥상 입체 난간, STS 물탱크, 벤트, 태양광 패널, HVAC 냉각탑, 헬리패드 등 세부 구조물: Zoom 15.2 이상 근접 상세 뷰에서만 활성화
+    if (this.waterTankInstancedMesh) {
+      this.waterTankInstancedMesh.visible = isNearDetail;
+    }
+    if (this.ventInstancedMesh) {
+      this.ventInstancedMesh.visible = isNearDetail;
+    }
+    if (this.solarPanelInstancedMesh) {
+      this.solarPanelInstancedMesh.visible = isNearDetail;
     }
     if (this.hvacInstancedMesh) {
-      this.hvacInstancedMesh.visible = isDetailed;
+      this.hvacInstancedMesh.visible = isNearDetail;
+    }
+    if (this.helipadUnifiedMesh) {
+      this.helipadUnifiedMesh.visible = isNearDetail;
     }
 
     if (this.map) {
@@ -647,6 +654,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           this.sunLightDirection.y,
           this.sunLightDirection.z,
         ],
+        zoom: this.currentZoomLOD,
       })
       .then((workerResult) => {
         if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
@@ -1669,6 +1677,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     }
 
     this.buildingCount = result.buildingCount;
+    this.updateZoomLOD(this.currentZoomLOD);
     if (this.map && this.isVisible) {
       this.map.triggerRepaint();
     }
@@ -1690,10 +1699,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       return;
     }
 
-    // 줌 13 미만 광역 뷰에서는 렌더링 스킵 (줌 13부터 도심 건물 100% 고밀도 표출)
+    // 줌 13.5 미만 광역 뷰에서는 Three.js 렌더링 패스 완전 스킵 (초경량 GPU Extrusion 레이어가 전담)
     if (this.map) {
       const zoom = this.map.getZoom();
-      if (zoom < 13.0) {
+      if (zoom < 13.5) {
         return;
       }
     }
@@ -1848,6 +1857,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.realisticCityMaterial) {
       this.realisticCityMaterial.dispose();
       this.realisticCityMaterial = null;
+    }
+    if (this.helipadUnifiedMaterial) {
+      this.helipadUnifiedMaterial.dispose();
+      this.helipadUnifiedMaterial = null;
+    }
+    if (this.contactShadowMaterial) {
+      this.contactShadowMaterial.dispose();
+      this.contactShadowMaterial = null;
     }
     if (this.threeDemTexture) {
       this.threeDemTexture.dispose();

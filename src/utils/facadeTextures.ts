@@ -26,6 +26,11 @@ export interface FacadeCanvasResult {
   dataUrl: string;
 }
 
+// 전역 싱글톤 Canvas 캐시 (최초 1회만 생성하여 메모리 누수 방지)
+const aptCanvasCache = new Map<number, HTMLCanvasElement>();
+const comCanvasCache = new Map<number, HTMLCanvasElement>();
+const resCanvasCache = new Map<number, HTMLCanvasElement>();
+
 /**
  * 1. 한국형 아파트 단지 외벽 캔버스 텍스처 (512x512)
  * - 층고 3.0m 비례 4개 층 x 4개 세대 그리드
@@ -36,11 +41,17 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
     return {} as HTMLCanvasElement;
   }
 
+  if (aptCanvasCache.has(size)) {
+    return aptCanvasCache.get(size)!;
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
+
+  aptCanvasCache.set(size, canvas);
 
   // 1) 외벽 베이스: 따뜻한 크림 아이보리 (#f4f1ea)
   ctx.fillStyle = '#f4f1ea';
@@ -171,11 +182,17 @@ export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
     return {} as HTMLCanvasElement;
   }
 
+  if (comCanvasCache.has(size)) {
+    return comCanvasCache.get(size)!;
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
+
+  comCanvasCache.set(size, canvas);
 
   // 1) 베이지·그레이 스톤 외벽 베이스 (#d6d3d1)
   ctx.fillStyle = '#d6d3d1';
@@ -251,11 +268,17 @@ export function createResidentialFacadeCanvas(size = 512): HTMLCanvasElement {
     return {} as HTMLCanvasElement;
   }
 
+  if (resCanvasCache.has(size)) {
+    return resCanvasCache.get(size)!;
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
+
+  resCanvasCache.set(size, canvas);
 
   // 1) 외벽 베이스: 적벽돌 (#9a3412)
   ctx.fillStyle = '#9a3412';
@@ -375,11 +398,16 @@ export function registerFacadeTexturesToMap(map: maplibregl.Map, size = 512): vo
   }
 }
 
+let cachedAptTexture: THREE.CanvasTexture | null = null;
+let cachedComTexture: THREE.CanvasTexture | null = null;
+
 /**
- * 4. Three.js PBR 렌더링용 층고 비례 RepeatWrapping 아파트 텍스처
+ * 4. Three.js PBR 렌더링용 층고 비례 RepeatWrapping 아파트 텍스처 (전역 싱글톤)
  */
 export function getApartmentFacadeTexture(size = 512): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
+  if (cachedAptTexture) return cachedAptTexture;
+
   const canvas = createApartmentFacadeCanvas(size);
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
@@ -389,14 +417,18 @@ export function getApartmentFacadeTexture(size = 512): THREE.CanvasTexture | nul
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+
+  cachedAptTexture = texture;
+  return cachedAptTexture;
 }
 
 /**
- * 5. Three.js PBR 렌더링용 층고 비례 RepeatWrapping 상업 커튼월 텍스처
+ * 5. Three.js PBR 렌더링용 층고 비례 RepeatWrapping 상업 커튼월 텍스처 (전역 싱글톤)
  */
 export function getCommercialFacadeTexture(size = 512): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
+  if (cachedComTexture) return cachedComTexture;
+
   const canvas = createCommercialFacadeCanvas(size);
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
@@ -406,5 +438,21 @@ export function getCommercialFacadeTexture(size = 512): THREE.CanvasTexture | nu
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+
+  cachedComTexture = texture;
+  return cachedComTexture;
+}
+
+/**
+ * 6. 파사드 텍스처 GPU 메모리 안전 해제
+ */
+export function disposeFacadeTextures(): void {
+  if (cachedAptTexture) {
+    cachedAptTexture.dispose();
+    cachedAptTexture = null;
+  }
+  if (cachedComTexture) {
+    cachedComTexture.dispose();
+    cachedComTexture = null;
+  }
 }

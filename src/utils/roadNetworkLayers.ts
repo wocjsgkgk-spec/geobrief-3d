@@ -467,7 +467,7 @@ export function getRoadNetworkLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // 5. 차선 분리선 (줌 15 이상 백색 점선 [3, 4], #f8fafc)
+    // 5. 차선 분리선 (근접 상세 뷰: 줌 15.2 이상 백색 점선 [3, 4], #f8fafc)
     // - 주간선도로 1차로와 2차로 사이에 자동 표출
     // -------------------------------------------------------------------------
     // (a) 좌측 방향 차선 분할 점선 (중심에서 -3.5m)
@@ -476,18 +476,18 @@ export function getRoadNetworkLayerDefinitions(
       type: 'line',
       source: sourceId,
       'source-layer': sourceLayer,
-      minzoom: 15, // [요구사항 2-2] 줌 15 이상에서 자동 표출
+      minzoom: 15.2, // [LOD3 근접 상세 뷰] 줌 15.2 이상에서 자동 표출
       filter: motorwayFilter as any,
       paint: {
         'line-color': '#F8FAFC',
         'line-width': [
           'interpolate', ['exponential', 2], ['zoom'],
-          15, 0.9,
+          15.2, 0.95,
           17, 1.6,
           19, 3.2,
           20, 5.5,
         ],
-        'line-dasharray': [3, 4], // [요구사항 2-2] 백색 점선
+        'line-dasharray': [3, 4], // 백색 점선
         'line-offset': createOffsetExpr(-3.5) as any,
         'line-opacity': 0.95,
       },
@@ -503,18 +503,18 @@ export function getRoadNetworkLayerDefinitions(
       type: 'line',
       source: sourceId,
       'source-layer': sourceLayer,
-      minzoom: 15, // [요구사항 2-2] 줌 15 이상에서 자동 표출
+      minzoom: 15.2, // [LOD3 근접 상세 뷰] 줌 15.2 이상에서 자동 표출
       filter: motorwayFilter as any,
       paint: {
         'line-color': '#F8FAFC',
         'line-width': [
           'interpolate', ['exponential', 2], ['zoom'],
-          15, 0.9,
+          15.2, 0.95,
           17, 1.6,
           19, 3.2,
           20, 5.5,
         ],
-        'line-dasharray': [3, 4], // [요구사항 2-2] 백색 점선
+        'line-dasharray': [3, 4], // 백색 점선
         'line-offset': createOffsetExpr(3.5) as any,
         'line-opacity': 0.95,
       },
@@ -605,13 +605,13 @@ export function getRoadNetworkLayerDefinitions(
       id: 'roundabout-circulating-lane',
       type: 'line',
       source: crosswalkSourceId,
-      minzoom: 15,
+      minzoom: 15.2, // [LOD3 근접 상세 뷰] 줌 15.2 이상에서 자동 표출
       filter: ['==', 'type', 'roundabout-circulating-lane'],
       paint: {
         'line-color': '#F8FAFC',
         'line-width': [
           'interpolate', ['exponential', 2], ['zoom'],
-          15, 0.9,
+          15.2, 0.95,
           17, 1.6,
           19, 3.2,
           20, 5.5,

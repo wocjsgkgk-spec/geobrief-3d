@@ -802,11 +802,14 @@ function drawParapetConcrete(ctx: CanvasRenderingContext2D, x: number, y: number
   }
 }
 
+let cachedAtlasCanvas: HTMLCanvasElement | null = null;
+
 /**
- * 2048x2048 고해상도 Canvas 아틀라스를 생성합니다.
+ * 2048x2048 고해상도 Canvas 아틀라스를 생성합니다 (전역 싱글톤).
  */
 export function generateKoreanCityAtlasCanvas(): HTMLCanvasElement | null {
   if (typeof document === 'undefined') return null;
+  if (cachedAtlasCanvas) return cachedAtlasCanvas;
 
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_GRID_SIZE;
@@ -845,7 +848,8 @@ export function generateKoreanCityAtlasCanvas(): HTMLCanvasElement | null {
   drawCommercialMid(ctx, 2 * s, 3 * s, s);
   drawCurtainwallHigh(ctx, 3 * s, 3 * s, s);
 
-  return canvas;
+  cachedAtlasCanvas = canvas;
+  return cachedAtlasCanvas;
 }
 
 let cachedAtlasTexture: THREE.CanvasTexture | null = null;
@@ -911,6 +915,7 @@ export function disposeKoreanCityAtlas(): void {
     cachedMasterMaterial.dispose();
     cachedMasterMaterial = null;
   }
+  cachedAtlasCanvas = null;
 }
 
 // =============================================================================

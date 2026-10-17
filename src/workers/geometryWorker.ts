@@ -367,6 +367,7 @@ export interface BuildBuildingsPayload {
   originLngLat: [number, number];
   demBounds?: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
   sunDirection?: [number, number, number];       // [sX, sY, sZ]
+  zoom?: number;                                 // 카메라 줌 레벨 (LOD 분기용)
 }
 
 export interface BuildBuildingsResult {
@@ -383,7 +384,9 @@ export interface BuildBuildingsResult {
 }
 
 function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsResult {
-  const { features, originLngLat, demBounds, sunDirection } = payload;
+  const { features, originLngLat, demBounds, sunDirection, zoom = 16 } = payload;
+  const isNearDetail = zoom >= 15.2; // 근접 상세 뷰 (15.2 이상)
+  const isStandardOrAbove = zoom >= 13.5; // 표준 조감도 뷰 (13.5 이상)
   const sunDir = sunDirection || [0.65, 0.75, 0.45];
   const sX = sunDir[0];
   const sY = Math.max(0.25, sunDir[1]);
@@ -608,15 +611,17 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
           0.008, 0.024, 0.090 // 다크 네이비 접지 차콜
         );
 
-        // 1-2) 건물 지면 밀착 코어 섀도우 (Core Contact Shadow: 폭 0.6m 내측 진한 그림자)
-        addShadowQuad(
-          shadowPositions, shadowColors,
-          { x: p1.x, y: 0.025, z: -p1.y, a: 0.88 },
-          { x: p2.x, y: 0.025, z: -p2.y, a: 0.88 },
-          { x: p2.x + nx * 0.6, y: 0.022, z: -(p2.y - nz * 0.6), a: 0.25 },
-          { x: p1.x + nx * 0.6, y: 0.022, z: -(p1.y - nz * 0.6), a: 0.25 },
-          0.005, 0.012, 0.040 // 초고밀도 접지 림
-        );
+        // 1-2) 건물 지면 밀착 코어 섀도우 (Core Contact Shadow: 폭 0.6m 내측 진한 그림자 - 근접 상세 뷰에서 활성화)
+        if (isNearDetail) {
+          addShadowQuad(
+            shadowPositions, shadowColors,
+            { x: p1.x, y: 0.025, z: -p1.y, a: 0.88 },
+            { x: p2.x, y: 0.025, z: -p2.y, a: 0.88 },
+            { x: p2.x + nx * 0.6, y: 0.022, z: -(p2.y - nz * 0.6), a: 0.25 },
+            { x: p1.x + nx * 0.6, y: 0.022, z: -(p1.y - nz * 0.6), a: 0.25 },
+            0.005, 0.012, 0.040 // 초고밀도 접지 림
+          );
+        }
 
         // 2) 초경량 평면 투영 그림자 (Planar Drop Shadow: 벽체 투영)
         // 태양 광원 벡터(-L) 방향으로 건물 외벽 정점을 지면 방향으로 비스듬히 투영
@@ -696,8 +701,8 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
         }
 
         // 3) 초경량 평면 투영 그림자 (Planar Drop Shadow: 옥상 다각형 전체 투영)
-        // 건물 복합 형태(ㄱ자, ㄷ자)가 지면에 완전한 실루엣으로 투영
-        if (totalH >= 5.0) {
+        // 건물 복합 형태(ㄱ자, ㄷ자)가 지면에 완전한 실루엣으로 투영 (근접 상세 뷰 또는 고층 건물에서 활성화)
+        if (totalH >= 5.0 && (isNearDetail || totalH >= 20.0)) {
           for (let t = 0; t < triangles.length; t += 3) {
             const idx0 = triangles[t];
             const idx1 = triangles[t + 1];

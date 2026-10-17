@@ -17,6 +17,10 @@
 import * as THREE from 'three';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
+// 전역 싱글톤 Canvas 캐시 (1회만 생성하여 메모리 누수 방지)
+const aptCanvasMap = new Map<number, HTMLCanvasElement>();
+const comCanvasMap = new Map<number, HTMLCanvasElement>();
+
 /**
  * 1. 한국형 판상형/타워형 아파트 외벽 텍스처 Canvas 생성 (512x512)
  * - 층고 3.0m 기준 세대별 발코니 난간, 이중창 섀시 프레임, 층간 슬래브 분할선이 선명한 모던 화이트 톤
@@ -26,11 +30,17 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
     return {} as HTMLCanvasElement;
   }
 
+  if (aptCanvasMap.has(size)) {
+    return aptCanvasMap.get(size)!;
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+
+  aptCanvasMap.set(size, canvas);
 
   // 1) 외벽 베이스: 따뜻한 크림 아이보리 톤 (#f4f1ea)
   ctx.fillStyle = '#f4f1ea';
@@ -167,11 +177,17 @@ export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
     return {} as HTMLCanvasElement;
   }
 
+  if (comCanvasMap.has(size)) {
+    return comCanvasMap.get(size)!;
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
+
+  comCanvasMap.set(size, canvas);
 
   // 1) 바탕: 딥 오피스 글래스 블루 (#0A192F)
   ctx.fillStyle = '#0A192F';
@@ -390,4 +406,6 @@ export function disposeFacadeGeneratorTextures(): void {
     lowLodMaterialCache.dispose();
     lowLodMaterialCache = null;
   }
+  aptCanvasMap.clear();
+  comCanvasMap.clear();
 }
