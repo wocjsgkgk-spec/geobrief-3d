@@ -10,6 +10,7 @@ import { Tile3DStreamState } from '@/types/map';
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { elevationCache } from '@/utils/elevationCache';
 import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
+import { TilesetController } from '@/lib/vendor/tilesetController';
 
 export interface Universal3DTilesCallbacks {
   onStatusChange?: (statusText: string, isLoading: boolean, tilesLoadedCount?: number) => void;
@@ -32,7 +33,7 @@ interface BuildingItem {
  *
  * [2단계: 모드 C 전 지역 100% 활성화 및 범용 하이브리드 3D 타일 엔진]
  *
- * 1) 1순위 (외부 OGC 3D Tiles 연동):
+ * 1) 1순위 (외부 OGC 3D Tiles 연동 - NASA 3DTilesRendererJS 128MB LRU & 동적 SSE):
  *    - Cesium Ion / Google Photorealistic 3D Tiles / V-World 3D 타일셋 URL이 설정된 경우 Tile3DLayer로 스트리밍.
  * 2) 2순위 (전 지역 실시간 고밀도 3D 타일 합성 엔진 - 100% 커버리지):
  *    - 외부 b3dm 파일이 없는 지역(원주 1군지사, 캠프 롱, 춘천, 철원 등)에서도
@@ -49,19 +50,30 @@ export class Universal3DTilesManager {
   private callbacks: Universal3DTilesCallbacks = {};
   private currentState: Tile3DStreamState | null = null;
   private isDestroyed: boolean = false;
+  private tilesetController: TilesetController;
 
   // 캐시된 건물 피처
   private features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
   private parsedBuildings: BuildingItem[] = [];
 
-  // OGC Tile3D 상태
-  private externalTilesLoadedCount: number = 0;
-  private isExternalLoading: boolean = false;
-
   constructor(callbacks?: Universal3DTilesCallbacks) {
     if (callbacks) {
       this.callbacks = callbacks;
     }
+    this.tilesetController = new TilesetController({
+      maxBytesUsed: 128 * 1024 * 1024, // 128MB
+      idleSSE: 10.0,                    // 8~12 고해상도
+      interactionSSE: 24.0,             // 경량 LOD (24)
+      fallbackTimeoutMs: 1500,          // 1.5초 감지
+      onStatusChange: (statusText, isLoading, count) => {
+        this.callbacks.onStatusChange?.(statusText, isLoading, count);
+      },
+      onFallbackActivated: () => {
+        if (!this.isDestroyed && this.currentState?.enabled) {
+          this.renderUniversalLayers();
+        }
+      },
+    });
   }
 
   /**
@@ -106,6 +118,16 @@ export class Universal3DTilesManager {
     this.reparseBuildings();
     this.renderUniversalLayers();
   };
+
+  /**
+   * [NASA 3DTilesRendererJS 규격] 카메라 회전/이동 중 동적 SSE 조절 (24.0 vs 10.0)
+   */
+  public setInteracting(interacting: boolean): void {
+    const sseChanged = this.tilesetController.setInteracting(interacting);
+    if (sseChanged && this.currentState?.enabled && !this.isDestroyed) {
+      this.renderUniversalLayers();
+    }
+  }
 
   /**
    * 건물 피처 수신 및 내부 고밀도 3D 타일 합성 캐시 갱신
@@ -339,7 +361,7 @@ export class Universal3DTilesManager {
     const layers: any[] = [];
 
     // =========================================================================
-    // 1. [1순위: 외부 OGC 3D Tiles 스트리밍 (Cesium / Google / V-World)]
+    // 1. [1순위: 외부 OGC 3D Tiles 스트리밍 (NASA 3DTilesRendererJS 128MB LRU & 동적 SSE)]
     // =========================================================================
     const hasValidExternalUrl =
       Boolean(state.url) &&
@@ -347,7 +369,22 @@ export class Universal3DTilesManager {
       !state.url.includes('undefined') &&
       !state.url.includes('/api/vworld/3dtiles/unsupported');
 
-    if (hasValidExternalUrl) {
+    if (hasValidExternalUrl && this.map) {
+      const center = this.map.getCenter();
+      this.tilesetController.startWatchdog(
+        state.url,
+        [center.lng, center.lat],
+        () => {
+          if (!this.isDestroyed && this.currentState?.enabled) {
+            this.renderUniversalLayers();
+          }
+        }
+      );
+    }
+
+    const isExternalActive = hasValidExternalUrl && this.tilesetController.getIsExternalAvailable();
+
+    if (isExternalActive) {
       try {
         const ogc3DLayer = new Tile3DLayer({
           id: 'external-ogc-3d-tiles-layer',
@@ -358,24 +395,27 @@ export class Universal3DTilesManager {
           loadOptions: {
             '3d-tiles': {
               isTileset: true,
-              maximumScreenSpaceError: state.maximumScreenSpaceError || 16,
-              maximumMemoryUsage: state.maximumMemoryUsage || 256,
+              maximumScreenSpaceError: this.tilesetController.getCurrentSSE(),
+              maximumMemoryUsage: 128, // 128MB LRU
             },
           },
           onTilesetLoad: (tileset) => {
             console.log('[Universal3DTilesManager] External OGC 3D Tileset loaded successfully:', tileset);
             this.callbacks.onStatusChange?.(
-              `🟢 외부 OGC 3D Tiles 스트리밍 가동 중 (${state.url.split('/').pop() || 'Tileset'})`,
+              `🟢 외부 OGC 3D Tiles 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,
               false,
-              this.externalTilesLoadedCount
+              this.tilesetController.getExternalTilesLoadedCount()
             );
           },
-          onTileLoad: () => {
-            this.externalTilesLoadedCount++;
+          onTileLoad: (tileHeader) => {
+            this.tilesetController.recordTileLoad(tileHeader);
+            this.callbacks.onTileCountUpdate?.(this.tilesetController.getExternalTilesLoadedCount());
+          },
+          onTileUnload: (tileHeader) => {
+            this.tilesetController.recordTileUnload(tileHeader);
           },
           onTileError: (tileHeader, message) => {
-            // 외부 타일셋 실패 시에도 2순위 하이브리드 엔진이 전역을 커버하므로 안전하게 흡수
-            console.warn('[Universal3DTilesManager] External tile node fallback notice:', message);
+            this.tilesetController.recordTileError(tileHeader, message);
           },
         });
         layers.push(ogc3DLayer);
@@ -385,9 +425,10 @@ export class Universal3DTilesManager {
     }
 
     // =========================================================================
-    // 2. [2순위: 전 지역 실시간 고밀도 3D 타일 합성 엔진 (100% 무장애 커버리지)]
+    // 2. [2순위: 외부 타일 미제공 지역(강원권 전역/원주/춘천) 또는 PointCloud 모드 하이브리드 합성]
     // =========================================================================
-    const buildings = this.parsedBuildings;
+    if (!isExternalActive || isPointCloudMode) {
+      const buildings = this.parsedBuildings;
 
     if (isPointCloudMode) {
       // -----------------------------------------------------------------------
@@ -706,6 +747,7 @@ export class Universal3DTilesManager {
         layers.push(equipLayer);
       }
     }
+    }
 
     this.overlay.setProps({ layers });
   }
@@ -732,6 +774,7 @@ export class Universal3DTilesManager {
   public destroy(): void {
     this.isDestroyed = true;
     this.detachFromMap();
+    this.tilesetController.destroy();
     this.parsedBuildings = [];
     this.features = [];
   }

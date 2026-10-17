@@ -2209,6 +2209,7 @@ export const MapViewer: React.FC = () => {
       elevationCache.setInteractionLock(true);
       lod2BuildingEngineRef.current?.setInteracting(true);
       proceduralTreesLayerRef.current?.setInteracting(true);
+      deck3DTilesManagerRef.current?.setInteracting(true);
 
       // 회전/이동 시작 시 캔버스 픽셀 비율을 1.0으로 낮추어 60fps 무결점 회전 보장
       try {
@@ -2310,6 +2311,7 @@ export const MapViewer: React.FC = () => {
         elevationCache.setInteractionLock(false);
         lod2BuildingEngineRef.current?.setInteracting(false);
         proceduralTreesLayerRef.current?.setInteracting(false);
+        deck3DTilesManagerRef.current?.setInteracting(false);
 
         // 회전/이동 정지 시 원래 고해상도로 안전 복원
         try {
