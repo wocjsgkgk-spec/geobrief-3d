@@ -44,6 +44,7 @@ import {
   classifyBuilding,
   AtlasSlot,
 } from '@/utils/koreanCityAtlas';
+import { geometryWorkerClient, BuildBuildingsResult } from '@/workers/geometryWorkerClient';
 
 // =============================================================================
 // 1. 기하 유틸리티 (OBB, 좌표 변환, 삼각화, 쿼드 버퍼)
@@ -546,9 +547,24 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.initMaterials();
     }
 
-    console.log('[LOD2BuildingEngine] updateBuildings START: features count =', features.length, 'origin =', this.originLngLat);
+    // [3단계: Web Worker 백그라운드 지오메트리 분리] 10ms+ Earcut 및 다각형 버텍스 계산을 Worker로 위임하여 메인 스레드 0ms 유지
+    geometryWorkerClient
+      .buildBuildings({
+        features,
+        originLngLat: this.originLngLat,
+      })
+      .then((workerResult) => {
+        if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
+          this.applyWorkerResult(workerResult);
+        }
+      })
+      .catch((err) => {
+        console.warn('[LOD2BuildingEngine] Worker build error, using fallback:', err);
+      });
 
-    // 마스터 아틀라스 버텍스 배열 (단일 BufferGeometry로 병합)
+    console.log('[LOD2BuildingEngine] updateBuildings START (Worker dispatched): features count =', features.length, 'origin =', this.originLngLat);
+
+    // 마스터 아틀라스 버텍스 배열 (폴백 보존)
     const masterPositions: number[] = [];
     const masterNormals: number[] = [];
     const masterUvs: number[] = [];
@@ -1476,6 +1492,65 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     if (this.map) {
       this.updateZoomLOD(this.map.getZoom());
+      this.map.triggerRepaint();
+    }
+  }
+
+  /**
+   * [3단계: Web Worker 수신 데이터 즉시 GPU 업로드]
+   * Worker에서 계산된 순수 Float32Array 버퍼(Transferable Objects)를 메인 스레드 0ms로 GPU에 직접 반영
+   */
+  private applyWorkerResult(result: BuildBuildingsResult): void {
+    if (!result || !result.positions || result.positions.length === 0) return;
+
+    if (!this.masterAtlasMaterial) {
+      this.masterAtlasMaterial = getKoreanCityAtlasMaterial();
+    }
+
+    const masterGeo = new THREE.BufferGeometry();
+    masterGeo.setAttribute('position', new THREE.BufferAttribute(result.positions, 3));
+    masterGeo.setAttribute('normal', new THREE.BufferAttribute(result.normals, 3));
+    masterGeo.setAttribute('uv', new THREE.BufferAttribute(result.uvs, 2));
+    masterGeo.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
+    masterGeo.computeBoundingSphere();
+
+    if (this.masterCityMesh) {
+      this.scene.remove(this.masterCityMesh);
+      if (this.masterCityMesh.geometry) {
+        this.masterCityMesh.geometry.dispose();
+      }
+    }
+
+    const mat = (this.masterAtlasMaterial || getKoreanCityAtlasMaterial()) ?? new THREE.MeshStandardMaterial({
+      color: 0xf8fafc,
+      roughness: 0.6,
+      vertexColors: true,
+    });
+    this.masterCityMesh = new THREE.Mesh(masterGeo, mat);
+    (this.masterCityMesh as any).frustumCulled = false;
+    this.scene.add(this.masterCityMesh);
+
+    // 지면 접지 그림자 메쉬
+    if (result.shadowPositions && result.shadowPositions.length > 0 && this.contactShadowMaterial) {
+      const shadowGeo = new THREE.BufferGeometry();
+      shadowGeo.setAttribute('position', new THREE.BufferAttribute(result.shadowPositions, 3));
+      shadowGeo.setAttribute('color', new THREE.BufferAttribute(result.shadowColors, 4));
+      shadowGeo.computeBoundingSphere();
+
+      if (this.contactShadowMesh) {
+        this.scene.remove(this.contactShadowMesh);
+        if (this.contactShadowMesh.geometry) {
+          this.contactShadowMesh.geometry.dispose();
+        }
+      }
+
+      this.contactShadowMesh = new THREE.Mesh(shadowGeo, this.contactShadowMaterial);
+      (this.contactShadowMesh as any).frustumCulled = false;
+      this.scene.add(this.contactShadowMesh);
+    }
+
+    this.buildingCount = result.buildingCount;
+    if (this.map && this.isVisible) {
       this.map.triggerRepaint();
     }
   }

@@ -7,6 +7,43 @@ interface ScaleBarProps {
   zoom: number;
 }
 
+export function updateScaleBarDOM(latitude: number, zoom: number): void {
+  if (typeof document === 'undefined') return;
+  const rad = (latitude * Math.PI) / 180;
+  const metersPerPixel = (156543.03392 * Math.cos(rad)) / Math.pow(2, zoom);
+  const targetWidthPx = 100;
+  const targetMeters = targetWidthPx * metersPerPixel;
+  const niceScales = [
+    10, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 50000,
+  ];
+
+  let selectedMeters = niceScales[0];
+  for (const scale of niceScales) {
+    if (Math.abs(scale - targetMeters) < Math.abs(selectedMeters - targetMeters)) {
+      selectedMeters = scale;
+    }
+  }
+
+  const actualWidthPx = Math.max(40, Math.min(220, selectedMeters / metersPerPixel));
+  const halfMeters = selectedMeters / 2;
+  const formatDist = (m: number) => (m >= 1000 ? `${(m / 1000).toLocaleString()}km` : `${m}m`);
+
+  const labelsEl = document.getElementById('scalebar-labels');
+  if (labelsEl) {
+    labelsEl.style.width = `${actualWidthPx}px`;
+    const spans = labelsEl.getElementsByTagName('span');
+    if (spans.length >= 3) {
+      spans[1].textContent = formatDist(halfMeters);
+      spans[2].textContent = formatDist(selectedMeters);
+    }
+  }
+
+  const barEl = document.getElementById('scalebar-bar');
+  if (barEl) {
+    barEl.style.width = `${actualWidthPx}px`;
+  }
+}
+
 export const ScaleBar: React.FC<ScaleBarProps> = ({ latitude, zoom }) => {
   // Web Mercator 기준 픽셀당 미터 계산:
   // metersPerPixel = 156543.03392 * cos(lat * pi / 180) / (2 ^ zoom)
@@ -40,6 +77,7 @@ export const ScaleBar: React.FC<ScaleBarProps> = ({ latitude, zoom }) => {
       <div className="bg-[#121814]/90 backdrop-blur-md border border-[#2b3a2e] px-3.5 py-2 rounded-xl shadow-2xl flex flex-col items-start space-y-1">
         {/* Scale labels (0, 1/2, Total) */}
         <div
+          id="scalebar-labels"
           className="flex justify-between text-[9px] text-slate-300 font-mono font-semibold"
           style={{ width: `${actualWidthPx}px` }}
         >
@@ -50,6 +88,7 @@ export const ScaleBar: React.FC<ScaleBarProps> = ({ latitude, zoom }) => {
 
         {/* Professional Segmented Scale Bar */}
         <div
+          id="scalebar-bar"
           className="h-2 flex border border-emerald-400/80 rounded-sm overflow-hidden"
           style={{ width: `${actualWidthPx}px` }}
         >

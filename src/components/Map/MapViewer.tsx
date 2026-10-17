@@ -6,8 +6,8 @@ import * as turf from '@turf/turf';
 import { useMapStore } from '@/store/useMapStore';
 import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { BORDER_SECURITY_GEOJSON } from '@/constants/borderSecurityZones';
-import { Compass } from './Compass';
-import { ScaleBar } from './ScaleBar';
+import { Compass, updateCompassDOM } from './Compass';
+import { ScaleBar, updateScaleBarDOM } from './ScaleBar';
 import { BriefingHeader } from './BriefingHeader';
 import { LegendBox } from './LegendBox';
 import { AccessibilityTableOverlay } from './AccessibilityTableOverlay';
@@ -666,7 +666,16 @@ export const MapViewer: React.FC = () => {
   const [pinScreenPositions, setPinScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
-  // 오버레이 실시간 렌더링용 로컬 상태
+  // [2단계: React 리렌더링 차단] 지도 이동 중 리렌더링 0회 달성을 위한 카메라 텔레메트리 Ref
+  const cameraTelemetryRef = useRef({
+    bearing: viewport.bearing,
+    pitch: viewport.pitch,
+    zoom: viewport.zoom,
+    lat: viewport.latitude,
+    lng: viewport.longitude,
+  });
+
+  // 오버레이 실시간 렌더링용 로컬 상태 (moveend 시 300ms 디바운스 동기화)
   const [currentBearing, setCurrentBearing] = useState<number>(viewport.bearing);
   const [currentPitch, setCurrentPitch] = useState<number>(viewport.pitch);
   const [currentZoom, setCurrentZoom] = useState<number>(viewport.zoom);
@@ -2130,10 +2139,69 @@ export const MapViewer: React.FC = () => {
     };
 
     let moveRafId: number | null = null;
+    let moveEndThrottleTimer: NodeJS.Timeout | null = null;
+
+    // [2단계: 메인 스레드 병목 제거 및 React 리렌더링 차단]
+    // 지도를 드래그/회전/줌할 때 React setState를 전면 차단하고 DOM 직접 조작으로 리렌더링 횟수 0회 달성
     const handleMove = () => {
       if (moveRafId !== null) return;
       moveRafId = requestAnimationFrame(() => {
         moveRafId = null;
+        if (!map) return;
+        const bearing = map.getBearing();
+        const pitch = map.getPitch();
+        const zoom = map.getZoom();
+        const center = map.getCenter();
+
+        // 1. Ref 텔레메트리 최신화 (리렌더링 없음)
+        cameraTelemetryRef.current = {
+          bearing,
+          pitch,
+          zoom,
+          lat: center.lat,
+          lng: center.lng,
+        };
+
+        // 2. Compass & ScaleBar DOM 직접 조작 (0ms)
+        updateCompassDOM(bearing, pitch, zoom);
+        updateScaleBarDOM(center.lat, zoom);
+
+        // 3. 폴리곤 중심 라벨 DOM 직접 조작
+        const storeCenter = useMapStore.getState().polygonCenter;
+        if (storeCenter) {
+          const p = map.project(storeCenter);
+          const polyLabelEl = document.getElementById('polygon-center-label-wrap');
+          if (polyLabelEl) {
+            polyLabelEl.style.left = `${p.x}px`;
+            polyLabelEl.style.top = `${p.y}px`;
+          }
+          const ceilingLabelEl = document.getElementById('flight-ceiling-label-wrap');
+          if (ceilingLabelEl) {
+            ceilingLabelEl.style.left = `${p.x}px`;
+            ceilingLabelEl.style.top = `${p.y}px`;
+          }
+        }
+
+        // 4. 인프라 마커 핀 DOM 직접 조작
+        const hoveredRow = useMapStore.getState().hoveredInfrastructureRow;
+        if (hoveredRow) {
+          const pt = map.project(hoveredRow.coords);
+          const tieEl = document.getElementById('tieline-marker-wrap');
+          if (tieEl) {
+            tieEl.style.left = `${pt.x}px`;
+            tieEl.style.top = `${pt.y}px`;
+          }
+        }
+
+        // 5. [줌 레벨 최적화 LOD 제어]
+        lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
+      });
+    };
+
+    // [지도 정지 후 300ms 디바운스] 카메라가 완전히 멈췄을 때만 1회 백그라운드 상태 동기화
+    const handleMoveEndSync = () => {
+      if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
+      moveEndThrottleTimer = setTimeout(() => {
         if (!map) return;
         const bearing = map.getBearing();
         const pitch = map.getPitch();
@@ -2145,25 +2213,12 @@ export const MapViewer: React.FC = () => {
         setCurrentZoom(zoom);
         setCurrentLat(center.lat);
 
-        // 폴리곤 중심 라벨 위치 추적
         const storeCenter = useMapStore.getState().polygonCenter;
         if (storeCenter) {
           const p = map.project(storeCenter);
           setLabelScreenPos({ x: p.x, y: p.y });
         }
-
-        // [교통·인프라 접근성] 타깃 인프라 핀 위치 추적
-        const hoveredRow = useMapStore.getState().hoveredInfrastructureRow;
-        if (hoveredRow) {
-          const pt = map.project(hoveredRow.coords);
-          setTieLineMarkerScreenPos((prev) =>
-            prev ? { ...prev, x: pt.x, y: pt.y } : null
-          );
-        }
-
-        // [줌 레벨 최적화 LOD 제어]: 줌 14 미만 경량 단색, 줌 14 이상 세부 창문 텍스처
-        lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
-      });
+      }, 300);
     };
 
     // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
@@ -2198,6 +2253,7 @@ export const MapViewer: React.FC = () => {
     };
 
     map.on('move', handleMove);
+    map.on('moveend', handleMoveEndSync);
     map.on('zoom', () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
     });
@@ -2777,17 +2833,10 @@ export const MapViewer: React.FC = () => {
             console.log('[Universal3DTilesManager] Real-time 3D hybrid building count:', count);
           },
         });
-        deckManager.attachToMap(map);
-        deck3DTilesManagerRef.current = deckManager;
-        (window as any).__deck3DManager = deckManager;
-
-        // 초기 샘플 건물 피처 사전 적재
-        if (SAMPLE_BUILDINGS?.features) {
-          deckManager.setBuildingFeatures(SAMPLE_BUILDINGS.features as any);
-        }
-
+        const initRenderMode = useMapStore.getState().renderMode3D;
         const initTileState = useMapStore.getState().tile3DStream;
-        if (initTileState.enabled) {
+        if (initRenderMode === 'tiles3d' && initTileState.enabled) {
+          deckManager.attachToMap(map);
           deckManager.update(initTileState);
         }
       } catch (deckErr) {
@@ -2885,7 +2934,6 @@ export const MapViewer: React.FC = () => {
     };
 
     map.on('movestart', handleMoveStart);
-    map.on('move', handleMoveStart);
     map.on('moveend', handleMoveEnd);
 
     map.on('error', (e: any) => {
@@ -3015,9 +3063,11 @@ export const MapViewer: React.FC = () => {
         canvas.removeEventListener('webglcontextlost', handleContextLost);
         canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       }
+      if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       try {
+        map.off('move', handleMove);
+        map.off('moveend', handleMoveEndSync);
         map.off('movestart', handleMoveStart);
-        map.off('move', handleMoveStart);
         map.off('moveend', handleMoveEnd);
       } catch {}
       resizeObserver.disconnect();
@@ -3463,7 +3513,7 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.setVisible(false);
       }
       if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
+        deck3DTilesManagerRef.current.detachFromMap();
       }
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
@@ -3475,7 +3525,10 @@ export const MapViewer: React.FC = () => {
       }
     } else if (renderMode3D === 'facade') {
       // 2. 모드 B: 실감 파사드 모드 (LOD2 Three.js 절차적 외벽/지붕)
-      // [최적화] 네이티브 단색 박스 및 그림자 레이어를 완전히 꺼서(none) 중복 렌더링 및 GPU 오버헤드 차단
+      // [최적화] 네이티브 단색 박스 및 Deck.gl 완전 언마운트
+      if (deck3DTilesManagerRef.current) {
+        deck3DTilesManagerRef.current.detachFromMap();
+      }
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
       }
@@ -3485,16 +3538,13 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.clearFacadesGroup();
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: false });
-      }
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
           map.setLayoutProperty(lyr, 'visibility', 'none');
         }
       }
     } else if (renderMode3D === 'tiles3d') {
-      // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (Deck.gl Tile3DLayer)
+      // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (Deck.gl Tile3DLayer 활성화)
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
       }
@@ -3502,6 +3552,7 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.setVisible(false);
       }
       if (deck3DTilesManagerRef.current) {
+        deck3DTilesManagerRef.current.attachToMap(map);
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
       }
       for (const lyr of nativeBuildingLayers) {
@@ -5839,6 +5890,7 @@ export const MapViewer: React.FC = () => {
         {/* [교통·인프라 접근성] 3D 타깃 인프라 플로팅 핀 배지 */}
         {tieLineMarkerScreenPos && (
           <div
+            id="tieline-marker-wrap"
             className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3 z-30 transition-transform duration-75 select-none"
             style={{
               left: `${tieLineMarkerScreenPos.x}px`,
@@ -5870,6 +5922,7 @@ export const MapViewer: React.FC = () => {
           defenseAnalysisResult.hasFlightSafetyZone &&
           labelScreenPos && (
             <div
+              id="flight-ceiling-label-wrap"
               className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full mb-28 z-20 transition-transform duration-75 select-none"
               style={{
                 left: `${labelScreenPos.x}px`,
@@ -5898,6 +5951,7 @@ export const MapViewer: React.FC = () => {
         {/* 폴리곤 중심 실시간 3D 정량 면적 라벨 콜아웃 */}
         {completedPolygon && polygonArea && labelScreenPos && (
           <div
+            id="polygon-center-label-wrap"
             className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3 z-10 transition-transform duration-75 select-none"
             style={{
               left: `${labelScreenPos.x}px`,

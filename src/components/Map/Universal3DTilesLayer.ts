@@ -711,18 +711,27 @@ export class Universal3DTilesManager {
   }
 
   /**
-   * 인스턴스 정리 및 자원 해제
+   * [1단계: GPU 컨텍스트 경합 방지] 비활성 시 Deck.gl 오버레이 및 이벤트 리스너 완전 분리
    */
-  public destroy(): void {
-    this.isDestroyed = true;
+  public detachFromMap(): void {
     if (this.overlay && this.map) {
       try {
+        this.overlay.setProps({ layers: [] });
         (this.map as any).removeControl(this.overlay as unknown as IControl);
+        this.map.off('moveend', this.handleMapMoveEnd);
       } catch {
         // ignore
       }
       this.overlay = null;
     }
+  }
+
+  /**
+   * 인스턴스 정리 및 자원 해제
+   */
+  public destroy(): void {
+    this.isDestroyed = true;
+    this.detachFromMap();
     this.parsedBuildings = [];
     this.features = [];
   }

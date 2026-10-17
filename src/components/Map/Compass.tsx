@@ -11,6 +11,27 @@ interface CompassProps {
   onAdjustPitch: (delta: number) => void;
 }
 
+export function updateCompassDOM(bearing: number, pitch: number, zoom: number): void {
+  if (typeof document === 'undefined') return;
+  const needle = document.getElementById('compass-needle');
+  if (needle) {
+    needle.style.transform = `rotate(${-bearing}deg)`;
+  }
+  const bearingEl = document.getElementById('compass-bearing-text');
+  if (bearingEl) {
+    const norm = ((bearing % 360) + 360) % 360;
+    bearingEl.textContent = `${norm.toFixed(0).padStart(3, '0')}°`;
+  }
+  const pitchEl = document.getElementById('compass-pitch-text');
+  if (pitchEl) {
+    pitchEl.textContent = `${pitch.toFixed(0)}°`;
+  }
+  const zoomEl = document.getElementById('compass-zoom-text');
+  if (zoomEl) {
+    zoomEl.textContent = `Lv ${zoom.toFixed(1)}`;
+  }
+}
+
 export const Compass: React.FC<CompassProps> = ({
   bearing,
   pitch,
@@ -35,7 +56,8 @@ export const Compass: React.FC<CompassProps> = ({
 
           {/* Rotating True North Needle */}
           <div
-            className="w-9 h-9 flex items-center justify-center transition-transform duration-100 ease-out"
+            id="compass-needle"
+            className="w-9 h-9 flex items-center justify-center transition-transform duration-75 ease-out"
             style={{ transform: `rotate(${-bearing}deg)` }}
           >
             <div className="relative flex flex-col items-center">
@@ -57,19 +79,19 @@ export const Compass: React.FC<CompassProps> = ({
         <div className="flex flex-col text-[11px] leading-tight space-y-0.5">
           <div className="flex items-center space-x-1.5">
             <span className="text-slate-400">진북방위:</span>
-            <span className="font-mono font-bold text-emerald-400">
+            <span id="compass-bearing-text" className="font-mono font-bold text-emerald-400">
               {normalizedBearing.toFixed(0).padStart(3, '0')}°
             </span>
           </div>
           <div className="flex items-center space-x-1.5">
             <span className="text-slate-400">시점경사:</span>
-            <span className="font-mono font-bold text-emerald-400">
+            <span id="compass-pitch-text" className="font-mono font-bold text-emerald-400">
               {pitch.toFixed(0)}°
             </span>
           </div>
           <div className="flex items-center space-x-1.5">
             <span className="text-slate-400">상세축척:</span>
-            <span className="font-mono text-slate-300">
+            <span id="compass-zoom-text" className="font-mono text-slate-300">
               Lv {zoom.toFixed(1)}
             </span>
           </div>
