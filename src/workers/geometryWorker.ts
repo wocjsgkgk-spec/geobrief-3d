@@ -9,9 +9,7 @@
  * - Transferable Objects(ArrayBuffer) 전송으로 0-copy 초고속 반환
  */
 
-// =============================================================================
-// 1. 순수 고성능 Earcut 삼각분할 알고리즘 (Zero-Dependency)
-// =============================================================================
+import { buildOsmBuildingGeometry } from '@/lib/vendor/osmGeometryBuilder';
 
 function earcut(data: number[], holeIndices: number[] | null = null, dim = 2): number[] {
   const hasHoles = holeIndices && holeIndices.length > 0;
@@ -842,7 +840,7 @@ self.onmessage = (event: MessageEvent) => {
 
   try {
     if (type === 'BUILD_BUILDINGS') {
-      const result = buildBuildingGeometry(payload);
+      const result = buildOsmBuildingGeometry(payload as any);
       // Transferable ArrayBuffers (0-copy 전송)
       const transferList = [
         result.positions.buffer,

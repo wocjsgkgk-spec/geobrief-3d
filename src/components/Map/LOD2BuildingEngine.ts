@@ -44,6 +44,7 @@ import {
   classifyBuilding,
   AtlasSlot,
 } from '@/utils/koreanCityAtlas';
+import { buildingMeshWorkerClient, OSMGeometryResult } from '@/workers/buildingMeshWorkerClient';
 import { geometryWorkerClient, BuildBuildingsResult } from '@/workers/geometryWorkerClient';
 import { createRealisticCityMaterial } from '@/shaders/realisticCityShader';
 
@@ -644,8 +645,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.initMaterials();
     }
 
-    // [3단계: Web Worker 백그라운드 지오메트리 분리] 10ms+ Earcut 및 다각형 버텍스 계산을 Worker로 위임하여 메인 스레드 0ms 유지
-    geometryWorkerClient
+    // [1단계: Web Worker 기반 고속 건물 지오메트리 엔진 구축]
+    // OSMBuildings & mapbox/earcut 벤더링 전용 buildingMeshWorker(Transferable Objects)로 백그라운드 0ms 연산
+    buildingMeshWorkerClient
       .buildBuildings({
         features,
         originLngLat: this.originLngLat,
@@ -660,11 +662,28 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
           this.applyWorkerResult(workerResult);
         } else {
-          this.buildFallbackSync(features);
+          geometryWorkerClient
+            .buildBuildings({
+              features,
+              originLngLat: this.originLngLat,
+              sunDirection: [
+                this.sunLightDirection.x,
+                this.sunLightDirection.y,
+                this.sunLightDirection.z,
+              ],
+              zoom: this.currentZoomLOD,
+            })
+            .then((fallbackResult) => {
+              if (fallbackResult && fallbackResult.positions && fallbackResult.positions.length > 0) {
+                this.applyWorkerResult(fallbackResult);
+              } else {
+                this.buildFallbackSync(features);
+              }
+            });
         }
       })
       .catch((err) => {
-        console.warn('[LOD2BuildingEngine] Worker build error, using fallback:', err);
+        console.warn('[LOD2BuildingEngine] buildingMeshWorker error, falling back:', err);
         this.buildFallbackSync(features);
       });
   }
@@ -1610,7 +1629,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    * [3단계: Web Worker 수신 데이터 즉시 GPU 업로드]
    * Worker에서 계산된 순수 Float32Array 버퍼(Transferable Objects)를 메인 스레드 0ms로 GPU에 직접 반영
    */
-  private applyWorkerResult(result: BuildBuildingsResult): void {
+  private applyWorkerResult(result: BuildBuildingsResult | OSMGeometryResult): void {
     if (!result || !result.positions || result.positions.length === 0) return;
 
     if (!this.realisticCityMaterial) {
