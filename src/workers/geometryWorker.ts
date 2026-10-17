@@ -279,11 +279,13 @@ function projectCoordsToLocalMeters(ring: [number, number][], origin: [number, n
   return pts;
 }
 
-function addQuad(
+function addBuildingQuad(
   positions: number[],
   normals: number[],
   uvs: number[],
   colors: number[],
+  buildingDatas: number[],
+  demCoords: number[],
   p0: { x: number; y: number; z: number },
   p1: { x: number; y: number; z: number },
   p2: { x: number; y: number; z: number },
@@ -295,6 +297,12 @@ function addQuad(
   uv1: { u: number; v: number },
   uv2: { u: number; v: number },
   uv3: { u: number; v: number },
+  bldType: number,
+  floors: number,
+  partType: number,
+  wallLength: number,
+  dem0: { u: number; v: number },
+  dem1: { u: number; v: number },
   r = 0.98,
   g = 0.98,
   b = 0.99
@@ -307,10 +315,15 @@ function addQuad(
   for (let k = 0; k < 6; k++) {
     normals.push(nx, ny, nz);
     colors.push(r, g, b);
+    buildingDatas.push(bldType, floors, partType, wallLength);
   }
 
   uvs.push(uv0.u, uv0.v, uv1.u, uv1.v, uv2.u, uv2.v);
   uvs.push(uv0.u, uv0.v, uv2.u, uv2.v, uv3.u, uv3.v);
+
+  // DEM uv per vertex
+  demCoords.push(dem0.u, dem0.v, dem1.u, dem1.v, dem1.u, dem1.v);
+  demCoords.push(dem0.u, dem0.v, dem1.u, dem1.v, dem0.u, dem0.v);
 }
 
 function addShadowQuad(
@@ -338,6 +351,7 @@ function addShadowQuad(
 export interface BuildBuildingsPayload {
   features: any[];
   originLngLat: [number, number];
+  demBounds?: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
 }
 
 export interface BuildBuildingsResult {
@@ -345,21 +359,62 @@ export interface BuildBuildingsResult {
   normals: Float32Array;
   uvs: Float32Array;
   colors: Float32Array;
+  buildingData: Float32Array; // aBuildingData (vec4)
+  demCoords: Float32Array;    // aDemCoord (vec2)
   shadowPositions: Float32Array;
   shadowColors: Float32Array;
   buildingCount: number;
+  demBounds: [number, number, number, number];
 }
 
 function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsResult {
-  const { features, originLngLat } = payload;
+  const { features, originLngLat, demBounds } = payload;
 
   const masterPositions: number[] = [];
   const masterNormals: number[] = [];
   const masterUvs: number[] = [];
   const masterColors: number[] = [];
+  const masterBuildingData: number[] = [];
+  const masterDemCoords: number[] = [];
 
   const shadowPositions: number[] = [];
   const shadowColors: number[] = [];
+
+  // 지리적 경계 산출 (DEM 텍스처 좌표 매핑용)
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  if (demBounds && demBounds.length === 4) {
+    [minLng, minLat, maxLng, maxLat] = demBounds;
+  } else {
+    for (const feat of features) {
+      if (!feat.geometry) continue;
+      const rings: [number, number][][] = [];
+      if (feat.geometry.type === 'Polygon') {
+        rings.push(feat.geometry.coordinates[0]);
+      } else if (feat.geometry.type === 'MultiPolygon') {
+        for (const poly of feat.geometry.coordinates) rings.push(poly[0]);
+      }
+      for (const ring of rings) {
+        if (!ring) continue;
+        for (const pt of ring) {
+          if (!pt) continue;
+          const lng = pt[0], lat = pt[1];
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+        }
+      }
+    }
+  }
+
+  if (!Number.isFinite(minLng)) {
+    minLng = originLngLat[0] - 0.02;
+    maxLng = originLngLat[0] + 0.02;
+    minLat = originLngLat[1] - 0.02;
+    maxLat = originLngLat[1] + 0.02;
+  }
+  const rangeLng = Math.max(0.0001, maxLng - minLng);
+  const rangeLat = Math.max(0.0001, maxLat - minLat);
 
   let count = 0;
 
@@ -397,38 +452,75 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
       const pts = projectCoordsToLocalMeters(ring, originLngLat);
       if (pts.length < 3) continue;
 
-      // 높이 결정
-      let totalH = explicitH;
       const isApt =
         name.includes('아파트') ||
         name.includes('apt') ||
+        name.includes('단지') ||
+        name.includes('푸르지오') ||
+        name.includes('자이') ||
+        name.includes('힐스테이트') ||
+        name.includes('래미안') ||
+        name.includes('e편한') ||
+        name.includes('더샵') ||
+        name.includes('아이파크') ||
+        name.includes('롯데캐슬') ||
+        name.includes('한신') ||
+        name.includes('삼호') ||
+        name.includes('두산') ||
+        name.includes('우성') ||
+        name.includes('현대') ||
+        name.includes('동보') ||
+        name.includes('세경') ||
+        name.includes('코아루') ||
+        name.includes('부영') ||
+        name.includes('주공') ||
         usageType.includes('apartment');
+
       const isComm =
         name.includes('타워') ||
         name.includes('빌딩') ||
+        name.includes('센터') ||
         usageType.includes('commercial') ||
         usageType.includes('office');
 
+      // 높이 및 목표 층수 결정
+      let totalH = explicitH;
       if (totalH <= 0) {
-        totalH = isApt ? 60.0 : isComm ? 12.0 : 6.0;
+        totalH = isApt ? 54.0 : isComm ? 12.0 : 6.0;
       }
-      totalH = Math.max(3.0, Math.min(200.0, totalH));
+      totalH = Math.max(3.5, Math.min(250.0, totalH));
+      const floors = rawFlr > 0 ? rawFlr : Math.max(1, Math.round(totalH / 3.0));
 
-      // 벽면 색상 팔레트
+      // 건물 유형 코드: 0=주택, 1=상업, 2=아파트
+      const bldType = isApt ? 2.0 : (isComm ? 1.0 : 0.0);
+
+      // 벽면 기본 색상 팔레트
       let r = 0.97, g = 0.98, b = 0.99; // 아파트 기본 화이트/아이보리
       if (isComm) {
-        r = 0.80; g = 0.85; b = 0.92; // 상업 쿨그레이/블루
+        r = 0.82; g = 0.86; b = 0.92; // 상업 쿨그레이/블루
       } else if (!isApt) {
-        r = 0.95; g = 0.96; b = 0.97; // 일반 주택 웜베이지
+        r = 0.95; g = 0.93; b = 0.89; // 일반 주택 웜베이지
       }
 
       const numPts = pts.length;
+
+      // 다각형 내 최장 변 길이 산출 (측벽 코어 판정용)
+      let maxEdgeLen = 0;
+      for (let i = 0; i < numPts; i++) {
+        const nextIdx = (i + 1) % numPts;
+        const edx = pts[nextIdx].x - pts[i].x;
+        const edz = pts[nextIdx].y - pts[i].y;
+        const elen = Math.sqrt(edx * edx + edz * edz);
+        if (elen > maxEdgeLen) maxEdgeLen = elen;
+      }
 
       // 1) 외벽(Wall) 1:1 수직 압출
       for (let i = 0; i < numPts; i++) {
         const nextIdx = (i + 1) % numPts;
         const p1 = pts[i];
         const p2 = pts[nextIdx];
+        const coord1 = ring[i];
+        const coord2 = ring[nextIdx];
 
         const edgeDx = p2.x - p1.x;
         const edgeDz = p2.y - p1.y;
@@ -439,40 +531,48 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
         const nx = edgeDz / edgeLen;
         const nz = -edgeDx / edgeLen;
 
-        const baseH = 0;
-        const topH = totalH;
-
-        // 기단부 (0 ~ 3.5m)
-        const foundationH = Math.min(3.5, topH);
-        addQuad(
-          masterPositions, masterNormals, masterUvs, masterColors,
-          { x: p1.x, y: baseH, z: -p1.y },
-          { x: p2.x, y: baseH, z: -p2.y },
-          { x: p2.x, y: foundationH, z: -p2.y },
-          { x: p1.x, y: foundationH, z: -p1.y },
-          nx, 0, -nz,
-          { u: 0, v: 0 }, { u: edgeLen / 4.0, v: 0 },
-          { u: edgeLen / 4.0, v: 1 }, { u: 0, v: 1 },
-          0.39, 0.45, 0.55 // 다크 화강석 #64748b
-        );
-
-        // 본체 (3.5m ~ topH)
-        if (topH > foundationH) {
-          addQuad(
-            masterPositions, masterNormals, masterUvs, masterColors,
-            { x: p1.x, y: foundationH, z: -p1.y },
-            { x: p2.x, y: foundationH, z: -p2.y },
-            { x: p2.x, y: topH, z: -p2.y },
-            { x: p1.x, y: topH, z: -p1.y },
-            nx, 0, -nz,
-            { u: 0, v: 0 }, { u: edgeLen / 4.0, v: 0 },
-            { u: edgeLen / 4.0, v: (topH - foundationH) / 3.0 }, { u: 0, v: (topH - foundationH) / 3.0 },
-            r, g, b
-          );
+        // 측벽 코어 판정: 10층 이상 아파트 단지의 단변(폭 16m 이하 또는 장변 대비 45% 이하)은 무창 엘리베이터 코어 벽면
+        let partType = 0.0; // 0=외벽 파사드
+        if (isApt && floors >= 10.0 && maxEdgeLen >= 25.0) {
+          if (edgeLen <= 16.0 || edgeLen <= maxEdgeLen * 0.45) {
+            partType = 3.0; // 3=측벽 수직 코어
+          }
         }
 
-        // 지면 접지 그림자(Ground Contact Shadow)
-        const shadowWidth = 1.8;
+        // DEM 텍스처 정규 좌표 (0.0 ~ 1.0)
+        const dem0 = {
+          u: (coord1[0] - minLng) / rangeLng,
+          v: (coord1[1] - minLat) / rangeLat,
+        };
+        const dem1 = {
+          u: (coord2[0] - minLng) / rangeLng,
+          v: (coord2[1] - minLat) / rangeLat,
+        };
+
+        // 단일 쿼드 압출 (0m ~ totalH, 셰이더에서 0~3.5m 기단부 및 층별 슬래브/창문 자동 분기)
+        addBuildingQuad(
+          masterPositions, masterNormals, masterUvs, masterColors,
+          masterBuildingData, masterDemCoords,
+          { x: p1.x, y: 0, z: -p1.y },
+          { x: p2.x, y: 0, z: -p2.y },
+          { x: p2.x, y: totalH, z: -p2.y },
+          { x: p1.x, y: totalH, z: -p1.y },
+          nx, 0, -nz,
+          { u: 0, v: 0 },
+          { u: edgeLen, v: 0 },
+          { u: edgeLen, v: totalH },
+          { u: 0, v: totalH },
+          bldType,
+          floors,
+          partType,
+          edgeLen,
+          dem0,
+          dem1,
+          r, g, b
+        );
+
+        // 지면 접지 그림자 (Ground Contact Shadow)
+        const shadowWidth = Math.max(1.8, Math.min(3.5, totalH * 0.06 + 1.6));
         addShadowQuad(
           shadowPositions, shadowColors,
           { x: p1.x, y: 0.02, z: -p1.y, a: 0.45 },
@@ -484,9 +584,15 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
 
       // 2) 지붕(Roof) Earcut 1:1 정밀 삼각화
       const flatCoords: number[] = [];
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const p of pts) {
         flatCoords.push(p.x, p.y);
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
       }
+      const polyDiameter = Math.max(maxX - minX, maxY - minY, 1.0);
 
       const triangles = earcut(flatCoords, null, 2);
       if (triangles.length > 0) {
@@ -506,6 +612,10 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
           const p1 = pts[idx1];
           const p2 = pts[idx2];
 
+          const c0 = ring[idx0] || ring[0];
+          const c1 = ring[idx1] || ring[0];
+          const c2 = ring[idx2] || ring[0];
+
           // 삼각형 추가 (Top Face: Normal = 0, 1, 0)
           masterPositions.push(p0.x, roofH, -p0.y);
           masterPositions.push(p1.x, roofH, -p1.y);
@@ -514,11 +624,16 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
           for (let k = 0; k < 3; k++) {
             masterNormals.push(0, 1, 0);
             masterColors.push(roofR, roofG, roofB);
+            masterBuildingData.push(bldType, floors, 1.0, polyDiameter); // partType: 1.0 (옥상)
           }
 
-          masterUvs.push(p0.x / 10.0, p0.y / 10.0);
-          masterUvs.push(p1.x / 10.0, p1.y / 10.0);
-          masterUvs.push(p2.x / 10.0, p2.y / 10.0);
+          masterUvs.push(p0.x, p0.y);
+          masterUvs.push(p1.x, p1.y);
+          masterUvs.push(p2.x, p2.y);
+
+          masterDemCoords.push((c0[0] - minLng) / rangeLng, (c0[1] - minLat) / rangeLat);
+          masterDemCoords.push((c1[0] - minLng) / rangeLng, (c1[1] - minLat) / rangeLat);
+          masterDemCoords.push((c2[0] - minLng) / rangeLng, (c2[1] - minLat) / rangeLat);
         }
       }
 
@@ -531,9 +646,12 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
     normals: new Float32Array(masterNormals),
     uvs: new Float32Array(masterUvs),
     colors: new Float32Array(masterColors),
+    buildingData: new Float32Array(masterBuildingData),
+    demCoords: new Float32Array(masterDemCoords),
     shadowPositions: new Float32Array(shadowPositions),
     shadowColors: new Float32Array(shadowColors),
     buildingCount: count,
+    demBounds: [minLng, minLat, maxLng, maxLat],
   };
 }
 
@@ -645,6 +763,8 @@ self.onmessage = (event: MessageEvent) => {
         result.normals.buffer,
         result.uvs.buffer,
         result.colors.buffer,
+        result.buildingData.buffer,
+        result.demCoords.buffer,
         result.shadowPositions.buffer,
         result.shadowColors.buffer,
       ];

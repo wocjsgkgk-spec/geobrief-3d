@@ -45,6 +45,7 @@ import {
   AtlasSlot,
 } from '@/utils/koreanCityAtlas';
 import { geometryWorkerClient, BuildBuildingsResult } from '@/workers/geometryWorkerClient';
+import { createRealisticCityMaterial } from '@/shaders/realisticCityShader';
 
 // =============================================================================
 // 1. 기하 유틸리티 (OBB, 좌표 변환, 삼각화, 쿼드 버퍼)
@@ -295,6 +296,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   // [핵심] 도시 전체 단일 마스터 메쉬 (Single Draw Call)
   private masterCityMesh: THREE.Mesh | null = null;
   private masterAtlasMaterial: THREE.MeshStandardMaterial | null = null;
+  private realisticCityMaterial: THREE.ShaderMaterial | null = null;
+  private threeDemTexture: THREE.DataTexture | null = null;
 
   // [단일 배칭 최적화] 랜드마크 옥상 헬리패드 통합 단일 메쉬 (정점 컬러 베이스 + 링 + 백색 H 단일 Draw Call)
   private helipadUnifiedMesh: THREE.Mesh | null = null;
@@ -349,6 +352,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private initMaterials(): void {
     this.materials = getKoreanBuildingMaterials();
     this.masterAtlasMaterial = getKoreanCityAtlasMaterial();
+    if (!this.realisticCityMaterial) {
+      this.realisticCityMaterial = createRealisticCityMaterial({
+        sunDirection: this.sunLightDirection,
+      });
+    }
     if (!this.contactShadowMaterial) {
       this.contactShadowMaterial = new THREE.ShaderMaterial({
         vertexShader: `
@@ -374,6 +382,55 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         side: THREE.DoubleSide,
       });
     }
+  }
+
+  /**
+   * [3단계: GPU Terrain Clamping] DEM 표고 데이터텍스처 갱신 및 셰이더 바인딩
+   */
+  public updateDemTexture(bounds: [number, number, number, number]): void {
+    if (!this.map || !this.realisticCityMaterial) return;
+    const [minLng, minLat, maxLng, maxLat] = bounds;
+    const size = 64;
+    const data = new Uint8Array(size * size * 4);
+
+    const dLng = (maxLng - minLng) / Math.max(1, size - 1);
+    const dLat = (maxLat - minLat) / Math.max(1, size - 1);
+
+    for (let y = 0; y < size; y++) {
+      const lat = minLat + y * dLat;
+      for (let x = 0; x < size; x++) {
+        const lng = minLng + x * dLng;
+        const elev = Math.max(0, this.map.queryTerrainElevation ? (this.map.queryTerrainElevation([lng, lat]) || 0) : 0);
+        const val = Math.max(0, Math.min(65535, elev + 32768));
+        const r = Math.floor(val / 256);
+        const g = Math.floor(val % 256);
+        const b = Math.floor((val - Math.floor(val)) * 256);
+
+        const idx = (y * size + x) * 4;
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      }
+    }
+
+    const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+
+    if (this.threeDemTexture) {
+      this.threeDemTexture.dispose();
+    }
+    this.threeDemTexture = texture;
+
+    const exaggeration = (this.map as any)?.painter?.terrain?.exaggeration || 1.0;
+
+    this.realisticCityMaterial.uniforms.uDemTexture.value = this.threeDemTexture;
+    this.realisticCityMaterial.uniforms.uUseDemTexture.value = true;
+    this.realisticCityMaterial.uniforms.uDemExaggeration.value = exaggeration;
+    this.realisticCityMaterial.needsUpdate = true;
   }
 
   public setVisible(visible: boolean): void {
@@ -444,6 +501,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     }
     if (this.fillLight) {
       this.fillLight.intensity = 0.45;
+    }
+    if (this.realisticCityMaterial) {
+      this.realisticCityMaterial.uniforms.uSunDirection.value.set(vector[0], vector[1], vector[2]).normalize();
+      const c = new THREE.Color(color);
+      this.realisticCityMaterial.uniforms.uSunColor.value.set(c.r, c.g, c.b);
+      this.realisticCityMaterial.uniforms.uSunIntensity.value = Math.max(1.0, intensity);
     }
     if (this.materials) {
       updateFacadeShaderLights(
@@ -556,14 +619,20 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       .then((workerResult) => {
         if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
           this.applyWorkerResult(workerResult);
+        } else {
+          this.buildFallbackSync(features);
         }
       })
       .catch((err) => {
         console.warn('[LOD2BuildingEngine] Worker build error, using fallback:', err);
+        this.buildFallbackSync(features);
       });
+  }
 
-    console.log('[LOD2BuildingEngine] updateBuildings START (Worker dispatched): features count =', features.length, 'origin =', this.originLngLat);
-
+  /**
+   * Worker 미지원 또는 예외 발생 시 동기식 폴백 빌더
+   */
+  private buildFallbackSync(features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]): void {
     // 마스터 아틀라스 버텍스 배열 (폴백 보존)
     const masterPositions: number[] = [];
     const masterNormals: number[] = [];
@@ -1284,14 +1353,15 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         this.masterAtlasMaterial = getKoreanCityAtlasMaterial();
       }
 
-      if (this.masterAtlasMaterial) {
-        newMasterMesh = new THREE.Mesh(masterGeo, this.masterAtlasMaterial);
+      const fallbackMat = this.realisticCityMaterial || this.masterAtlasMaterial;
+      if (fallbackMat) {
+        newMasterMesh = new THREE.Mesh(masterGeo, fallbackMat);
         newMasterMesh.castShadow = true;
         newMasterMesh.receiveShadow = true;
         newMasterMesh.frustumCulled = false;
         console.log('[LOD2BuildingEngine] newMasterMesh created! Vertices =', masterPositions.length / 3);
       } else {
-        console.warn('[LOD2BuildingEngine] masterAtlasMaterial is NULL!');
+        console.warn('[LOD2BuildingEngine] master material is NULL!');
       }
     } else {
       console.warn('[LOD2BuildingEngine] masterPositions is EMPTY!');
@@ -1503,8 +1573,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private applyWorkerResult(result: BuildBuildingsResult): void {
     if (!result || !result.positions || result.positions.length === 0) return;
 
-    if (!this.masterAtlasMaterial) {
-      this.masterAtlasMaterial = getKoreanCityAtlasMaterial();
+    if (!this.realisticCityMaterial) {
+      this.initMaterials();
     }
 
     const masterGeo = new THREE.BufferGeometry();
@@ -1512,6 +1582,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     masterGeo.setAttribute('normal', new THREE.BufferAttribute(result.normals, 3));
     masterGeo.setAttribute('uv', new THREE.BufferAttribute(result.uvs, 2));
     masterGeo.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
+    if (result.buildingData && result.buildingData.length > 0) {
+      masterGeo.setAttribute('aBuildingData', new THREE.BufferAttribute(result.buildingData, 4));
+    }
+    if (result.demCoords && result.demCoords.length > 0) {
+      masterGeo.setAttribute('aDemCoord', new THREE.BufferAttribute(result.demCoords, 2));
+    }
     masterGeo.computeBoundingSphere();
 
     if (this.masterCityMesh) {
@@ -1521,14 +1597,24 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    const mat = (this.masterAtlasMaterial || getKoreanCityAtlasMaterial()) ?? new THREE.MeshStandardMaterial({
-      color: 0xf8fafc,
-      roughness: 0.6,
-      vertexColors: true,
-    });
+    const mat =
+      this.realisticCityMaterial ||
+      this.masterAtlasMaterial ||
+      getKoreanCityAtlasMaterial() ||
+      new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        roughness: 0.6,
+      });
     this.masterCityMesh = new THREE.Mesh(masterGeo, mat);
+    this.masterCityMesh.castShadow = true;
+    this.masterCityMesh.receiveShadow = true;
     (this.masterCityMesh as any).frustumCulled = false;
     this.scene.add(this.masterCityMesh);
+
+    // [3단계: GPU Terrain Clamping] DEM 표고 데이터텍스처 셰이더 바인딩
+    if (result.demBounds) {
+      this.updateDemTexture(result.demBounds);
+    }
 
     // 지면 접지 그림자 메쉬
     if (result.shadowPositions && result.shadowPositions.length > 0 && this.contactShadowMaterial) {
@@ -1546,6 +1632,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
       this.contactShadowMesh = new THREE.Mesh(shadowGeo, this.contactShadowMaterial);
       (this.contactShadowMesh as any).frustumCulled = false;
+      this.contactShadowMesh.renderOrder = -1;
       this.scene.add(this.contactShadowMesh);
     }
 
@@ -1588,6 +1675,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
       // DEM 표고 실시간 적응 (초기 로드 후 DEM 타일 수신 시 자동 재스냅)
       if (this.map) {
+        // [3단계: GPU Terrain Clamping] DEM 과장율 실시간 동기화
+        if (this.realisticCityMaterial) {
+          const terrain = (this.map as any)?.painter?.terrain;
+          if (terrain && Number.isFinite(terrain.exaggeration)) {
+            if (this.realisticCityMaterial.uniforms.uDemExaggeration.value !== terrain.exaggeration) {
+              this.realisticCityMaterial.uniforms.uDemExaggeration.value = terrain.exaggeration;
+            }
+          }
+        }
+
         const queried = elevationCache.getFromMap(this.map, this.originLngLat);
         if (Number.isFinite(queried)) {
           if (this.clampedAltitude === 0 && queried > 5.0) {
@@ -1715,6 +1812,15 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     disposeKoreanBuildingMaterials();
     this.materials = null;
     this.masterAtlasMaterial = null;
+
+    if (this.realisticCityMaterial) {
+      this.realisticCityMaterial.dispose();
+      this.realisticCityMaterial = null;
+    }
+    if (this.threeDemTexture) {
+      this.threeDemTexture.dispose();
+      this.threeDemTexture = null;
+    }
 
     if (this.directionalLight) {
       this.scene.remove(this.directionalLight);
