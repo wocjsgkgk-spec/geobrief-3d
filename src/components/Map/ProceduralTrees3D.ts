@@ -25,75 +25,46 @@ export const WONJU_1ST_LOGISTICS_CENTER: [number, number] = [127.9358, 37.3592];
 // =============================================================================
 
 /**
- * 활엽수 (Deciduous Tree): 로우폴리 줄기 + 십이면체 캐노피 (버텍스 컬러 병합)
+ * 한국형 입체 수목 (통합 단일 지오메트리): 로우폴리 수피 줄기 + 다층 돔형 캐노피 (버텍스 컬러 PBR 내장)
  */
-function createDeciduousGeometry(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.24, 0.42, 2.6, 5).toNonIndexed();
+function createUnifiedTreeGeometry(): THREE.BufferGeometry {
+  const trunk = new THREE.CylinderGeometry(0.22, 0.38, 2.5, 5).toNonIndexed();
   trunk.deleteAttribute('uv');
-  trunk.translate(0, 1.3, 0);
+  trunk.translate(0, 1.25, 0);
 
   const trunkColors = new Float32Array(trunk.attributes.position.count * 3);
   for (let i = 0; i < trunk.attributes.position.count; i++) {
-    trunkColors[i * 3] = 0.38; // R (갈색 수피)
+    trunkColors[i * 3] = 0.36;     // R (갈색 수피)
     trunkColors[i * 3 + 1] = 0.22; // G
     trunkColors[i * 3 + 2] = 0.12; // B
   }
   trunk.setAttribute('color', new THREE.BufferAttribute(trunkColors, 3));
 
-  const crown = new THREE.DodecahedronGeometry(2.1, 1).toNonIndexed();
-  crown.deleteAttribute('uv');
-  crown.translate(0, 3.8, 0);
+  // 하단 주 수관 돔
+  const crown1 = new THREE.DodecahedronGeometry(2.0, 1).toNonIndexed();
+  crown1.deleteAttribute('uv');
+  crown1.translate(0, 3.5, 0);
 
-  const crownColors = new Float32Array(crown.attributes.position.count * 3);
-  for (let i = 0; i < crown.attributes.position.count; i++) {
-    const jitter = (Math.sin(i * 1.7) + 1) * 0.04;
-    crownColors[i * 3] = 0.08 + jitter; // R (싱그러운 나뭇잎 녹색)
-    crownColors[i * 3 + 1] = 0.58 + jitter * 1.5; // G
-    crownColors[i * 3 + 2] = 0.22 + jitter; // B
-  }
-  crown.setAttribute('color', new THREE.BufferAttribute(crownColors, 3));
+  // 상단 소 수관 돔
+  const crown2 = new THREE.DodecahedronGeometry(1.4, 1).toNonIndexed();
+  crown2.deleteAttribute('uv');
+  crown2.translate(0, 4.8, 0);
 
-  const merged = BufferGeometryUtils.mergeGeometries([trunk, crown]);
-  merged.computeVertexNormals();
-  return merged;
-}
-
-/**
- * 침엽수 (Coniferous Pine Tree): 로우폴리 줄기 + 3단 원추형 솔잎 수관
- */
-function createConiferGeometry(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.2, 0.35, 2.5, 5).toNonIndexed();
-  const cone1 = new THREE.ConeGeometry(1.6, 2.2, 5).toNonIndexed();
-  const cone2 = new THREE.ConeGeometry(1.2, 1.8, 5).toNonIndexed();
-  const cone3 = new THREE.ConeGeometry(0.8, 1.4, 5).toNonIndexed();
-
-  trunk.deleteAttribute('uv');
-  cone1.deleteAttribute('uv');
-  cone2.deleteAttribute('uv');
-  cone3.deleteAttribute('uv');
-
-  trunk.translate(0, 1.25, 0);
-  cone1.translate(0, 2.5, 0);
-  cone2.translate(0, 3.6, 0);
-  cone3.translate(0, 4.5, 0);
-
-  const setColors = (geo: THREE.BufferGeometry, r: number, g: number, b: number) => {
+  const setCrownColor = (geo: THREE.BufferGeometry, baseG: number) => {
     const arr = new Float32Array(geo.attributes.position.count * 3);
     for (let i = 0; i < geo.attributes.position.count; i++) {
-      const j = (Math.sin(i * 2.3) + 1) * 0.03;
-      arr[i * 3] = r + j;
-      arr[i * 3 + 1] = g + j * 1.2;
-      arr[i * 3 + 2] = b + j;
+      const j = (Math.sin(i * 1.8) + 1) * 0.035;
+      arr[i * 3] = 0.08 + j;
+      arr[i * 3 + 1] = baseG + j * 1.4;
+      arr[i * 3 + 2] = 0.18 + j;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   };
 
-  setColors(trunk, 0.32, 0.18, 0.09); // 짙은 솔방울 갈색 수피
-  setColors(cone1, 0.06, 0.32, 0.15); // 짙은 소나무/잣나무 청록색
-  setColors(cone2, 0.07, 0.38, 0.18);
-  setColors(cone3, 0.08, 0.44, 0.20);
+  setCrownColor(crown1, 0.50);
+  setCrownColor(crown2, 0.58);
 
-  const merged = BufferGeometryUtils.mergeGeometries([trunk, cone1, cone2, cone3]);
+  const merged = BufferGeometryUtils.mergeGeometries([trunk, crown1, crown2]);
   merged.computeVertexNormals();
   return merged;
 }
@@ -256,8 +227,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   private scene: THREE.Scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer | null = null;
 
-  private deciduousMesh: THREE.InstancedMesh | null = null;
-  private coniferMesh: THREE.InstancedMesh | null = null;
+  // [단일 InstancedMesh 최적화] 수목 전체를 단 1개의 인스턴싱 메쉬로 일괄 렌더링 (Draw Call = 1회)
+  private unifiedTreeMesh: THREE.InstancedMesh | null = null;
   private treeMaterial: THREE.MeshStandardMaterial | null = null;
 
   private directionalLight: THREE.DirectionalLight | null = null;
@@ -283,8 +254,7 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
 
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
-    if (this.deciduousMesh) this.deciduousMesh.visible = visible;
-    if (this.coniferMesh) this.coniferMesh.visible = visible;
+    if (this.unifiedTreeMesh) this.unifiedTreeMesh.visible = visible;
     if (this.map) {
       this.map.triggerRepaint();
     }
@@ -297,7 +267,7 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   public setSite(siteId: string): void {
     if (!siteId) return;
     const site = getGangwonMilitarySiteById(siteId) || GANGWON_MILITARY_SITES[0];
-    if (this.currentSiteId === site.id && this.deciduousMesh) {
+    if (this.currentSiteId === site.id && this.unifiedTreeMesh) {
       return;
     }
 
@@ -356,17 +326,11 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
 
   private rebuildTrees(): void {
     // 기존 메쉬 메모리 해제
-    if (this.deciduousMesh) {
-      this.scene.remove(this.deciduousMesh);
-      this.deciduousMesh.geometry.dispose();
-      this.deciduousMesh.dispose();
-      this.deciduousMesh = null;
-    }
-    if (this.coniferMesh) {
-      this.scene.remove(this.coniferMesh);
-      this.coniferMesh.geometry.dispose();
-      this.coniferMesh.dispose();
-      this.coniferMesh = null;
+    if (this.unifiedTreeMesh) {
+      this.scene.remove(this.unifiedTreeMesh);
+      this.unifiedTreeMesh.geometry.dispose();
+      this.unifiedTreeMesh.dispose();
+      this.unifiedTreeMesh = null;
     }
 
     if (!this.treeMaterial) {
@@ -391,25 +355,22 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       this.rotationDeg
     );
 
-    const deciduousList = this.rawTreeData.filter((t) => !t.isConifer);
-    const coniferList = this.rawTreeData.filter((t) => t.isConifer);
-
     const dummy = new THREE.Object3D();
 
-    // 1) 활엽수 인스턴스 메쉬 생성 (단일 Draw Call)
-    if (deciduousList.length > 0) {
-      const decGeo = createDeciduousGeometry();
-      this.deciduousMesh = new THREE.InstancedMesh(
-        decGeo,
+    // 단일 InstancedMesh 생성 (전체 수목 Draw Call = 1회)
+    if (this.rawTreeData.length > 0) {
+      const treeGeo = createUnifiedTreeGeometry();
+      this.unifiedTreeMesh = new THREE.InstancedMesh(
+        treeGeo,
         this.treeMaterial,
-        deciduousList.length
+        this.rawTreeData.length
       );
-      this.deciduousMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.deciduousMesh.castShadow = true;
-      this.deciduousMesh.receiveShadow = true;
+      this.unifiedTreeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.unifiedTreeMesh.castShadow = true;
+      this.unifiedTreeMesh.receiveShadow = true;
 
-      for (let i = 0; i < deciduousList.length; i++) {
-        const item = deciduousList[i];
+      for (let i = 0; i < this.rawTreeData.length; i++) {
+        const item = this.rawTreeData[i];
         let treeY = item.y;
         if (this.map) {
           const elev = elevationCache.getFromMap(this.map, [
@@ -424,53 +385,35 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         dummy.scale.set(item.scale, item.scale, item.scale);
         dummy.rotation.set(0, item.rotationY, 0);
         dummy.updateMatrix();
-        this.deciduousMesh.setMatrixAt(i, dummy.matrix);
+        this.unifiedTreeMesh.setMatrixAt(i, dummy.matrix);
       }
-      this.deciduousMesh.instanceMatrix.needsUpdate = true;
-      this.deciduousMesh.visible = this.isVisible;
-      this.deciduousMesh.frustumCulled = false;
-      this.scene.add(this.deciduousMesh);
-    }
-
-    // 2) 침엽수/소나무 인스턴스 메쉬 생성 (단일 Draw Call)
-    if (coniferList.length > 0) {
-      const conGeo = createConiferGeometry();
-      this.coniferMesh = new THREE.InstancedMesh(
-        conGeo,
-        this.treeMaterial,
-        coniferList.length
-      );
-      this.coniferMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.coniferMesh.castShadow = true;
-      this.coniferMesh.receiveShadow = true;
-
-      for (let i = 0; i < coniferList.length; i++) {
-        const item = coniferList[i];
-        let treeY = item.y;
-        if (this.map) {
-          const elev = elevationCache.getFromMap(this.map, [
-            this.centerLngLat[0] + (item.x / 111000) * 1.25,
-            this.centerLngLat[1] + (item.z / 111000),
-          ]);
-          if (elev !== null && elev !== undefined && !Number.isNaN(elev)) {
-            treeY = Math.max(-15, Math.min(60, elev - this.clampedAltitude));
-          }
-        }
-        dummy.position.set(item.x, treeY, item.z);
-        dummy.scale.set(item.scale, item.scale, item.scale);
-        dummy.rotation.set(0, item.rotationY, 0);
-        dummy.updateMatrix();
-        this.coniferMesh.setMatrixAt(i, dummy.matrix);
-      }
-      this.coniferMesh.instanceMatrix.needsUpdate = true;
-      this.coniferMesh.visible = this.isVisible;
-      this.coniferMesh.frustumCulled = false;
-      this.scene.add(this.coniferMesh);
+      this.unifiedTreeMesh.instanceMatrix.needsUpdate = true;
+      this.unifiedTreeMesh.visible = this.isVisible;
+      this.unifiedTreeMesh.frustumCulled = false;
+      this.scene.add(this.unifiedTreeMesh);
     }
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.isVisible || !this.renderer) return;
+
+    // 줌 14.5 미만 시 렌더링 스킵 & 줌 14.5~15.5 거리 페이드 (Distance Fade)
+    if (this.map) {
+      const zoom = this.map.getZoom();
+      if (zoom < 14.5) {
+        if (this.unifiedTreeMesh) this.unifiedTreeMesh.visible = false;
+        return;
+      }
+
+      const fade = Math.min(1.0, Math.max(0.0, (zoom - 14.5) / 1.0));
+      if (this.treeMaterial) {
+        this.treeMaterial.transparent = fade < 1.0;
+        this.treeMaterial.opacity = fade;
+      }
+      if (this.unifiedTreeMesh) {
+        this.unifiedTreeMesh.visible = this.isVisible;
+      }
+    }
 
     try {
       const rawMatrix =
@@ -539,17 +482,11 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   }
 
   onRemove(): void {
-    if (this.deciduousMesh) {
-      this.scene.remove(this.deciduousMesh);
-      this.deciduousMesh.geometry.dispose();
-      this.deciduousMesh.dispose();
-      this.deciduousMesh = null;
-    }
-    if (this.coniferMesh) {
-      this.scene.remove(this.coniferMesh);
-      this.coniferMesh.geometry.dispose();
-      this.coniferMesh.dispose();
-      this.coniferMesh = null;
+    if (this.unifiedTreeMesh) {
+      this.scene.remove(this.unifiedTreeMesh);
+      this.unifiedTreeMesh.geometry.dispose();
+      this.unifiedTreeMesh.dispose();
+      this.unifiedTreeMesh = null;
     }
 
     if (this.directionalLight) {

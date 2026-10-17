@@ -301,7 +301,7 @@ export function getRoadNetworkLayerDefinitions(
       minzoom: 12,
       filter: secondaryFilter as any,
       paint: {
-        'line-color': '#334155', // [요구사항 1-2] 차콜 그레이 아스팔트
+        'line-color': '#1E293B', // [요구사항 1-2] 차분한 다크 아스팔트
         'line-width': createMeterScaleWidthExpr(7.0, 12, 1.2) as any,
         'line-opacity': 0.96,
       },
@@ -320,7 +320,7 @@ export function getRoadNetworkLayerDefinitions(
       minzoom: 13,
       filter: minorFilter as any,
       paint: {
-        'line-color': '#334155', // [요구사항 1-2] 차콜 그레이 아스팔트
+        'line-color': '#1E293B', // [요구사항 1-2] 차분한 다크 아스팔트
         'line-width': createMeterScaleWidthExpr(4.0, 13, 0.9) as any,
         'line-opacity': 0.92,
       },

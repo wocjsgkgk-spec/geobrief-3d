@@ -249,8 +249,9 @@ const baseStyle: maplibregl.StyleSpecification = {
       source: 'satellite-tiles',
       paint: {
         'raster-opacity': 1.0,
-        'raster-saturation': -0.15,
-        'raster-contrast': 0.1,
+        'raster-saturation': -0.2,
+        'raster-contrast': 0.12,
+        'raster-brightness-max': 0.92,
       },
     },
   ],
@@ -300,8 +301,9 @@ export function safeSetTerrain(
               source: map.getSource('satellite-tiles') ? 'satellite-tiles' : 'satellite-source',
               paint: {
                 'raster-opacity': 1.0,
-                'raster-saturation': -0.15,
-                'raster-contrast': 0.1,
+                'raster-saturation': -0.2,
+                'raster-contrast': 0.12,
+                'raster-brightness-max': 0.92,
               },
               layout: { visibility: 'visible' },
             },
@@ -1024,8 +1026,9 @@ export const MapViewer: React.FC = () => {
             source: 'satellite-tiles',
             paint: {
               'raster-opacity': 1.0,
-              'raster-saturation': -0.15,
-              'raster-contrast': 0.1,
+              'raster-saturation': -0.2,
+              'raster-contrast': 0.12,
+              'raster-brightness-max': 0.92,
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
@@ -3967,8 +3970,9 @@ export const MapViewer: React.FC = () => {
         'visibility',
         baseMap === 'satellite' ? 'visible' : 'none'
       );
-      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.15);
-      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.1);
+      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.2);
+      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.12);
+      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 0.92);
     }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(

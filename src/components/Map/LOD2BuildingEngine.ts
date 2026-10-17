@@ -615,6 +615,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       .buildBuildings({
         features,
         originLngLat: this.originLngLat,
+        sunDirection: [
+          this.sunLightDirection.x,
+          this.sunLightDirection.y,
+          this.sunLightDirection.z,
+        ],
       })
       .then((workerResult) => {
         if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
@@ -816,23 +821,23 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           addShadowQuad(
             shadowPositions,
             shadowColors,
-            { x: p0.x, y: relElev + 0.04, z: p0.y, a: 0.45 },
-            { x: p1.x, y: relElev + 0.04, z: p1.y, a: 0.45 },
+            { x: p0.x, y: relElev + 0.04, z: p0.y, a: 0.70 },
+            { x: p1.x, y: relElev + 0.04, z: p1.y, a: 0.70 },
             { x: p1_out_x, y: relElev + 0.04, z: p1_out_z, a: 0.0 },
             { x: p0_out_x, y: relElev + 0.04, z: p0_out_z, a: 0.0 },
-            0.008, 0.024, 0.09
+            0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42)
           );
 
           // (2) 실시간 태양광 투영 그림자 (Drop Shadow: 건물 높이에 비례하여 광원 반대 방향으로 연장 투영)
-          if (totalH >= 8.0 && (outNx * sX + outNz * sZ) < 0.15) {
+          if (totalH >= 4.0 && (outNx * sX + outNz * sZ) < 0.20) {
             addShadowQuad(
               shadowPositions,
               shadowColors,
-              { x: p0.x, y: relElev + 0.03, z: p0.y, a: 0.35 },
-              { x: p1.x, y: relElev + 0.03, z: p1.y, a: 0.35 },
-              { x: p1.x + dropDx, y: relElev + 0.03, z: p1.y + dropDz, a: 0.05 },
-              { x: p0.x + dropDx, y: relElev + 0.03, z: p0.y + dropDz, a: 0.05 },
-              0.008, 0.024, 0.09
+              { x: p0.x, y: relElev + 0.03, z: p0.y, a: 0.45 },
+              { x: p1.x, y: relElev + 0.03, z: p1.y, a: 0.45 },
+              { x: p1.x + dropDx, y: relElev + 0.03, z: p1.y + dropDz, a: 0.45 },
+              { x: p0.x + dropDx, y: relElev + 0.03, z: p0.y + dropDz, a: 0.45 },
+              0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.45)
             );
           }
         }

@@ -333,15 +333,29 @@ function addShadowQuad(
   p1: { x: number; y: number; z: number; a: number },
   p2: { x: number; y: number; z: number; a: number },
   p3: { x: number; y: number; z: number; a: number },
-  r = 0.008,
-  g = 0.024,
-  b = 0.09
+  r = 0.059,
+  g = 0.090,
+  b = 0.165
 ): void {
   positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
   colors.push(r, g, b, p0.a, r, g, b, p1.a, r, g, b, p2.a);
 
   positions.push(p0.x, p0.y, p0.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z);
   colors.push(r, g, b, p0.a, r, g, b, p2.a, r, g, b, p3.a);
+}
+
+function addShadowTriangle(
+  positions: number[],
+  colors: number[],
+  p0: { x: number; y: number; z: number; a: number },
+  p1: { x: number; y: number; z: number; a: number },
+  p2: { x: number; y: number; z: number; a: number },
+  r = 0.059,
+  g = 0.090,
+  b = 0.165
+): void {
+  positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+  colors.push(r, g, b, p0.a, r, g, b, p1.a, r, g, b, p2.a);
 }
 
 // =============================================================================
@@ -352,6 +366,7 @@ export interface BuildBuildingsPayload {
   features: any[];
   originLngLat: [number, number];
   demBounds?: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
+  sunDirection?: [number, number, number];       // [sX, sY, sZ]
 }
 
 export interface BuildBuildingsResult {
@@ -368,7 +383,11 @@ export interface BuildBuildingsResult {
 }
 
 function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsResult {
-  const { features, originLngLat, demBounds } = payload;
+  const { features, originLngLat, demBounds, sunDirection } = payload;
+  const sunDir = sunDirection || [0.65, 0.75, 0.45];
+  const sX = sunDir[0];
+  const sY = Math.max(0.25, sunDir[1]);
+  const sZ = sunDir[2];
 
   const masterPositions: number[] = [];
   const masterNormals: number[] = [];
@@ -504,6 +523,12 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
 
       const numPts = pts.length;
 
+      // 태양광 투영 그림자 오프셋 산출 (rgba(15, 23, 42, 0.45))
+      const dropScale = Math.min(2.5, 1.0 / sY);
+      const dropLength = totalH * dropScale;
+      const dropDx = -sX * dropLength;
+      const dropDz = -sZ * dropLength;
+
       // 다각형 내 최장 변 길이 산출 (측벽 코어 판정용)
       let maxEdgeLen = 0;
       for (let i = 0; i < numPts; i++) {
@@ -571,15 +596,32 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
           r, g, b
         );
 
-        // 지면 접지 그림자 (Ground Contact Shadow)
-        const shadowWidth = Math.max(1.8, Math.min(3.5, totalH * 0.06 + 1.6));
+        // 1) 짙은 바닥 외곽 접지 그림자 (Ground Ambient Occlusion Skirt: 2.5m~4.5m)
+        // 위성사진 속 기존 납작한 건물 지붕 흔적을 깔끔하게 덮어 시각적 일체화 달성
+        const aoWidth = Math.max(2.5, Math.min(4.5, totalH * 0.08 + 2.0));
         addShadowQuad(
           shadowPositions, shadowColors,
-          { x: p1.x, y: 0.02, z: -p1.y, a: 0.45 },
-          { x: p2.x, y: 0.02, z: -p2.y, a: 0.45 },
-          { x: p2.x + nx * shadowWidth, y: 0.01, z: -(p2.y - nz * shadowWidth), a: 0.0 },
-          { x: p1.x + nx * shadowWidth, y: 0.01, z: -(p1.y - nz * shadowWidth), a: 0.0 }
+          { x: p1.x, y: 0.02, z: -p1.y, a: 0.70 },
+          { x: p2.x, y: 0.02, z: -p2.y, a: 0.70 },
+          { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
+          { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
+          0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.70 -> 0.0)
         );
+
+        // 2) 초경량 평면 투영 그림자 (Planar Drop Shadow: 벽체 투영)
+        // 태양 광원 벡터(-L) 방향으로 건물 외벽 정점을 지면 방향으로 비스듬히 투영
+        // 음영측 외벽 판정 (normal · L < 0.20)
+        const nDotL = nx * sX + (-nz) * sZ;
+        if (nDotL < 0.20 && totalH >= 4.0) {
+          addShadowQuad(
+            shadowPositions, shadowColors,
+            { x: p1.x, y: 0.02, z: -p1.y, a: 0.45 },
+            { x: p2.x, y: 0.02, z: -p2.y, a: 0.45 },
+            { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.45 },
+            { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.45 },
+            0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.45)
+          );
+        }
       }
 
       // 2) 지붕(Roof) Earcut 1:1 정밀 삼각화
@@ -634,6 +676,28 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
           masterDemCoords.push((c0[0] - minLng) / rangeLng, (c0[1] - minLat) / rangeLat);
           masterDemCoords.push((c1[0] - minLng) / rangeLng, (c1[1] - minLat) / rangeLat);
           masterDemCoords.push((c2[0] - minLng) / rangeLng, (c2[1] - minLat) / rangeLat);
+        }
+
+        // 3) 초경량 평면 투영 그림자 (Planar Drop Shadow: 옥상 다각형 전체 투영)
+        // 건물 복합 형태(ㄱ자, ㄷ자)가 지면에 완전한 실루엣으로 투영
+        if (totalH >= 5.0) {
+          for (let t = 0; t < triangles.length; t += 3) {
+            const idx0 = triangles[t];
+            const idx1 = triangles[t + 1];
+            const idx2 = triangles[t + 2];
+
+            const p0 = pts[idx0];
+            const p1 = pts[idx1];
+            const p2 = pts[idx2];
+
+            addShadowTriangle(
+              shadowPositions, shadowColors,
+              { x: p0.x + dropDx, y: 0.012, z: -p0.y + dropDz, a: 0.45 },
+              { x: p1.x + dropDx, y: 0.012, z: -p1.y + dropDz, a: 0.45 },
+              { x: p2.x + dropDx, y: 0.012, z: -p2.y + dropDz, a: 0.45 },
+              0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.45)
+            );
+          }
         }
       }
 
