@@ -513,12 +513,12 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
       // 건물 유형 코드: 0=주택, 1=상업, 2=아파트
       const bldType = isApt ? 2.0 : (isComm ? 1.0 : 0.0);
 
-      // 벽면 기본 색상 팔레트
-      let r = 0.97, g = 0.98, b = 0.99; // 아파트 기본 화이트/아이보리
+      // 벽면 기본 색상 팔레트 (한국 실제 건축물 유형별 실측 도색)
+      let r = 0.957, g = 0.945, b = 0.918; // 아파트 기본 크림 아이보리 (#f4f1ea)
       if (isComm) {
-        r = 0.82; g = 0.86; b = 0.92; // 상업 쿨그레이/블루
+        r = 0.839; g = 0.827; b = 0.820; // 상업/근린생활시설 베이지·그레이 스톤 (#d6d3d1)
       } else if (!isApt) {
-        r = 0.95; g = 0.93; b = 0.89; // 일반 주택 웜베이지
+        r = 0.604; g = 0.204; b = 0.071; // 일반 주택 적벽돌 (#9a3412) / 회벽 투톤
       }
 
       const numPts = pts.length;
@@ -601,11 +601,21 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
         const aoWidth = Math.max(2.5, Math.min(4.5, totalH * 0.08 + 2.0));
         addShadowQuad(
           shadowPositions, shadowColors,
-          { x: p1.x, y: 0.02, z: -p1.y, a: 0.70 },
-          { x: p2.x, y: 0.02, z: -p2.y, a: 0.70 },
+          { x: p1.x, y: 0.02, z: -p1.y, a: 0.78 },
+          { x: p2.x, y: 0.02, z: -p2.y, a: 0.78 },
           { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
           { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
-          0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.70 -> 0.0)
+          0.008, 0.024, 0.090 // 다크 네이비 접지 차콜
+        );
+
+        // 1-2) 건물 지면 밀착 코어 섀도우 (Core Contact Shadow: 폭 0.6m 내측 진한 그림자)
+        addShadowQuad(
+          shadowPositions, shadowColors,
+          { x: p1.x, y: 0.025, z: -p1.y, a: 0.88 },
+          { x: p2.x, y: 0.025, z: -p2.y, a: 0.88 },
+          { x: p2.x + nx * 0.6, y: 0.022, z: -(p2.y - nz * 0.6), a: 0.25 },
+          { x: p1.x + nx * 0.6, y: 0.022, z: -(p1.y - nz * 0.6), a: 0.25 },
+          0.005, 0.012, 0.040 // 초고밀도 접지 림
         );
 
         // 2) 초경량 평면 투영 그림자 (Planar Drop Shadow: 벽체 투영)
@@ -638,10 +648,17 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
 
       const triangles = earcut(flatCoords, null, 2);
       if (triangles.length > 0) {
-        // 옥상 색상: 고층 다크슬레이트 #334155, 저층 초록 우레탄 #15803d
-        let roofR = 0.08, roofG = 0.50, roofB = 0.24; // 초록 #15803d
-        if (totalH >= 28.0 || isApt || isComm) {
-          roofR = 0.20; roofG = 0.25; roofB = 0.33; // 다크 슬레이트 #334155
+        // [실제 한국 도심 지붕 색감 팔레트]:
+        // 대단지 아파트/오피스: 웨더링된 콘크리트 웜 그레이 #64748b 및 다크 차콜 #475569
+        // 중·저층 상가/빌라: 실제 우레탄 방수 톤 세이지 그린 #2e5a44 및 다크 올리브 그린 #365314
+        // 단독주택: 테라코타 브라운 #7c2d12 / 다크 네이비 슬레이트 #1e3a8a
+        let roofR = 0.180, roofG = 0.353, roofB = 0.267; // 기본: 차분한 세이지 그린 #2e5a44
+        if (isApt || totalH >= 25.0) {
+          roofR = 0.392; roofG = 0.455; roofB = 0.545; // 아파트/오피스: 웨더링 웜 그레이 #64748b
+        } else if (isComm || (totalH >= 9.0 && totalH < 25.0)) {
+          roofR = 0.180; roofG = 0.353; roofB = 0.267; // 상가: 세이지 그린 #2e5a44
+        } else {
+          roofR = 0.486; roofG = 0.176; roofB = 0.071; // 저층 주택: 테라코타 브라운 #7c2d12
         }
 
         const roofH = totalH + 0.15; // 미세 단차

@@ -129,7 +129,7 @@ export const realisticCityFragmentShader = /* glsl */ `
   }
 
   void main() {
-    float bldType = vBuildingData.x;  // 0: 주택, 1: 상업, 2: 아파트
+    float bldType = vBuildingData.x;  // 0: 주택/군사, 1: 상업, 2: 아파트
     float floors = vBuildingData.y;   // 층수
     float partType = vBuildingData.z; // 0: 외벽, 1: 옥상, 2: 기단부, 3: 측벽코어
     float wallLength = max(1.0, vBuildingData.w);
@@ -139,23 +139,40 @@ export const realisticCityFragmentShader = /* glsl */ `
     vec3 L = normalize(uSunDirection);
 
     // -------------------------------------------------------------------------
-    // 1. [옥상 슬래브 마감] (partType == 1.0 또는 수직 법선 N.y > 0.85 / N.z > 0.85)
+    // 1. [실제 한국 도심 옥상 슬래브 마감: 원색 제거, 채도 정돈된 실사 색감]
     // -------------------------------------------------------------------------
     if (partType > 0.5 || abs(N.y) > 0.85 || abs(N.z) > 0.85) {
-      // 한국형 초록 우레탄 (#15803d) 또는 고층 콘크리트 슬래브 (#334155)
-      vec3 roofColor = (floors >= 10.0 || bldType > 1.5) 
-                       ? vec3(0.20, 0.25, 0.33)  // 고층 다크 슬레이트
-                       : vec3(0.08, 0.50, 0.24); // 중저층 초록 우레탄 방수
+      vec3 roofColor = vec3(0.180, 0.353, 0.267); // 기본: 차분한 세이지 그린 (#2e5a44)
 
-      // 가장자리 0.8m 난간 내측 앰비언트 오클루전(Parapet AO)
+      if (bldType > 1.5 || floors >= 10.0) {
+        // [대단지 아파트 및 대형 오피스 옥상]: 웨더링된 콘크리트 웜 그레이 (#64748b) ~ 다크 차콜 (#475569)
+        float weathering = fract(sin(dot(vUv.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        vec3 warmGray = vec3(0.392, 0.455, 0.545); // #64748b
+        vec3 darkCharcoal = vec3(0.278, 0.333, 0.412); // #475569
+        roofColor = mix(warmGray, darkCharcoal, weathering * 0.35);
+      } else if (bldType > 0.5) {
+        // [중·저층 상가/빌라 옥상]: 실제 우레탄 방수 톤인 세이지 그린 (#2e5a44) 및 다크 올리브 그린 (#365314)
+        vec3 sageGreen = vec3(0.180, 0.353, 0.267);  // #2e5a44
+        vec3 darkOlive = vec3(0.212, 0.325, 0.078);  // #365314
+        float urethaneTone = fract(vUv.x * 0.08 + vUv.y * 0.08);
+        roofColor = mix(sageGreen, darkOlive, smoothstep(0.3, 0.7, urethaneTone));
+      } else {
+        // [저층 주택 및 군 막사 지붕]: 차분한 테라코타 브라운 (#7c2d12) 및 다크 네이비 슬레이트 (#1e3a8a)
+        float isNavy = step(0.5, fract(wallLength * 0.37));
+        vec3 terracotta = vec3(0.486, 0.176, 0.071); // #7c2d12
+        vec3 navySlate = vec3(0.118, 0.227, 0.541);  // #1e3a8a
+        roofColor = mix(terracotta, navySlate, isNavy);
+      }
+
+      // 가장자리 0.8m 난간(Parapet) 내측 드롭 섀도우 & 앰비언트 오클루전
       float edgeDistX = min(vUv.x, max(0.0, wallLength - vUv.x));
-      float edgeAO = smoothstep(0.0, 1.2, edgeDistX);
+      float edgeAO = smoothstep(0.0, 0.85, edgeDistX);
       roofColor *= mix(0.55, 1.0, edgeAO);
 
-      // 슬래브 미세 콘크리트 패널 줄눈
+      // 슬래브 미세 콘크리트 패널 줄눈 및 방수 코팅 롤러 결
       vec2 tileUv = fract(vUv * 0.25);
       float seam = aastep(0.02, tileUv.x) * aastep(0.02, tileUv.y);
-      roofColor *= mix(0.85, 1.0, seam);
+      roofColor *= mix(0.88, 1.0, seam);
 
       // 3점 조명 합성
       float NdotL = max(0.0, dot(N, L));
@@ -168,12 +185,12 @@ export const realisticCityFragmentShader = /* glsl */ `
     }
 
     // -------------------------------------------------------------------------
-    // 2. [수직/수평 파사드 좌표 계산]
+    // 2. [수직/수평 파사드 좌표 및 층간 분할]
     // -------------------------------------------------------------------------
     float heightMeters = vUv.y;
     float lengthMeters = vUv.x;
 
-    float floorH = 3.0; // 층고 3.0m 기준
+    float floorH = 3.0; // 실측 층고 3.0m 엄격 준수
     float floorCoord = heightMeters / floorH;
     float inFloor = fract(floorCoord);
     float floorIdx = floor(floorCoord);
@@ -183,39 +200,54 @@ export const realisticCityFragmentShader = /* glsl */ `
     // -------------------------------------------------------------------------
     if (heightMeters < 3.5 || partType == 2.0) {
       // 다크 화강석 그레이 (#64748b)
-      vec3 graniteColor = vec3(0.39, 0.45, 0.55);
+      vec3 graniteColor = vec3(0.392, 0.455, 0.545);
       
       // 석재 패널 줄눈 (1.5m x 1.0m 그리드)
       vec2 panelUv = fract(vec2(lengthMeters / 1.5, heightMeters / 1.0));
       float panelSeam = aastep(0.03, panelUv.x) * aastep(0.03, panelUv.y);
-      graniteColor *= mix(0.75, 1.0, panelSeam);
+      graniteColor *= mix(0.78, 1.0, panelSeam);
 
-      // 1층 상가 출입문/쇼윈도 글래스 영역
-      float winH = step(0.6, heightMeters) * (1.0 - step(3.0, heightMeters));
-      float winBay = fract(lengthMeters / 4.0);
-      float isShopWindow = winH * aabox(vec2(0.12, 0.15), vec2(0.88, 0.95), vec2(winBay, inFloor));
+      // 1층 상가 쇼윈도 구분선 및 대형 유리창
+      float winH = step(0.65, heightMeters) * (1.0 - step(3.0, heightMeters));
+      float winBay = fract(lengthMeters / 3.8);
+      float isShopWindow = winH * aabox(vec2(0.10, 0.12), vec2(0.90, 0.94), vec2(winBay, inFloor));
 
       if (isShopWindow > 0.5) {
-        vec3 shopGlass = vec3(0.15, 0.22, 0.32);
-        // 쇼윈도 조명 하이라이트
-        shopGlass += vec3(0.45, 0.40, 0.30) * smoothstep(0.7, 0.95, inFloor);
-        graniteColor = mix(graniteColor, shopGlass, 0.85);
+        vec3 shopGlass = vec3(0.12, 0.18, 0.28);
+        // 쇼윈도 온백색 조명
+        shopGlass += vec3(0.50, 0.45, 0.35) * smoothstep(0.65, 0.95, inFloor);
+        graniteColor = mix(graniteColor, shopGlass, 0.88);
       }
 
+      // [3. 건물 하단 지면 밀착(Ambient Occlusion)]
+      float groundAO = mix(0.42, 1.0, smoothstep(0.0, 0.85, heightMeters));
       float NdotL = max(0.0, dot(N, L));
-      vec3 finalColor = graniteColor * (uSunColor * NdotL * uSunIntensity + uAmbientSky * uAmbientIntensity);
+      vec3 finalColor = graniteColor * (uSunColor * NdotL * uSunIntensity + uAmbientSky * uAmbientIntensity) * groundAO;
       gl_FragColor = vec4(finalColor, 1.0);
       return;
     }
 
     // -------------------------------------------------------------------------
-    // 4. [측벽 코어 벽면: 엘리베이터/계단실 무창 콘크리트 및 브랜드 라인]
+    // 4. [측벽 코어 벽면: 엘리베이터/계단실 무창 콘크리트 및 브랜드 도색 밴드]
     // -------------------------------------------------------------------------
     if (partType == 3.0) {
-      vec3 coreWall = vec3(0.88, 0.91, 0.94);
-      // 수직 브랜드 액센트 라인 (너비 0.6m 스트라이프)
-      float stripe = aabox(vec2(0.35, 0.0), vec2(0.55, 1.0), vec2(fract(lengthMeters / wallLength), 0.5));
-      coreWall = mix(coreWall, vec3(0.15, 0.35, 0.65), stripe);
+      // 매끈한 크림 아이보리 콘크리트 외벽 (#f4f1ea)
+      vec3 coreWall = vec3(0.957, 0.945, 0.918);
+
+      // 한국 대단지 아파트 특유의 브랜드 포인트 도색 밴드:
+      // 네이비 블루 (#1e3a8a) 및 웜 브라운 (#78350f), 다크 슬레이트 (#334155)
+      float normX = fract(lengthMeters / wallLength);
+      float bandNavy = aabox(vec2(0.20, 0.0), vec2(0.42, 1.0), vec2(normX, 0.5));
+      float bandBrown = aabox(vec2(0.42, 0.0), vec2(0.52, 1.0), vec2(normX, 0.5));
+      float bandSlate = aabox(vec2(0.16, 0.0), vec2(0.20, 1.0), vec2(normX, 0.5));
+
+      coreWall = mix(coreWall, vec3(0.118, 0.227, 0.541), bandNavy);  // 네이비 #1e3a8a
+      coreWall = mix(coreWall, vec3(0.471, 0.208, 0.059), bandBrown); // 브라운 #78350f
+      coreWall = mix(coreWall, vec3(0.200, 0.255, 0.333), bandSlate); // 다크 슬레이트 #334155
+
+      // 수직 패널 이음매
+      float vSeam = aastep(0.02, fract(lengthMeters / 3.0));
+      coreWall *= mix(0.90, 1.0, vSeam);
 
       float NdotL = max(0.0, dot(N, L));
       vec3 finalColor = coreWall * (uSunColor * NdotL * uSunIntensity + uAmbientSky * uAmbientIntensity);
@@ -224,44 +256,84 @@ export const realisticCityFragmentShader = /* glsl */ `
     }
 
     // -------------------------------------------------------------------------
-    // 5. [본동 외벽: 건물 유형별 고밀도 GLSL 파사드 렌더링]
+    // 5. [본동 외벽: 한국 실제 건축물 유형별 정밀 입면(Facade)]
     // -------------------------------------------------------------------------
-    vec3 wallBaseColor = vec3(0.97, 0.98, 0.99); // 아파트 화이트 콘크리트
-    vec3 slabColor = vec3(0.80, 0.84, 0.88);     // 층간 슬래브 분할선
-    vec3 frameColor = vec3(0.88, 0.90, 0.92);    // 알루미늄/하이섀시 프레임
+    vec3 wallBaseColor = vec3(0.957, 0.945, 0.918); // #f4f1ea 크림 아이보리
+    vec3 slabColor = vec3(0.886, 0.910, 0.941);     // #e2e8f0 라이트 웜 그레이
+    vec3 frameColor = vec3(0.200, 0.255, 0.333);    // #334155 다크 그레이 섀시
 
-    if (bldType < 0.5) {
-      // 일반 주택: 웜 베이지
-      wallBaseColor = vec3(0.95, 0.93, 0.89);
-    } else if (bldType < 1.5) {
-      // 상업 빌딩: 쿨 그레이/블루
-      wallBaseColor = vec3(0.82, 0.86, 0.92);
-      slabColor = vec3(0.35, 0.40, 0.48);
-      frameColor = vec3(0.25, 0.28, 0.35);
+    if (bldType > 1.5) {
+      // -----------------------------------------------------------------------
+      // [1) 한국형 대단지 아파트 (높이 25m 이상 / apartments)]
+      // - 외벽 베이스: 크림 아이보리(#f4f1ea) + 라이트 웜 그레이(#e2e8f0) 투톤 도색
+      // - 3.0m 층고마다 선명한 베란다 섀시 프레임(#334155)과 세대간 수직 날개벽(Fin)
+      // -----------------------------------------------------------------------
+      float twoToneFactor = mod(floorIdx, 3.0) < 1.0 ? 1.0 : 0.0;
+      wallBaseColor = mix(vec3(0.957, 0.945, 0.918), vec3(0.886, 0.910, 0.941), twoToneFactor * 0.75);
+      slabColor = vec3(0.886, 0.910, 0.941);
+      frameColor = vec3(0.200, 0.255, 0.333); // #334155 다크 그레이 섀시
+    } else if (bldType > 0.5) {
+      // -----------------------------------------------------------------------
+      // [2) 시내 대로변 상가/근린생활시설 (높이 9m ~ 24m)]
+      // - 화강석/타일 줄눈이 살아있는 베이지·그레이 스톤 외벽 (#d6d3d1)
+      // - 넓은 가로형 상가 통유리창 (리본 윈도우)
+      // -----------------------------------------------------------------------
+      wallBaseColor = vec3(0.839, 0.827, 0.820); // #d6d3d1 스톤 외벽
+      slabColor = vec3(0.420, 0.460, 0.520);     // 층간 띠
+      frameColor = vec3(0.200, 0.255, 0.333);    // 다크 프레임
+    } else {
+      // -----------------------------------------------------------------------
+      // [3) 저층 주택가 및 군부대 영외/영내 시설 (높이 9m 미만)]
+      // - 적벽돌(#9a3412) 및 밝은 회벽(#f1f5f9) 외벽
+      // - 정돈된 직사각형 창호 + 얇은 옥상 테두리 두겁석(Parapet)
+      // -----------------------------------------------------------------------
+      wallBaseColor = vec3(0.604, 0.204, 0.071); // #9a3412 적벽돌
+      slabColor = vec3(0.945, 0.961, 0.976);     // 밝은 회벽
+      frameColor = vec3(0.980, 0.980, 0.980);    // 화이트 PVC 창호
     }
 
     // 1) 층간 슬래브 가로 홈 (두께 0.18m)
     float slabBorder = 0.18 / floorH;
     float isSlab = (1.0 - aastep(slabBorder, inFloor)) + aastep(1.0 - slabBorder * 0.5, inFloor);
 
-    // 2) 세대별 수평 베이(Bay) 분할
-    float bayWidth = (bldType > 1.5) ? 3.4 : (bldType > 0.5 ? 2.4 : 3.0);
+    // 2) 세대별 수평 베이(Bay) 분할 및 수직 날개벽 (Fin Pillar)
+    float bayWidth = (bldType > 1.5) ? 3.4 : (bldType > 0.5 ? 2.5 : 2.8);
     float inBay = fract(lengthMeters / bayWidth);
     float bayIdx = floor(lengthMeters / bayWidth);
+
+    // 세대 사이 수직 콘크리트 날개벽 (Fin: 양쪽 8% 구간)
+    float isFinPillar = step(inBay, 0.08) + step(0.92, inBay);
 
     // 3) 창문 영역 판정 (aabox 안티앨리어싱)
     float winLeft = 0.12;
     float winRight = 0.88;
-    float winBottom = (bldType > 1.5) ? 0.38 : 0.22; // 아파트는 발코니 난간 높이 위부터 창문
-    float winTop = 0.92;
+    float winBottom = (bldType > 1.5) ? 0.38 : (bldType > 0.5 ? 0.20 : 0.25);
+    float winTop = (bldType > 0.5 && bldType <= 1.5) ? 0.95 : 0.92; // 상가는 와이드 통유리
 
     float isWindow = aabox(vec2(winLeft, winBottom), vec2(winRight, winTop), vec2(inBay, inFloor));
-    float isFrame = aabox(vec2(winLeft - 0.04, winBottom - 0.04), vec2(winRight + 0.04, winTop + 0.04), vec2(inBay, inFloor)) - isWindow;
+    float isFrame = aabox(vec2(winLeft - 0.035, winBottom - 0.035), vec2(winRight + 0.035, winTop + 0.035), vec2(inBay, inFloor)) - isWindow;
 
     vec3 surfaceColor = wallBaseColor;
 
+    // 상가 화강석/타일 줄눈 질감
+    if (bldType > 0.5 && bldType <= 1.5) {
+      vec2 tileUv = fract(vec2(lengthMeters / 1.0, heightMeters / 0.6));
+      float tileGrout = aastep(0.04, tileUv.x) * aastep(0.05, tileUv.y);
+      surfaceColor *= mix(0.82, 1.0, tileGrout);
+    }
+
+    // 주택 적벽돌 줄눈
+    if (bldType <= 0.5) {
+      vec2 brickUv = fract(vec2(lengthMeters / 0.25, heightMeters / 0.12));
+      float brickGrout = aastep(0.08, brickUv.x) * aastep(0.12, brickUv.y);
+      surfaceColor *= mix(0.75, 1.0, brickGrout);
+    }
+
     if (isSlab > 0.5) {
       surfaceColor = slabColor;
+    } else if (isFinPillar > 0.5 && bldType > 1.5) {
+      // 아파트 세대 간 수직 콘크리트 날개벽 (라이트 웜그레이 돌출 림)
+      surfaceColor = vec3(0.886, 0.910, 0.941);
     } else if (isFrame > 0.5) {
       surfaceColor = frameColor;
     } else if (isWindow > 0.5) {
@@ -278,10 +350,10 @@ export const realisticCityFragmentShader = /* glsl */ `
 
       // 하늘빛 프레넬 반사광 (Fresnel Reflection)
       float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.5);
-      vec3 skyReflection = mix(vec3(0.20, 0.45, 0.85), vec3(0.65, 0.85, 1.0), V.y * 0.5 + 0.5);
+      vec3 skyReflection = mix(vec3(0.18, 0.40, 0.78), vec3(0.60, 0.80, 0.98), V.y * 0.5 + 0.5);
 
       // 유리 표면 합성: 내부 방 조명 + 표면 프레넬 하늘 반사
-      vec3 glassFinal = mix(interiorColor, skyReflection, clamp(fresnel + 0.25, 0.0, 0.85));
+      vec3 glassFinal = mix(interiorColor, skyReflection, clamp(fresnel + 0.28, 0.0, 0.88));
 
       surfaceColor = mix(surfaceColor, glassFinal, isWindow);
     } else if (bldType > 1.5 && inFloor < 0.38 && inFloor >= slabBorder) {
@@ -306,7 +378,10 @@ export const realisticCityFragmentShader = /* glsl */ `
     // 층간 슬래브 밑면 미세 요철 음영
     float slabShadow = mix(0.78, 1.0, smoothstep(0.0, slabBorder * 2.5, inFloor));
 
-    vec3 finalColor = surfaceColor * (directLight + ambientLight) * slabShadow;
+    // [3. 건물 하단 지면 밀착(Ambient Occlusion)]
+    float groundAO = mix(0.48, 1.0, smoothstep(0.0, 1.2, heightMeters));
+
+    vec3 finalColor = surfaceColor * (directLight + ambientLight) * slabShadow * groundAO;
 
     gl_FragColor = vec4(finalColor, 1.0);
   }

@@ -774,23 +774,32 @@ export const MapViewer: React.FC = () => {
       0.3,
     ];
 
-    // [Layer 3 - 옥상 마감 컬러: 고층 아파트/빌딩 다크 슬레이트 #334155, 중·저층 초록 우레탄 #15803d]
+    // [Layer 3 - 옥상 마감 컬러: 한국 도심 실사 팔레트 (원색 제거, 채도 정돈)]
+    // 대단지 아파트/오피스: 웨더링 콘크리트 웜 그레이 #64748b 및 다크 차콜 #475569
+    // 중·저층 상가/빌라: 실제 우레탄 방수 톤인 세이지 그린 #2e5a44 및 다크 올리브 #365314
+    // 단독주택: 차분한 테라코타 브라운 #7c2d12 / 군 막사: 다크 네이비 슬레이트 #1e3a8a
     const buildingRoofColorExpr: any = [
       'coalesce',
       ['get', 'roofColour'],
       ['get', 'roof_color'],
       [
         'case',
-        ['>=', buildingHeightExpr, 28.0],
-        '#334155', // 고층 아파트 및 오피스 빌딩 (28m 이상): 차분한 다크 슬레이트
+        ['>=', buildingHeightExpr, 25.0],
+        '#64748b', // 고층 아파트 및 오피스 빌딩 (25m 이상): 웨더링 콘크리트 웜 그레이
         [
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          '#334155', // 아파트 옥상: 다크 슬레이트 콘크리트
+          '#64748b', // 아파트 옥상: 콘크리트 웜 그레이
+          ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+          '#2e5a44', // 상가 옥상: 차분한 세이지 그린 우레탄
           ['industrial', 'warehouse'],
-          '#1e40af', // 산업 시설: 청색 강판 지붕
-          '#15803d', // 중·저층 건물 및 상가: 한국형 초록색 우레탄 방수색
+          '#1e3a8a', // 산업 시설: 다크 네이비 강판 지붕
+          ['military', 'barracks', 'depot'],
+          '#1e3a8a', // 군 막사/시설: 다크 네이비 슬레이트 지붕
+          ['residential', 'house', 'detached', 'villa'],
+          '#7c2d12', // 단독주택/빌라: 차분한 테라코타 브라운
+          '#2e5a44', // 일반 중·저층 건물: 한국형 세이지 그린 우레탄
         ],
       ],
     ];
@@ -803,7 +812,7 @@ export const MapViewer: React.FC = () => {
       -1.5,
     ];
 
-    // [Layer 2 - 건물 본동 외벽 실사 컬러: 아파트 크림 아이보리 #f8fafc, 상업 쿨 그레이/블루 #cbd5e1, 주택 웜 베이지 #f1f5f9]
+    // [Layer 2 - 건물 본동 외벽 실사 컬러: 아파트 크림 아이보리 #f4f1ea, 상업 스톤 #d6d3d1, 주택 적벽돌 #9a3412]
     const buildingColorExpr: any = [
       'coalesce',
       ['get', 'color'],
@@ -811,16 +820,16 @@ export const MapViewer: React.FC = () => {
         'match',
         ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
         ['apartment', 'apartments'],
-        '#f8fafc', // 아파트: 밝은 크림 아이보리
+        '#f4f1ea', // 아파트: 따뜻한 크림 아이보리
         ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-        '#cbd5e1', // 상업 빌딩: 쿨 그레이/블루
+        '#d6d3d1', // 상업 빌딩: 베이지·그레이 스톤
         ['residential', 'house', 'detached', 'villa'],
-        '#f1f5f9', // 일반 주택: 웜 베이지
+        '#9a3412', // 일반 주택: 적벽돌 및 회벽
         ['military', 'barracks', 'depot'],
-        '#e2e8f0', // 군사/국방: 모던 콘크리트 베이지
+        '#e2e8f0', // 군사/국방: 모던 콘크리트 웜그레이
         ['public', 'government', 'public_military', 'civic'],
-        '#cbd5e1', // 공공청사: 차분한 쿨 그레이
-        '#f1f5f9', // 일반 건축물: 웜 베이지
+        '#d6d3d1', // 공공청사: 화강석 웜그레이
+        '#f4f1ea', // 기본 건축물: 크림 아이보리
       ],
     ];
 
@@ -1275,9 +1284,10 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.0, 0.0,
-                14.0, 0.35,
-                16.0, 0.45,
+                13.0, 0.15,
+                14.0, 0.55,
+                16.0, 0.75,
+                18.0, 0.85,
               ],
             },
             layout: { visibility: 'visible' },
@@ -1420,9 +1430,10 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.0, 0.0,
-                14.0, 0.35,
-                16.0, 0.45,
+                13.0, 0.15,
+                14.0, 0.55,
+                16.0, 0.75,
+                18.0, 0.85,
               ],
             },
             layout: { visibility: 'visible' },
@@ -1530,6 +1541,45 @@ export const MapViewer: React.FC = () => {
                 ['zoom'],
                 14.0, 0.0,
                 14.5, 0.5,
+              ],
+            },
+            layout: { visibility: 'visible' },
+          },
+
+          // [전략 대상지 샘플 건축물 바닥 접지 그림자 레이어]
+          {
+            id: 'sample-buildings-contact-shadow',
+            type: 'line',
+            source: 'sample-buildings-source',
+            minzoom: 13,
+            paint: {
+              'line-color': '#020617',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                13, 3.5,
+                14, 6.5,
+                16, 12.0,
+                18, 18.0,
+              ],
+              'line-blur': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                13, 2.5,
+                14, 4.0,
+                16, 7.0,
+                18, 10.0,
+              ],
+              'line-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                13.0, 0.15,
+                14.0, 0.55,
+                16.0, 0.75,
+                18.0, 0.85,
               ],
             },
             layout: { visibility: 'visible' },
@@ -3616,6 +3666,7 @@ export const MapViewer: React.FC = () => {
       'fusion-buildings-roof',
       'fusion-buildings-edge',
       'sample-buildings-overview',
+      'sample-buildings-contact-shadow',
       'sample-buildings-foundation',
       'sample-buildings-3d',
       'sample-buildings-roof',

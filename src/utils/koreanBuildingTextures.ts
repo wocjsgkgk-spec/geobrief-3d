@@ -61,31 +61,34 @@ export function createKoreanApartmentCanvas(size = 512): HTMLCanvasElement {
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  // 1) 외벽 베이스: 도심 신축 아파트 특유의 밝은 오프화이트/아이보리 톤 (#F8FAFC)
-  ctx.fillStyle = '#F8FAFC';
+  // 1) 외벽 베이스: 도심 신축 아파트 특유의 밝은 크림 아이보리 톤 (#f4f1ea)
+  ctx.fillStyle = '#f4f1ea';
   ctx.fillRect(0, 0, size, size);
 
-  // 미세한 콘크리트 외장재 질감
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.4)';
+  // 미세한 콘크리트 외장재 질감 및 라이트 웜 그레이 (#e2e8f0) 투톤
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.45)';
+  ctx.fillRect(0, size * 0.5, size, size * 0.5);
+
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.25)';
   for (let y = 0; y < size; y += 8) {
     ctx.fillRect(0, y, size, 2);
   }
 
   // 2) 층간 슬래브 밴드 (상단 경계선, 두께 12px)
-  ctx.fillStyle = '#CBD5E1';
+  ctx.fillStyle = '#e2e8f0';
   ctx.fillRect(0, 0, size, 12);
-  ctx.fillStyle = '#94A3B8';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(0, 10, size, 3);
   // 하단 층간 이음매 음영선
-  ctx.fillStyle = '#64748B';
+  ctx.fillStyle = '#64748b';
   ctx.fillRect(0, size - 6, size, 6);
 
-  // 세대 간 수직 콘크리트 날개벽 (Pillars)
+  // 세대 간 수직 콘크리트 날개벽 (Fin Pillars)
   const pillarW = Math.round(size * 0.08); // ~41px
-  ctx.fillStyle = '#E2E8F0';
+  ctx.fillStyle = '#e2e8f0';
   ctx.fillRect(0, 0, pillarW, size);
   ctx.fillRect(size - pillarW, 0, pillarW, size);
-  ctx.fillStyle = '#94A3B8';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(pillarW - 2, 0, 2, size);
   ctx.fillRect(size - pillarW, 0, 2, size);
 
@@ -93,20 +96,20 @@ export function createKoreanApartmentCanvas(size = 512): HTMLCanvasElement {
   const winX = pillarW + 8;
   const winW = size - (pillarW + 8) * 2;
   const winY = 22;
-  const winH = Math.round(size * 0.52); // ~266px
+  const winH = Math.round(size * 0.52);
 
-  // 창틀 외곽 화이트/라이트그레이 알루미늄 새시 프레임
-  ctx.fillStyle = '#1E293B';
+  // 창틀 외곽 선명한 베란다 섀시 프레임 (다크 그레이 #334155)
+  ctx.fillStyle = '#334155';
   ctx.fillRect(winX - 4, winY - 4, winW + 8, winH + 8);
-  ctx.fillStyle = '#F1F5F9';
+  ctx.fillStyle = '#f4f1ea';
   ctx.fillRect(winX - 2, winY - 2, winW + 4, winH + 4);
 
   // 하늘빛 반사 틴트 글래스 (이중창 반사)
   const glassGrad = ctx.createLinearGradient(winX, winY, winX + winW, winY + winH);
-  glassGrad.addColorStop(0, '#0F233F');
-  glassGrad.addColorStop(0.3, '#1E3A5F');
-  glassGrad.addColorStop(0.65, '#0284C7');
-  glassGrad.addColorStop(1, '#0F1E36');
+  glassGrad.addColorStop(0, '#0f233f');
+  glassGrad.addColorStop(0.3, '#1e3a5f');
+  glassGrad.addColorStop(0.65, '#0284c7');
+  glassGrad.addColorStop(1, '#0f1e36');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(winX, winY, winW, winH);
 
@@ -569,18 +572,18 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
     neighborhoodShaderMaterial: createNeighborhoodFacadeShaderMaterial(),
     landmarkShaderMaterial: createLandmarkFacadeShaderMaterial(),
 
-    // 아파트 옥상: 초록색 우레탄 방수 도색 (#15803d)
+    // 아파트 옥상: 차분한 세이지 그린 우레탄 방수 도색 (#2e5a44)
     apartmentRoofGreenMaterial: new THREE.MeshStandardMaterial({
-      color: 0x15803d,
+      color: 0x2e5a44,
       roughness: 0.65,
       metalness: 0.15,
       flatShading: true,
       side: THREE.DoubleSide,
     }),
 
-    // 상업/오피스 옥상: 쿨루프 그레이 (#475569)
+    // 상업/오피스 옥상: 웨더링된 콘크리트 웜그레이 (#64748b)
     coolRoofGrayMaterial: new THREE.MeshStandardMaterial({
-      color: 0x475569,
+      color: 0x64748b,
       roughness: 0.6,
       metalness: 0.2,
       flatShading: true,
@@ -594,9 +597,9 @@ export function getKoreanBuildingMaterials(): KoreanBuildingMaterials {
       metalness: 0.65,
     }),
 
-    // 11) 옥상 방수 슬래브 (초록색 우레탄 방수 도색 #15803d)
+    // 11) 옥상 방수 슬래브 (차분한 세이지 그린 우레탄 #2e5a44)
     roofSlateMaterial: new THREE.MeshStandardMaterial({
-      color: 0x15803d,
+      color: 0x2e5a44,
       roughness: 0.65,
       metalness: 0.15,
       flatShading: true,

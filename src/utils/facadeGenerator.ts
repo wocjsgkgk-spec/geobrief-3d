@@ -32,34 +32,37 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  // 1) 외벽 베이스: 모던 화이트/오프화이트 톤 (#F8FAFC)
-  ctx.fillStyle = '#F8FAFC';
+  // 1) 외벽 베이스: 따뜻한 크림 아이보리 톤 (#f4f1ea)
+  ctx.fillStyle = '#f4f1ea';
   ctx.fillRect(0, 0, size, size);
 
-  // 미세한 콘크리트 미장 질감선
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.35)';
+  // 미세한 콘크리트 미장 질감선 및 라이트 웜그레이(#e2e8f0) 투톤 밴드
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.45)';
+  ctx.fillRect(0, size * 0.5, size, size * 0.5);
+
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.25)';
   for (let y = 0; y < size; y += 6) {
     ctx.fillRect(0, y, size, 1.5);
   }
 
   // 2) 층간 콘크리트 슬래브 분할선 (상단/하단 경계 밴드)
   // 상단 슬래브 (두께 14px)
-  ctx.fillStyle = '#CBD5E1';
+  ctx.fillStyle = '#e2e8f0';
   ctx.fillRect(0, 0, size, 14);
-  ctx.fillStyle = '#94A3B8';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(0, 12, size, 2.5);
   // 하단 층간 슬래브 음영선
-  ctx.fillStyle = '#64748B';
+  ctx.fillStyle = '#64748b';
   ctx.fillRect(0, size - 8, size, 8);
   ctx.fillStyle = '#475569';
   ctx.fillRect(0, size - 2, size, 2);
 
-  // 세대 간 수직 콘크리트 기둥(Pillars)
+  // 세대 간 수직 콘크리트 날개벽 (Fin Pillars: 라이트 웜 그레이 #e2e8f0)
   const pillarW = Math.round(size * 0.08); // 약 41px
-  ctx.fillStyle = '#E2E8F0';
+  ctx.fillStyle = '#e2e8f0';
   ctx.fillRect(0, 0, pillarW, size);
   ctx.fillRect(size - pillarW, 0, pillarW, size);
-  ctx.fillStyle = '#94A3B8';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(pillarW - 2, 0, 2, size);
   ctx.fillRect(size - pillarW, 0, 2, size);
 
@@ -67,20 +70,20 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
   const winX = pillarW + 8;
   const winW = size - (pillarW + 8) * 2;
   const winY = 22;
-  const winH = Math.round(size * 0.52); // 약 266px
+  const winH = Math.round(size * 0.52);
 
-  // 창틀 외곽 화이트/라이트그레이 알루미늄 새시 프레임
-  ctx.fillStyle = '#1E293B';
+  // 창틀 외곽 선명한 베란다 섀시 프레임 (다크 그레이 #334155)
+  ctx.fillStyle = '#334155';
   ctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
-  ctx.fillStyle = '#F1F5F9';
+  ctx.fillStyle = '#f4f1ea';
   ctx.fillRect(winX - 1.5, winY - 1.5, winW + 3, winH + 3);
 
   // 하늘빛 반사 틴트 글래스 (이중창 반사 그라데이션)
   const glassGrad = ctx.createLinearGradient(winX, winY, winX + winW, winY + winH);
-  glassGrad.addColorStop(0, '#0F233F');
-  glassGrad.addColorStop(0.3, '#1E3A5F');
-  glassGrad.addColorStop(0.65, '#0284C7');
-  glassGrad.addColorStop(1, '#0F1E36');
+  glassGrad.addColorStop(0, '#0f233f');
+  glassGrad.addColorStop(0.3, '#1e3a5f');
+  glassGrad.addColorStop(0.65, '#0284c7');
+  glassGrad.addColorStop(1, '#0f1e36');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(winX, winY, winW, winH);
 
@@ -104,14 +107,14 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
   ctx.fill();
 
   // 중앙 섀시 분할 멀리언 (창문 4분할 바)
-  ctx.fillStyle = '#E2E8F0';
+  ctx.fillStyle = '#e2e8f0';
   const midX = winX + winW * 0.5;
   ctx.fillRect(midX - 2.5, winY, 5, winH);
   ctx.fillRect(winX + winW * 0.25 - 1.5, winY, 3, winH);
   ctx.fillRect(winX + winW * 0.75 - 1.5, winY, 3, winH);
 
   // 수평 환기창 분할선 (상단 25% 지점)
-  ctx.fillStyle = '#CBD5E1';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(winX, winY + winH * 0.25, winW, 3);
 
   // 4) 발코니 난간 영역 (하단 40% 높이)
@@ -119,9 +122,9 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
   const balH = size - balY - 14;
 
   // 발코니 하단 콘크리트 베이스 턱
-  ctx.fillStyle = '#E2E8F0';
+  ctx.fillStyle = '#f4f1ea';
   ctx.fillRect(winX - 2, balY, winW + 4, balH);
-  ctx.fillStyle = '#94A3B8';
+  ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(winX - 2, balY, winW + 4, 3);
 
   // 세대별 발코니 알루미늄 난간 살 (Balusters - 세로 18개 창살)
@@ -133,8 +136,8 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
     ctx.fillRect(barX - 1.5, balY + 4, 3, balH - 12);
   }
 
-  // 발코니 상단 핸드레일 (손잡이)
-  ctx.fillStyle = '#1E293B';
+  // 발코니 상단 핸드레일 (다크 그레이 #334155)
+  ctx.fillStyle = '#334155';
   ctx.fillRect(winX - 4, balY + 3, winW + 8, 4);
 
   // 에어컨 실외기 거치대 음영 (우측 하단)

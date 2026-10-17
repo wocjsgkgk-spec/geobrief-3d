@@ -42,8 +42,8 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
 
-  // 1) 외벽 베이스: 깔끔하고 모던한 베이지-화이트 콘크리트 (#F8FAFC)
-  ctx.fillStyle = '#F8FAFC';
+  // 1) 외벽 베이스: 따뜻한 크림 아이보리 (#f4f1ea)
+  ctx.fillStyle = '#f4f1ea';
   ctx.fillRect(0, 0, size, size);
 
   // 미세 콘크리트 외장 질감
@@ -60,10 +60,16 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
   for (let f = 0; f < floors; f++) {
     const y = f * floorH;
 
+    // 층별 투톤 도색: 하단 층 라이트 웜 그레이 (#e2e8f0)
+    if (f >= 2) {
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.5)';
+      ctx.fillRect(0, y, size, floorH);
+    }
+
     // 2) 층간 콘크리트 슬래브 분할선 (두께 10px, 입체 음영선)
-    ctx.fillStyle = '#CBD5E1';
+    ctx.fillStyle = '#e2e8f0';
     ctx.fillRect(0, y, size, 10);
-    ctx.fillStyle = '#94A3B8';
+    ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(0, y + 8, size, 2);
     ctx.fillStyle = 'rgba(71, 85, 105, 0.35)';
     ctx.fillRect(0, y + 10, size, 2);
@@ -71,12 +77,12 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
     for (let b = 0; b < bays; b++) {
       const x = b * bayW;
 
-      // 세대 간 수직 콘크리트 날개벽 (Pillars)
-      const pillarW = 10;
-      ctx.fillStyle = '#E2E8F0';
+      // 세대 간 수직 콘크리트 날개벽 (Fin Pillars: 라이트 웜 그레이 #e2e8f0)
+      const pillarW = 12;
+      ctx.fillStyle = '#e2e8f0';
       ctx.fillRect(x, y + 10, pillarW, floorH - 10);
       ctx.fillRect(x + bayW - pillarW, y + 10, pillarW, floorH - 10);
-      ctx.fillStyle = '#CBD5E1';
+      ctx.fillStyle = '#cbd5e1';
       ctx.fillRect(x + pillarW - 2, y + 10, 2, floorH - 10);
 
       const marginX = pillarW + 6;
@@ -84,18 +90,18 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
       const winH = Math.round(floorH * 0.48); // 상단 이중창 높이 (~61px)
       const winY = y + 14;
 
-      // 3) 이중창 알루미늄/화이트 섀시 프레임
-      ctx.fillStyle = '#1E293B';
+      // 3) 선명한 베란다 섀시 프레임 (다크 그레이 #334155)
+      ctx.fillStyle = '#334155';
       ctx.fillRect(marginX + x - 2, winY - 2, winW + 4, winH + 4);
-      ctx.fillStyle = '#F1F5F9';
+      ctx.fillStyle = '#f4f1ea';
       ctx.fillRect(marginX + x - 1, winY - 1, winW + 2, winH + 2);
 
       // 하늘빛 반사 틴트 글래스 (이중창 반사 그라데이션)
       const glassGrad = ctx.createLinearGradient(x + marginX, winY, x + marginX + winW, winY + winH);
-      glassGrad.addColorStop(0, '#0F233F');
-      glassGrad.addColorStop(0.35, '#1E3A5F');
-      glassGrad.addColorStop(0.7, '#0284C7');
-      glassGrad.addColorStop(1, '#0F1E36');
+      glassGrad.addColorStop(0, '#0f233f');
+      glassGrad.addColorStop(0.35, '#1e3a5f');
+      glassGrad.addColorStop(0.7, '#0284c7');
+      glassGrad.addColorStop(1, '#0f1e36');
       ctx.fillStyle = glassGrad;
       ctx.fillRect(marginX + x, winY, winW, winH);
 
@@ -110,7 +116,7 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
       ctx.fill();
 
       // 중앙 창틀 수직 분할바 (Mullion)
-      ctx.strokeStyle = '#E2E8F0';
+      ctx.strokeStyle = '#e2e8f0';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(x + marginX + winW / 2, winY);
@@ -119,26 +125,26 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
 
       // 4) 세대별 전면 발코니 난간 (Balcony Railings)
       const balcY = winY + winH + 4;
-      const balcH = floorH - (winY - y) - winH - 6; // ~40px
+      const balcH = floorH - (winY - y) - winH - 6;
 
       // 발코니 하부 콘크리트 턱 및 바닥 슬래브
-      ctx.fillStyle = '#E2E8F0';
+      ctx.fillStyle = '#f4f1ea';
       ctx.fillRect(x + marginX, balcY, winW, balcH);
-      ctx.fillStyle = '#CBD5E1';
+      ctx.fillStyle = '#cbd5e1';
       ctx.fillRect(x + marginX, balcY + balcH - 4, winW, 4);
 
       // 반투명 발코니 세이프티 글래스 패널
       ctx.fillStyle = 'rgba(15, 35, 63, 0.45)';
       ctx.fillRect(x + marginX + 2, balcY + 4, winW - 4, balcH - 8);
 
-      // 발코니 상단 스테인리스 핸드레일 (Handrail)
-      ctx.fillStyle = '#94A3B8';
+      // 발코니 상단 스테인리스 핸드레일 (Handrail #334155)
+      ctx.fillStyle = '#334155';
       ctx.fillRect(x + marginX, balcY, winW, 3.5);
-      ctx.fillStyle = '#F8FAFC';
+      ctx.fillStyle = '#f8fafc';
       ctx.fillRect(x + marginX, balcY + 0.5, winW, 1.0);
 
       // 발코니 수직 난간살 (Balusters)
-      ctx.strokeStyle = 'rgba(203, 213, 225, 0.7)';
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.8)';
       ctx.lineWidth = 1.5;
       const balusterCount = 7;
       const balusterStep = (winW - 8) / (balusterCount + 1);
@@ -156,9 +162,9 @@ export function createApartmentFacadeCanvas(size = 512): HTMLCanvasElement {
 }
 
 /**
- * 2. 상업/업무 빌딩 반사형 유리 커튼월 & 알루미늄 루버 텍스처 (512x512)
- * - 세로 알루미늄 루버(Louver) / 멀리언 그리드
- * - 반사형 유리 커튼월 및 고광택 스펙큘러 하이라이트
+ * 2. 상업/업무 빌딩 화강석/타일 줄눈 스톤 외벽 & 가로 통유리창 텍스처 (512x512)
+ * - 베이지·그레이 스톤 외벽 (#d6d3d1)
+ * - 넓은 가로형 상가 통유리창 (Ribbon Window)
  */
 export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
   if (typeof document === 'undefined') {
@@ -171,15 +177,18 @@ export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
 
-  // 1) 딥블루 반사 유리 베이스 그라데이션
-  const baseGrad = ctx.createLinearGradient(0, 0, size, size);
-  baseGrad.addColorStop(0, '#0F172A');
-  baseGrad.addColorStop(0.25, '#1E3A8A');
-  baseGrad.addColorStop(0.55, '#1D4ED8');
-  baseGrad.addColorStop(0.85, '#2563EB');
-  baseGrad.addColorStop(1, '#0284C7');
-  ctx.fillStyle = baseGrad;
+  // 1) 베이지·그레이 스톤 외벽 베이스 (#d6d3d1)
+  ctx.fillStyle = '#d6d3d1';
   ctx.fillRect(0, 0, size, size);
+
+  // 화강석/석재 타일 줄눈 (#a8a29e)
+  ctx.fillStyle = '#a8a29e';
+  for (let px = 0; px < size; px += 64) {
+    ctx.fillRect(px, 0, 1.5, size);
+  }
+  for (let py = 0; py < size; py += 32) {
+    ctx.fillRect(0, py, size, 1.5);
+  }
 
   // 2) 층간 스팬드럴 글래스 / 수평 알루미늄 트랜섬 밴드 (64px 주기 = 8개 층)
   const floorH = 64;
@@ -189,33 +198,36 @@ export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
     ctx.fillRect(0, y, size, 14);
 
     // 알루미늄 수평 바 (트랜섬)
-    ctx.fillStyle = '#CBD5E1';
+    ctx.fillStyle = '#cbd5e1';
     ctx.fillRect(0, y + 14, size, 3.5);
-    ctx.fillStyle = '#64748B';
+    ctx.fillStyle = '#64748b';
     ctx.fillRect(0, y + 17.5, size, 2);
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, y + 14, size, 1);
+
+    // 넓은 가로형 상가 통유리창 밴드 (Ribbon Window)
+    const winGrad = ctx.createLinearGradient(0, y + 18, 0, y + floorH);
+    winGrad.addColorStop(0, '#0f172a');
+    winGrad.addColorStop(0.3, '#1e3a8a');
+    winGrad.addColorStop(0.7, '#2563eb');
+    winGrad.addColorStop(1, '#0284c7');
+    ctx.fillStyle = winGrad;
+    ctx.fillRect(0, y + 18, size, floorH - 18);
   }
 
   // 3) 알루미늄 수직 루버(Louver) 및 멀리온 (32px 주기 = 16 bays)
   const mullionStep = 32;
   for (let x = 0; x < size; x += mullionStep) {
-    // 음영면
     ctx.fillStyle = '#475569';
-    ctx.fillRect(x, 0, 4, size);
-    // 메탈릭 알루미늄 루버 하이라이트
-    ctx.fillStyle = '#E2E8F0';
-    ctx.fillRect(x + 1, 0, 2, size);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(x + 1, 0, 1, size);
+    ctx.fillRect(x, 0, 3, size);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(x + 1, 0, 1.5, size);
   }
 
-  // 4) 와이드 사선 스펙큘러 하이라이트 (태양광 및 스카이라인 채광 반사)
+  // 4) 와이드 사선 스펙큘러 하이라이트
   const sheenGrad = ctx.createLinearGradient(0, size, size, 0);
   sheenGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  sheenGrad.addColorStop(0.35, 'rgba(255, 255, 255, 0.08)');
-  sheenGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.32)');
-  sheenGrad.addColorStop(0.65, 'rgba(255, 255, 255, 0.08)');
+  sheenGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.28)');
   sheenGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = sheenGrad;
   ctx.beginPath();
@@ -226,27 +238,13 @@ export function createCommercialFacadeCanvas(size = 512): HTMLCanvasElement {
   ctx.closePath();
   ctx.fill();
 
-  // 보조 스펙큘러 밴드
-  const sheenGrad2 = ctx.createLinearGradient(0, size * 0.5, size * 0.5, 0);
-  sheenGrad2.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  sheenGrad2.addColorStop(0.5, 'rgba(255, 255, 255, 0.16)');
-  sheenGrad2.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = sheenGrad2;
-  ctx.beginPath();
-  ctx.moveTo(0, size * 0.35);
-  ctx.lineTo(size * 0.35, 0);
-  ctx.lineTo(size * 0.55, 0);
-  ctx.lineTo(0, size * 0.55);
-  ctx.closePath();
-  ctx.fill();
-
   return canvas;
 }
 
 /**
  * 2-2. 한국형 단독주택 / 빌라 / 다세대 캔버스 텍스처 (512x512)
- * - 웜 베이지(#F1F5F9) 외벽 베이스
- * - 층간 슬래브 분할선 및 세대 창문 프레임
+ * - 적벽돌(#9a3412) 및 밝은 회벽 외벽 베이스
+ * - 정돈된 직사각형 창호 + 얇은 옥상 테두리 두겁석
  */
 export function createResidentialFacadeCanvas(size = 512): HTMLCanvasElement {
   if (typeof document === 'undefined') {
@@ -259,13 +257,19 @@ export function createResidentialFacadeCanvas(size = 512): HTMLCanvasElement {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
 
-  // 1) 외벽 베이스: 웜 베이지 (#F1F5F9)
-  ctx.fillStyle = '#F1F5F9';
+  // 1) 외벽 베이스: 적벽돌 (#9a3412)
+  ctx.fillStyle = '#9a3412';
   ctx.fillRect(0, 0, size, size);
 
-  // 미세 가로 줄눈
-  ctx.fillStyle = 'rgba(203, 213, 225, 0.4)';
-  for (let y = 0; y < size; y += 8) {
+  // 상단 25% 밝은 회벽 투톤
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillRect(0, 0, size, size * 0.25);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(0, size * 0.25 - 4, size, 4);
+
+  // 미세 벽돌 줄눈
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.4)';
+  for (let y = size * 0.25; y < size; y += 16) {
     ctx.fillRect(0, y, size, 1.5);
   }
 
@@ -278,39 +282,45 @@ export function createResidentialFacadeCanvas(size = 512): HTMLCanvasElement {
     const y = f * floorH;
 
     // 층간 슬래브 밴드
-    ctx.fillStyle = '#CBD5E1';
-    ctx.fillRect(0, y, size, 8);
-    ctx.fillStyle = '#94A3B8';
-    ctx.fillRect(0, y + 6, size, 2);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(0, y, size, 6);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(0, y + 4, size, 2);
 
     for (let b = 0; b < bays; b++) {
       const x = b * bayW;
       const marginX = 14;
       const winW = bayW - marginX * 2;
-      const winH = Math.round(floorH * 0.52);
+      const winH = Math.round(floorH * 0.48);
       const winY = y + 16;
 
-      // 창호 프레임
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(x + marginX - 2, winY - 2, winW + 4, winH + 4);
-      ctx.fillStyle = '#E2E8F0';
-      ctx.fillRect(x + marginX - 1, winY - 1, winW + 2, winH + 2);
+      // 화이트 PVC 창호 프레임
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + marginX - 3, winY - 3, winW + 6, winH + 6);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(x + marginX - 5, winY + winH + 3, winW + 10, 4); // 창대석
 
       // 유리창 반사 그라데이션
       const glassGrad = ctx.createLinearGradient(x + marginX, winY, x + marginX + winW, winY + winH);
-      glassGrad.addColorStop(0, '#1E293B');
-      glassGrad.addColorStop(0.4, '#0F172A');
-      glassGrad.addColorStop(0.7, '#0369A1');
-      glassGrad.addColorStop(1, '#0284C7');
+      glassGrad.addColorStop(0, '#1e293b');
+      glassGrad.addColorStop(0.4, '#0f172a');
+      glassGrad.addColorStop(0.7, '#0369a1');
+      glassGrad.addColorStop(1, '#0284c7');
       ctx.fillStyle = glassGrad;
       ctx.fillRect(x + marginX, winY, winW, winH);
 
       // 창틀 십자 섀시 분할
-      ctx.fillStyle = '#F8FAFC';
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(x + marginX + winW * 0.5 - 1, winY, 2, winH);
       ctx.fillRect(x + marginX, winY + winH * 0.45 - 1, winW, 2);
     }
   }
+
+  // 상단 얇은 옥상 테두리 두겁석(Parapet)
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(0, 0, size, 8);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(0, 6, size, 2);
 
   return canvas;
 }
