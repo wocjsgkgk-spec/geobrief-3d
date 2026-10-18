@@ -1065,8 +1065,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 1. [외벽 (Wall) 지오메트리 & 4단 입체 구조 아틀라스 정밀 UV 매핑]
-        const wallBaseY = relElev - 2.5; // 경사지 및 기단부 밀착용 2.5m 지하 매립 기초
+        // 1. [외벽 (Wall) 지오메트리 & 경사지 건물 들뜸 방지 지하 기초 옹벽(Foundation Skirt -5.0m)]
+        // 급경사 산비탈이나 구릉지에서도 건물의 바닥 한쪽이 공중에 뜨지 않도록 지하 -5.0m까지 콘크리트 화강석 기초 옹벽을 연장
+        const wallBaseY = relElev - 5.0;
         const aboveGroundH = Math.max(2.8, wallTop - relElev); // 지상 실측 높이
 
         // [Part 1. 저층 기단부 (0m ~ 4m)]: 짙은 화강석 그레이 #94a3b8로 지면과 건물의 경계를 단단하게 고정
@@ -1096,6 +1097,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
         const podiumSlotId = isComm ? 9 : 5;
         const fndUV = getVWorldAtlasSlotUV(podiumSlotId);
+        const skirtUV = getVWorldAtlasSlotUV(21); // 21: parapet_concrete / 옹벽 콘크리트
         const aptFrontSlot = Math.floor(buildingSeed * 4); // 0, 1, 2, 3
         const aptFrontUV = getVWorldAtlasSlotUV(aptFrontSlot);
         const aptSideUV = getVWorldAtlasSlotUV(4); // 4: apt_side
@@ -1116,13 +1118,32 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const outNz = -dx / segLen;
 
           // ===================================================================
-          // [Part 1. 저층 기단부 (0m ~ 4m)]
-          // 지하 매립 기초(wallBaseY)부터 지상 4m(podiumTopY)까지 일체형 화강석 기단부 외벽 구성
+          // [Part 0. 지하 기초 옹벽 (Foundation Skirt: -5.0m ~ 0m)]
+          // 경사지/구릉지에서 지면 아래로 파고들어 건물이 공중에 뜨지 않도록 완벽 밀착
+          // 콘크리트 화강석 기단부 (#475569)
           // ===================================================================
           addQuad(
             masterPositions, masterNormals, masterUvs, masterColors,
             { x: p0.x, y: wallBaseY, z: p0.y },
             { x: p1.x, y: wallBaseY, z: p1.y },
+            { x: p1.x, y: relElev, z: p1.y },
+            { x: p0.x, y: relElev, z: p0.y },
+            outNx, 0, outNz,
+            { u: skirtUV.u0, v: skirtUV.v0 },
+            { u: skirtUV.u1, v: skirtUV.v0 },
+            { u: skirtUV.u1, v: skirtUV.v1 },
+            { u: skirtUV.u0, v: skirtUV.v1 },
+            0.28, 0.33, 0.41 // #475569 콘크리트 화강석 옹벽 톤
+          );
+
+          // ===================================================================
+          // [Part 1. 저층 기단부 (0m ~ 4m)]
+          // 지상 0m(relElev)부터 지상 4m(podiumTopY)까지 일체형 화강석 기단부 외벽 구성
+          // ===================================================================
+          addQuad(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            { x: p0.x, y: relElev, z: p0.y },
+            { x: p1.x, y: relElev, z: p1.y },
             { x: p1.x, y: podiumTopY, z: p1.y },
             { x: p0.x, y: podiumTopY, z: p0.y },
             outNx, 0, outNz,

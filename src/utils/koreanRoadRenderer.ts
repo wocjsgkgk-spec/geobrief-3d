@@ -84,6 +84,12 @@ export const KOREAN_ROAD_LAYER_IDS: string[] = [
   'roads-overview-highway',
   'roads-overview-secondary',
   'roads-overview-local',
+
+  // 10. 아파트 단지 및 학교/공공부지 외곽 담장/경계석 & 단지 내부 보행로
+  'complex-boundary-wall',
+  'complex-boundary-curb',
+  'road-complex-footway-casing',
+  'road-complex-footway',
 ];
 
 /**
@@ -1070,6 +1076,96 @@ export function getKoreanRoadLayerDefinitions(
           13, 1.4,
         ],
         'line-opacity': 0.70,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 10. [아파트 단지 및 학교/공공부지 외곽 담장 & 단지 내 보행로]
+    // -------------------------------------------------------------------------
+    // (a) 단지 외곽 얕은 담장 라인 (#64748b)
+    {
+      id: 'complex-boundary-wall',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'landuse',
+      minzoom: 13.5,
+      filter: ['in', 'class', 'residential', 'school', 'hospital', 'military', 'industrial'] as any,
+      paint: {
+        'line-color': '#64748B',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 1.0,
+          16, 2.2,
+          18, 4.0,
+        ],
+        'line-opacity': 0.85,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (b) 단지 외곽 경계석/연석 라인 (#cbd5e1)
+    {
+      id: 'complex-boundary-curb',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'landuse',
+      minzoom: 14.0,
+      filter: ['in', 'class', 'residential', 'school', 'hospital', 'military', 'industrial'] as any,
+      paint: {
+        'line-color': '#CBD5E1',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          14, 0.7,
+          16, 1.3,
+          18, 2.4,
+        ],
+        'line-opacity': 0.95,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (c) 단지 내부 보행로/서비스도로 경계석 라인 (실측 4.2m 케이싱)
+    {
+      id: 'road-complex-footway-casing',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.0,
+      filter: ['in', 'class', 'path', 'track', 'service', 'footway', 'pedestrian', 'steps'] as any,
+      paint: {
+        'line-color': '#64748B',
+        'line-width': createMeterScaleWidthExpr(4.2, 14, 1.2) as any,
+        'line-opacity': 0.75,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (d) 단지 내부 보행로 밝은 보도블록 톤 (#94a3b8 ~ #cbd5e1, 실측 3.2m)
+    {
+      id: 'road-complex-footway',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.0,
+      filter: ['in', 'class', 'path', 'track', 'service', 'footway', 'pedestrian', 'steps'] as any,
+      paint: {
+        'line-color': '#94A3B8', // 밝은 보도블록 톤
+        'line-width': createMeterScaleWidthExpr(3.2, 14, 0.9) as any,
+        'line-opacity': 0.92,
       },
       layout: {
         'line-cap': 'round',

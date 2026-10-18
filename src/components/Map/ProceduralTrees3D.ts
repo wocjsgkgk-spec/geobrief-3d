@@ -25,46 +25,53 @@ export const WONJU_1ST_LOGISTICS_CENTER: [number, number] = [127.9358, 37.3592];
 // =============================================================================
 
 /**
- * 한국형 입체 수목 (통합 단일 지오메트리): 로우폴리 수피 줄기 + 다층 돔형 캐노피 (버텍스 컬러 PBR 내장)
+ * 한국형 입체 수목 (통합 단일 지오메트리): 로우폴리 수피 줄기 + 다층 돔형 캐노피 (3대 수종 인스턴스 PBR 컬러 지원)
  */
 function createUnifiedTreeGeometry(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.22, 0.38, 2.5, 5).toNonIndexed();
+  const trunk = new THREE.CylinderGeometry(0.24, 0.42, 2.6, 5).toNonIndexed();
   trunk.deleteAttribute('uv');
-  trunk.translate(0, 1.25, 0);
+  trunk.translate(0, 1.3, 0);
 
   const trunkColors = new Float32Array(trunk.attributes.position.count * 3);
   for (let i = 0; i < trunk.attributes.position.count; i++) {
-    trunkColors[i * 3] = 0.36;     // R (갈색 수피)
-    trunkColors[i * 3 + 1] = 0.22; // G
-    trunkColors[i * 3 + 2] = 0.12; // B
+    trunkColors[i * 3] = 0.38;     // R (갈색 수피)
+    trunkColors[i * 3 + 1] = 0.25; // G
+    trunkColors[i * 3 + 2] = 0.16; // B
   }
   trunk.setAttribute('color', new THREE.BufferAttribute(trunkColors, 3));
 
-  // 하단 주 수관 돔
-  const crown1 = new THREE.DodecahedronGeometry(2.0, 1).toNonIndexed();
+  // 하단 주 수관 돔 (Main Lower Canopy)
+  const crown1 = new THREE.DodecahedronGeometry(2.1, 1).toNonIndexed();
   crown1.deleteAttribute('uv');
-  crown1.translate(0, 3.5, 0);
+  crown1.translate(0, 3.6, 0);
 
-  // 상단 소 수관 돔
-  const crown2 = new THREE.DodecahedronGeometry(1.4, 1).toNonIndexed();
+  // 상단 소 수관 돔 (Upper Crown)
+  const crown2 = new THREE.DodecahedronGeometry(1.5, 1).toNonIndexed();
   crown2.deleteAttribute('uv');
-  crown2.translate(0, 4.8, 0);
+  crown2.translate(0, 4.9, 0);
 
-  const setCrownColor = (geo: THREE.BufferGeometry, baseG: number) => {
+  // 꼭대기 원추 첨두관 (Spire Top)
+  const crown3 = new THREE.ConeGeometry(1.2, 1.8, 6).toNonIndexed();
+  crown3.deleteAttribute('uv');
+  crown3.translate(0, 5.8, 0);
+
+  const setCanopyBaseShading = (geo: THREE.BufferGeometry, baseShade: number) => {
     const arr = new Float32Array(geo.attributes.position.count * 3);
     for (let i = 0; i < geo.attributes.position.count; i++) {
-      const j = (Math.sin(i * 1.8) + 1) * 0.035;
-      arr[i * 3] = 0.08 + j;
-      arr[i * 3 + 1] = baseG + j * 1.4;
-      arr[i * 3 + 2] = 0.18 + j;
+      const variation = (Math.sin(i * 1.8) + 1) * 0.08;
+      const shade = baseShade + variation;
+      arr[i * 3] = shade;
+      arr[i * 3 + 1] = shade;
+      arr[i * 3 + 2] = shade;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   };
 
-  setCrownColor(crown1, 0.50);
-  setCrownColor(crown2, 0.58);
+  setCanopyBaseShading(crown1, 0.85);
+  setCanopyBaseShading(crown2, 0.95);
+  setCanopyBaseShading(crown3, 1.05);
 
-  const merged = BufferGeometryUtils.mergeGeometries([trunk, crown1, crown2]);
+  const merged = BufferGeometryUtils.mergeGeometries([trunk, crown1, crown2, crown3]);
   merged.computeVertexNormals();
   return merged;
 }
@@ -80,6 +87,7 @@ export interface TreeInstanceData {
   scale: number;
   rotationY: number;
   isConifer: boolean;
+  species: 'ginkgo' | 'pine' | 'zelkova';
 }
 
 /**
@@ -105,15 +113,23 @@ export function generateTreeDistribution(
     if (Math.abs(z) < 18) continue; // 교차로 진입로는 비움
     const jitterZ = (pseudoRandom() - 0.5) * 1.5;
 
-    // 서측 가로수 열 (활엽수 위주)
+    // 가로수는 한국 대표 은행나무(45%)와 느티나무(45%), 조경 소나무(10%)로 조화
+    const rndW = pseudoRandom();
+    const speciesW: 'ginkgo' | 'pine' | 'zelkova' = rndW < 0.45 ? 'ginkgo' : (rndW < 0.90 ? 'zelkova' : 'pine');
+
+    // 서측 가로수 열
     trees.push({
       x: -22 + (pseudoRandom() - 0.5) * 1.2,
       z: z + jitterZ,
       y: 0,
       scale: 0.85 + pseudoRandom() * 0.35,
       rotationY: pseudoRandom() * Math.PI * 2,
-      isConifer: pseudoRandom() > 0.8,
+      isConifer: speciesW === 'pine',
+      species: speciesW,
     });
+
+    const rndE = pseudoRandom();
+    const speciesE: 'ginkgo' | 'pine' | 'zelkova' = rndE < 0.45 ? 'ginkgo' : (rndE < 0.90 ? 'zelkova' : 'pine');
 
     // 동측 가로수 열
     trees.push({
@@ -122,7 +138,8 @@ export function generateTreeDistribution(
       y: 0,
       scale: 0.85 + pseudoRandom() * 0.35,
       rotationY: pseudoRandom() * Math.PI * 2,
-      isConifer: pseudoRandom() > 0.8,
+      isConifer: speciesE === 'pine',
+      species: speciesE,
     });
   }
 
@@ -131,14 +148,21 @@ export function generateTreeDistribution(
     if (Math.abs(x) < 30) continue;
     const jitterX = (pseudoRandom() - 0.5) * 1.5;
 
+    const rndN = pseudoRandom();
+    const speciesN: 'ginkgo' | 'pine' | 'zelkova' = rndN < 0.45 ? 'zelkova' : (rndN < 0.90 ? 'ginkgo' : 'pine');
+
     trees.push({
       x: x + jitterX,
       z: -18 + (pseudoRandom() - 0.5) * 1.2,
       y: 0,
       scale: 0.85 + pseudoRandom() * 0.3,
       rotationY: pseudoRandom() * Math.PI * 2,
-      isConifer: pseudoRandom() > 0.75,
+      isConifer: speciesN === 'pine',
+      species: speciesN,
     });
+
+    const rndS = pseudoRandom();
+    const speciesS: 'ginkgo' | 'pine' | 'zelkova' = rndS < 0.45 ? 'zelkova' : (rndS < 0.90 ? 'ginkgo' : 'pine');
 
     trees.push({
       x: x + jitterX,
@@ -146,20 +170,21 @@ export function generateTreeDistribution(
       y: 0,
       scale: 0.85 + pseudoRandom() * 0.3,
       rotationY: pseudoRandom() * Math.PI * 2,
-      isConifer: pseudoRandom() > 0.75,
+      isConifer: speciesS === 'pine',
+      species: speciesS,
     });
   }
 
   // 2) 부지 주변 완충 녹지대 및 도심 공원 (Park & Buffer Green Belts)
   const parkRings = [
-    { radius: 120, count: 52, coniferRatio: 0.35 },
-    { radius: 210, count: 78, coniferRatio: 0.4 },
-    { radius: 320, count: 110, coniferRatio: 0.45 },
-    { radius: 460, count: 140, coniferRatio: 0.5 },
-    { radius: 620, count: 180, coniferRatio: 0.55 },
+    { radius: 120, count: 52 },
+    { radius: 210, count: 78 },
+    { radius: 320, count: 110 },
+    { radius: 460, count: 140 },
+    { radius: 620, count: 180 },
   ];
 
-  parkRings.forEach(({ radius, count, coniferRatio }) => {
+  parkRings.forEach(({ radius, count }) => {
     for (let i = 0; i < count; i++) {
       const baseAngle = (i / count) * Math.PI * 2;
       const angle = baseAngle + (pseudoRandom() - 0.5) * (Math.PI / count) * 1.8;
@@ -172,13 +197,18 @@ export function generateTreeDistribution(
       if (Math.abs(px) < 18 && Math.abs(pz) < 700) continue;
       if (Math.abs(pz) < 15 && Math.abs(px) < 600) continue;
 
+      const rndSpecies = pseudoRandom();
+      const species: 'ginkgo' | 'pine' | 'zelkova' =
+        rndSpecies < 0.40 ? 'pine' : (rndSpecies < 0.75 ? 'zelkova' : 'ginkgo');
+
       trees.push({
         x: px,
         z: pz,
         y: 0,
         scale: 0.8 + pseudoRandom() * 0.5,
         rotationY: pseudoRandom() * Math.PI * 2,
-        isConifer: pseudoRandom() < coniferRatio,
+        isConifer: species === 'pine',
+        species,
       });
     }
   });
@@ -186,18 +216,21 @@ export function generateTreeDistribution(
   // 3) 외곽 산림/구릉지 식생 군락 (Mountain & Hillside Forest Clusters)
   // 강원권 지형 특성상 북동/동측 산자락(치악산 방면 등)에 울창한 소나무 군락지 형성
   const forestClusters = [
-    { cx: 450, cz: -400, radius: 220, count: 140, coniferRatio: 0.8 },
-    { cx: 580, cz: 250, radius: 260, count: 170, coniferRatio: 0.85 },
-    { cx: -520, cz: -480, radius: 200, count: 120, coniferRatio: 0.75 },
-    { cx: -600, cz: 380, radius: 240, count: 150, coniferRatio: 0.7 },
+    { cx: 450, cz: -400, radius: 220, count: 140 },
+    { cx: 580, cz: 250, radius: 260, count: 170 },
+    { cx: -520, cz: -480, radius: 200, count: 120 },
+    { cx: -600, cz: 380, radius: 240, count: 150 },
   ];
 
-  forestClusters.forEach(({ cx, cz, radius, count, coniferRatio }) => {
+  forestClusters.forEach(({ cx, cz, radius, count }) => {
     for (let i = 0; i < count; i++) {
       const angle = pseudoRandom() * Math.PI * 2;
       const dist = Math.sqrt(pseudoRandom()) * radius;
       const fx = cx + Math.cos(angle) * dist;
       const fz = cz + Math.sin(angle) * dist;
+
+      const rndF = pseudoRandom();
+      const species: 'ginkgo' | 'pine' | 'zelkova' = rndF < 0.80 ? 'pine' : 'zelkova';
 
       trees.push({
         x: fx,
@@ -205,7 +238,8 @@ export function generateTreeDistribution(
         y: 0,
         scale: 0.9 + pseudoRandom() * 0.55,
         rotationY: pseudoRandom() * Math.PI * 2,
-        isConifer: pseudoRandom() < coniferRatio,
+        isConifer: species === 'pine',
+        species,
       });
     }
   });
@@ -368,6 +402,7 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
     );
 
     const dummy = new THREE.Object3D();
+    const tempColor = new THREE.Color();
 
     // 단일 InstancedMesh 생성 (전체 수목 Draw Call = 1회)
     if (this.rawTreeData.length > 0) {
@@ -398,8 +433,24 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         dummy.rotation.set(0, item.rotationY, 0);
         dummy.updateMatrix();
         this.unifiedTreeMesh.setMatrixAt(i, dummy.matrix);
+
+        // [한국형 가로수 3대 수종 인스턴스 컬러 변주 (단색 초록 구체 완전 탈피)]
+        if (item.species === 'ginkgo') {
+          // 1) 은행나무: 화사한 라임 옐로우-그린 (#84cc16 ~ #a3e635)
+          tempColor.setRGB(0.55 + item.scale * 0.04, 0.82 + item.scale * 0.03, 0.18);
+        } else if (item.species === 'pine') {
+          // 2) 소나무: 깊고 짙은 딥 에메랄드 상록수 (#14532d ~ #064e3b)
+          tempColor.setRGB(0.08, 0.32 + item.scale * 0.03, 0.18);
+        } else {
+          // 3) 느티나무: 싱그럽고 풍성한 한국 대표 활엽수 (#15803d ~ #16a34a)
+          tempColor.setRGB(0.12, 0.55 + item.scale * 0.04, 0.22);
+        }
+        this.unifiedTreeMesh.setColorAt(i, tempColor);
       }
       this.unifiedTreeMesh.instanceMatrix.needsUpdate = true;
+      if (this.unifiedTreeMesh.instanceColor) {
+        this.unifiedTreeMesh.instanceColor.needsUpdate = true;
+      }
       this.unifiedTreeMesh.visible = this.isVisible;
       this.unifiedTreeMesh.frustumCulled = false;
       this.scene.add(this.unifiedTreeMesh);

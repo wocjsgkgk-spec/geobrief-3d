@@ -598,6 +598,29 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             u1 = 1.0;
           }
 
+          // (a-0) 경사지 건물 들뜸 방지 지하 기초 옹벽 (Foundation Skirt: -5.0m ~ 0.0m)
+          // 급경사 지형에서도 지면과 빈틈없이 100% 맞물려 단단히 박혀 있도록 지하 방향으로 -5.0m 연장
+          const SKIRT_DEPTH = -5.0;
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: p1.x, y: SKIRT_DEPTH, z: -p1.y },
+            { x: p2.x, y: SKIRT_DEPTH, z: -p2.y },
+            { x: p2.x, y: 0, z: -p2.y },
+            { x: p1.x, y: 0, z: -p1.y },
+            nx, 0, -nz,
+            { u: u0, v: 0.0 },
+            { u: u1, v: 0.0 },
+            { u: u1, v: 1.0 },
+            { u: u0, v: 1.0 },
+            bldType,
+            floors,
+            4.0, // partType: 4=기단부/기초
+            21.0, // slotId: 21=콘크리트 옹벽
+            dem0, dem1,
+            0.28, 0.33, 0.41 // 콘크리트 화강석 기초 기단부 (#475569)
+          );
+
           // (a) 1층 기단부 (0 ~ 3.8m)
           const vBase0 = 0.0;
           const vPodiumTop = podiumH / STORY_HEIGHT;
