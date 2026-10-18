@@ -82,6 +82,10 @@ import {
   getStreetsGlRoadLayerDefinitions,
 } from '@/lib/vendor/streetsGlRoadLayers';
 import { elevationCache, clearElevationCache } from '@/utils/elevationCache';
+import {
+  registerNativeBuildingPatterns,
+  NATIVE_BUILDING_PATTERNS,
+} from '@/utils/nativeBuildingPatterns';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -96,6 +100,11 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
+    'building-ground-ao',
+    'building-podium',
+    'building-body',
+    'building-roof-cap',
+    '3d-buildings-edge',
     '3d-buildings-overview',
     '3d-buildings-contact-shadow',
     '3d-buildings-foundation',
@@ -293,7 +302,7 @@ export function safeSetTerrain(
           });
         }
         if (!map.getLayer('satellite-base-layer') && !map.getLayer('satellite-layer')) {
-          const firstLayer = map.getLayer('3d-buildings') ? '3d-buildings' : undefined;
+          const firstLayer = map.getLayer('building-body') ? 'building-body' : (map.getLayer('3d-buildings') ? '3d-buildings' : undefined);
           map.addLayer(
             {
               id: 'satellite-base-layer',
@@ -749,33 +758,33 @@ export const MapViewer: React.FC = () => {
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          60.0, // 아파트 단지: 15~25층 (평균 20층, 60m)
+          55.0, // 아파트 단지: 55m (약 18층)
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          12.0, // 일반 시내 상가: 3~4층 (12m)
+          15.0, // 일반 상가/오피스: 15m (5층)
           ['residential', 'house', 'detached', 'villa'],
-          6.0,  // 단독/연립 주택: 1~2층 (6m)
+          7.0,  // 단독/연립 주택: 7m (2층)
           ['military', 'public', 'government', 'public_military', 'barracks'],
           4.5,  // 단층/2층 군사 막사 및 공공시설 (4.5m)
-          9.0,  // 기본
+          12.0, // 기본
         ],
       ],
-      9.0,
+      12.0,
     ];
 
-    // [Layer 3 - 옥상 슬래브 마감 바닥 높이 표현식: 건물 외벽 상단 H]
+    // [Layer 4 - 옥상 마감 바닥 높이 표현식: 건물 외벽 상단 H]
     const buildingRoofBaseExpr: any = buildingHeightExpr;
 
-    // [Layer 3 - 옥상 슬래브 상단 높이 표현식: 최상단 0.3m 마감 (H ~ H + 0.3m)]
+    // [Layer 4 - 옥상 마감 상단 높이 표현식: 최상단 H ~ H + 0.4m]
     const buildingRoofHeightExpr: any = [
       '+',
       buildingHeightExpr,
-      0.3,
+      0.4,
     ];
 
-    // [Layer 3 - 옥상 마감 컬러: 한국 도심 실사 팔레트 (원색 제거, 채도 정돈)]
-    // 대단지 아파트/오피스: 웨더링 콘크리트 웜 그레이 #64748b 및 다크 차콜 #475569
-    // 중·저층 상가/빌라: 실제 우레탄 방수 톤인 세이지 그린 #2e5a44 및 다크 올리브 #365314
-    // 단독주택: 차분한 테라코타 브라운 #7c2d12 / 군 막사: 다크 네이비 슬레이트 #1e3a8a
+    // [Layer 4 - 한국형 우레탄/콘크리트 옥상 마감 색상]
+    // * 높이 25m 미만 중·저층 건물 옥상: 한국 도시 특유의 차분한 우레탄 방수 그린(#2e5a44)
+    // * 높이 25m 이상 고층 아파트/빌딩 옥상: 콘크리트 다크 그레이(#334155)
+    // * 저층 단독주택/군 막사: 테라코타 브라운(#7c2d12)
     const buildingRoofColorExpr: any = [
       'coalesce',
       ['get', 'roofColour'],
@@ -783,21 +792,13 @@ export const MapViewer: React.FC = () => {
       [
         'case',
         ['>=', buildingHeightExpr, 25.0],
-        '#64748b', // 고층 아파트 및 오피스 빌딩 (25m 이상): 웨더링 콘크리트 웜 그레이
+        '#334155', // 고층 아파트/빌딩 (25m 이상): 콘크리트 다크 그레이 (#334155)
         [
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
-          ['apartment', 'apartments'],
-          '#64748b', // 아파트 옥상: 콘크리트 웜 그레이
-          ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          '#2e5a44', // 상가 옥상: 차분한 세이지 그린 우레탄
-          ['industrial', 'warehouse'],
-          '#1e3a8a', // 산업 시설: 다크 네이비 강판 지붕
-          ['military', 'barracks', 'depot'],
-          '#1e3a8a', // 군 막사/시설: 다크 네이비 슬레이트 지붕
-          ['residential', 'house', 'detached', 'villa'],
-          '#7c2d12', // 단독주택/빌라: 차분한 테라코타 브라운
-          '#2e5a44', // 일반 중·저층 건물: 한국형 세이지 그린 우레탄
+          ['residential', 'house', 'detached', 'villa', 'military', 'barracks', 'depot'],
+          '#7c2d12', // 저층 단독주택/군 막사: 테라코타 브라운 (#7c2d12)
+          '#2e5a44', // 25m 미만 중·저층 상가/일반 건물: 한국형 우레탄 방수 그린 (#2e5a44)
         ],
       ],
     ];
@@ -810,37 +811,53 @@ export const MapViewer: React.FC = () => {
       -1.5,
     ];
 
-    // [Layer 2 - 건물 본동 외벽 실사 컬러: 아파트 크림 아이보리 #f4f1ea, 상업 스톤 #d6d3d1, 주택 적벽돌 #9a3412]
+    // [Layer 3 - 건물 본동 외벽 실사 컬러: 아파트 크림 아이보리 #f4f1ea, 상업 스톤 #cbd5e1, 주택 적벽돌 #b45309]
     const buildingColorExpr: any = [
       'coalesce',
       ['get', 'color'],
       [
-        'match',
-        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
-        ['apartment', 'apartments'],
-        '#f4f1ea', // 아파트: 따뜻한 크림 아이보리
-        ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-        '#d6d3d1', // 상업 빌딩: 베이지·그레이 스톤
-        ['residential', 'house', 'detached', 'villa'],
-        '#9a3412', // 일반 주택: 적벽돌 및 회벽
-        ['military', 'barracks', 'depot'],
-        '#e2e8f0', // 군사/국방: 모던 콘크리트 웜그레이
-        ['public', 'government', 'public_military', 'civic'],
-        '#d6d3d1', // 공공청사: 화강석 웜그레이
-        '#f4f1ea', // 기본 건축물: 크림 아이보리
+        'case',
+        ['>=', buildingHeightExpr, 25.0],
+        '#f4f1ea', // 25m 이상 고층 아파트: 따뜻한 크림 아이보리
+        [
+          'match',
+          ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+          ['apartment', 'apartments'],
+          '#f4f1ea', // 아파트: 따뜻한 크림 아이보리
+          ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+          '#cbd5e1', // 상업 빌딩: 쿨 그레이 스톤
+          ['residential', 'house', 'detached', 'villa'],
+          '#b45309', // 일반 주택: 적벽돌 및 회벽
+          ['military', 'barracks', 'depot'],
+          '#e2e8f0', // 군사/국방: 모던 콘크리트 웜그레이
+          ['public', 'government', 'public_military', 'civic'],
+          '#d6d3d1', // 공공청사: 화강석 웜그레이
+          '#f4f1ea', // 기본 건축물: 크림 아이보리
+        ],
       ],
     ];
 
-    // [Layer 2 - 실감 512x512 건축 외벽 가로 줄무늬 층수 파사드 패턴 표현식]
-    const facadePatternExpr: any = [
-      'match',
-      ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
-      ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-      'facade-commercial',
-      ['residential', 'house', 'detached', 'villa'],
-      'facade-residential',
-      'facade-apartment', // 기본값: 아파트/공동주택 층간 슬래브 & 발코니 띠
+    // [Layer 3 - 고해상도 한국형 창문·베란다 심리스 패턴 매핑]
+    // 1) pattern-apt: 아파트 단지 및 25m 이상 고층 빌딩
+    // 2) pattern-office: 상업/오피스 빌딩 반사 유리 & 알루미늄 커튼월
+    // 3) pattern-brick: 적벽돌 및 밝은 베이지 주택/다세대
+    const buildingPatternExpr: any = [
+      'case',
+      ['>=', buildingHeightExpr, 25.0],
+      NATIVE_BUILDING_PATTERNS.APT,
+      [
+        'match',
+        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+        ['apartment', 'apartments'],
+        NATIVE_BUILDING_PATTERNS.APT,
+        ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+        NATIVE_BUILDING_PATTERNS.OFFICE,
+        ['residential', 'house', 'detached', 'villa'],
+        NATIVE_BUILDING_PATTERNS.BRICK,
+        NATIVE_BUILDING_PATTERNS.APT,
+      ],
     ];
+    const facadePatternExpr: any = buildingPatternExpr;
 
     const fullMapStyle: any = {
       version: 8,
@@ -2379,6 +2396,7 @@ export const MapViewer: React.FC = () => {
 
     let hasInitializedMapLayers = false;
     const handleMapReady = () => {
+      registerNativeBuildingPatterns(map);
       if (hasInitializedMapLayers) return;
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
@@ -2460,8 +2478,9 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapLibre] safeSetLight skipped or not supported:', lightErr);
       }
 
-      // [절차적 외벽 텍스처 (Procedural Facade) 512x512 고해상도 패턴 스프라이트 등록]
+      // [고해상도 한국형 창문·베란다 심리스 패턴 및 외벽 텍스처 등록]
       try {
+        registerNativeBuildingPatterns(map);
         registerFacadeTexturesToMap(map, 512);
         registerBuildingTextures(map, 256);
         registerProceduralFacadeTextures(map, 256);
@@ -2607,44 +2626,49 @@ export const MapViewer: React.FC = () => {
           }
         }
 
-        // [건물 바닥 외곽 접지 그림자 (Ground Contact Shadow)]
+        // ---------------------------------------------------------------------
+        // [2단계: 실제 건물 폴리곤 위 5단 입체 레이어 스태킹 (CPU 부하 0%, 100% GPU 가속)]
+        // ---------------------------------------------------------------------
+
+        // [Layer 1 - 지면 접지 그림자 (building-ground-ao)]
+        if (!map.getLayer('building-ground-ao')) {
+          map.addLayer({
+            id: 'building-ground-ao',
+            type: 'fill',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12,
+            paint: {
+              'fill-color': '#020617',
+              'fill-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12.0, 0.0,
+                13.0, 0.35,
+                15.0, 0.45,
+              ],
+              'fill-translate': [3, 3],
+              'fill-translate-anchor': 'viewport',
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // [하위 호환 접지선]
         if (!map.getLayer('3d-buildings-contact-shadow')) {
           map.addLayer({
             id: '3d-buildings-contact-shadow',
-            type: 'line',
+            type: 'fill',
             source: 'openmaptiles-vector',
             'source-layer': 'building',
             minzoom: 13,
             paint: {
-              'line-color': '#020617',
-              'line-width': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13, 3.5,
-                14, 6.5,
-                16, 12.0,
-                18, 18.0,
-              ],
-              'line-blur': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13, 2.5,
-                14, 4.0,
-                16, 7.0,
-                18, 10.0,
-              ],
-              'line-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13.0, 0.0,
-                14.0, 0.35,
-                16.0, 0.45,
-              ],
+              'fill-color': '#020617',
+              'fill-opacity': 0.45,
+              'fill-translate': [3, 3],
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            layout: { visibility: 'none' },
           });
         }
 
@@ -2656,7 +2680,7 @@ export const MapViewer: React.FC = () => {
             source: 'openmaptiles-vector',
             'source-layer': 'building',
             minzoom: 12,
-            maxzoom: 14,
+            maxzoom: 13.5,
             paint: {
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
@@ -2676,7 +2700,32 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 1 - 3D 건축물 저층 기단부 (0m ~ 3.5m: 짙은 화강석 그레이 #64748b)
+        // [Layer 2 - 1층 상가/로비 기단부 (building-podium, 0m ~ 3.5m: 짙은 화강석 그레이 #475569)]
+        if (!map.getLayer('building-podium')) {
+          map.addLayer({
+            id: 'building-podium',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 13.0,
+            paint: {
+              'fill-extrusion-color': '#475569',
+              'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
+              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                13.0, 0.0,
+                13.5, 0.98,
+              ],
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // 하위 호환 기단부 레이어
         if (!map.getLayer('3d-buildings-foundation')) {
           map.addLayer({
             id: '3d-buildings-foundation',
@@ -2685,32 +2734,25 @@ export const MapViewer: React.FC = () => {
             'source-layer': 'building',
             minzoom: 13.2,
             paint: {
-              'fill-extrusion-color': '#64748b',
+              'fill-extrusion-color': '#475569',
               'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
               'fill-extrusion-base': buildingBaseExpr,
-              'fill-extrusion-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13.2, 0.0,
-                13.5, 1.0,
-              ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            layout: { visibility: 'none' },
           });
         }
 
-        // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 2 - 3D 건축물 본동 외벽 (3.5m ~ H: 캔버스 가로 줄무늬 층수 파사드 패턴 + 실사 컬러)
-        if (!map.getLayer('3d-buildings')) {
+        // [Layer 3 - 본동 외벽 및 창문 격자 (building-body, 3.5m ~ H: 한국형 창문·베란다 심리스 패턴 매핑)]
+        if (!map.getLayer('building-body')) {
           map.addLayer({
-            id: '3d-buildings',
+            id: 'building-body',
             type: 'fill-extrusion',
             source: 'openmaptiles-vector',
             'source-layer': 'building',
-            minzoom: 13.2,
+            minzoom: 13.0,
             paint: {
-              'fill-extrusion-pattern': facadePatternExpr,
+              'fill-extrusion-pattern': buildingPatternExpr,
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': ['min', 3.5, buildingHeightExpr],
@@ -2718,7 +2760,7 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
+                13.0, 0.0,
                 13.5, 0.95,
               ],
               'fill-extrusion-vertical-gradient': true,
@@ -2727,7 +2769,51 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 3 - 3D 건축물 옥상 슬래브(Roof Cap) 레이어 (H ~ H + 0.3m: 초록 우레탄 / 다크 슬레이트)
+        // 하위 호환 본동 레이어
+        if (!map.getLayer('3d-buildings')) {
+          map.addLayer({
+            id: '3d-buildings',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 13.2,
+            paint: {
+              'fill-extrusion-pattern': buildingPatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': ['min', 3.5, buildingHeightExpr],
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: 'none' },
+          });
+        }
+
+        // [Layer 4 - 한국형 우레탄/콘크리트 옥상 마감 (building-roof-cap, H ~ H + 0.4m)]
+        if (!map.getLayer('building-roof-cap')) {
+          map.addLayer({
+            id: 'building-roof-cap',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 13.0,
+            paint: {
+              'fill-extrusion-color': buildingRoofColorExpr,
+              'fill-extrusion-height': buildingRoofHeightExpr,
+              'fill-extrusion-base': buildingRoofBaseExpr,
+              'fill-extrusion-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                13.0, 0.0,
+                13.5, 0.98,
+              ],
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // 하위 호환 옥상 레이어
         if (!map.getLayer('3d-buildings-roof')) {
           map.addLayer({
             id: '3d-buildings-roof',
@@ -2739,16 +2825,9 @@ export const MapViewer: React.FC = () => {
               'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
               'fill-extrusion-base': buildingRoofBaseExpr,
-              'fill-extrusion-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13.2, 0.0,
-                13.5, 0.98,
-              ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            layout: { visibility: 'none' },
           });
         }
 
@@ -2774,7 +2853,7 @@ export const MapViewer: React.FC = () => {
               },
               layout: { visibility: 'none' },
             },
-            '3d-buildings'
+            'building-body'
           );
         }
 
@@ -2799,7 +2878,7 @@ export const MapViewer: React.FC = () => {
               try {
                 const beforeId = (layerDef.type === 'fill-extrusion' || layerDef.type === 'custom')
                   ? undefined
-                  : (map.getLayer('3d-buildings') ? '3d-buildings' : undefined);
+                  : (map.getLayer('building-body') ? 'building-body' : (map.getLayer('3d-buildings') ? '3d-buildings' : undefined));
                 map.addLayer(layerDef as any, beforeId);
               } catch (lErr) {
                 console.warn(`[MapViewer] addLayer notice (${layerDef.id}):`, lErr);
@@ -3636,12 +3715,16 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const nativeBuildingLayers = [
+      'building-ground-ao',
+      'building-podium',
+      'building-body',
+      'building-roof-cap',
+      '3d-buildings-edge',
       '3d-buildings-overview',
       '3d-buildings-contact-shadow',
       '3d-buildings-foundation',
       '3d-buildings',
       '3d-buildings-roof',
-      '3d-buildings-edge',
       'vworld-buildings-overview',
       'vworld-buildings-contact-shadow',
       'vworld-buildings-foundation',
@@ -4300,7 +4383,9 @@ export const MapViewer: React.FC = () => {
       'sample-buildings-overview',
       'sample-buildings-foundation',
       'sample-buildings-3d',
-      'sample-buildings-roof',
+      'building-podium',
+      'building-body',
+      'building-roof-cap',
       '3d-buildings-overview',
       '3d-buildings-foundation',
       '3d-buildings',
@@ -5503,11 +5588,15 @@ export const MapViewer: React.FC = () => {
         }
         // 3D 건축물 및 비행안전 천장 표시
         for (const bLyr of [
+          'building-ground-ao',
+          'building-podium',
+          'building-body',
+          'building-roof-cap',
+          '3d-buildings-edge',
           '3d-buildings-overview',
           '3d-buildings-foundation',
           '3d-buildings',
           '3d-buildings-roof',
-          '3d-buildings-edge',
           'vworld-buildings-overview',
           'vworld-buildings-foundation',
           'vworld-buildings-3d',
@@ -5645,12 +5734,16 @@ export const MapViewer: React.FC = () => {
         }
         // [요구사항 반영] '건축물 3D 돌출' 레이어가 항상 표출 및 최상단 렌더링
         for (const lyr of [
+          'building-ground-ao',
+          'building-podium',
+          'building-body',
+          'building-roof-cap',
+          '3d-buildings-edge',
           '3d-buildings-overview',
           '3d-buildings-contact-shadow',
           '3d-buildings-foundation',
           '3d-buildings',
           '3d-buildings-roof',
-          '3d-buildings-edge',
           'fusion-buildings-overview',
           'fusion-buildings-contact-shadow',
           'fusion-buildings-foundation',

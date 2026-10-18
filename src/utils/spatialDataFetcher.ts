@@ -47,7 +47,14 @@ export function extractRenderedVectorBuildings(
   if (!map) return [];
 
   try {
-    const targetLayers = ['3d-buildings', '3d-buildings-roof', 'fusion-buildings-3d', 'fusion-buildings-roof'].filter((l) => map.getLayer(l));
+    const targetLayers = [
+      'building-body',
+      'building-roof-cap',
+      '3d-buildings',
+      '3d-buildings-roof',
+      'fusion-buildings-3d',
+      'fusion-buildings-roof',
+    ].filter((l) => map.getLayer(l));
     let rendered: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = [];
     if (targetLayers.length > 0) {
       try {
