@@ -126,6 +126,9 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.map || !this.renderer || !this.isVisible) return;
+    if (!this.threatDomeState.enabled && !this.securityWallState.enabled && !this.losState.isActive) {
+      return;
+    }
 
     try {
       const rawMatrix = options?.modelViewProjectionMatrix || options;

@@ -74,6 +74,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
 
   // 상태 관리
   private isVisible = true;
+  private isInteracting = false;
   private currentPreset: BuildingMassPresetId = 'defense_rd';
   private originLngLat: [number, number] | null = null;
   private clampedAltitude = 0;
@@ -83,6 +84,10 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   private customGltfUrl: string | null = null;
   private lodMode: Detail3DMode = 'lod2';
   private currentFacilities: PlacedFacility3D[] = [];
+
+  public setInteracting(val: boolean): void {
+    this.isInteracting = val;
+  }
 
   // [PBR 물리 기반 재질 캐시]
   private materials = {
@@ -970,10 +975,11 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.buildingGroup.visible = visible;
     this.roofsGroup.visible = visible && this.lodMode === 'lod2';
     this.facadesGroup.visible = visible && this.lodMode === 'lod2';
-    this.isVisible = visible || this.facilityMeshes.size > 0 ||
+    this.isVisible = visible && (this.facilityMeshes.size > 0 ||
       (this.roofsGroup.visible && this.roofsGroup.children.length > 0) ||
-      (this.facadesGroup.visible && this.facadesGroup.children.length > 0);
-    if (this.map) {
+      (this.facadesGroup.visible && this.facadesGroup.children.length > 0) ||
+      this.buildingGroup.children.length > 0);
+    if (this.map && !this.isInteracting) {
       this.map.triggerRepaint();
     }
   }

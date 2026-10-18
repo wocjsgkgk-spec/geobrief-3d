@@ -458,7 +458,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
   public setVisible(visible: boolean): void {
     this.isVisible = visible;
-    if (this.map) {
+    if (this.map && !this.isInteracting) {
       this.map.triggerRepaint();
     }
   }
@@ -478,6 +478,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    * - 근접 상세 뷰 (Zoom >= 15.2): 입체 옥상 난간, 옥탑 코어, 인스턴싱 설비 활성화
    */
   public updateZoomLOD(currentZoom: number): void {
+    if (!this.isVisible) return;
     const isStandardOrAbove = currentZoom >= 13.5; // Zoom 13.5 이상
     const isNearDetail = currentZoom >= 15.2;      // Zoom 15.2 이상
     this.currentZoomLOD = currentZoom;
@@ -507,7 +508,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.helipadUnifiedMesh.visible = isNearDetail;
     }
 
-    if (this.map) {
+    if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
     }
   }
@@ -1620,7 +1621,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
     }
 
-    if (this.map) {
+    if (this.map && this.isVisible && !this.isInteracting) {
       this.updateZoomLOD(this.map.getZoom());
       this.map.triggerRepaint();
     }
@@ -1698,7 +1699,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     this.buildingCount = result.buildingCount;
     this.updateZoomLOD(this.currentZoomLOD);
-    if (this.map && this.isVisible) {
+    if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
     }
   }
