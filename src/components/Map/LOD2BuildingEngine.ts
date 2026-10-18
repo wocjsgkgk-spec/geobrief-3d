@@ -275,6 +275,34 @@ function addShadowQuad(
   colors.push(r, g, b, p0.a, r, g, b, p2.a, r, g, b, p3.a);
 }
 
+/**
+ * 3D 교량 콘크리트 방호벽 및 상판 측면 거더 쿼드를 정점 컬러와 함께 버퍼에 추가합니다.
+ */
+function addBarrierQuad(
+  positions: number[],
+  normals: number[],
+  colors: number[],
+  p0: { x: number; y: number; z: number },
+  p1: { x: number; y: number; z: number },
+  p2: { x: number; y: number; z: number },
+  p3: { x: number; y: number; z: number },
+  nx: number,
+  ny: number,
+  nz: number,
+  r = 0.89,
+  g = 0.91,
+  b = 0.94
+): void {
+  // Triangle 1: p0 -> p1 -> p2
+  positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+  // Triangle 2: p0 -> p2 -> p3
+  positions.push(p0.x, p0.y, p0.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z);
+  for (let k = 0; k < 6; k++) {
+    normals.push(nx, ny, nz);
+    colors.push(r, g, b);
+  }
+}
+
 // =============================================================================
 // 2. LOD2BuildingEngine 클래스 (MapLibre 3D 커스텀 레이어)
 // =============================================================================
@@ -322,10 +350,23 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private contactShadowMaterial: THREE.ShaderMaterial | null = null;
   private sunLightDirection: THREE.Vector3 = new THREE.Vector3(0.65, 0.75, 0.45).normalize();
 
+  // [2단계: 하천·도로 횡단 교량 3D 상판 두께 및 35m 간격 하부 원기둥 교각(Pier) 메쉬]
+  private bridgePierColMesh: THREE.InstancedMesh | null = null;
+  private bridgePierCapMesh: THREE.InstancedMesh | null = null;
+  private bridgePierFootingMesh: THREE.InstancedMesh | null = null;
+  private bridgeBarrierMesh: THREE.Mesh | null = null;
+  private bridgePierMaterial: THREE.MeshStandardMaterial | null = null;
+  private bridgePierCapMaterial: THREE.MeshStandardMaterial | null = null;
+  private bridgeBarrierMaterial: THREE.MeshStandardMaterial | null = null;
+
   private static unitWaterTankGeo: THREE.CylinderGeometry | null = null;
   private static unitVentGeo: THREE.CylinderGeometry | null = null;
   private static unitSolarGeo: THREE.BoxGeometry | null = null;
   private static unitHvacGeo: THREE.BoxGeometry | null = null;
+
+  private static unitBridgePierColGeo: THREE.CylinderGeometry | null = null;
+  private static unitBridgePierCapGeo: THREE.BoxGeometry | null = null;
+  private static unitBridgePierFootingGeo: THREE.BoxGeometry | null = null;
 
   // 폴백용 재질 참조
   private materials: KoreanBuildingMaterials | null = null;
@@ -385,6 +426,18 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
       LOD2BuildingEngine.unitHvacGeo = new THREE.BoxGeometry(2.6, 1.6, 1.8);
       LOD2BuildingEngine.unitHvacGeo.translate(0, 0.8, 0);
+
+      // 교량 하부 원기둥 교각(Pier) 기둥 (반경 1.4m, 상단 y=0 기준 하향 -1.0m)
+      LOD2BuildingEngine.unitBridgePierColGeo = new THREE.CylinderGeometry(1.4, 1.6, 1.0, 16);
+      LOD2BuildingEngine.unitBridgePierColGeo.translate(0, -0.5, 0);
+
+      // 교량 상단 교각 두부(Pier Cap) 코핑 브라켓 (폭 1.0m, 높이 1.4m, 깊이 2.6m)
+      LOD2BuildingEngine.unitBridgePierCapGeo = new THREE.BoxGeometry(1.0, 1.4, 2.6);
+      LOD2BuildingEngine.unitBridgePierCapGeo.translate(0, -0.7, 0);
+
+      // 수중/지면 기초 우물통 기단부 (폭 4.6m, 높이 1.8m, 깊이 4.6m)
+      LOD2BuildingEngine.unitBridgePierFootingGeo = new THREE.BoxGeometry(4.6, 1.8, 4.6);
+      LOD2BuildingEngine.unitBridgePierFootingGeo.translate(0, -0.9, 0);
     }
   }
 
@@ -435,6 +488,28 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         polygonOffset: true,
         polygonOffsetFactor: -1.0,
         polygonOffsetUnits: -1.0,
+        side: THREE.DoubleSide,
+      });
+    }
+    if (!this.bridgePierMaterial) {
+      this.bridgePierMaterial = new THREE.MeshStandardMaterial({
+        color: 0x94a3b8, // 밝은 콘크리트 그레이
+        roughness: 0.65,
+        metalness: 0.12,
+      });
+    }
+    if (!this.bridgePierCapMaterial) {
+      this.bridgePierCapMaterial = new THREE.MeshStandardMaterial({
+        color: 0x64748b, // 짙은 거더/코핑 콘크리트
+        roughness: 0.70,
+        metalness: 0.15,
+      });
+    }
+    if (!this.bridgeBarrierMaterial) {
+      this.bridgeBarrierMaterial = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.60,
+        metalness: 0.10,
         side: THREE.DoubleSide,
       });
     }
@@ -609,6 +684,20 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     }
     if (this.helipadUnifiedMesh) {
       this.helipadUnifiedMesh.visible = isNearDetail;
+    }
+
+    // 3) 교량 하부 원기둥 교각(Pier) 및 상판 방호벽 난간 메쉬: Zoom 13.5 이상 표준 조감도 뷰에서 활성화
+    if (this.bridgePierColMesh) {
+      this.bridgePierColMesh.visible = isStandardOrAbove;
+    }
+    if (this.bridgePierCapMesh) {
+      this.bridgePierCapMesh.visible = isStandardOrAbove;
+    }
+    if (this.bridgePierFootingMesh) {
+      this.bridgePierFootingMesh.visible = isStandardOrAbove;
+    }
+    if (this.bridgeBarrierMesh) {
+      this.bridgeBarrierMesh.visible = isStandardOrAbove;
     }
 
     if (this.map && this.isVisible && !this.isInteracting) {
@@ -1944,6 +2033,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.setOpacity(this.opacity);
     this.setStyleMode(this.styleMode);
     this.updateZoomLOD(this.currentZoomLOD);
+    this.updateBridges();
     if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
     }
@@ -2063,6 +2153,342 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   }
 
   /**
+   * [2단계: 하천·도로 횡단 교량 3D 가시성 토글]
+   */
+  public setBridgesVisible(visible: boolean): void {
+    if (this.bridgePierColMesh) this.bridgePierColMesh.visible = visible;
+    if (this.bridgePierCapMesh) this.bridgePierCapMesh.visible = visible;
+    if (this.bridgePierFootingMesh) this.bridgePierFootingMesh.visible = visible;
+    if (this.bridgeBarrierMesh) this.bridgeBarrierMesh.visible = visible;
+    if (this.map && this.isVisible && !this.isInteracting) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  /**
+   * [2단계: 하천·도로 횡단 교량 3D 상판 두께 및 35m 간격 하부 원기둥 교각(Pier) 자동 배치]
+   */
+  public updateBridges(bridgeFeatures?: GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>[]): void {
+    if (!this.map || !this.isVisible) return;
+    try {
+      let feats = bridgeFeatures;
+      if (!feats || feats.length === 0) {
+        const vectorSources = ['openmaptiles-vector', 'openmaptiles', 'openfreemap'].filter(s => this.map!.getSource(s));
+        for (const sId of vectorSources) {
+          try {
+            const queried = this.map.querySourceFeatures(sId, {
+              sourceLayer: 'transportation',
+              filter: ['==', 'brunnel', 'bridge'],
+            });
+            if (queried && queried.length > 0) {
+              feats = queried as any;
+              break;
+            }
+          } catch {}
+        }
+      }
+
+      if (!feats || feats.length === 0) return;
+      this.buildBridgePiers(feats);
+    } catch (err) {
+      console.warn('[LOD2BuildingEngine] updateBridges notice:', err);
+    }
+  }
+
+  private buildBridgePiers(bridgeFeats: any[]): void {
+    const colMatrices: THREE.Matrix4[] = [];
+    const capMatrices: THREE.Matrix4[] = [];
+    const footingMatrices: THREE.Matrix4[] = [];
+
+    const barrierPositions: number[] = [];
+    const barrierNormals: number[] = [];
+    const barrierColors: number[] = [];
+
+    const PIER_SPACING = 35.0; // 35m 간격 자동 배치
+    const seenLine = new Set<string>();
+
+    const tempMat = new THREE.Matrix4();
+    const tempPos = new THREE.Vector3();
+    const tempQuat = new THREE.Quaternion();
+    const tempScale = new THREE.Vector3();
+    const tempEuler = new THREE.Euler();
+
+    const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
+    const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
+    const metersPerLat = (Math.PI / 180) * 6378137;
+
+    for (const feat of bridgeFeats) {
+      if (!feat.geometry) continue;
+      const geomType = feat.geometry.type;
+      const lines: [number, number][][] = [];
+      if (geomType === 'LineString') {
+        lines.push(feat.geometry.coordinates);
+      } else if (geomType === 'MultiLineString') {
+        lines.push(...feat.geometry.coordinates);
+      }
+
+      const roadClass = String(feat.properties?.class || 'primary');
+      const isMotorway = roadClass === 'motorway' || roadClass === 'trunk' || roadClass === 'primary';
+      const isRail = roadClass === 'rail' || roadClass === 'transit';
+      const deckHalfW = isMotorway ? 12.0 : isRail ? 3.2 : 7.0;
+
+      for (const rawLine of lines) {
+        if (!rawLine || rawLine.length < 2) continue;
+        const key = `${rawLine[0][0].toFixed(5)},${rawLine[0][1].toFixed(5)}_${rawLine[rawLine.length - 1][0].toFixed(5)}`;
+        if (seenLine.has(key)) continue;
+        seenLine.add(key);
+
+        const mPts: { x: number; z: number }[] = [];
+        for (const [lng, lat] of rawLine) {
+          const mx = (lng - this.originLngLat[0]) * metersPerLng;
+          const mz = -(lat - this.originLngLat[1]) * metersPerLat;
+          mPts.push({ x: mx, z: mz });
+        }
+
+        const segLens: number[] = [];
+        let totalLen = 0;
+        for (let i = 0; i < mPts.length - 1; i++) {
+          const dx = mPts[i + 1].x - mPts[i].x;
+          const dz = mPts[i + 1].z - mPts[i].z;
+          const len = Math.hypot(dx, dz);
+          segLens.push(len);
+          totalLen += len;
+        }
+
+        if (totalLen < 25.0) continue;
+
+        // 1) 3D 교량 도로 양옆 높이 1.1m 회백색 콘크리트 방호벽 및 두께 1.5m 상판 측면 거더
+        const BARRIER_H = 1.1;
+        const DECK_THICKNESS = 1.5;
+
+        for (let i = 0; i < mPts.length - 1; i++) {
+          const p1 = mPts[i];
+          const p2 = mPts[i + 1];
+          const dx = p2.x - p1.x;
+          const dz = p2.z - p1.z;
+          const len = segLens[i];
+          if (len < 0.1) continue;
+
+          const nx = -dz / len;
+          const nz = dx / len;
+
+          const p1L = { x: p1.x + nx * deckHalfW, z: p1.z + nz * deckHalfW };
+          const p2L = { x: p2.x + nx * deckHalfW, z: p2.z + nz * deckHalfW };
+          const p1R = { x: p1.x - nx * deckHalfW, z: p1.z - nz * deckHalfW };
+          const p2R = { x: p2.x - nx * deckHalfW, z: p2.z - nz * deckHalfW };
+
+          // 좌측 방호벽 (1.1m 회백색 콘크리트 #e2e8f0)
+          addBarrierQuad(
+            barrierPositions, barrierNormals, barrierColors,
+            { x: p1L.x, y: 0, z: p1L.z },
+            { x: p2L.x, y: 0, z: p2L.z },
+            { x: p2L.x, y: BARRIER_H, z: p2L.z },
+            { x: p1L.x, y: BARRIER_H, z: p1L.z },
+            nx, 0, nz,
+            0.89, 0.91, 0.94
+          );
+          // 우측 방호벽 (1.1m 회백색 콘크리트 #e2e8f0)
+          addBarrierQuad(
+            barrierPositions, barrierNormals, barrierColors,
+            { x: p2R.x, y: 0, z: p2R.z },
+            { x: p1R.x, y: 0, z: p1R.z },
+            { x: p1R.x, y: BARRIER_H, z: p1R.z },
+            { x: p2R.x, y: BARRIER_H, z: p2R.z },
+            -nx, 0, -nz,
+            0.89, 0.91, 0.94
+          );
+
+          // 좌측 상판 1.5m 두께 측면 거더 (#475569)
+          addBarrierQuad(
+            barrierPositions, barrierNormals, barrierColors,
+            { x: p2L.x, y: -DECK_THICKNESS, z: p2L.z },
+            { x: p1L.x, y: -DECK_THICKNESS, z: p1L.z },
+            { x: p1L.x, y: 0, z: p1L.z },
+            { x: p2L.x, y: 0, z: p2L.z },
+            nx, 0, nz,
+            0.28, 0.33, 0.41
+          );
+          // 우측 상판 1.5m 두께 측면 거더 (#475569)
+          addBarrierQuad(
+            barrierPositions, barrierNormals, barrierColors,
+            { x: p1R.x, y: -DECK_THICKNESS, z: p1R.z },
+            { x: p2R.x, y: -DECK_THICKNESS, z: p2R.z },
+            { x: p2R.x, y: 0, z: p2R.z },
+            { x: p1R.x, y: 0, z: p1R.z },
+            -nx, 0, -nz,
+            0.28, 0.33, 0.41
+          );
+        }
+
+        // 2) 35m 간격 콘크리트 원기둥 교각(Pier) 기둥 + T-Cap + Footing
+        let distAccum = 0;
+        let curTargetDist = PIER_SPACING * 0.5;
+
+        for (let i = 0; i < mPts.length - 1; i++) {
+          const p1 = mPts[i];
+          const p2 = mPts[i + 1];
+          const segLen = segLens[i];
+          if (segLen < 0.1) continue;
+
+          const dx = p2.x - p1.x;
+          const dz = p2.z - p1.z;
+          const angle = Math.atan2(dx, dz);
+
+          while (curTargetDist <= distAccum + segLen && curTargetDist < totalLen - 10.0) {
+            const t = (curTargetDist - distAccum) / segLen;
+            const px = p1.x + dx * t;
+            const pz = p1.z + dz * t;
+            const pierH = 12.0; // 하천/수면까지 내려가는 기본 교각 높이 12m
+
+            tempEuler.set(0, angle, 0, 'YXZ');
+            tempQuat.setFromEuler(tempEuler);
+
+            // (a) 교각 상단 T-Cap 코핑 브라켓
+            tempPos.set(px, -0.4, pz);
+            tempScale.set(Math.max(5.0, deckHalfW * 1.8), 1.0, 1.0);
+            tempMat.compose(tempPos, tempQuat, tempScale);
+            capMatrices.push(tempMat.clone());
+
+            // (b) 교각 기둥
+            if (isMotorway && deckHalfW >= 10.0) {
+              // 복열 원기둥
+              const nx = -dz / segLen;
+              const nz = dx / segLen;
+              const colOffset = deckHalfW * 0.45;
+
+              tempPos.set(px + nx * colOffset, 0, pz + nz * colOffset);
+              tempScale.set(1.0, pierH, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              colMatrices.push(tempMat.clone());
+
+              tempPos.set(px - nx * colOffset, 0, pz - nz * colOffset);
+              tempScale.set(1.0, pierH, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              colMatrices.push(tempMat.clone());
+
+              // 수중/지면 기초 우물통
+              tempPos.set(px + nx * colOffset, -pierH, pz + nz * colOffset);
+              tempScale.set(1.0, 1.0, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              footingMatrices.push(tempMat.clone());
+
+              tempPos.set(px - nx * colOffset, -pierH, pz - nz * colOffset);
+              tempScale.set(1.0, 1.0, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              footingMatrices.push(tempMat.clone());
+            } else {
+              // 단열 원기둥
+              tempPos.set(px, 0, pz);
+              tempScale.set(1.0, pierH, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              colMatrices.push(tempMat.clone());
+
+              tempPos.set(px, -pierH, pz);
+              tempScale.set(1.0, 1.0, 1.0);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              footingMatrices.push(tempMat.clone());
+            }
+
+            curTargetDist += PIER_SPACING;
+          }
+
+          distAccum += segLen;
+        }
+      }
+    }
+
+    // 신규 교량 메쉬 인스턴스 빌드
+    let newColMesh: THREE.InstancedMesh | null = null;
+    let newCapMesh: THREE.InstancedMesh | null = null;
+    let newFootingMesh: THREE.InstancedMesh | null = null;
+    let newBarrierMesh: THREE.Mesh | null = null;
+
+    if (colMatrices.length > 0 && LOD2BuildingEngine.unitBridgePierColGeo && this.bridgePierMaterial) {
+      newColMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitBridgePierColGeo,
+        this.bridgePierMaterial,
+        colMatrices.length
+      );
+      for (let i = 0; i < colMatrices.length; i++) {
+        newColMesh.setMatrixAt(i, colMatrices[i]);
+      }
+      newColMesh.instanceMatrix.needsUpdate = true;
+      newColMesh.computeBoundingSphere();
+      newColMesh.frustumCulled = false;
+    }
+
+    if (capMatrices.length > 0 && LOD2BuildingEngine.unitBridgePierCapGeo && this.bridgePierCapMaterial) {
+      newCapMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitBridgePierCapGeo,
+        this.bridgePierCapMaterial,
+        capMatrices.length
+      );
+      for (let i = 0; i < capMatrices.length; i++) {
+        newCapMesh.setMatrixAt(i, capMatrices[i]);
+      }
+      newCapMesh.instanceMatrix.needsUpdate = true;
+      newCapMesh.computeBoundingSphere();
+      newCapMesh.frustumCulled = false;
+    }
+
+    if (footingMatrices.length > 0 && LOD2BuildingEngine.unitBridgePierFootingGeo && this.bridgePierCapMaterial) {
+      newFootingMesh = new THREE.InstancedMesh(
+        LOD2BuildingEngine.unitBridgePierFootingGeo,
+        this.bridgePierCapMaterial,
+        footingMatrices.length
+      );
+      for (let i = 0; i < footingMatrices.length; i++) {
+        newFootingMesh.setMatrixAt(i, footingMatrices[i]);
+      }
+      newFootingMesh.instanceMatrix.needsUpdate = true;
+      newFootingMesh.computeBoundingSphere();
+      newFootingMesh.frustumCulled = false;
+    }
+
+    if (barrierPositions.length > 0 && this.bridgeBarrierMaterial) {
+      const bGeo = new THREE.BufferGeometry();
+      bGeo.setAttribute('position', new THREE.Float32BufferAttribute(barrierPositions, 3));
+      bGeo.setAttribute('normal', new THREE.Float32BufferAttribute(barrierNormals, 3));
+      bGeo.setAttribute('color', new THREE.Float32BufferAttribute(barrierColors, 3));
+      bGeo.computeBoundingSphere();
+      newBarrierMesh = new THREE.Mesh(bGeo, this.bridgeBarrierMaterial);
+      newBarrierMesh.frustumCulled = false;
+    }
+
+    // Double buffering 원자적 교체
+    if (this.bridgePierColMesh) {
+      this.scene.remove(this.bridgePierColMesh);
+      this.bridgePierColMesh.dispose();
+    }
+    if (this.bridgePierCapMesh) {
+      this.scene.remove(this.bridgePierCapMesh);
+      this.bridgePierCapMesh.dispose();
+    }
+    if (this.bridgePierFootingMesh) {
+      this.scene.remove(this.bridgePierFootingMesh);
+      this.bridgePierFootingMesh.dispose();
+    }
+    if (this.bridgeBarrierMesh) {
+      this.scene.remove(this.bridgeBarrierMesh);
+      if (this.bridgeBarrierMesh.geometry) this.bridgeBarrierMesh.geometry.dispose();
+    }
+
+    this.bridgePierColMesh = newColMesh;
+    this.bridgePierCapMesh = newCapMesh;
+    this.bridgePierFootingMesh = newFootingMesh;
+    this.bridgeBarrierMesh = newBarrierMesh;
+
+    if (newColMesh) this.scene.add(newColMesh);
+    if (newCapMesh) this.scene.add(newCapMesh);
+    if (newFootingMesh) this.scene.add(newFootingMesh);
+    if (newBarrierMesh) this.scene.add(newBarrierMesh);
+
+    if (this.map && this.isVisible && !this.isInteracting) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  /**
    * 메쉬 제거 및 지오메트리 GPU 메모리 해제
    */
   private clearMeshes(): void {
@@ -2088,6 +2514,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.ventInstancedMesh,
       this.solarPanelInstancedMesh,
       this.hvacInstancedMesh,
+      this.bridgePierColMesh,
+      this.bridgePierCapMesh,
+      this.bridgePierFootingMesh,
     ];
     for (const im of instanced) {
       if (im) {
@@ -2099,6 +2528,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.ventInstancedMesh = null;
     this.solarPanelInstancedMesh = null;
     this.hvacInstancedMesh = null;
+    this.bridgePierColMesh = null;
+    this.bridgePierCapMesh = null;
+    this.bridgePierFootingMesh = null;
+
+    if (this.bridgeBarrierMesh) {
+      this.scene.remove(this.bridgeBarrierMesh);
+      if (this.bridgeBarrierMesh.geometry) {
+        this.bridgeBarrierMesh.geometry.dispose();
+      }
+      this.bridgeBarrierMesh = null;
+    }
 
     if (this.contactShadowMesh) {
       this.scene.remove(this.contactShadowMesh);
@@ -2132,6 +2572,18 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.contactShadowMaterial) {
       this.contactShadowMaterial.dispose();
       this.contactShadowMaterial = null;
+    }
+    if (this.bridgePierMaterial) {
+      this.bridgePierMaterial.dispose();
+      this.bridgePierMaterial = null;
+    }
+    if (this.bridgePierCapMaterial) {
+      this.bridgePierCapMaterial.dispose();
+      this.bridgePierCapMaterial = null;
+    }
+    if (this.bridgeBarrierMaterial) {
+      this.bridgeBarrierMaterial.dispose();
+      this.bridgeBarrierMaterial = null;
     }
     if (this.threeDemTexture) {
       this.threeDemTexture.dispose();

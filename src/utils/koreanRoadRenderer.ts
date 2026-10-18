@@ -28,44 +28,68 @@ import type { LayerSpecification } from 'maplibre-gl';
  * 한국형 실측 도로 렌더링에 등록되는 전체 레이어 ID 목록
  */
 export const KOREAN_ROAD_LAYER_IDS: string[] = [
-  // 0. 교량 입체 구조
+  // 0. 하천·계곡 횡단 교량 입체 구조 (거더·상판·방호벽 난간)
+  'road-bridge-shadow',
+  'road-bridge-girder',
   'road-bridge-casing',
   'road-bridge-deck',
+  'road-bridge-barrier-left-motorway',
+  'road-bridge-barrier-right-motorway',
+  'road-bridge-barrier-left-secondary',
+  'road-bridge-barrier-right-secondary',
+  'road-bridge-piers-marker',
 
-  // 1. 최하단 보도블록/연석 단차 음영 (Curb Shadow)
+  // 1. 철도 선로 (자갈 도상·침목·은백색 듀얼 강철 레일)
+  'rail-ballast-shadow',
+  'rail-ballast',
+  'rail-ballast-grain',
+  'rail-sleepers',
+  'rail-steel-base-left',
+  'rail-steel-base-right',
+  'rail-steel-left',
+  'rail-steel-right',
+  'rail-overview',
+
+  // 2. 최하단 보도블록/연석 단차 음영 (Curb Shadow)
   'road-curb-shadow-motorway',
   'road-curb-shadow-secondary',
   'road-curb-shadow-minor',
   'road-curb-shadow-link',
 
-  // 2. 밝은 화강석 연석 라인 (Granite Curb #cbd5e1)
+  // 3. 밝은 화강석 연석 라인 (Granite Curb #cbd5e1)
   'road-curb-motorway',
   'road-curb-secondary',
   'road-curb-minor',
   'road-curb-link',
 
-  // 3. 다크 슬레이트 차콜 아스팔트 포장 노면 (Dark Asphalt #26292e ~ #32363d)
+  // 4. 다크 슬레이트 차콜 아스팔트 포장 노면 (Dark Asphalt #26292e ~ #32363d)
   'road-asphalt-motorway',
   'road-asphalt-secondary',
   'road-asphalt-minor',
   'road-asphalt-link',
 
-  // 4. 고속도로/국도 진출입 램프 가감속 차로 합류 유도선
+  // 5. 고속도로/국도 진출입 램프 가감속 차로 합류 유도선
   'road-ramp-guide-blue',
   'road-ramp-guide-dash',
 
-  // 5. 차도 외곽 갓길 백색 실선 (Outer Edge Lines #f8fafc)
+  // 6. 차도 외곽 갓길 백색 실선 (Outer Edge Lines #f8fafc)
   'road-edge-white-left-motorway',
   'road-edge-white-right-motorway',
   'road-edge-white-left-secondary',
   'road-edge-white-right-secondary',
 
-  // 6. 한국 도로 규격 황색 중앙선 (Yellow Centerline #eab308)
+  // 7. 왕복 4차선 이상 주간선도로 중앙분리대 및 가드레일 (Median Strip & Barrier)
+  'road-median-shadow',
+  'road-median-curb',
+  'road-median-strip',
+  'road-median-guardrail',
+
+  // 8. 한국 도로 규격 황색 중앙선 (Yellow Centerline #eab308)
   'road-centerline-yellow-left',
   'road-centerline-yellow-right',
   'road-centerline-yellow-single',
 
-  // 7. 차로 폭 3.25m 규격 백색 점선 차로 분리선 (White Dashed Lane Lines [3, 5])
+  // 9. 차로 폭 3.25m 규격 백색 점선 차로 분리선 (White Dashed Lane Lines [3, 5])
   'road-lanes-dashed-left-1',
   'road-lanes-dashed-right-1',
   'road-lanes-dashed-left-2',
@@ -73,19 +97,19 @@ export const KOREAN_ROAD_LAYER_IDS: string[] = [
   'road-lanes-dashed-left-3',
   'road-lanes-dashed-right-3',
 
-  // 8. 교차로 횡단보도, 정지선 및 회전교차로
+  // 10. 교차로 횡단보도, 정지선 및 회전교차로
   'crosswalks-fill',
   'crosswalks-stopline',
   'roundabout-island-fill',
   'roundabout-island-casing',
   'roundabout-circulating-lane',
 
-  // 9. 광역 저배율 오버뷰 도로망 (줌 13 미만)
+  // 11. 광역 저배율 오버뷰 도로망 (줌 13 미만)
   'roads-overview-highway',
   'roads-overview-secondary',
   'roads-overview-local',
 
-  // 10. 아파트 단지 및 학교/공공부지 외곽 담장/경계석 & 단지 내부 보행로
+  // 12. 아파트 단지 및 학교/공공부지 외곽 담장/경계석 & 단지 내부 보행로
   'complex-boundary-wall',
   'complex-boundary-curb',
   'road-complex-footway-casing',
@@ -201,17 +225,65 @@ export function getKoreanRoadLayerDefinitions(
     'tertiary_link',
   ];
 
-  // 5) 교량 (Bridge) 필터
+  // 5) 교량 (Bridge) 필터 (도로 및 철교)
   const bridgeFilter: any[] = [
     'all',
     ['in', 'class', 'motorway', 'trunk', 'primary', 'secondary', 'tertiary'],
     ['==', 'brunnel', 'bridge'],
   ];
 
+  // 6) 철도 선로 (Railway) 필터
+  const railFilter: any[] = [
+    'in',
+    'class',
+    'rail',
+    'transit',
+  ];
+
   const layers: LayerSpecification[] = [
     // -------------------------------------------------------------------------
-    // 0. 교량/고가도로 하부 입체 상판 및 난간 케이싱
+    // 0. 하천·계곡·도로 횡단 교량(Bridge) 3D 상판 두께 및 방호벽 난간
     // -------------------------------------------------------------------------
+    // (a) 교량 지면/수면 투영 짙은 그림자
+    {
+      id: 'road-bridge-shadow',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 12.5,
+      filter: bridgeFilter as any,
+      paint: {
+        'line-color': '#0F172A',
+        'line-width': createMeterScaleWidthExpr(33.0, 12.5, 3.8) as any,
+        'line-opacity': 0.58,
+        'line-blur': 1.0,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (b) 두께 1.5m의 교량 상판 측면 및 하부 콘크리트 거더 (Girder)
+    {
+      id: 'road-bridge-girder',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 12.5,
+      filter: bridgeFilter as any,
+      paint: {
+        'line-color': '#475569', // 두께 1.5m 콘크리트 거더 측면
+        'line-width': createMeterScaleWidthExpr(29.5, 12.5, 3.2) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (c) 교량 외곽 콘크리트 난간 케이싱
     {
       id: 'road-bridge-casing',
       type: 'line',
@@ -221,7 +293,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: bridgeFilter as any,
       paint: {
         'line-color': '#334155', // 교량 콘크리트 난간 및 외곽 프레임
-        'line-width': createMeterScaleWidthExpr(29.0, 13, 3.2) as any,
+        'line-width': createMeterScaleWidthExpr(28.0, 13, 2.9) as any,
         'line-opacity': 0.98,
       },
       layout: {
@@ -230,17 +302,330 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
+    // (d) 교량 상판 아스팔트 슬래브
     {
       id: 'road-bridge-deck',
       type: 'line',
       source: sourceId,
       'source-layer': sourceLayer,
-      minzoom: 13,
+      minzoom: 12.5,
       filter: bridgeFilter as any,
       paint: {
-        'line-color': '#0F172A', // 교량 상판 슬래브
-        'line-width': createMeterScaleWidthExpr(26.5, 13, 2.6) as any,
+        'line-color': '#1E293B', // 교량 상판 슬래브
+        'line-width': createMeterScaleWidthExpr(25.5, 12.5, 2.5) as any,
+        'line-opacity': 0.99,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (e) 주간선 교량 좌측 높이 1.1m 회백색 콘크리트 방호벽/난간
+    {
+      id: 'road-bridge-barrier-left-motorway',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: ['all', bridgeFilter, motorwayFilter] as any,
+      paint: {
+        'line-color': '#E2E8F0', // 높이 1.1m 회백색 콘크리트 방호벽
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 1.0,
+          15, 1.8,
+          17, 3.6,
+          19, 7.2,
+        ],
+        'line-offset': createOffsetExpr(-13.8) as any,
         'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (f) 주간선 교량 우측 높이 1.1m 회백색 콘크리트 방호벽/난간
+    {
+      id: 'road-bridge-barrier-right-motorway',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: ['all', bridgeFilter, motorwayFilter] as any,
+      paint: {
+        'line-color': '#E2E8F0',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 1.0,
+          15, 1.8,
+          17, 3.6,
+          19, 7.2,
+        ],
+        'line-offset': createOffsetExpr(13.8) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (g) 중로 교량 좌측 높이 1.1m 회백색 방호벽
+    {
+      id: 'road-bridge-barrier-left-secondary',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: ['all', bridgeFilter, secondaryFilter] as any,
+      paint: {
+        'line-color': '#E2E8F0',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 0.8,
+          15, 1.5,
+          17, 3.0,
+          19, 6.0,
+        ],
+        'line-offset': createOffsetExpr(-7.8) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (h) 중로 교량 우측 높이 1.1m 회백색 방호벽
+    {
+      id: 'road-bridge-barrier-right-secondary',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: ['all', bridgeFilter, secondaryFilter] as any,
+      paint: {
+        'line-color': '#E2E8F0',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 0.8,
+          15, 1.5,
+          17, 3.0,
+          19, 6.0,
+        ],
+        'line-offset': createOffsetExpr(7.8) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (i) 35m 간격 교량 하부 교각(Pier) 위치 심볼 마커
+    {
+      id: 'road-bridge-piers-marker',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.0,
+      filter: bridgeFilter as any,
+      paint: {
+        'line-color': '#334155',
+        'line-width': createMeterScaleWidthExpr(5.4, 14, 1.5) as any,
+        'line-dasharray': [1, 7],
+        'line-opacity': 0.90,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-B. 실제 철도 선로(Railway) 및 역사 주변 침목·레일 정밀 렌더링
+    // -------------------------------------------------------------------------
+    // (a) 하단 자갈 도상 접지 음영 (Ballast Shadow)
+    {
+      id: 'rail-ballast-shadow',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 11.0,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#1C1917',
+        'line-width': createMeterScaleWidthExpr(6.4, 11, 1.8) as any,
+        'line-opacity': 0.45,
+        'line-blur': 0.6,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (b) 폭 5m 다크 브라운/그레이 자갈 도상 (Ballast #44403c)
+    {
+      id: 'rail-ballast',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 11.0,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#44403C', // 실제 자갈 도상 컬러 (#44403c)
+        'line-width': createMeterScaleWidthExpr(5.0, 11, 1.4) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (c) 자갈 미세 요철 질감 (Ballast Grain)
+    {
+      id: 'rail-ballast-grain',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.5,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#292524',
+        'line-width': createMeterScaleWidthExpr(4.6, 14.5, 1.2) as any,
+        'line-dasharray': [1, 1],
+        'line-opacity': 0.40,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (d) 촘촘한 가로 침목 패턴 (Sleepers, line-dasharray: [0.4, 0.8])
+    {
+      id: 'rail-sleepers',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 12.5,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#57534E', // 콘크리트/방부목 침목 톤
+        'line-width': createMeterScaleWidthExpr(3.8, 12.5, 1.1) as any,
+        'line-dasharray': [0.4, 0.8], // 촘촘한 가로 침목 패턴
+        'line-opacity': 0.96,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (e) 좌측 강철 레일 베이스 플레이트 및 음영
+    {
+      id: 'rail-steel-base-left',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#1E293B',
+        'line-width': createMeterScaleWidthExpr(0.75, 13.5, 0.9) as any,
+        'line-offset': createOffsetExpr(-0.72) as any,
+        'line-opacity': 0.65,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (f) 우측 강철 레일 베이스 플레이트 및 음영
+    {
+      id: 'rail-steel-base-right',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#1E293B',
+        'line-width': createMeterScaleWidthExpr(0.75, 13.5, 0.9) as any,
+        'line-offset': createOffsetExpr(0.72) as any,
+        'line-opacity': 0.65,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (g) 좌측 은백색 강철 레일 (표준궤 -0.72m)
+    {
+      id: 'rail-steel-left',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.0,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#E2E8F0', // 은백색 강철 레일 두부
+        'line-width': createMeterScaleWidthExpr(0.45, 13, 0.75) as any,
+        'line-offset': createOffsetExpr(-0.72) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (h) 우측 은백색 강철 레일 (표준궤 +0.72m)
+    {
+      id: 'rail-steel-right',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.0,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#E2E8F0', // 은백색 강철 레일 두부
+        'line-width': createMeterScaleWidthExpr(0.45, 13, 0.75) as any,
+        'line-offset': createOffsetExpr(0.72) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (i) 줌 12.5 미만 광역 철도망 가시화
+    {
+      id: 'rail-overview',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      maxzoom: 12.5,
+      filter: railFilter as any,
+      paint: {
+        'line-color': '#57534E',
+        'line-width': [
+          'interpolate', ['linear'], ['zoom'],
+          6, 0.5,
+          9, 1.2,
+          12.5, 2.0,
+        ],
+        'line-dasharray': [4, 3],
+        'line-opacity': 0.85,
       },
       layout: {
         'line-cap': 'round',
@@ -656,11 +1041,98 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // 6. [2단계: 한국 도로 규격 황색 중앙선 (Yellow Centerline #eab308)]
-    // - 왕복 4차선 이상 주간선도로: 황색 복선 (두 줄 실선 #eab308, 좌우 ±0.38m)
+    // 6. [3단계: 왕복 4차선 이상 주간선도로 중앙분리대(Median Strip) 및 콘크리트 방호벽/가드레일]
+    // -------------------------------------------------------------------------
+    // (a) 중앙분리대 단차 미세 그림자
+    {
+      id: 'road-median-shadow',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: motorwayFilter as any,
+      paint: {
+        'line-color': '#0F172A',
+        'line-width': createMeterScaleWidthExpr(2.8, 13.5, 1.8) as any,
+        'line-opacity': 0.45,
+        'line-blur': 0.6,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (b) 중앙분리대 화강석 연석 라인 (Granite Curb)
+    {
+      id: 'road-median-curb',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: motorwayFilter as any,
+      paint: {
+        'line-color': '#CBD5E1', // 밝은 화강석 연석
+        'line-width': createMeterScaleWidthExpr(2.2, 13.5, 1.4) as any,
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (c) 녹지형 중앙분리대 관목/식재 매트
+    {
+      id: 'road-median-strip',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.0,
+      filter: motorwayFilter as any,
+      paint: {
+        'line-color': '#15803D', // 자연스러운 딥 그린 관목/잔디 식재
+        'line-width': createMeterScaleWidthExpr(1.6, 14.0, 1.2) as any,
+        'line-opacity': 0.92,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (d) 중앙 콘크리트 방호벽 / 아연도금 가드레일 센터 빔
+    {
+      id: 'road-median-guardrail',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.2,
+      filter: motorwayFilter as any,
+      paint: {
+        'line-color': '#E2E8F0', // 회색 콘크리트 방호벽 / 가드레일
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          14.2, 0.7,
+          16, 1.3,
+          18, 2.5,
+          20, 4.8,
+        ],
+        'line-opacity': 0.96,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 7. [2단계: 한국 도로 규격 황색 중앙선 (Yellow Centerline #eab308)]
+    // - 왕복 4차선 이상 주간선도로: 중앙분리대 양옆 황색 복선 (두 줄 실선 #eab308, 좌우 ±1.2m)
     // - 2차선 도로: 황색 단선 (도로 정중앙 배치)
     // -------------------------------------------------------------------------
-    // (a) 주간선 좌측 황색 실선
+    // (a) 주간선 좌측 황색 실선 (중앙분리대 좌측 경계)
     {
       id: 'road-centerline-yellow-left',
       type: 'line',
@@ -677,7 +1149,7 @@ export function getKoreanRoadLayerDefinitions(
           18, 2.8,
           20, 5.2,
         ],
-        'line-offset': createOffsetExpr(-0.38) as any,
+        'line-offset': createOffsetExpr(-1.2) as any,
         'line-opacity': 0.96,
       },
       layout: {
@@ -686,7 +1158,7 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
-    // (b) 주간선 우측 황색 실선
+    // (b) 주간선 우측 황색 실선 (중앙분리대 우측 경계)
     {
       id: 'road-centerline-yellow-right',
       type: 'line',
@@ -703,7 +1175,7 @@ export function getKoreanRoadLayerDefinitions(
           18, 2.8,
           20, 5.2,
         ],
-        'line-offset': createOffsetExpr(0.38) as any,
+        'line-offset': createOffsetExpr(1.2) as any,
         'line-opacity': 0.96,
       },
       layout: {

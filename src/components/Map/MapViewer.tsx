@@ -2356,6 +2356,7 @@ export const MapViewer: React.FC = () => {
             const currentMode = useMapStore.getState().renderMode3D;
             if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
               lod2BuildingEngineRef.current.updateBuildings(bldgs);
+              lod2BuildingEngineRef.current.updateBridges();
             }
             if (deck3DTilesManagerRef.current) {
               deck3DTilesManagerRef.current.setBuildingFeatures(bldgs);
@@ -2429,6 +2430,7 @@ export const MapViewer: React.FC = () => {
           const currentMode = useMapStore.getState().renderMode3D;
           if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
             lod2BuildingEngineRef.current.updateBuildings(bldgs);
+            lod2BuildingEngineRef.current.updateBridges();
           }
           if (deck3DTilesManagerRef.current) {
             deck3DTilesManagerRef.current.setBuildingFeatures(bldgs);
@@ -3549,6 +3551,10 @@ export const MapViewer: React.FC = () => {
       if (map.getLayer(lid)) {
         map.setLayoutProperty(lid, 'visibility', roadVis);
       }
+    }
+
+    if (lod2BuildingEngineRef.current) {
+      lod2BuildingEngineRef.current.setBridgesVisible(layers.roads);
     }
   }, [layers.roads, isMapLoaded]);
 
