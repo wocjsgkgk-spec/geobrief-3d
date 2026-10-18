@@ -694,7 +694,7 @@ export const useMapStore = create<MapStoreState>()(
       polygonArea: WONJU_DEFAULT_AREA,
       defenseAnalysisResult: analyzeDefenseRegulations(WONJU_DEFAULT_POLYGON, WONJU_DEFAULT_CENTER),
       showFlightCeiling3D: false,
-      showBuildingMass3D: true,
+      showBuildingMass3D: false,
       buildingMassPreset: 'defense_rd',
       customGltfUrl: null,
       setShowFlightCeiling3D: (showFlightCeiling3D) => set({ showFlightCeiling3D }),
@@ -829,7 +829,7 @@ export const useMapStore = create<MapStoreState>()(
       },
 
       // 부지 폴리곤 렌더링 스타일
-      polygonStyle: 'blue',
+      polygonStyle: 'emerald',
       setPolygonStyle: (polygonStyle) => set({ polygonStyle }),
 
       // 목표 면적(평/㎡) 기반 정형 템플릿(스탬프) 생성기
@@ -1360,18 +1360,31 @@ export const useMapStore = create<MapStoreState>()(
         tilesLoadedCount: 0,
       },
       toggleTile3DStream: () =>
-        set((state) => ({
-          tile3DStream: {
-            ...state.tile3DStream,
-            enabled: !state.tile3DStream.enabled,
-          },
-        })),
+        set((state) => {
+          const nextEnabled = !state.tile3DStream.enabled;
+          return {
+            tile3DStream: {
+              ...state.tile3DStream,
+              enabled: nextEnabled,
+              statusText: nextEnabled
+                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
+                : '⚪ 3D 타일셋 일시 정지 (LOD2 메쉬 가동 중)',
+            },
+            renderMode3D: nextEnabled ? 'tiles3d' : 'facade',
+            detail3DMode: 'lod2',
+          };
+        }),
       setTile3DStreamEnabled: (enabled) =>
         set((state) => ({
           tile3DStream: {
             ...state.tile3DStream,
             enabled,
+            statusText: enabled
+              ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
+              : '⚪ 3D 타일셋 일시 정지 (LOD2 메쉬 가동 중)',
           },
+          renderMode3D: enabled ? 'tiles3d' : 'facade',
+          detail3DMode: 'lod2',
         })),
       setTile3DStreamUrl: (url) =>
         set((state) => ({
@@ -1379,21 +1392,38 @@ export const useMapStore = create<MapStoreState>()(
             ...state.tile3DStream,
             url,
             presetId: 'custom',
+            enabled: true,
+            statusText: `🟢 사용자 지정 3D Tiles 연결됨 (${url.slice(0, 32)}...)`,
           },
+          renderMode3D: 'tiles3d',
+          detail3DMode: 'lod2',
         })),
       setTile3DStreamPreset: (presetId) =>
-        set((state) => ({
-          tile3DStream: {
-            ...state.tile3DStream,
-            presetId,
-            url: SAMPLE_3D_TILES_PRESETS[presetId].url || state.tile3DStream.url,
-          },
-        })),
+        set((state) => {
+          const preset = SAMPLE_3D_TILES_PRESETS[presetId];
+          const statusMap: Record<Tile3DPresetId, string> = {
+            vworld_3d_buildings: '🟢 브이월드 실사 3D (OGC 타일셋) 스트리밍 가동',
+            sample_city: '🟢 도시 모델 (b3dm) 클린 화이트 매스 렌더링 가동',
+            sample_pointcloud: '🟢 고밀도 LiDAR 공간 점군 (pnts) 가동',
+            custom: '🟢 사용자 지정 OGC 3D Tiles 스트리밍 가동',
+          };
+          return {
+            tile3DStream: {
+              ...state.tile3DStream,
+              presetId,
+              url: preset?.url || state.tile3DStream.url,
+              enabled: true,
+              statusText: statusMap[presetId] || '🟢 3D 타일셋 스트리밍 가동',
+            },
+            renderMode3D: 'tiles3d',
+            detail3DMode: 'lod2',
+          };
+        }),
       setTile3DStreamOpacity: (opacity) =>
         set((state) => ({
           tile3DStream: {
             ...state.tile3DStream,
-            opacity,
+            opacity: Math.max(0.0, Math.min(1.0, opacity)),
           },
         })),
       setTile3DStreamSse: (maximumScreenSpaceError) =>
@@ -1407,7 +1437,7 @@ export const useMapStore = create<MapStoreState>()(
         set((state) => ({
           tile3DStream: {
             ...state.tile3DStream,
-            pointSize,
+            pointSize: Math.max(1.0, Math.min(10.0, pointSize)),
           },
         })),
       setTile3DStreamStatus: (statusText, isLoading, tilesLoadedCount) =>
@@ -1439,7 +1469,7 @@ export const useMapStore = create<MapStoreState>()(
       transformGizmoMode: 'translate',
 
       // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+) 토글 관리]
-      detail3DMode: 'lod1',
+      detail3DMode: 'lod2',
       setDetail3DMode: (mode) => set({ detail3DMode: mode }),
       toggleDetail3DMode: () =>
         set((s) => {
@@ -1451,7 +1481,7 @@ export const useMapStore = create<MapStoreState>()(
         }),
 
       // [신규] 3D 건축물 상호 배타적 렌더러 모드 (Mutual Exclusion)
-      renderMode3D: 'native',
+      renderMode3D: 'facade',
       setRenderMode3D: (mode) =>
         set((s) => {
           const isNative = mode === 'native';
@@ -1897,7 +1927,7 @@ export const useMapStore = create<MapStoreState>()(
           polygonArea: WONJU_DEFAULT_AREA,
           defenseAnalysisResult: analyzeDefenseRegulations(WONJU_DEFAULT_POLYGON, WONJU_DEFAULT_CENTER),
           showFlightCeiling3D: false,
-          showBuildingMass3D: true,
+          showBuildingMass3D: false,
           buildingMassPreset: 'defense_rd',
           customGltfUrl: null,
           accessibilityResult: analyzeAccessibility(WONJU_DEFAULT_CENTER),
@@ -1907,7 +1937,7 @@ export const useMapStore = create<MapStoreState>()(
           slidePackProgress: DEFAULT_SLIDE_PACK_PROGRESS,
           metadata: DEFAULT_METADATA,
           viewMode: '3D',
-          polygonStyle: 'blue',
+          polygonStyle: 'emerald',
           stampMode: false,
           stampAreaPyeong: 5000,
           stampShape: 'square',

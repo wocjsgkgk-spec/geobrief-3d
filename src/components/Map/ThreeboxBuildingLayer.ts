@@ -909,18 +909,9 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       canopy.position.set(0, 4.2, d / 2 + 3.5);
       root.add(canopy);
 
-      // 11. 지면 그림자 수신용 바닥 플레이트 (Ground Shadow Receiver Plane)
-      const shadowPlaneGeo = new THREE.PlaneGeometry(160, 160);
-      const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.38 });
-      const shadowPlane = new THREE.Mesh(shadowPlaneGeo, shadowPlaneMat);
-      shadowPlane.rotation.x = -Math.PI / 2;
-      shadowPlane.position.y = 0.05;
-      shadowPlane.receiveShadow = true;
-      root.add(shadowPlane);
-
-      // 12. 전체 서브메쉬에 CastShadow & ReceiveShadow 활성화
+      // 11. 전체 서브메쉬에 CastShadow & ReceiveShadow 활성화
       root.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh && obj !== shadowPlane) {
+        if ((obj as THREE.Mesh).isMesh) {
           obj.castShadow = true;
           obj.receiveShadow = true;
         }

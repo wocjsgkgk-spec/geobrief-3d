@@ -84,6 +84,7 @@ export const Header: React.FC = () => {
     setShowTerrainProfile,
     renderMode3D,
     setRenderMode3D,
+    tile3DStream,
     losAnalysis,
     startLosAnalysis,
     resetLosAnalysis,
@@ -742,7 +743,13 @@ export const Header: React.FC = () => {
             {renderMode3D === 'facade'
               ? '실감(LOD2)'
               : renderMode3D === 'tiles3d'
-              ? '3D 타일셋'
+              ? tile3DStream.presetId === 'sample_pointcloud'
+                ? 'LiDAR 점군'
+                : tile3DStream.presetId === 'sample_city'
+                ? '도시 모델(b3dm)'
+                : tile3DStream.presetId === 'custom'
+                ? '3D Tiles(URL)'
+                : '3D 타일셋'
               : '경량 네이티브'}
           </span>
         </button>

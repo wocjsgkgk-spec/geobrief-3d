@@ -48,6 +48,7 @@ export function extractRenderedVectorBuildings(
 
   try {
     const targetLayers = [
+      'building-vector-carrier',
       'building-body',
       'building-roof-cap',
       '3d-buildings',
@@ -55,20 +56,37 @@ export function extractRenderedVectorBuildings(
       'fusion-buildings-3d',
       'fusion-buildings-roof',
     ].filter((l) => map.getLayer(l));
-    let rendered: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = [];
+
+    const candidateFeatures: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = [];
+
+    // 1) 뷰포트 내 렌더링 피처 수집
     if (targetLayers.length > 0) {
       try {
-        rendered = map.queryRenderedFeatures(undefined, { layers: targetLayers });
+        const rendered = map.queryRenderedFeatures(undefined, { layers: targetLayers });
+        if (rendered && rendered.length > 0) candidateFeatures.push(...rendered);
       } catch {
         // ignore
       }
     }
 
-    if ((!rendered || rendered.length === 0) && map.getSource('openmaptiles-vector')) {
+    // 2) 오픈 벡터 타일(openmaptiles-vector, openmaptiles, openfreemap) 전체 소스 피처 100% 수집
+    const vectorSources = ['openmaptiles-vector', 'openmaptiles', 'openfreemap'].filter((s) => map.getSource(s));
+    for (const srcId of vectorSources) {
       try {
-        rendered = map.querySourceFeatures('openmaptiles-vector', {
+        const srcFeats = map.querySourceFeatures(srcId, {
           sourceLayer: 'building',
         });
+        if (srcFeats && srcFeats.length > 0) candidateFeatures.push(...srcFeats);
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3) 브이월드/국토부 융합 소스 피처 수집
+    if (map.getSource('fusion-buildings-source')) {
+      try {
+        const fusionFeats = map.querySourceFeatures('fusion-buildings-source');
+        if (fusionFeats && fusionFeats.length > 0) candidateFeatures.push(...fusionFeats);
       } catch {
         // ignore
       }
@@ -77,7 +95,7 @@ export function extractRenderedVectorBuildings(
     const seen = new Set<string>();
     const uniqueFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
 
-    for (const feat of rendered) {
+    for (const feat of candidateFeatures) {
       if (!feat.geometry || (feat.geometry.type !== 'Polygon' && feat.geometry.type !== 'MultiPolygon')) {
         continue;
       }
@@ -98,30 +116,77 @@ export function extractRenderedVectorBuildings(
       const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '');
       const usageType = String(props.type || props.class || props.building || props.usageType || props.bld_category || 'general').toLowerCase();
 
-      // 건물 면적 및 종횡비 계산으로 누락된 층고/높이 지능형 복원
-      let approxArea = 0;
-      let aspectRatio = 1.0;
-      if (feat.geometry.type === 'Polygon' && feat.geometry.coordinates[0]?.length >= 3) {
-        const ring = feat.geometry.coordinates[0];
+      // 건물 폴리곤 좌표 파싱 및 기하학적 치수(폭, 길이, 면적, 종횡비, 중심좌표) 계산
+      let dimMin = 10, dimMax = 15, approxArea = 150, cLng = 127.935, cLat = 37.359;
+      const polyCoords = feat.geometry.type === 'Polygon' ? feat.geometry.coordinates[0] : feat.geometry.coordinates[0]?.[0];
+      if (polyCoords && polyCoords.length >= 3) {
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        for (const pt of ring) {
+        let sumLng = 0, sumLat = 0;
+        for (const pt of polyCoords) {
           if (pt[0] < minX) minX = pt[0];
           if (pt[0] > maxX) maxX = pt[0];
           if (pt[1] < minY) minY = pt[1];
           if (pt[1] > maxY) maxY = pt[1];
+          sumLng += pt[0];
+          sumLat += pt[1];
         }
-        const cosLat = Math.cos((((minY + maxY) * 0.5) * Math.PI) / 180);
-        const wMeters = (maxX - minX) * 111319.5 * cosLat;
-        const hMeters = (maxY - minY) * 111319.5;
-        approxArea = Math.max(10, wMeters * hMeters);
-        const maxD = Math.max(wMeters, hMeters);
-        const minD = Math.max(1, Math.min(wMeters, hMeters));
-        aspectRatio = maxD / minD;
+        cLng = sumLng / polyCoords.length;
+        cLat = sumLat / polyCoords.length;
+        const cosLat = Math.cos((cLat * Math.PI) / 180);
+        const wMeters = (maxX - minX) * 111320 * cosLat;
+        const hMeters = (maxY - minY) * 111320;
+        dimMin = Math.max(1, Math.min(wMeters, hMeters));
+        dimMax = Math.max(wMeters, hMeters);
+        approxArea = Math.max(10, wMeters * hMeters * 0.85);
       }
+      const aspectRatio = dimMax / Math.max(1, dimMin);
 
-      const isApartment = name.includes('아파트') || usageType.includes('apartment') || (aspectRatio >= 1.6 && approxArea >= 350);
-      const isCommercial = name.includes('타워') || name.includes('빌딩') || name.includes('센터') || usageType.includes('commercial') || usageType.includes('office') || approxArea >= 600;
+      // -----------------------------------------------------------------------
+      // [2단계: 지역별·용도별 실제 건물 층수(Height) 정밀 복원]
+      // -----------------------------------------------------------------------
 
+      // (a) 군부대 주둔지 판정 (1군지사 우산동, 캠프 롱 태장동, 접경 군부대)
+      const isWonjuMilitarySite =
+        (cLat >= 37.355 && cLat <= 37.375 && cLng >= 127.930 && cLng <= 127.948) || // 1군지사(우산동)
+        (cLat >= 37.370 && cLat <= 37.390 && cLng >= 127.945 && cLng <= 127.965);   // 캠프 롱(태장동)
+      const isBorderMilitaryZone = cLat >= 38.0; // 철원·화천·양구·인제 등 접경 군부대
+      const isMilitaryName =
+        name.includes('부대') || name.includes('군') || name.includes('막사') ||
+        name.includes('병영') || name.includes('창고') || name.includes('보급') ||
+        name.includes('사령부') || usageType.includes('military') || usageType.includes('barracks');
+
+      const isMilitary = isMilitaryName || (isWonjuMilitarySite && dimMin <= 22 && dimMax >= 18) || (isBorderMilitaryZone && isMilitaryName);
+
+      // (b) 아파트 명칭 매칭
+      const isAptByName =
+        name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
+        name.includes('푸르지오') || name.includes('자이') || name.includes('힐스테이트') ||
+        name.includes('래미안') || name.includes('e편한') || name.includes('더샵') ||
+        name.includes('아이파크') || name.includes('롯데캐슬') || name.includes('한신') ||
+        name.includes('삼호') || name.includes('두산') || name.includes('우성') ||
+        name.includes('현대') || name.includes('동보') || name.includes('세경') ||
+        name.includes('코아루') || name.includes('부영') || name.includes('주공') ||
+        name.includes('호반') || name.includes('중흥') || name.includes('센트럴') ||
+        usageType.includes('apartment');
+
+      // (c) 아파트 기하학적 형태 판정 (한국형 판상형: 폭 10~18m, 길이 32~95m / ㄱ자·ㄷ자형 단지)
+      const isAptByGeometry =
+        !isMilitary &&
+        ((dimMin >= 9.0 && dimMin <= 20.0 && dimMax >= 32.0 && approxArea >= 320 && aspectRatio >= 1.8) ||
+         (dimMin >= 12.0 && dimMax >= 30.0 && approxArea >= 380));
+
+      const isApartment = isAptByName || isAptByGeometry;
+
+      // (d) 중대형 상업/오피스 판정
+      const isCommercialName =
+        name.includes('타워') || name.includes('빌딩') || name.includes('센터') ||
+        name.includes('상가') || name.includes('마트') || name.includes('병원') ||
+        name.includes('의원') || name.includes('스퀘어') || name.includes('프라자') ||
+        name.includes('호텔') || usageType.includes('commercial') || usageType.includes('office');
+      const isCommercialByGeometry = !isMilitary && !isApartment && (approxArea >= 320 && aspectRatio < 2.0 || approxArea >= 550);
+      const isCommercial = isCommercialName || isCommercialByGeometry;
+
+      // 실측 속성값 확인
       const rawFlr = Number(
         props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.grnd_flr_cnt || props.levels || 0
       );
@@ -129,28 +194,30 @@ export function extractRenderedVectorBuildings(
         props.hei || props.HEI || props.render_height || props.height || props.bld_hgt || 0
       );
 
-      let renderHeight = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.2 : 0);
+      let renderHeight = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.0 : 0);
 
-      if (!renderHeight || renderHeight <= 0) {
-        if (isApartment) {
-          // 판상형/타워형 아파트 단지: 15층~25층 (45m~75m)
-          const seed = Math.abs(Math.sin(approxArea * 17.13 + (feat.id ? Number(feat.id) : 42))) % 1;
+      // 누락된 층고 지능형 정밀 복원
+      if (!renderHeight || renderHeight <= 4.0) {
+        if (isMilitary) {
+          // 군 표준 병영막사 및 군수창고: 2층~3층 (7.5m~10m)
+          const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
+          const milStories = (approxArea < 200) ? 2 : Math.round(2 + seed);
+          renderHeight = milStories * 3.5; // 7.0m ~ 10.5m
+        } else if (isApartment) {
+          // 한국형 아파트 단지(원주·춘천 등): 15층~25층 (45m~75m)
+          const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
           const aptStories = Math.round(15 + seed * 10);
           renderHeight = aptStories * 3.0; // 45m ~ 75m
         } else if (isCommercial) {
-          // 대로변 상업/업무 빌딩: 4층~8층 (15m~28m)
-          const seed = Math.abs(Math.sin(approxArea * 23.41 + 19)) % 1;
-          const commStories = Math.round(4 + seed * 4);
-          renderHeight = commStories * 3.5; // 14m ~ 28m
+          // 간선도로변 중대형 상업 빌딩: 4층~10층 (14m~32m)
+          const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
+          const commStories = Math.round(4 + seed * 6);
+          renderHeight = commStories * 3.2; // 13m ~ 32m
         } else {
-          // 일반 주택 및 군 막사: 1층~3층 (4m~10m)
-          if (approxArea < 120) {
-            renderHeight = 4.0; // 1층 (4m)
-          } else if (approxArea < 240) {
-            renderHeight = 7.0; // 2층 (7m)
-          } else {
-            renderHeight = 10.0; // 3층 (10m)
-          }
+          // 주택가 다세대 빌라/단독주택: 2층~4층 (6m~12m)
+          const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
+          const villaStories = approxArea < 110 ? 2 : Math.round(2 + seed * 2);
+          renderHeight = villaStories * 3.0; // 6m ~ 12m
         }
       }
 
@@ -161,16 +228,16 @@ export function extractRenderedVectorBuildings(
         id: feat.id || `ofm-bld-${uniqueFeatures.length}`,
         properties: {
           ...props,
-          name: props.name || props.name_ko || '건축물',
+          name: props.name || props.name_ko || (isApartment ? '아파트' : isMilitary ? '군 시설' : isCommercial ? '상업 빌딩' : '주택'),
           buildingName: props.name || props.name_ko || '',
           height: renderHeight,
           levels,
-          roofShape: props['roof:shape'] || props.roof_shape || 'flat',
-          roofColour: props['roof:colour'] || '#334155',
-          usageType: isApartment ? 'apartment' : (props.type || props.class || 'general').toLowerCase() as any,
-          isMilitaryOrPublic: false,
-          color: '#F1F5F9',
-          bld_category: isApartment ? 'apartment' : (props.class || 'building'),
+          roofShape: isMilitary ? 'gabled' : (props['roof:shape'] || props.roof_shape || 'flat'),
+          roofColour: isMilitary ? '#1e3a8a' : (props['roof:colour'] || '#334155'),
+          usageType: isApartment ? 'apartment' : isMilitary ? 'military' : isCommercial ? 'commercial' : 'residential',
+          isMilitaryOrPublic: isMilitary,
+          color: isApartment ? '#F4F1EA' : isMilitary ? '#CBD5E1' : isCommercial ? '#E2E8F0' : '#8C3B2B',
+          bld_category: isApartment ? 'apartment' : isMilitary ? 'military' : isCommercial ? 'commercial' : 'residential',
           source: 'openfreemap',
         },
         geometry: feat.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,

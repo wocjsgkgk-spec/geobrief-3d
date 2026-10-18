@@ -461,23 +461,45 @@ export class Universal3DTilesManager {
         }
       };
 
+      const opacityVal = Math.max(0.0, Math.min(1.0, state.opacity ?? 1.0));
+      const pointSizeVal = Math.max(1.0, Math.min(10.0, state.pointSize || 3.0));
+
       for (const b of buildings) {
         for (const ring of b.polygon) {
-          const stepZ = Math.max(2.0, b.height / 8);
+          const stepZ = Math.max(1.5, b.height / 10);
           for (let z = b.baseElev; z <= b.totalElev; z += stepZ) {
-            for (let i = 0; i < ring.length; i++) {
-              const pt = ring[i];
-              pointCloudData.push({
-                position: [pt[0], pt[1], z],
-                color: getGradientColor(z),
-              });
+            for (let i = 0; i < ring.length - 1; i++) {
+              const p0 = ring[i];
+              const p1 = ring[i + 1];
+              const dLng = p1[0] - p0[0];
+              const dLat = p1[1] - p0[1];
+              const segLen = Math.hypot(dLng * 88000, dLat * 111000);
+              const nSub = Math.max(1, Math.round(segLen / 2.5));
+              for (let k = 0; k < nSub; k++) {
+                const t = k / nSub;
+                pointCloudData.push({
+                  position: [p0[0] + dLng * t, p0[1] + dLat * t, z],
+                  color: getGradientColor(z),
+                });
+              }
             }
           }
         }
-        // 옥상 중심 및 모서리 점군
+        // 옥상 슬래브 면적 격자 점군
+        const roofStepLng = Math.max(0.00003, (b.bounds.maxLng - b.bounds.minLng) / 4);
+        const roofStepLat = Math.max(0.00003, (b.bounds.maxLat - b.bounds.minLat) / 4);
+        for (let lng = b.bounds.minLng + roofStepLng; lng < b.bounds.maxLng; lng += roofStepLng) {
+          for (let lat = b.bounds.minLat + roofStepLat; lat < b.bounds.maxLat; lat += roofStepLat) {
+            pointCloudData.push({
+              position: [lng, lat, b.totalElev],
+              color: getGradientColor(b.totalElev),
+            });
+          }
+        }
+        // 옥상 상단 중심 점군
         pointCloudData.push({
-          position: [b.centroid[0], b.centroid[1], b.totalElev],
-          color: getGradientColor(b.totalElev),
+          position: [b.centroid[0], b.centroid[1], b.totalElev + 0.8],
+          color: getGradientColor(b.totalElev + 0.8),
         });
       }
 
@@ -486,11 +508,14 @@ export class Universal3DTilesManager {
         data: pointCloudData,
         getPosition: (d: any) => d.position,
         getColor: (d: any) => d.color,
-        pointSize: state.pointSize || 3.0,
+        pointSize: pointSizeVal,
+        opacity: opacityVal,
         sizeUnits: 'pixels',
       });
       layers.push(pointCloudLayer);
     } else {
+      const opacityVal = Math.max(0.0, Math.min(1.0, state.opacity ?? 1.0));
+
       // -----------------------------------------------------------------------
       // [Sub-layer 0 (Ground Contact Shadow)]: 건물 바닥 외곽 접지 그림자 (다크 차콜 #020617, opacity 0.45)
       // -----------------------------------------------------------------------
@@ -500,7 +525,7 @@ export class Universal3DTilesManager {
           const pathGround = ring.map((pt) => [pt[0], pt[1], b.baseElev + 0.05] as [number, number, number]);
           contactShadowPaths.push({
             path: pathGround,
-            color: [2, 6, 23, 115], // #020617 opacity 0.45
+            color: [2, 6, 23, Math.round(115 * opacityVal)], // #020617 opacity 0.45 * layer opacity
           });
         }
       }
@@ -512,6 +537,7 @@ export class Universal3DTilesManager {
           getPath: (d: any) => d.path,
           getColor: (d: any) => d.color,
           getWidth: 8.0,
+          opacity: opacityVal,
           widthUnits: 'pixels',
           jointRounded: true,
           capRounded: true,
@@ -534,6 +560,7 @@ export class Universal3DTilesManager {
         getPolygon: (d: any) => d.polygon,
         getElevation: (d: any) => d.elevation,
         getFillColor: (d: any) => d.color,
+        opacity: opacityVal,
         extruded: true,
         wireframe: false,
       });
@@ -571,6 +598,7 @@ export class Universal3DTilesManager {
         getPolygon: (d: any) => d.polygon,
         getElevation: (d: any) => d.elevation,
         getFillColor: (d: any) => d.color,
+        opacity: opacityVal,
         extruded: true,
         wireframe: false,
       });
@@ -586,7 +614,7 @@ export class Universal3DTilesManager {
             const path3D = ring.map((pt) => [pt[0], pt[1], grooveZ] as [number, number, number]);
             slabGroovePaths.push({
               path: path3D,
-              color: [51, 65, 85, 200], // 다크 슬레이트 (#334155)
+              color: [51, 65, 85, Math.round(200 * opacityVal)], // 다크 슬레이트 (#334155)
             });
           }
         }
@@ -599,6 +627,7 @@ export class Universal3DTilesManager {
           getPath: (d: any) => d.path,
           getColor: (d: any) => d.color,
           getWidth: 1.5,
+          opacity: opacityVal,
           widthUnits: 'pixels',
         });
         layers.push(slabGrooveLayer);
@@ -630,6 +659,7 @@ export class Universal3DTilesManager {
         getPolygon: (d: any) => d.polygon,
         getElevation: (d: any) => d.elevation,
         getFillColor: (d: any) => d.color,
+        opacity: opacityVal,
         extruded: true,
         wireframe: false,
       });
@@ -640,7 +670,10 @@ export class Universal3DTilesManager {
       for (const b of buildings) {
         for (const ring of b.polygon) {
           const pathTop = ring.map((pt) => [pt[0], pt[1], b.totalElev + 1.2] as [number, number, number]);
-          parapetPaths.push({ path: pathTop, color: [148, 163, 184, 255] });
+          parapetPaths.push({
+            path: pathTop,
+            color: [148, 163, 184, Math.round(255 * opacityVal)],
+          });
         }
       }
 
@@ -650,6 +683,7 @@ export class Universal3DTilesManager {
         getPath: (d: any) => d.path,
         getColor: (d: any) => d.color,
         getWidth: 2.5,
+        opacity: opacityVal,
         widthUnits: 'pixels',
       });
       layers.push(parapetLayer);
@@ -687,6 +721,7 @@ export class Universal3DTilesManager {
           getPolygon: (d: any) => d.polygon,
           getElevation: (d: any) => d.elevation,
           getFillColor: (d: any) => d.color,
+          opacity: opacityVal,
           extruded: true,
           wireframe: false,
         });
@@ -741,6 +776,7 @@ export class Universal3DTilesManager {
           getPolygon: (d: any) => d.polygon,
           getElevation: (d: any) => d.elevation,
           getFillColor: (d: any) => d.color,
+          opacity: opacityVal,
           extruded: true,
           wireframe: false,
         });

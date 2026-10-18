@@ -1707,27 +1707,27 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           },
 
-          // 부지 드로잉 완성 폴리곤 반투명 채우기 (#3B82F6, opacity 0.4)
+          // 부지 드로잉 완성 폴리곤 반투명 에메랄드 채우기 (#10B981, opacity 0.18)
           {
             id: 'drawing-polygon-fill',
             type: 'fill',
             source: 'drawing-polygon-source',
             paint: {
-              'fill-color': '#3B82F6',
-              'fill-opacity': 0.4,
+              'fill-color': '#10B981',
+              'fill-opacity': 0.18,
             },
-            layout: { visibility: 'none' },
+            layout: { visibility: 'visible' },
           },
-          // 부지 드로잉 완성 폴리곤 외곽선
+          // 부지 드로잉 완성 폴리곤 에메랄드 외곽선 (#10B981, width 3.0)
           {
             id: 'drawing-polygon-line',
             type: 'line',
             source: 'drawing-polygon-source',
             paint: {
-              'line-color': '#2563EB',
+              'line-color': '#10B981',
               'line-width': 3,
             },
-            layout: { visibility: 'none' },
+            layout: { visibility: 'visible' },
           },
           // 부지 드로잉 완성 꼭짓점
           {
@@ -1736,12 +1736,12 @@ export const MapViewer: React.FC = () => {
             source: 'drawing-polygon-source',
             filter: ['==', '$type', 'Point'],
             paint: {
-              'circle-radius': 5,
+              'circle-radius': 4,
               'circle-color': '#FFFFFF',
-              'circle-stroke-color': '#2563EB',
+              'circle-stroke-color': '#10B981',
               'circle-stroke-width': 2,
             },
-            layout: { visibility: 'none' },
+            layout: { visibility: 'visible' },
           },
 
           // [토목·지형 단면 및 3단 경사도 분석 격자 오버레이 레이어]
@@ -2339,6 +2339,29 @@ export const MapViewer: React.FC = () => {
           setCurrentZoom(zoom);
           setCurrentLat(center.lat);
         }
+
+        // [신규] 화면 내 실제 건물 벡터 피처 실시간 추출 및 좌측 패널/엔진 동기화
+        try {
+          const bldgs = extractRenderedVectorBuildings(map);
+          const count = bldgs?.length || 0;
+          if (count > 0) {
+            setVworldDiagnostic({
+              status: 'connected',
+              message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
+              lastChecked: Date.now(),
+              featureCount: count,
+            });
+            const currentMode = useMapStore.getState().renderMode3D;
+            if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
+              lod2BuildingEngineRef.current.updateBuildings(bldgs);
+            }
+            if (deck3DTilesManagerRef.current) {
+              deck3DTilesManagerRef.current.setBuildingFeatures(bldgs);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
       }, 350);
     };
 
@@ -2389,6 +2412,31 @@ export const MapViewer: React.FC = () => {
     map.on('pitchend', handleInteractionEnd);
     map.on('dragend', handleInteractionEnd);
     map.on('zoomend', handleInteractionEnd);
+
+    const handleMapIdle = () => {
+      try {
+        const bldgs = extractRenderedVectorBuildings(map);
+        const count = bldgs?.length || 0;
+        if (count > 0) {
+          setVworldDiagnostic({
+            status: 'connected',
+            message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
+            lastChecked: Date.now(),
+            featureCount: count,
+          });
+          const currentMode = useMapStore.getState().renderMode3D;
+          if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
+            lod2BuildingEngineRef.current.updateBuildings(bldgs);
+          }
+          if (deck3DTilesManagerRef.current) {
+            deck3DTilesManagerRef.current.setBuildingFeatures(bldgs);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    map.on('idle', handleMapIdle);
 
     map.on('zoom', () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
@@ -2627,234 +2675,22 @@ export const MapViewer: React.FC = () => {
         }
 
         // ---------------------------------------------------------------------
-        // [2단계: 실제 건물 폴리곤 위 5단 입체 레이어 스태킹 (CPU 부하 0%, 100% GPU 가속)]
-        // ---------------------------------------------------------------------
-
-        // [Layer 1 - 지면 접지 그림자 (building-ground-ao)]
-        if (!map.getLayer('building-ground-ao')) {
+        // [1단계: 초록색 단색 박스를 유발하는 MapLibre fill-extrusion 건물 레이어 전면 제거]
+        // - Three.js LOD2BuildingEngine이 법선(Normal) 기반 외벽 vs 옥상 100% 물리적 분리 렌더링을 전담하므로
+        //   단색으로 칠해버리는 기존 fill-extrusion 및 검은색 그림자 레이어(building-ground-ao)를 전면 비활성화/제거합니다.
+        // - MapLibre가 OpenFreeMap의 'building' 벡터 타일을 정상 수신할 수 있도록 투명(opacity 0) 캐리어 레이어만 등록합니다.
+        if (!map.getLayer('building-vector-carrier')) {
           map.addLayer({
-            id: 'building-ground-ao',
+            id: 'building-vector-carrier',
             type: 'fill',
             source: 'openmaptiles-vector',
             'source-layer': 'building',
             minzoom: 12,
             paint: {
-              'fill-color': '#020617',
-              'fill-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                12.0, 0.0,
-                13.0, 0.35,
-                15.0, 0.45,
-              ],
-              'fill-translate': [3, 3],
-              'fill-translate-anchor': 'viewport',
+              'fill-opacity': 0,
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            layout: { visibility: 'visible' },
           });
-        }
-
-        // [하위 호환 접지선]
-        if (!map.getLayer('3d-buildings-contact-shadow')) {
-          map.addLayer({
-            id: '3d-buildings-contact-shadow',
-            type: 'fill',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13,
-            paint: {
-              'fill-color': '#020617',
-              'fill-opacity': 0.45,
-              'fill-translate': [3, 3],
-            },
-            layout: { visibility: 'none' },
-          });
-        }
-
-        // [LOD 1 - 광역 조감도 (줌 12 ~ 13.5)] 단일 고속 레이어로 수만 채 60fps 표출
-        if (!map.getLayer('3d-buildings-overview')) {
-          map.addLayer({
-            id: '3d-buildings-overview',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 12,
-            maxzoom: 13.5,
-            paint: {
-              'fill-extrusion-color': buildingColorExpr,
-              'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': buildingBaseExpr,
-              'fill-extrusion-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                12.0, 0.0,
-                12.8, 0.95,
-                13.2, 0.95,
-                13.5, 0.0,
-              ],
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
-          });
-        }
-
-        // [Layer 2 - 1층 상가/로비 기단부 (building-podium, 0m ~ 3.5m: 짙은 화강석 그레이 #475569)]
-        if (!map.getLayer('building-podium')) {
-          map.addLayer({
-            id: 'building-podium',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13.0,
-            paint: {
-              'fill-extrusion-color': '#475569',
-              'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
-              'fill-extrusion-base': buildingBaseExpr,
-              'fill-extrusion-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13.0, 0.0,
-                13.5, 0.98,
-              ],
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
-          });
-        }
-
-        // 하위 호환 기단부 레이어
-        if (!map.getLayer('3d-buildings-foundation')) {
-          map.addLayer({
-            id: '3d-buildings-foundation',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13.2,
-            paint: {
-              'fill-extrusion-color': '#475569',
-              'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
-              'fill-extrusion-base': buildingBaseExpr,
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: 'none' },
-          });
-        }
-
-        // [Layer 3 - 본동 외벽 및 창문 격자 (building-body, 3.5m ~ H: 한국형 창문·베란다 심리스 패턴 매핑)]
-        if (!map.getLayer('building-body')) {
-          map.addLayer({
-            id: 'building-body',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13.0,
-            paint: {
-              'fill-extrusion-pattern': buildingPatternExpr,
-              'fill-extrusion-color': buildingColorExpr,
-              'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': ['min', 3.5, buildingHeightExpr],
-              'fill-extrusion-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13.0, 0.0,
-                13.5, 0.95,
-              ],
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
-          });
-        }
-
-        // 하위 호환 본동 레이어
-        if (!map.getLayer('3d-buildings')) {
-          map.addLayer({
-            id: '3d-buildings',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13.2,
-            paint: {
-              'fill-extrusion-pattern': buildingPatternExpr,
-              'fill-extrusion-color': buildingColorExpr,
-              'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': ['min', 3.5, buildingHeightExpr],
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: 'none' },
-          });
-        }
-
-        // [Layer 4 - 한국형 우레탄/콘크리트 옥상 마감 (building-roof-cap, H ~ H + 0.4m)]
-        if (!map.getLayer('building-roof-cap')) {
-          map.addLayer({
-            id: 'building-roof-cap',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13.0,
-            paint: {
-              'fill-extrusion-color': buildingRoofColorExpr,
-              'fill-extrusion-height': buildingRoofHeightExpr,
-              'fill-extrusion-base': buildingRoofBaseExpr,
-              'fill-extrusion-opacity': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                13.0, 0.0,
-                13.5, 0.98,
-              ],
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
-          });
-        }
-
-        // 하위 호환 옥상 레이어
-        if (!map.getLayer('3d-buildings-roof')) {
-          map.addLayer({
-            id: '3d-buildings-roof',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 13.2,
-            paint: {
-              'fill-extrusion-color': buildingRoofColorExpr,
-              'fill-extrusion-height': buildingRoofHeightExpr,
-              'fill-extrusion-base': buildingRoofBaseExpr,
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: 'none' },
-          });
-        }
-
-        // [모서리 엣지(Edge Wireframe) 라인 레이어]
-        if (!map.getLayer('3d-buildings-edge')) {
-          map.addLayer(
-            {
-              id: '3d-buildings-edge',
-              type: 'line',
-              source: 'openmaptiles-vector',
-              'source-layer': 'building',
-              minzoom: 13.2,
-              paint: {
-                'line-color': '#0F172A',
-                'line-width': 0.8,
-                'line-opacity': [
-                  'interpolate',
-                  ['linear'],
-                  ['zoom'],
-                  13.2, 0.0,
-                  13.5, 0.5,
-                ],
-              },
-              layout: { visibility: 'none' },
-            },
-            'building-body'
-          );
         }
 
         // [전술·분석 GeoJSON 소스 및 오버레이 레이어 동적 안전 주입]
@@ -3285,6 +3121,7 @@ export const MapViewer: React.FC = () => {
         map.off('pitchend', handleInteractionEnd);
         map.off('dragend', handleInteractionEnd);
         map.off('zoomend', handleInteractionEnd);
+        map.off('idle', handleMapIdle);
       } catch {}
       resizeObserver.disconnect();
       map.remove();
@@ -3396,6 +3233,16 @@ export const MapViewer: React.FC = () => {
         features,
       });
 
+      if (map.getLayer('drawing-polygon-fill')) {
+        map.setLayoutProperty('drawing-polygon-fill', 'visibility', 'visible');
+      }
+      if (map.getLayer('drawing-polygon-line')) {
+        map.setLayoutProperty('drawing-polygon-line', 'visibility', 'visible');
+      }
+      if (map.getLayer('drawing-polygon-points')) {
+        map.setLayoutProperty('drawing-polygon-points', 'visibility', 'visible');
+      }
+
       if (polygonCenter) {
         const p = map.project(polygonCenter);
         setLabelScreenPos({ x: p.x, y: p.y });
@@ -3405,6 +3252,15 @@ export const MapViewer: React.FC = () => {
         type: 'FeatureCollection',
         features: [],
       });
+      if (map.getLayer('drawing-polygon-fill')) {
+        map.setLayoutProperty('drawing-polygon-fill', 'visibility', 'none');
+      }
+      if (map.getLayer('drawing-polygon-line')) {
+        map.setLayoutProperty('drawing-polygon-line', 'visibility', 'none');
+      }
+      if (map.getLayer('drawing-polygon-points')) {
+        map.setLayoutProperty('drawing-polygon-points', 'visibility', 'none');
+      }
       setLabelScreenPos(null);
     }
   }, [completedPolygon, polygonCenter, isMapLoaded]);
@@ -3527,25 +3383,10 @@ export const MapViewer: React.FC = () => {
           threeboxLayerRef.current.setVisible(true);
         }
 
-        // 2. 부지 대지 베이스플레이트 및 기단부 패드 생성
-        const basePad = turf.transformScale(completedPolygon, 0.96);
+        // 2. 가상 건축 매스 소스 초기화 (거대 사각형 평면/패드 생성 원천 차단)
         massSource.setData({
           type: 'FeatureCollection',
-          features: [
-            {
-              type: 'Feature',
-              properties: {
-                part: 'site_podium',
-                name: `${preset.name} 대지 기단`,
-                height: 0.5,
-                min_height: 0,
-                color: preset.color,
-                edgeColor: preset.edgeColor,
-                opacity: 0.85,
-              },
-              geometry: basePad.geometry,
-            },
-          ],
+          features: [],
         });
       } catch (err) {
         console.error('Failed to update 3D building models:', err);
@@ -3775,6 +3616,19 @@ export const MapViewer: React.FC = () => {
       }
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+        try {
+          const bldgs = extractRenderedVectorBuildings(map);
+          const count = bldgs?.length || 0;
+          if (count > 0) {
+            lod2BuildingEngineRef.current.updateBuildings(bldgs);
+            setVworldDiagnostic({
+              status: 'connected',
+              message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
+              lastChecked: Date.now(),
+              featureCount: count,
+            });
+          }
+        } catch {}
       }
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setLodMode('lod1');
@@ -3788,17 +3642,45 @@ export const MapViewer: React.FC = () => {
         }
       }
     } else if (renderMode3D === 'tiles3d') {
-      // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (Deck.gl Tile3DLayer 활성화)
-      if (lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setVisible(false);
+      // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (4대 프리셋 완벽 분기)
+      try {
+        const bldgs = extractRenderedVectorBuildings(map);
+        if (bldgs && bldgs.length > 0) {
+          lod2BuildingEngineRef.current?.updateBuildings(bldgs);
+          deck3DTilesManagerRef.current?.setBuildingFeatures(bldgs);
+        }
+      } catch (err) {
+        // ignore
       }
+
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setVisible(false);
       }
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.attachToMap(map);
-        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
+
+      const presetId = tile3DStream.presetId;
+      if (presetId === 'vworld_3d_buildings' || presetId === 'sample_city') {
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.detachFromMap();
+        }
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
+          lod2BuildingEngineRef.current.setStyleMode(
+            presetId === 'vworld_3d_buildings' ? 'photorealistic' : 'clean_mass'
+          );
+          lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
+          lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
+        }
+      } else {
+        // 'sample_pointcloud' | 'custom'
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setVisible(false);
+        }
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.attachToMap(map);
+          deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
+        }
       }
+
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
           map.setLayoutProperty(lyr, 'visibility', 'none');
@@ -3807,7 +3689,17 @@ export const MapViewer: React.FC = () => {
     }
 
     map.triggerRepaint();
-  }, [renderMode3D, layers.buildings3D, tile3DStream.enabled, tile3DStream.url, isMapLoaded]);
+  }, [
+    renderMode3D,
+    layers.buildings3D,
+    tile3DStream.enabled,
+    tile3DStream.url,
+    tile3DStream.presetId,
+    tile3DStream.opacity,
+    tile3DStream.maximumScreenSpaceError,
+    tile3DStream.pointSize,
+    isMapLoaded,
+  ]);
 
   // 8-0-0. [2단계 신규: 국토지리정보원 정밀 등고선(Contour) 레이어 가시성 및 실시간 생성 동기화]
   useEffect(() => {
@@ -3972,11 +3864,13 @@ export const MapViewer: React.FC = () => {
     // 무거운 queryTerrainElevation() 반복 루프를 전면 중단하여 메인 스레드 블로킹 차단.
     // 전 세계 및 한국 건물 폴리곤이 내장된 OpenFreeMap 벡터 타일(https://tiles.openfreemap.org/planet)을
     // GPU 네이티브 fill-extrusion 파이프라인으로 직결하여 60fps 무중단 렌더링 유지.
+    const bldgs = extractRenderedVectorBuildings(map);
+    const count = bldgs && bldgs.length > 0 ? bldgs.length : 0;
     setVworldDiagnostic({
       status: 'connected',
       message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
       lastChecked: Date.now(),
-      featureCount: 0,
+      featureCount: count,
     });
   }, [isMapLoaded, layers.buildings3D, setVworldDiagnostic]);
 
@@ -4216,19 +4110,19 @@ export const MapViewer: React.FC = () => {
 
     if (polygonStyle === 'hatch') {
       map.setPaintProperty('drawing-polygon-fill', 'fill-pattern', 'hatch-pattern');
-      map.setPaintProperty('drawing-polygon-fill', 'fill-opacity', 0.7);
-      map.setPaintProperty('drawing-polygon-line', 'line-color', '#F59E0B');
-      map.setPaintProperty('drawing-polygon-line', 'line-width', 3.5);
+      map.setPaintProperty('drawing-polygon-fill', 'fill-opacity', 0.5);
+      map.setPaintProperty('drawing-polygon-line', 'line-color', '#10B981');
+      map.setPaintProperty('drawing-polygon-line', 'line-width', 3);
     } else {
       map.setPaintProperty('drawing-polygon-fill', 'fill-pattern', undefined);
       const colors = {
-        blue: { fill: '#3B82F6', line: '#2563EB' },
-        orange: { fill: '#F97316', line: '#EA580C' },
-        emerald: { fill: '#10B981', line: '#059669' },
-      }[polygonStyle] || { fill: '#3B82F6', line: '#2563EB' };
+        emerald: { fill: '#10B981', line: '#10B981', opacity: 0.18 },
+        blue: { fill: '#3B82F6', line: '#2563EB', opacity: 0.22 },
+        orange: { fill: '#F97316', line: '#EA580C', opacity: 0.22 },
+      }[polygonStyle] || { fill: '#10B981', line: '#10B981', opacity: 0.18 };
 
       map.setPaintProperty('drawing-polygon-fill', 'fill-color', colors.fill);
-      map.setPaintProperty('drawing-polygon-fill', 'fill-opacity', 0.4);
+      map.setPaintProperty('drawing-polygon-fill', 'fill-opacity', colors.opacity);
       map.setPaintProperty('drawing-polygon-line', 'line-color', colors.line);
       map.setPaintProperty('drawing-polygon-line', 'line-width', 3);
     }
@@ -5103,22 +4997,55 @@ export const MapViewer: React.FC = () => {
     addSurveillanceSensor,
   ]);
 
-  // 29. [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 상태 동기화]
+  // 29. [Deck.gl Tile3DLayer 및 LOD2 3D 엔진 실시간 파라미터(투명도, SSE, 점 크기) 동기화]
   useEffect(() => {
-    if (!deck3DTilesManagerRef.current) return;
-    const shouldEnable = renderMode3D === 'tiles3d' && tile3DStream.enabled;
-    deck3DTilesManagerRef.current.update({
-      ...tile3DStream,
-      enabled: shouldEnable,
-    });
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    if (renderMode3D === 'tiles3d') {
+      const presetId = tile3DStream.presetId;
+      if (presetId === 'vworld_3d_buildings' || presetId === 'sample_city') {
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setStyleMode(
+            presetId === 'vworld_3d_buildings' ? 'photorealistic' : 'clean_mass'
+          );
+          lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
+          lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
+        }
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.detachFromMap();
+        }
+      } else {
+        // 'sample_pointcloud' | 'custom'
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setVisible(false);
+        }
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.attachToMap(map);
+          deck3DTilesManagerRef.current.update({
+            ...tile3DStream,
+            enabled: tile3DStream.enabled,
+          });
+        }
+      }
+      map.triggerRepaint();
+    } else if (renderMode3D === 'facade') {
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.setStyleMode('photorealistic');
+        lod2BuildingEngineRef.current.setOpacity(1.0);
+      }
+    }
   }, [
     renderMode3D,
+    layers.buildings3D,
     tile3DStream.enabled,
     tile3DStream.url,
     tile3DStream.presetId,
     tile3DStream.opacity,
     tile3DStream.maximumScreenSpaceError,
     tile3DStream.pointSize,
+    isMapLoaded,
   ]);
 
   // 30-1. [지휘통제 및 보안 관제] 3D 전술 탐지 돔(Threat Dome) 상태 동기화
@@ -5971,9 +5898,9 @@ export const MapViewer: React.FC = () => {
               top: `${labelScreenPos.y}px`,
             }}
           >
-            <div className="bg-[#101b2b]/95 backdrop-blur-md border border-blue-400/80 px-3 py-2 rounded-lg shadow-2xl text-center flex flex-col items-center min-w-[130px]">
-              <div className="flex items-center space-x-1 text-[10px] text-blue-300 font-semibold mb-0.5">
-                <Ruler className="w-3 h-3 text-blue-400" />
+            <div className="bg-[#101b2b]/95 backdrop-blur-md border border-emerald-400/80 px-3 py-2 rounded-lg shadow-2xl text-center flex flex-col items-center min-w-[130px]">
+              <div className="flex items-center space-x-1 text-[10px] text-emerald-300 font-semibold mb-0.5">
+                <Ruler className="w-3 h-3 text-emerald-400" />
                 <span>군 유휴부지 산출구역</span>
               </div>
               <div className="text-sm font-mono font-extrabold text-white">
@@ -5982,7 +5909,7 @@ export const MapViewer: React.FC = () => {
               <div className="text-[11px] font-mono font-bold text-emerald-400">
                 약 {polygonArea.pyeong.toLocaleString()} 평
               </div>
-              <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-blue-400/80 absolute -bottom-[6px] left-1/2 -translate-x-1/2" />
+              <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-emerald-400/80 absolute -bottom-[6px] left-1/2 -translate-x-1/2" />
             </div>
           </div>
         )}

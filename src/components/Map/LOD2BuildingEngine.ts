@@ -40,7 +40,6 @@ import { elevationCache } from '@/utils/elevationCache';
 import {
   getKoreanCityAtlasMaterial,
   disposeKoreanCityAtlas,
-  getAtlasSlotUV,
   classifyBuilding,
   AtlasSlot,
 } from '@/utils/koreanCityAtlas';
@@ -48,6 +47,13 @@ import { buildingMeshWorkerClient, OSMGeometryResult } from '@/workers/buildingM
 import { geometryWorkerClient, BuildBuildingsResult } from '@/workers/geometryWorkerClient';
 import { createRealisticCityMaterial } from '@/shaders/realisticCityShader';
 import { createStreetsGlBuildingMaterial } from '@/lib/vendor/streetsGlBuildingShader';
+import {
+  getVWorldAtlasTexture,
+  getVWorldAtlasSlotUV,
+  VWORLD_SLOT_NAME_TO_ID,
+  disposeVWorldAtlas,
+} from '@/utils/vworldStyleAtlas';
+import { buildOsmBuildingGeometry } from '@/lib/vendor/osmGeometryBuilder';
 
 // =============================================================================
 // 1. 기하 유틸리티 (OBB, 좌표 변환, 삼각화, 쿼드 버퍼)
@@ -330,6 +336,37 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private isVisible = true;
   private buildingCount = 0;
   private currentZoomLOD = 16;
+  private opacity = 1.0;
+  private sseQuality = 16;
+  private styleMode: 'photorealistic' | 'clean_mass' = 'photorealistic';
+
+  // [3단계: 타일/피처 단위 청크 메쉬 캐시 (60fps 무중단 화면 유지)]
+  private chunkMeshCache = new Map<string, OSMGeometryResult>();
+  private readonly MAX_CHUNK_CACHE_ENTRIES = 64;
+
+  /**
+   * 지도 이동/회전 시 0ms 즉각 재사용을 위한 청크 고유 해시 키 계산
+   */
+  private computeChunkKey(
+    features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
+    origin: [number, number],
+    zoom: number
+  ): string {
+    const len = features.length;
+    if (len === 0) return 'empty';
+    const firstId = String(features[0]?.id || features[0]?.properties?.name || '0');
+    const midIdx = Math.floor(len / 2);
+    const midId = String(features[midIdx]?.id || features[midIdx]?.properties?.name || 'mid');
+    const lastId = String(features[len - 1]?.id || features[len - 1]?.properties?.name || 'end');
+    const rx = Math.round(origin[0] * 200) / 200; // ~500m 타일 그리드
+    const ry = Math.round(origin[1] * 200) / 200;
+    const lod = zoom < 13.5 ? 0 : zoom < 15.2 ? 1 : 2;
+    return `${rx}_${ry}_cnt${len}_${firstId}_${midId}_${lastId}_lod${lod}`;
+  }
+
+  public clearChunkCache(): void {
+    this.chunkMeshCache.clear();
+  }
 
   constructor() {
     this.initGeometries();
@@ -354,10 +391,27 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private initMaterials(): void {
     this.materials = getKoreanBuildingMaterials();
     this.masterAtlasMaterial = getKoreanCityAtlasMaterial();
+    const isPhotorealistic = this.styleMode === 'photorealistic';
+    const vworldTex = getVWorldAtlasTexture();
     if (!this.realisticCityMaterial) {
       this.realisticCityMaterial = createStreetsGlBuildingMaterial({
         sunDirection: this.sunLightDirection,
+        atlasTexture: vworldTex,
+        useAtlasTexture: isPhotorealistic && !!vworldTex,
+        opacity: this.opacity,
       });
+    } else if (this.realisticCityMaterial.uniforms) {
+      if (vworldTex && this.realisticCityMaterial.uniforms.uAtlasTexture) {
+        this.realisticCityMaterial.uniforms.uAtlasTexture.value = vworldTex;
+      }
+      if (this.realisticCityMaterial.uniforms.uUseAtlasTexture) {
+        this.realisticCityMaterial.uniforms.uUseAtlasTexture.value = isPhotorealistic;
+      }
+      if (this.realisticCityMaterial.uniforms.uOpacity) {
+        this.realisticCityMaterial.uniforms.uOpacity.value = this.opacity;
+      }
+      this.realisticCityMaterial.transparent = this.opacity < 0.99;
+      this.realisticCityMaterial.needsUpdate = true;
     }
     if (!this.contactShadowMaterial) {
       this.contactShadowMaterial = new THREE.ShaderMaterial({
@@ -471,17 +525,66 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     return this.buildingCount;
   }
 
+  public setOpacity(opacity: number): void {
+    this.opacity = Math.max(0, Math.min(1, opacity));
+    if (this.realisticCityMaterial && this.realisticCityMaterial.uniforms.uOpacity) {
+      this.realisticCityMaterial.uniforms.uOpacity.value = this.opacity;
+      this.realisticCityMaterial.transparent = this.opacity < 0.99;
+      this.realisticCityMaterial.needsUpdate = true;
+    }
+    if (this.masterAtlasMaterial) {
+      this.masterAtlasMaterial.opacity = this.opacity;
+      this.masterAtlasMaterial.transparent = this.opacity < 0.99;
+      this.masterAtlasMaterial.needsUpdate = true;
+    }
+    if (this.contactShadowMaterial) {
+      (this.contactShadowMaterial as any).opacity = this.opacity * 0.70;
+      this.contactShadowMaterial.transparent = true;
+      this.contactShadowMaterial.needsUpdate = true;
+    }
+    if (this.masterCityMesh && this.masterCityMesh.material) {
+      const mat = this.masterCityMesh.material as THREE.Material;
+      mat.transparent = this.opacity < 0.99;
+      mat.opacity = this.opacity;
+      mat.needsUpdate = true;
+    }
+    if (this.map && this.isVisible && !this.isInteracting) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  public setStyleMode(mode: 'photorealistic' | 'clean_mass'): void {
+    this.styleMode = mode;
+    const useAtlas = mode === 'photorealistic';
+    if (this.realisticCityMaterial && this.realisticCityMaterial.uniforms.uUseAtlasTexture) {
+      this.realisticCityMaterial.uniforms.uUseAtlasTexture.value = useAtlas;
+      this.realisticCityMaterial.needsUpdate = true;
+    }
+    if (this.map && this.isVisible && !this.isInteracting) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  public setSSE(sse: number): void {
+    this.sseQuality = sse;
+    this.updateZoomLOD(this.currentZoomLOD);
+  }
+
   /**
-   * [1. 카메라 거리에 따른 3단계 자동 LOD 시스템]
-   * - 광역 뷰 (Zoom < 13.5): 옥탑/난간/파사드 메쉬 연산 스킵, 초경량 GPU Extrusion으로만 렌더링
-   * - 표준 조감도 뷰 (Zoom 13.5 ~ 15.2): 파사드 텍스처 및 옥상 우레탄/콘크리트 색상 분리 활성화
-   * - 근접 상세 뷰 (Zoom >= 15.2): 입체 옥상 난간, 옥탑 코어, 인스턴싱 설비 활성화
+   * [1. 카메라 거리에 따른 3단계 자동 LOD 시스템 + 동적 SSE 품질 연동]
+   * - SSE 8 (초정밀): 먼 거리에서도 옥탑/난간/설비 디테일 적극 노출
+   * - SSE 16 (균형): 표준 거리
+   * - SSE 24 (고성능): 근접 시에만 세부 구조물 노출
    */
   public updateZoomLOD(currentZoom: number): void {
     if (!this.isVisible) return;
-    const isStandardOrAbove = currentZoom >= 13.5; // Zoom 13.5 이상
-    const isNearDetail = currentZoom >= 15.2;      // Zoom 15.2 이상
     this.currentZoomLOD = currentZoom;
+
+    const standardThreshold = this.sseQuality <= 8 ? 12.8 : this.sseQuality <= 16 ? 13.5 : 14.2;
+    const detailThreshold = this.sseQuality <= 8 ? 14.0 : this.sseQuality <= 16 ? 15.2 : 16.0;
+
+    const isStandardOrAbove = currentZoom >= standardThreshold;
+    const isNearDetail = currentZoom >= detailThreshold;
 
     // 1) 건물 본체 파사드 및 접지 그림자: Zoom 13.5 이상 표준 조감도 뷰에서 활성화
     if (this.masterCityMesh) {
@@ -647,6 +750,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.initMaterials();
     }
 
+    // [3단계: 타일 단위 청크 메쉬 캐시 선조회 (0ms 즉시 화면 유지, 60fps)]
+    const chunkKey = this.computeChunkKey(features, this.originLngLat, this.currentZoomLOD);
+    if (this.chunkMeshCache.has(chunkKey)) {
+      const cached = this.chunkMeshCache.get(chunkKey)!;
+      // LRU 갱신
+      this.chunkMeshCache.delete(chunkKey);
+      this.chunkMeshCache.set(chunkKey, cached);
+      this.applyWorkerResult(cached);
+      return;
+    }
+
     // [1단계: Web Worker 기반 고속 건물 지오메트리 엔진 구축]
     // OSMBuildings & mapbox/earcut 벤더링 전용 buildingMeshWorker(Transferable Objects)로 백그라운드 0ms 연산
     buildingMeshWorkerClient
@@ -662,6 +776,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       })
       .then((workerResult) => {
         if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
+          // 청크 캐시에 등록 (LRU 용량 제어)
+          if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
+            const oldest = this.chunkMeshCache.keys().next().value;
+            if (oldest) this.chunkMeshCache.delete(oldest);
+          }
+          this.chunkMeshCache.set(chunkKey, workerResult);
           this.applyWorkerResult(workerResult);
         } else {
           geometryWorkerClient
@@ -677,6 +797,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             })
             .then((fallbackResult) => {
               if (fallbackResult && fallbackResult.positions && fallbackResult.positions.length > 0) {
+                if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
+                  const oldest = this.chunkMeshCache.keys().next().value;
+                  if (oldest) this.chunkMeshCache.delete(oldest);
+                }
+                this.chunkMeshCache.set(chunkKey, fallbackResult as any);
                 this.applyWorkerResult(fallbackResult);
               } else {
                 this.buildFallbackSync(features);
@@ -694,7 +819,27 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
    * Worker 미지원 또는 예외 발생 시 동기식 폴백 빌더
    */
   private buildFallbackSync(features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]): void {
-    // 마스터 아틀라스 버텍스 배열 (폴백 보존)
+    // [1순위: 24종 실사 아틀라스 & 다중 지붕 지오메트리 동기 빌더 직결]
+    try {
+      const osmResult = buildOsmBuildingGeometry({
+        features,
+        originLngLat: this.originLngLat,
+        sunDirection: [
+          this.sunLightDirection.x,
+          this.sunLightDirection.y,
+          this.sunLightDirection.z,
+        ],
+        zoom: this.currentZoomLOD,
+      });
+      if (osmResult && osmResult.positions && osmResult.positions.length > 0) {
+        this.applyWorkerResult(osmResult);
+        return;
+      }
+    } catch (err) {
+      console.warn('[LOD2BuildingEngine] buildOsmBuildingGeometry direct fallback error:', err);
+    }
+
+    // 마스터 아틀라스 버텍스 배열 (2차 안전 폴백)
     const masterPositions: number[] = [];
     const masterNormals: number[] = [];
     const masterUvs: number[] = [];
@@ -761,61 +906,83 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const approxArea = Math.max(10, obb.lenU * obb.lenV);
         const aspectRatio = obb.lenU / Math.max(1.0, obb.lenV);
 
+        const isMilitary =
+          name.includes('부대') ||
+          name.includes('군') ||
+          name.includes('막사') ||
+          name.includes('병영') ||
+          name.includes('창고') ||
+          name.includes('보급') ||
+          name.includes('사령부') ||
+          usageType.includes('military') ||
+          usageType.includes('barracks') ||
+          props.isMilitaryOrPublic === true;
+
         // [Z축 스케일 정밀 복원: 1개 층 3.0m 기준 및 실측 비례 매핑]
         let totalH = explicitH;
         const isApt =
-          name.includes('아파트') ||
-          name.includes('apt') ||
-          name.includes('단지') ||
-          name.includes('푸르지오') ||
-          name.includes('자이') ||
-          name.includes('힐스테이트') ||
-          name.includes('래미안') ||
-          name.includes('e편한') ||
-          name.includes('더샵') ||
-          name.includes('아이파크') ||
-          name.includes('롯데캐슬') ||
-          name.includes('한신') ||
-          name.includes('삼호') ||
-          name.includes('두산') ||
-          name.includes('우성') ||
-          name.includes('현대') ||
-          name.includes('동보') ||
-          name.includes('세경') ||
-          name.includes('코아루') ||
-          name.includes('부영') ||
-          name.includes('주공') ||
-          usageType.includes('apartment') ||
-          (aspectRatio >= 1.4 && approxArea >= 280);
+          !isMilitary && (
+            name.includes('아파트') ||
+            name.includes('apt') ||
+            name.includes('단지') ||
+            name.includes('푸르지오') ||
+            name.includes('자이') ||
+            name.includes('힐스테이트') ||
+            name.includes('래미안') ||
+            name.includes('e편한') ||
+            name.includes('더샵') ||
+            name.includes('아이파크') ||
+            name.includes('롯데캐슬') ||
+            name.includes('한신') ||
+            name.includes('삼호') ||
+            name.includes('두산') ||
+            name.includes('우성') ||
+            name.includes('현대') ||
+            name.includes('동보') ||
+            name.includes('세경') ||
+            name.includes('코아루') ||
+            name.includes('부영') ||
+            name.includes('주공') ||
+            usageType.includes('apartment') ||
+            props.bld_category === 'apartment' ||
+            (aspectRatio >= 1.4 && approxArea >= 280)
+          );
 
         const isComm =
-          name.includes('타워') ||
-          name.includes('빌딩') ||
-          name.includes('센터') ||
-          usageType.includes('commercial') ||
-          usageType.includes('office') ||
-          approxArea >= 500;
+          !isMilitary && !isApt && (
+            name.includes('타워') ||
+            name.includes('빌딩') ||
+            name.includes('센터') ||
+            usageType.includes('commercial') ||
+            usageType.includes('office') ||
+            props.bld_category === 'commercial' ||
+            approxArea >= 500
+          );
 
         // [3. 실측 층수 기반 정확한 높이 스케일링: 1개 층 3.0m 엄격 준수]
-        if (!totalH || totalH <= 0) {
-          if (isApt) {
+        if (!totalH || totalH <= 4.0) {
+          if (isMilitary) {
+            const seed = Math.abs(Math.sin(obb.centroid.x * 31.7 + obb.centroid.y * 89.3)) % 1;
+            const milStories = approxArea < 200 ? 2 : Math.round(2 + seed);
+            totalH = milStories * 3.5; // 7.0m ~ 10.5m
+          } else if (isApt) {
             // 아파트 단지: 층수 부재 시 실제 동별 층수 15~25층 (45m~75m, 3.0m/층)
             const seed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
             const defaultAptStories = Math.round(15 + seed * 10); // 15~25층
             totalH = defaultAptStories * 3.0; // 정확히 3.0m/층 (45m~75m)
           } else if (isComm) {
-            // 일반 시내 상가: 층수 부재 시 3~4층 (9m~12m), 대형 오피스는 5~8층 (15m~24m)
+            // 일반 시내 상가: 층수 부재 시 4~10층 (13m~32m)
             const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
-            const stories = approxArea >= 700 ? Math.round(5 + seed * 3) : (seed > 0.5 ? 4 : 3);
-            totalH = stories * 3.0; // 정확히 3.0m/층 (9m 또는 12m)
+            const stories = approxArea >= 700 ? Math.round(5 + seed * 4) : (seed > 0.5 ? 4 : 3);
+            totalH = stories * 3.2;
           } else {
-            // 단독주택 / 빌라: 층수 부재 시 1~2층 (3.5m ~ 6.0m)
+            // 단독주택 / 빌라: 층수 부재 시 2~4층 (6m~12m)
             if (approxArea < 130 || usageType.includes('house')) {
-              totalH = 3.5; // 1층 단독주택 (3.5m)
+              totalH = 6.0; // 2층 단독주택 (6.0m)
             } else if (approxArea < 350) {
-              totalH = 6.0; // 2층 빌라/단독주택 (6.0m)
+              totalH = 9.0; // 3층 빌라/다세대 (9.0m)
             } else {
-              totalH = 9.0; // 3층 저층 상가주택 (9.0m)
+              totalH = 12.0; // 4층 저층 상가주택 (12.0m)
             }
           }
         }
@@ -911,6 +1078,32 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const BAY_WIDTH = 2.8;
         const STORY_HEIGHT = 3.0;
 
+        const buildingSeed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
+        const seedRoof = Math.abs(Math.sin(obb.centroid.x * 45.164 + obb.centroid.y * 91.733)) % 1;
+        let roofSlotId = 14;
+        let roofR = 0.47, roofG = 0.44, roofB = 0.42; // 30%: 노후 콘크리트 슬래브 웜 그레이
+        if (seedRoof < 0.30) {
+          roofSlotId = 14; roofR = 0.47; roofG = 0.44; roofB = 0.42;
+        } else if (seedRoof < 0.55) {
+          roofSlotId = 15; roofR = 0.20; roofG = 0.25; roofB = 0.33; // 25%: 아스팔트 차콜
+        } else if (seedRoof < 0.75) {
+          roofSlotId = 16; roofR = 0.42; roofG = 0.18; roofB = 0.12; // 20%: 적갈색 기와
+        } else if (seedRoof < 0.90) {
+          roofSlotId = 17; roofR = 0.23; roofG = 0.32; roofB = 0.29; // 15%: 세이지 그린
+        } else {
+          roofSlotId = 18; roofR = 0.17; roofG = 0.26; roofB = 0.34; // 10%: 청회색 징크
+        }
+
+        const podiumSlotId = isComm ? 9 : 5;
+        const fndUV = getVWorldAtlasSlotUV(podiumSlotId);
+        const aptFrontSlot = Math.floor(buildingSeed * 4); // 0, 1, 2, 3
+        const aptFrontUV = getVWorldAtlasSlotUV(aptFrontSlot);
+        const aptSideUV = getVWorldAtlasSlotUV(4); // 4: apt_side
+        const commSlot = 5 + Math.floor(buildingSeed * 4);
+        const resSlot = isMilitary ? 23 : 10 + Math.floor(buildingSeed * 4);
+        const wallSlotId = isComm ? commSlot : resSlot;
+        const genWallUV = getVWorldAtlasSlotUV(wallSlotId);
+
         for (let i = 0; i < N; i++) {
           const p0 = pts[i];
           const p1 = pts[(i + 1) % N];
@@ -926,8 +1119,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           // [Part 1. 저층 기단부 (0m ~ 4m)]
           // 지하 매립 기초(wallBaseY)부터 지상 4m(podiumTopY)까지 일체형 화강석 기단부 외벽 구성
           // ===================================================================
-          const podiumSlot = cls.category === 'commercial' ? 'commercial_ground' : 'foundation_stone';
-          const fndUV = getAtlasSlotUV(podiumSlot);
           addQuad(
             masterPositions, masterNormals, masterUvs, masterColors,
             { x: p0.x, y: wallBaseY, z: p0.y },
@@ -955,7 +1146,6 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
               if (isNarrowSide) {
                 // (1) 한국형 아파트 측벽: 밝은 크림 아이보리(#f8fafc) + 측벽 수직 코어 라인 + 상단 동 번호 마킹
-                const sideUV = getAtlasSlotUV('apartment_side');
                 addQuad(
                   masterPositions, masterNormals, masterUvs, masterColors,
                   { x: p0.x, y: podiumTopY, z: p0.y },
@@ -963,16 +1153,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                   { x: p1.x, y: wallTop, z: p1.y },
                   { x: p0.x, y: wallTop, z: p0.y },
                   outNx, 0, outNz,
-                  { u: sideUV.u0, v: sideUV.v0 },
-                  { u: sideUV.u1, v: sideUV.v0 },
-                  { u: sideUV.u1, v: sideUV.v1 },
-                  { u: sideUV.u0, v: sideUV.v1 },
+                  { u: aptSideUV.u0, v: aptSideUV.v0 },
+                  { u: aptSideUV.u1, v: aptSideUV.v0 },
+                  { u: aptSideUV.u1, v: aptSideUV.v1 },
+                  { u: aptSideUV.u0, v: aptSideUV.v1 },
                   0.98, 0.98, 0.99
                 );
               } else {
                 // (2) 한국형 아파트 전/후면: 세대별 베란다 창문 격자 및 실외기 루버 (3m 층고 단위 격자)
-                const frontUV = getAtlasSlotUV('apartment_front');
-
                 for (let b = 0; b < nBays; b++) {
                   const t0 = b / nBays;
                   const t1 = (b + 1) / nBays;
@@ -992,19 +1180,18 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                       { x: bx1, y: y1, z: bz1 },
                       { x: bx0, y: y1, z: bz0 },
                       outNx, 0, outNz,
-                      { u: frontUV.u0, v: frontUV.v0 },
-                      { u: frontUV.u1, v: frontUV.v0 },
-                      { u: frontUV.u1, v: frontUV.v1 },
-                      { u: frontUV.u0, v: frontUV.v1 },
+                      { u: aptFrontUV.u0, v: aptFrontUV.v0 },
+                      { u: aptFrontUV.u1, v: aptFrontUV.v0 },
+                      { u: aptFrontUV.u1, v: aptFrontUV.v1 },
+                      { u: aptFrontUV.u0, v: aptFrontUV.v1 },
                       0.98, 0.98, 0.99
                     );
                   }
                 }
               }
             } else {
-              // (3) 상업/오피스 (스카이 블루 반사 커튼월 #bae6fd), 저층 주택/군사 막사 (밝은 샌드 베이지 #f1f5f9)
-              const wallSlot = cls.wallFrontSlot;
-              const wallUV = getAtlasSlotUV(wallSlot);
+              // (3) 상업/오피스 (4종 5~8), 주택/시설 (4종 10~13), 군 시설 (23)
+              const wallUV = genWallUV;
 
               for (let b = 0; b < nBays; b++) {
                 const t0 = b / nBays;
@@ -1038,10 +1225,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         }
 
         // 2. [지붕 (Roof) 지오메트리 & 아틀라스 UV 매핑 - 실제 GIS 건물 다각형 100% 1:1 Earcut 정밀 수직 압출]
-        // 건물 외곽선 Bounding Box 치환 및 가짜 박공/피라미드 지붕을 완전히 제거하고, 위성사진 지붕 윤곽과 1:1 일치
         const roofTriangles = triangulatePolygon2D(pts);
         if (roofTriangles.length > 0) {
-          const roofUV = getAtlasSlotUV(cls.roofSlot);
+          const roofUV = getVWorldAtlasSlotUV(roofSlotId);
           for (const idx of roofTriangles) {
             const p = pts[idx];
             const u = roofUV.u0 + ((p.x - minX) / rangeX) * (roofUV.u1 - roofUV.u0);
@@ -1050,16 +1236,15 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             masterPositions.push(p.x, wallTop, p.y);
             masterNormals.push(0, 1, 0); // normal.y = 1
             masterUvs.push(u, v);
-            masterColors.push(1.0, 1.0, 1.0);
+            masterColors.push(roofR, roofG, roofB);
           }
         }
 
-        // 3. [0.8m 실측 규격 콘크리트 난간(Parapet) - 외곽선 안쪽으로만 0.25m 두께 정밀 모델링]
-        // 두께 0.25m, 높이 0.8m로 얇고 날렵하게 외곽선 안쪽으로만 생성 (과장된 돌출 기둥 및 외측 침범 원천 차단)
+        // 3. [0.9m 실측 규격 콘크리트 난간(Parapet) - 외곽선 안쪽으로만 0.35m 두께 정밀 모델링]
         if (cls.hasParapet && obb.lenV >= 2.5 && approxArea >= 20) {
-          const parapetUV = getAtlasSlotUV('parapet_concrete');
-          const pH = cls.parapetHeight || 0.8;
-          const pThick = 0.25; // 외곽선 안쪽 테두리 두께 0.25m (실측 건축 규격)
+          const parapetUV = getVWorldAtlasSlotUV(21);
+          const pH = 0.9; // 옥상 난간 높이 0.9m
+          const pThick = 0.35; // 외곽선 안쪽 테두리 두께 0.35m (실측 규격)
 
           for (let i = 0; i < N; i++) {
             const p0 = pts[i];
@@ -1168,8 +1353,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             pentW = coreW;
             pentD = coreD;
 
-            const pentUV = getAtlasSlotUV('penthouse_wall');
-            const coolRoofUV = getAtlasSlotUV('roof_concrete_cool');
+            const pentUV = getVWorldAtlasSlotUV(19);
+            const coolRoofUV = getVWorldAtlasSlotUV(14);
             const realHw = coreW * 0.5;
             const realHd = coreD * 0.5;
             const rc0 = { x: cx - u.x * realHw - v.x * realHd, z: cz - u.y * realHw - v.y * realHd };
@@ -1397,9 +1582,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       for (let i = 0; i < masterNormals.length; i += 3) {
         const ny = masterNormals[i + 1]; // 로컬 y축 법선 = 회전 후 월드 z축 법선
         if (Math.abs(ny) < 0.5) {
-          masterColors[i] = 0.98;
-          masterColors[i + 1] = 0.98;
-          masterColors[i + 2] = 0.99;
+          masterColors[i] = Math.max(masterColors[i], 0.95);
+          masterColors[i + 1] = Math.max(masterColors[i + 1], 0.95);
+          masterColors[i + 2] = Math.max(masterColors[i + 2], 0.95);
         }
       }
 
@@ -1698,6 +1883,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     }
 
     this.buildingCount = result.buildingCount;
+    this.setOpacity(this.opacity);
+    this.setStyleMode(this.styleMode);
     this.updateZoomLOD(this.currentZoomLOD);
     if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
@@ -1870,6 +2057,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   onRemove(): void {
     this.clearMeshes();
 
+    disposeVWorldAtlas();
     disposeKoreanCityAtlas();
     disposeKoreanBuildingMaterials();
     this.materials = null;
@@ -1913,6 +2101,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.ambientLight = null;
     }
 
+    this.chunkMeshCache.clear();
     this.scene.clear();
     this.renderer = null;
     this.map = null;

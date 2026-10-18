@@ -36,10 +36,13 @@ export interface StreetsGlBuildingMaterialOptions {
   ambientIntensity?: number;
   demTexture?: THREE.Texture | null;
   demBounds?: [number, number, number, number];
+  atlasTexture?: THREE.Texture | null;
+  useAtlasTexture?: boolean;
+  opacity?: number;
 }
 
 export const streetsGlBuildingVertexShader = /* glsl */ `
-  // aBuildingData: x: bldType(0=주택/빌라, 1=상업/오피스, 2=아파트), y: floors(층수), z: partType(0=외벽, 1=옥상, 2=난간, 3=측벽코어, 4=기단부), w: wallLength
+  // aBuildingData: x: bldType, y: floors, z: partType, w: slotId
   attribute vec4 aBuildingData;
   attribute vec2 aDemCoord;
 
@@ -49,6 +52,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
 
   varying vec3 vWorldPos;
   varying vec3 vNormal;
+  varying vec3 vLocalNormal;
   varying vec2 vUv;
   varying vec4 vBuildingData;
   varying vec3 vViewDir;
@@ -61,6 +65,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
   void main() {
     vUv = uv;
     vNormal = normalize(normalMatrix * normal);
+    vLocalNormal = normalize(normal);
     vBuildingData = aBuildingData;
 
     vec3 pos = position;
@@ -90,8 +95,13 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
   uniform vec3 uAmbientGround;
   uniform float uAmbientIntensity;
 
+  uniform sampler2D uAtlasTexture;
+  uniform bool uUseAtlasTexture;
+  uniform float uOpacity;
+
   varying vec3 vWorldPos;
   varying vec3 vNormal;
+  varying vec3 vLocalNormal;
   varying vec2 vUv;
   varying vec4 vBuildingData;
   varying vec3 vViewDir;
@@ -151,10 +161,11 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
   }
 
   void main() {
-    float bldType = vBuildingData.x;  // 0: 주택/빌라, 1: 상업/오피스, 2: 아파트
+    float bldType = vBuildingData.x;  // 0: 주택/빌라, 1: 상업/오피스, 2: 아파트, 3: 군부대/공공
     float floors = vBuildingData.y;   // 층수
-    float partType = vBuildingData.z; // 0: 외벽, 1: 옥상, 2: 난간, 3: 측벽코어, 4: 기단부
-    float wallLength = max(1.0, vBuildingData.w);
+    float partType = vBuildingData.z; // 0: 외벽, 1: 옥상, 2: 난간, 3: 측벽코어, 4: 기단부, 5: 옥탑박스, 6: 박공지붕
+    float slotId = vBuildingData.w;   // V-World 아틀라스 슬롯 ID (0..11)
+    float wallLength = max(1.0, vUv.x * 3.2);
 
     vec3 N = normalize(vNormal);
     vec3 V = normalize(vViewDir);
@@ -162,55 +173,118 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     vec3 R = reflect(-V, N);
 
     // -------------------------------------------------------------------------
-    // [1. 실제 항공사진과 어우러지는 저채도 옥상 마감]
-    // 상단 수평면 (abs(N.y) > 0.85) 또는 partType == 1.0 (옥상 슬래브)
+    // [1단계: V-World 스타일 고해상도(2048x2048) 24종 건축 텍스처 아틀라스 매핑]
     // -------------------------------------------------------------------------
-    if (partType == 1.0 || partType == 2.0 || abs(N.y) > 0.85) {
-      // 1) 기본 옥상 색상 분기
-      vec3 roofColor;
+    if (uUseAtlasTexture) {
+      float col = mod(slotId, 6.0);
+      float row = floor(slotId / 6.0);
+      vec2 slotOffset = vec2(col * (1.0 / 6.0), (3.0 - row) * 0.25);
+      vec2 slotSize = vec2(1.0 / 6.0, 0.25);
 
-      if (bldType > 1.5 || floors >= 10.0) {
-        // [대단지 아파트 및 대형 오피스 옥상]: 웨더링된 콘크리트 웜 그레이 (#64748b) ~ 다크 차콜 (#475569)
-        float weathering = fract(sin(dot(vUv.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        vec3 warmGray = vec3(0.392, 0.455, 0.545);    // #64748b
-        vec3 darkCharcoal = vec3(0.278, 0.333, 0.412); // #475569
-        roofColor = mix(warmGray, darkCharcoal, weathering * 0.35);
-      } else if (bldType > 0.5) {
-        // [중·저층 상가/빌라 옥상]: 한국 특유의 차분한 우레탄 세이지 그린 (#2e5a44) 및 다크 올리브 그린 (#365314)
-        vec3 sageGreen = vec3(0.180, 0.353, 0.267);  // #2e5a44
-        vec3 darkOlive = vec3(0.212, 0.325, 0.078);  // #365314
-        float urethaneTone = fract(vUv.x * 0.08 + vUv.y * 0.08);
-        roofColor = mix(sageGreen, darkOlive, smoothstep(0.3, 0.7, urethaneTone));
+      vec2 innerUv;
+      if (partType == 3.0 || slotId == 4.0) {
+        // [한국형 아파트 측벽 타일]: 가로 0..1 전폭 매핑, 세로 층별 반복
+        innerUv = vec2(clamp(vUv.x, 0.002, 0.998), fract(vUv.y));
+      } else if (partType == 1.0 || (slotId >= 14.0 && slotId <= 18.0)) {
+        // [옥상 슬래브]: 미터 단위 자연스러운 반복 (12m x 12m)
+        innerUv = clamp(fract(vUv * 0.08), 0.002, 0.998);
       } else {
-        // [단독주택/저층 주택]: 차분한 테라코타 브라운 (#7c2d12) 및 다크 네이비 슬레이트 (#1e3a8a)
-        float isNavy = step(0.5, fract(wallLength * 0.37));
-        vec3 terracotta = vec3(0.486, 0.176, 0.071); // #7c2d12
-        vec3 navySlate = vec3(0.118, 0.227, 0.541);  // #1e3a8a
-        roofColor = mix(terracotta, navySlate, isNavy);
+        // [외벽 / 난간 / 옥탑 / 박공]: 3.2m(가로) x 3.0m(세로) 단위 반복
+        innerUv = clamp(fract(vUv), 0.002, 0.998);
       }
 
-      // 난간 상단 코핑 수평면(#334155 다크 스톤)
-      if (partType == 2.0 && abs(N.y) > 0.85) {
-        roofColor = vec3(0.200, 0.255, 0.333); // #334155
-      }
+      vec2 atlasUv = slotOffset + innerUv * slotSize;
+      vec4 atlasTex = texture2D(uAtlasTexture, atlasUv);
+      vec3 surfaceColor = atlasTex.rgb;
 
-      // 2) 가장자리 0.8m 난간(Parapet) 내측 드롭 섀도우 & 앰비언트 오클루전(AO)
-      float edgeDistX = min(vUv.x, max(0.0, wallLength - vUv.x));
-      float edgeAO = smoothstep(0.0, 0.85, edgeDistX);
-      roofColor *= mix(0.55, 1.0, edgeAO);
-
-      // 3) 슬래브 미세 콘크리트 패널 줄눈 및 방수 코팅 결 (fwidth 안티앨리어싱)
-      vec2 tileUv = fract(vUv * 0.25);
-      float seam = aastep(0.02, tileUv.x) * aastep(0.02, tileUv.y);
-      roofColor *= mix(0.88, 1.0, seam);
-
-      // 4) PBR 조명 합성
+      // PBR 조명 합성
       float NdotL = max(0.0, dot(N, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
-      vec3 ambient = mix(uAmbientGround, uAmbientSky, N.y * 0.5 + 0.5) * uAmbientIntensity;
+      vec3 ambient = mix(uAmbientGround, uAmbientSky, N.y * 0.4 + 0.6) * uAmbientIntensity;
+
+      // 유리창 영역 감지 (어두운 복층유리 창문 픽셀) 및 스페큘러 하이라이트
+      vec3 H = normalize(L + V);
+      float NdotH = max(0.0, dot(N, H));
+      float lum = dot(surfaceColor, vec3(0.299, 0.587, 0.114));
+      // 외벽에서 루미넌스가 낮고 상단부가 아닌 창문 영역
+      float isGlass = step(lum, 0.38) * (1.0 - step(1.5, partType));
+      float specPower = (isGlass > 0.5) ? 64.0 : 16.0;
+      float specIntensity = (isGlass > 0.5) ? 0.85 : 0.08;
+      vec3 specular = uSunColor * pow(NdotH, specPower) * specIntensity;
+
+      // 프레넬 하늘 반사 (유리창 영역)
+      if (isGlass > 0.5) {
+        float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.5);
+        vec3 skyReflection = getSkyReflection(R);
+        surfaceColor = mix(surfaceColor, skyReflection, clamp(fresnel * 0.55, 0.0, 0.85));
+      }
+
+      vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
+      gl_FragColor = vec4(finalColor, uOpacity);
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // [Three.js 법선 기반 물리적 분리: 윗면(옥상) vs 난간(Parapet) vs 옆면(외벽)]
+    // -------------------------------------------------------------------------
+    bool isRoof = (partType == 1.0) || (vLocalNormal.y >= 0.5) || (vLocalNormal.z >= 0.5);
+    bool isParapet = (partType == 2.0);
+
+    if (isRoof) {
+      vec3 roofColor;
+      float roofHash = fract(sin(dot(floor(vWorldPos.xz * 0.05), vec2(12.9898, 78.233))) * 43758.5453);
+
+      if (bldType > 1.5 || floors >= 10.0) {
+        // [대단지 아파트 및 대형 오피스 옥상]: 콘크리트 그레이 & 차콜 슁글
+        if (roofHash < 0.60) {
+          roofColor = vec3(0.47, 0.44, 0.42); // 웜 그레이 #78716c
+        } else if (roofHash < 0.85) {
+          roofColor = vec3(0.20, 0.25, 0.33); // 차콜 그레이 #334155
+        } else {
+          roofColor = vec3(0.23, 0.32, 0.29); // 차분한 세이지 그린 #3b5249
+        }
+      } else {
+        // [실제 항공사진 지붕 비율]: 콘크리트(30%), 아스팔트(25%), 적갈색 기와(20%), 세이지 그린(15%), 징크(10%)
+        if (roofHash < 0.30) {
+          roofColor = vec3(0.47, 0.44, 0.42); // 노후 콘크리트 #78716c
+        } else if (roofHash < 0.55) {
+          roofColor = vec3(0.20, 0.25, 0.33); // 차콜 슁글 #334155
+        } else if (roofHash < 0.75) {
+          roofColor = vec3(0.42, 0.18, 0.12); // 적갈색 기와 #6b2d1f
+        } else if (roofHash < 0.90) {
+          roofColor = vec3(0.23, 0.32, 0.29); // 저채도 세이지 그린 #3b5249
+        } else {
+          roofColor = vec3(0.17, 0.26, 0.34); // 청회색 징크 #2c4257
+        }
+      }
+
+      // 슬래브 미세 콘크리트 패널 줄눈 및 방수 코팅 결
+      vec2 tileUv = fract(vUv * 0.25);
+      float seam = aastep(0.02, tileUv.x) * aastep(0.02, tileUv.y);
+      roofColor *= mix(0.90, 1.0, seam);
+
+      float NdotL = max(0.0, dot(N, L));
+      vec3 diffuse = uSunColor * NdotL * uSunIntensity;
+      vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = roofColor * (diffuse + ambient);
 
-      gl_FragColor = vec4(finalColor, 1.0);
+      gl_FragColor = vec4(finalColor, uOpacity);
+      return;
+    }
+
+    if (isParapet) {
+      // [옥상 난간 (Parapet)]: 두께 0.35m, 높이 0.9m 회백색 콘크리트 난간 (#cbd5e1 ~ #e2e8f0)
+      vec3 parapetColor = vec3(0.85, 0.88, 0.92); // 회백색 콘크리트 #cbd5e1
+      if (vLocalNormal.y >= 0.5 || vLocalNormal.z >= 0.5) {
+        parapetColor = vec3(0.80, 0.83, 0.88); // 난간 상단 코핑
+      }
+
+      float NdotL = max(0.0, dot(N, L));
+      vec3 diffuse = uSunColor * NdotL * uSunIntensity;
+      vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
+      vec3 finalColor = parapetColor * (diffuse + ambient);
+
+      gl_FragColor = vec4(finalColor, uOpacity);
       return;
     }
 
@@ -261,7 +335,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = graniteColor * (diffuse + ambient) * groundAO;
 
-      gl_FragColor = vec4(finalColor, 1.0);
+      gl_FragColor = vec4(finalColor, uOpacity);
       return;
     }
 
@@ -293,36 +367,36 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.6) * uAmbientIntensity;
       vec3 finalColor = coreWall * (diffuse + ambient);
 
-      gl_FragColor = vec4(finalColor, 1.0);
+      gl_FragColor = vec4(finalColor, uOpacity);
       return;
     }
 
     // -------------------------------------------------------------------------
-    // [5. 한국 실제 건축물 유형별 정밀 입면(Facade)]
+    // [5. 한국 실제 건축물 유형별 정밀 입면(Facade) - 초록색 엄격히 배제]
     // -------------------------------------------------------------------------
-    vec3 wallBaseColor = vec3(0.957, 0.945, 0.918); // 아파트 외벽: 크림 아이보리 (#f4f1ea)
+    vec3 wallBaseColor = vec3(0.961, 0.961, 0.941); // 아파트 외벽: 밝은 크림 아이보리 (#f5f5f0)
     vec3 slabColor = vec3(0.886, 0.910, 0.941);     // 층간 슬래브: 라이트 웜 그레이 (#e2e8f0)
     vec3 frameColor = vec3(0.200, 0.255, 0.333);    // 섀시 프레임: 다크 그레이 (#334155)
 
     if (bldType > 1.5) {
       // (1) 대단지 아파트 (apartments, 10층 이상):
-      // - 따뜻한 크림 아이보리(#f4f1ea) 외벽 + 층간 슬래브(#e2e8f0) 투톤 도색
+      // - 따뜻한 밝은 크림 아이보리(#f5f5f0) 외벽 + 층간 슬래브(#e2e8f0) 투톤 도색
       // - 3.0m 층고마다 선명한 다크 그레이 베란다 섀시 프레임(#334155)
       float twoToneFactor = mod(floorIdx, 3.0) < 1.0 ? 1.0 : 0.0;
-      wallBaseColor = mix(vec3(0.957, 0.945, 0.918), vec3(0.886, 0.910, 0.941), twoToneFactor * 0.75);
+      wallBaseColor = mix(vec3(0.961, 0.961, 0.941), vec3(0.910, 0.910, 0.890), twoToneFactor * 0.35);
       slabColor = vec3(0.886, 0.910, 0.941);
       frameColor = vec3(0.200, 0.255, 0.333);
     } else if (bldType > 0.5) {
       // (2) 상업/오피스 빌딩:
-      // - 화강석 베이지(#d6d3d1) 프레임 + 유리 커튼월
-      wallBaseColor = vec3(0.839, 0.827, 0.820);
+      // - 오피스 유리(#cbd5e1) 프레임 + 반사 글래스
+      wallBaseColor = vec3(0.796, 0.835, 0.882); // #cbd5e1 오피스 유리
       slabColor = vec3(0.420, 0.460, 0.520);
       frameColor = vec3(0.180, 0.220, 0.280);
     } else {
       // (3) 중·저층 상가 및 주택/빌라:
-      // - 화강석 베이지(#e7e5e4) 및 적벽돌(#9a3412) 질감 표현
-      wallBaseColor = vec3(0.604, 0.204, 0.071); // #9a3412 적벽돌
-      slabColor = vec3(0.906, 0.898, 0.894);     // #e7e5e4 화강석 베이지
+      // - 화강석 베이지(#e7e5e4) 질감 표현 (초록색 엄격히 배제)
+      wallBaseColor = vec3(0.906, 0.898, 0.894); // #e7e5e4 화강석 베이지
+      slabColor = vec3(0.850, 0.840, 0.830);
       frameColor = vec3(0.950, 0.950, 0.950);    // 화이트 PVC 창호
     }
 
@@ -420,7 +494,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     vec3 specular = uSunColor * pow(NdotH, specPower) * specIntensity;
 
     vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(finalColor, uOpacity);
   }
 `;
 
@@ -438,6 +512,8 @@ export function createStreetsGlBuildingMaterial(
   const ambGnd = options.ambientGround || new THREE.Color(0x334155);
   const ambInt = options.ambientIntensity !== undefined ? options.ambientIntensity : 0.85;
 
+  const opacity = options.opacity !== undefined ? Math.max(0.0, Math.min(1.0, options.opacity)) : 1.0;
+
   return new THREE.ShaderMaterial({
     vertexShader: streetsGlBuildingVertexShader,
     fragmentShader: streetsGlBuildingFragmentShader,
@@ -451,9 +527,12 @@ export function createStreetsGlBuildingMaterial(
       uDemTexture: { value: options.demTexture || null },
       uUseDemTexture: { value: !!options.demTexture },
       uDemExaggeration: { value: 1.0 },
+      uAtlasTexture: { value: options.atlasTexture || null },
+      uUseAtlasTexture: { value: options.useAtlasTexture !== undefined ? options.useAtlasTexture : !!options.atlasTexture },
+      uOpacity: { value: opacity },
     },
     side: THREE.DoubleSide,
-    transparent: false,
+    transparent: opacity < 0.99,
     depthWrite: true,
   });
 }

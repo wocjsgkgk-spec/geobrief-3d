@@ -3443,7 +3443,12 @@ export const ControlPanel: React.FC = () => {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setTile3DStreamPreset(item.id)}
+                        onClick={() => {
+                          setTile3DStreamPreset(item.id);
+                          if (item.id === 'custom') {
+                            setCustom3DTilesModalOpen(true);
+                          }
+                        }}
                         className={`py-1.5 px-1.5 rounded text-[10px] font-bold transition-all border text-center ${
                           tile3DStream.presetId === item.id
                             ? 'bg-cyan-600 border-cyan-400 text-white shadow-sm'
@@ -3462,9 +3467,18 @@ export const ControlPanel: React.FC = () => {
                 {/* 사용자 정의 URL 입력기 */}
                 {tile3DStream.presetId === 'custom' && (
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 block">
-                      3D Tiles 엔드포인트 URL (tileset.json)
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-slate-400 block">
+                        3D Tiles 엔드포인트 URL (tileset.json)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setCustom3DTilesModalOpen(true)}
+                        className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-mono"
+                      >
+                        모달 열기
+                      </button>
+                    </div>
                     <input
                       type="text"
                       placeholder="https://.../tileset.json"
@@ -3523,7 +3537,7 @@ export const ControlPanel: React.FC = () => {
                     </div>
                     <input
                       type="range"
-                      min={0.1}
+                      min={0.0}
                       max={1.0}
                       step={0.05}
                       value={tile3DStream.opacity}
@@ -3542,7 +3556,7 @@ export const ControlPanel: React.FC = () => {
                     <input
                       type="range"
                       min={1}
-                      max={5}
+                      max={10}
                       step={0.5}
                       value={tile3DStream.pointSize}
                       onChange={(e) => setTile3DStreamPointSize(parseFloat(e.target.value))}
