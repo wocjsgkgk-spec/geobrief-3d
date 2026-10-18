@@ -26,6 +26,7 @@
  */
 
 import * as THREE from 'three';
+import { realisticRoofGlslChunk } from '@/utils/realisticRoofShader';
 
 export interface StreetsGlBuildingMaterialOptions {
   sunDirection?: THREE.Vector3;
@@ -87,6 +88,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
 
 export const streetsGlBuildingFragmentShader = /* glsl */ `
   precision highp float;
+  ${realisticRoofGlslChunk}
 
   uniform vec3 uSunDirection;
   uniform vec3 uSunColor;
@@ -197,20 +199,28 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec4 atlasTex = texture2D(uAtlasTexture, atlasUv);
       vec3 surfaceColor = atlasTex.rgb;
 
+      // [옥상 슬래브]: 다층 웨더링 얼룩 및 방수 코팅 톤 변화
+      if (partType == 1.0 || (slotId >= 14.0 && slotId <= 18.0)) {
+        surfaceColor = applyRealisticRoofAging(surfaceColor, vWorldPos.xz, slotId);
+      }
+
       // PBR 조명 합성
       float NdotL = max(0.0, dot(N, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, N.y * 0.4 + 0.6) * uAmbientIntensity;
 
-      // 유리창 영역 감지 (어두운 복층유리 창문 픽셀) 및 스페큘러 하이라이트
-      vec3 H = normalize(L + V);
-      float NdotH = max(0.0, dot(N, H));
+      // 유리창 영역 감지 (어두운 복층유리 창문 픽셀) 및 창문별 가변 스페큘러 하이라이트
       float lum = dot(surfaceColor, vec3(0.299, 0.587, 0.114));
-      // 외벽에서 루미넌스가 낮고 상단부가 아닌 창문 영역
       float isGlass = step(lum, 0.38) * (1.0 - step(1.5, partType));
-      float specPower = (isGlass > 0.5) ? 64.0 : 16.0;
-      float specIntensity = (isGlass > 0.5) ? 0.85 : 0.08;
-      vec3 specular = uSunColor * pow(NdotH, specPower) * specIntensity;
+      
+      vec3 specular;
+      if (isGlass > 0.5) {
+        specular = getWindowDynamicSpecular(uSunColor, N, L, V, vWorldPos, floor(vUv.y), floor(vUv.x));
+      } else {
+        vec3 H = normalize(L + V);
+        float NdotH = max(0.0, dot(N, H));
+        specular = uSunColor * pow(NdotH, 16.0) * 0.08;
+      }
 
       // 프레넬 하늘 반사 (유리창 영역)
       if (isGlass > 0.5) {
@@ -263,6 +273,9 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       float seam = aastep(0.02, tileUv.x) * aastep(0.02, tileUv.y);
       roofColor *= mix(0.90, 1.0, seam);
 
+      // 실제 위성 영상 기반 다층 웨더링 및 풍화 얼룩 적용
+      roofColor = applyRealisticRoofAging(roofColor, vWorldPos.xz, roofHash);
+
       float NdotL = max(0.0, dot(N, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
@@ -288,6 +301,27 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       return;
     }
 
+    // [옥탑 권상기실 외벽 (partType == 5.0)]: 출입문 및 환기 루버 표현
+    if (partType == 5.0) {
+      vec3 pentColor = vec3(0.86, 0.89, 0.92);
+      float doorU = step(0.12, fract(vUv.x)) * (1.0 - step(0.42, fract(vUv.x)));
+      float doorV = step(0.05, fract(vUv.y)) * (1.0 - step(0.85, fract(vUv.y)));
+      if (doorU * doorV > 0.5) {
+        pentColor = vec3(0.20, 0.25, 0.33); // 철제 방화문 #334155
+      }
+      float luvU = step(0.58, fract(vUv.x)) * (1.0 - step(0.90, fract(vUv.x)));
+      float luvV = step(0.30, fract(vUv.y)) * (1.0 - step(0.75, fract(vUv.y)));
+      if (luvU * luvV > 0.5) {
+        float luvLines = aastep(0.4, fract(vUv.y * 10.0));
+        pentColor = mix(vec3(0.18, 0.22, 0.28), vec3(0.58, 0.64, 0.72), luvLines);
+      }
+      float NdotL = max(0.0, dot(N, L));
+      vec3 diffuse = uSunColor * NdotL * uSunIntensity;
+      vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
+      gl_FragColor = vec4(pentColor * (diffuse + ambient), uOpacity);
+      return;
+    }
+
     // -------------------------------------------------------------------------
     // [2. 수직 파사드 입면 좌표 및 층간 분할]
     // -------------------------------------------------------------------------
@@ -300,35 +334,48 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     float floorIdx = floor(floorCoord);
 
     // -------------------------------------------------------------------------
-    // [3. 1층 상가 쇼윈도 기단부 분리 (0m ~ 3.5m 또는 partType == 4.0)]
+    // [3. 1층 기단부 분리 (0m ~ 3.8m 또는 partType == 4.0)]
     // -------------------------------------------------------------------------
-    if (heightMeters < 3.5 || partType == 4.0) {
-      // 다크 화강석 그레이 (#64748b)
-      vec3 graniteColor = vec3(0.392, 0.455, 0.545);
+    if (heightMeters < 3.8 || partType == 4.0) {
+      vec3 graniteColor;
+      if (bldType > 1.5 || bldType <= 0.5) {
+        // [아파트 및 다세대 빌라]: 1층 현관 출입구(필로티 기둥 및 공동현관 포치) 어두운 화강석(#1e293b ~ #334155) 마감
+        graniteColor = vec3(0.18, 0.22, 0.28);
+        vec2 panelUv = fract(vec2(lengthMeters / 1.2, heightMeters / 0.8));
+        float panelSeam = aastep(0.03, panelUv.x) * aastep(0.03, panelUv.y);
+        graniteColor *= mix(0.72, 1.0, panelSeam);
 
-      // 석재 패널 줄눈 (1.5m x 1.0m 그리드)
-      vec2 panelUv = fract(vec2(lengthMeters / 1.5, heightMeters / 1.0));
-      float panelSeam = aastep(0.03, panelUv.x) * aastep(0.03, panelUv.y);
-      graniteColor *= mix(0.78, 1.0, panelSeam);
-
-      // 1층 상가 쇼윈도 구분선 및 대형 통유리창
-      float winH = step(0.65, heightMeters) * (1.0 - step(3.0, heightMeters));
-      float winBay = fract(lengthMeters / 3.8);
-      float isShopWindow = winH * aabox(vec2(0.10, 0.12), vec2(0.90, 0.94), vec2(winBay, inFloor));
-
-      if (isShopWindow > 0.5) {
-        vec3 shopGlass = vec3(0.10, 0.16, 0.25);
-        // 쇼윈도 온백색 조명 (진열대 포인트 조명)
-        shopGlass += vec3(0.55, 0.50, 0.38) * smoothstep(0.60, 0.95, inFloor);
-
-        // 쇼윈도 프레넬 하늘빛 반사
-        float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.0);
-        shopGlass = mix(shopGlass, getSkyReflection(R), fresnel * 0.65);
-
-        graniteColor = mix(graniteColor, shopGlass, 0.90);
+        float inBay = fract(lengthMeters / 4.5);
+        float isLobbyDoor = step(0.35, inBay) * (1.0 - step(0.65, inBay)) * step(0.5, heightMeters) * (1.0 - step(3.4, heightMeters));
+        if (isLobbyDoor > 0.5) {
+          vec3 doorGlass = vec3(0.08, 0.12, 0.18);
+          doorGlass += vec3(0.60, 0.55, 0.40) * smoothstep(0.65, 0.95, inFloor);
+          float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.0);
+          doorGlass = mix(doorGlass, getSkyReflection(R), fresnel * 0.70);
+          graniteColor = mix(graniteColor, doorGlass, 0.92);
+        }
+      } else {
+        // [상업/근린생활 건물]: 1층 어두운 통유리 쇼윈도 + 상가 간판 밴드(화이트/네이비/차콜 톤)
+        graniteColor = vec3(0.14, 0.18, 0.24);
+        float isSignBand = step(2.8, heightMeters) * (1.0 - step(3.6, heightMeters));
+        if (isSignBand > 0.5) {
+          float signHash = fract(sin(floor(lengthMeters / 5.5) * 19.31) * 43758.5453);
+          vec3 signColor = (signHash < 0.35) ? vec3(0.92, 0.94, 0.96)
+                         : (signHash < 0.70) ? vec3(0.12, 0.22, 0.48)
+                         : vec3(0.18, 0.20, 0.24);
+          graniteColor = signColor;
+        } else {
+          float isShopWindow = step(0.5, heightMeters) * (1.0 - step(2.7, heightMeters));
+          if (isShopWindow > 0.5) {
+            vec3 shopGlass = vec3(0.06, 0.10, 0.16);
+            shopGlass += vec3(0.55, 0.48, 0.35) * smoothstep(0.55, 0.95, inFloor);
+            float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.0);
+            shopGlass = mix(shopGlass, getSkyReflection(R), fresnel * 0.65);
+            graniteColor = mix(graniteColor, shopGlass, 0.90);
+          }
+        }
       }
 
-      // 하단 지면 밀착 접지 앰비언트 오클루전
       float groundAO = mix(0.42, 1.0, smoothstep(0.0, 0.85, heightMeters));
       float NdotL = max(0.0, dot(N, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
@@ -486,12 +533,17 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     vec3 diffuse = uSunColor * NdotL * uSunIntensity;
     vec3 ambient = mix(uAmbientGround, uAmbientSky, N.y * 0.4 + 0.6) * uAmbientIntensity;
 
-    // 유리창 및 금속 섀시 스페큘러 하이라이트
-    vec3 H = normalize(L + V);
-    float NdotH = max(0.0, dot(N, H));
-    float specPower = (isWindow > 0.5) ? 64.0 : 16.0;
-    float specIntensity = (isWindow > 0.5) ? 0.65 : (isFrame > 0.5 ? 0.25 : 0.05);
-    vec3 specular = uSunColor * pow(NdotH, specPower) * specIntensity;
+    // 유리창 및 금속 섀시 스페큘러 하이라이트 (창문별 가변 Roughness / 스페큘러)
+    vec3 specular;
+    if (isWindow > 0.5) {
+      specular = getWindowDynamicSpecular(uSunColor, N, L, V, vWorldPos, floorIdx, bayIdx);
+    } else {
+      vec3 H = normalize(L + V);
+      float NdotH = max(0.0, dot(N, H));
+      float specPower = (isFrame > 0.5 ? 24.0 : 12.0);
+      float specIntensity = (isFrame > 0.5 ? 0.25 : 0.04);
+      specular = uSunColor * pow(NdotH, specPower) * specIntensity;
+    }
 
     vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
     gl_FragColor = vec4(finalColor, uOpacity);

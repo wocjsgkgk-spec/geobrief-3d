@@ -1405,7 +1405,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 5. [아파트 부속 설비 인스턴싱: STS 원통 물탱크 & 환기 벤트 - 다각형 내부 검증 시에만 배치]
+        // 5. [한국형 옥상 부속 설비 인스턴싱: STS 원통/사각 물탱크 & 환기 파이프 벤트]
         if (cls.category === 'apartment' && hasValidPenthouse) {
           const tankRadius = Math.max(0.8, Math.min(1.4, obb.lenV * 0.10));
           const tankHeight = 2.0;
@@ -1417,7 +1417,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
           if (isPointInPolygon2D(tx, tz, pts)) {
             tempPos.set(tx, wallTop, tz);
-            tempQuat.identity();
+            tempEuler.set(0, Math.atan2(obb.dirU.y, obb.dirU.x), 0, 'YXZ');
+            tempQuat.setFromEuler(tempEuler);
             tempScale.set(tankRadius * 2, tankHeight, tankRadius * 2);
             tempMat.compose(tempPos, tempQuat, tempScale);
             waterTankMatrices.push(tempMat.clone());
@@ -1439,6 +1440,36 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               tempMat.compose(tempPos, tempQuat, tempScale);
               ventMatrices.push(tempMat.clone());
             }
+          }
+        } else if ((cls.category === 'commercial' || cls.category === 'villa') && totalH >= 7.0 && approxArea >= 50.0) {
+          // 상가 및 저층 주택/빌라: STS 물탱크 1~2기와 벤트 파이프 배치 (위성사진 실루엣 재현)
+          const tankRadius = Math.max(0.7, Math.min(1.2, obb.lenV * 0.08));
+          const tankHeight = 1.8;
+          const tankAngle = Math.atan2(obb.dirU.y, obb.dirU.x);
+          const nTanks = approxArea >= 180 ? 2 : 1;
+          for (let t = 0; t < nTanks; t++) {
+            const offsetMag = (t === 0 ? 1 : -1) * (obb.lenU * 0.22);
+            const tx = obb.obbCenter.x + obb.dirU.x * offsetMag;
+            const tz = obb.obbCenter.y + obb.dirU.y * offsetMag;
+            if (isPointInPolygon2D(tx, tz, pts)) {
+              tempPos.set(tx, wallTop, tz);
+              tempEuler.set(0, tankAngle, 0, 'YXZ');
+              tempQuat.setFromEuler(tempEuler);
+              tempScale.set(tankRadius * 2, tankHeight, tankRadius * 2);
+              tempMat.compose(tempPos, tempQuat, tempScale);
+              waterTankMatrices.push(tempMat.clone());
+            }
+          }
+
+          // 환기 파이프 벤트
+          const vx = obb.obbCenter.x - obb.dirV.x * (obb.lenV * 0.2);
+          const vz = obb.obbCenter.y - obb.dirV.y * (obb.lenV * 0.2);
+          if (isPointInPolygon2D(vx, vz, pts)) {
+            tempPos.set(vx, wallTop, vz);
+            tempQuat.identity();
+            tempScale.set(0.5, 0.8, 0.5);
+            tempMat.compose(tempPos, tempQuat, tempScale);
+            ventMatrices.push(tempMat.clone());
           }
         }
 
@@ -1482,7 +1513,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             helipadMarkGeometries.push(crossBar);
           }
 
-          // 남향 태양광 패널 그리드
+          // 건물 주축 방향 남향 태양광 패널 그리드
           if (obb.lenU >= 16.0 && obb.lenV >= 14.0) {
             const panelCols = Math.max(2, Math.min(4, Math.floor(obb.lenU / 6.0)));
             const panelRows = 2;
@@ -1491,15 +1522,18 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
             const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.28);
             const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.28);
+            const bAngle = Math.atan2(obb.dirU.y, obb.dirU.x);
 
-            tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ');
+            tempEuler.set(-15 * (Math.PI / 180), bAngle, 0, 'YXZ');
             tempQuat.setFromEuler(tempEuler);
             tempScale.set(1.0, 1.0, 1.0);
 
             for (let r = 0; r < panelRows; r++) {
               for (let c = 0; c < panelCols; c++) {
-                const px = solarCenterX + (c - (panelCols - 1) * 0.5) * spacingX;
-                const pz = solarCenterZ + (r - (panelRows - 1) * 0.5) * spacingZ;
+                const uOff = (c - (panelCols - 1) * 0.5) * spacingX;
+                const vOff = (r - (panelRows - 1) * 0.5) * spacingZ;
+                const px = solarCenterX + obb.dirU.x * uOff + obb.dirV.x * vOff;
+                const pz = solarCenterZ + obb.dirU.y * uOff + obb.dirV.y * vOff;
 
                 if (isPointInPolygon2D(px, pz, pts)) {
                   tempPos.set(px, wallTop + 0.45 + r * 0.12, pz);
@@ -1511,8 +1545,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 7. [상업/오피스 옥상: 대형 HVAC 실외기(냉각탑) 유닛 블록 절차적 자동 배치]
-        if ((cls.category === 'commercial' || cls.category === 'curtainwall') && totalH >= 12.0 && approxArea >= 120) {
+        // 7. [아파트 및 상업/오피스 옥상: 대형 HVAC 실외기(냉각탑) 유닛 블록 건물 방향 정렬 배치]
+        if ((cls.category === 'commercial' || cls.category === 'curtainwall' || (cls.category === 'apartment' && totalH >= 18.0)) && approxArea >= 120) {
           const nHvac = approxArea >= 350 ? 2 : 1;
           for (let h = 0; h < nHvac; h++) {
             const hDist = (h - (nHvac - 1) * 0.5) * 4.5;
@@ -1529,23 +1563,26 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           }
         }
 
-        // 8. [상업/오피스 남향 태양광 패널]
-        if (cls.category === 'commercial' && totalH >= 15.0 && approxArea >= 220 && obb.lenU >= 14.0) {
+        // 8. [아파트 및 상업/오피스: 건물 주축 방향 정렬 남향 태양광 패널 그리드]
+        if ((cls.category === 'commercial' || cls.category === 'apartment') && totalH >= 15.0 && approxArea >= 200 && obb.lenU >= 14.0) {
           const panelCols = Math.max(2, Math.min(4, Math.floor(obb.lenU / 6.0)));
           const panelRows = 2;
           const spacingX = 2.6;
           const spacingZ = 1.8;
           const solarCenterX = obb.obbCenter.x - obb.dirU.x * (obb.lenU * 0.22);
           const solarCenterZ = obb.obbCenter.y - obb.dirU.y * (obb.lenU * 0.22);
+          const bAngle = Math.atan2(obb.dirU.y, obb.dirU.x);
 
-          tempEuler.set(-15 * (Math.PI / 180), 0, 0, 'YXZ');
+          tempEuler.set(-15 * (Math.PI / 180), bAngle, 0, 'YXZ');
           tempQuat.setFromEuler(tempEuler);
           tempScale.set(1.0, 1.0, 1.0);
 
           for (let r = 0; r < panelRows; r++) {
             for (let c = 0; c < panelCols; c++) {
-              const px = solarCenterX + (c - (panelCols - 1) * 0.5) * spacingX;
-              const pz = solarCenterZ + (r - (panelRows - 1) * 0.5) * spacingZ;
+              const uOff = (c - (panelCols - 1) * 0.5) * spacingX;
+              const vOff = (r - (panelRows - 1) * 0.5) * spacingZ;
+              const px = solarCenterX + obb.dirU.x * uOff + obb.dirV.x * vOff;
+              const pz = solarCenterZ + obb.dirU.y * uOff + obb.dirV.y * vOff;
               if (isPointInPolygon2D(px, pz, pts)) {
                 tempPos.set(px, wallTop + 0.45 + r * 0.12, pz);
                 tempMat.compose(tempPos, tempQuat, tempScale);

@@ -259,7 +259,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
   // 가로 3.2m(1세대/1스팬), 세로 3.0m(1개 층) 단위
   const WINDOW_BAY_WIDTH = 3.2;
   const STORY_HEIGHT = 3.0;
-  const PODIUM_MAX_HEIGHT = 3.5;
+  const PODIUM_MAX_HEIGHT = 3.8;
   const PARAPET_THICKNESS = 0.35; // 옥상 난간 실측 두께 0.35m
   const PARAPET_HEIGHT = 0.9;     // 옥상 난간 실측 높이 0.9m
 
@@ -585,7 +585,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           }
 
           const currentWallSlot = (isApt && isSideWall) ? 4.0 : defaultWallSlotId; // 4=apt_side
-          const currentPodiumSlot = isComm ? 9.0 : currentWallSlot; // 9=comm_ground_shop
+          // 상업/근린생활: 9=comm_ground_shop | 아파트/다세대: 23=apt_pilotis_lobby (어두운 화강석 필로티/공동현관)
+          const currentPodiumSlot = isComm ? 9.0 : 23.0;
 
           const dem0 = { u: (c1[0] - minLng) / rangeLng, v: (c1[1] - minLat) / rangeLat };
           const dem1 = { u: (c2[0] - minLng) / rangeLng, v: (c2[1] - minLat) / rangeLat };
@@ -597,9 +598,12 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             u1 = 1.0;
           }
 
-          // (a) 기단부 (0 ~ 3.5m)
+          // (a) 1층 기단부 (0 ~ 3.8m)
           const vBase0 = 0.0;
           const vPodiumTop = podiumH / STORY_HEIGHT;
+          const curPodiumR = isComm ? 0.16 : 0.20;
+          const curPodiumG = isComm ? 0.20 : 0.24;
+          const curPodiumB = isComm ? 0.26 : 0.30;
 
           addQuadVertices(
             masterPositions, masterNormals, masterUvs, masterColors,
@@ -618,11 +622,55 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             4.0, // partType: 4=기단부
             currentPodiumSlot,
             dem0, dem1,
-            podiumR, podiumG, podiumB
+            curPodiumR, curPodiumG, curPodiumB
           );
 
-          // (b) 본동 외벽 (3.5m ~ H)
-          if (totalH > podiumH) {
+          // (b) 본동 외벽 (3.8m ~ H) 및 최상층 0.4m 두겁석(Cornice) 분리
+          const corniceH = 0.4;
+          if (totalH > podiumH + corniceH) {
+            const wallH = totalH - corniceH;
+            const vWallTop = wallH / STORY_HEIGHT;
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1.x, y: podiumH, z: -p1.y },
+              { x: p2.x, y: podiumH, z: -p2.y },
+              { x: p2.x, y: wallH, z: -p2.y },
+              { x: p1.x, y: wallH, z: -p1.y },
+              nx, 0, -nz,
+              { u: u0, v: vPodiumTop },
+              { u: u1, v: vPodiumTop },
+              { u: u1, v: vWallTop },
+              { u: u0, v: vWallTop },
+              bldType,
+              floors,
+              partType,
+              currentWallSlot,
+              dem0, dem1,
+              wallR, wallG, wallB
+            );
+
+            // (c) 최상층 0.4m 두겁석 (Cornice 띠 - 선명한 화이트 콘크리트 마감)
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1.x, y: wallH, z: -p1.y },
+              { x: p2.x, y: wallH, z: -p2.y },
+              { x: p2.x, y: totalH, z: -p2.y },
+              { x: p1.x, y: totalH, z: -p1.y },
+              nx, 0, -nz,
+              { u: 0, v: 0 },
+              { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+              { u: segLen / WINDOW_BAY_WIDTH, v: 1.0 },
+              { u: 0, v: 1.0 },
+              bldType,
+              floors,
+              2.0, // partType: 2.0 (두겁석/난간)
+              21.0, // 21=parapet_concrete
+              dem0, dem1,
+              0.92, 0.94, 0.96 // 밝은 콘크리트 #e2e8f0 ~ #f1f5f9
+            );
+          } else if (totalH > podiumH) {
             const vWallTop = totalH / STORY_HEIGHT;
             addQuadVertices(
               masterPositions, masterNormals, masterUvs, masterColors,
@@ -778,6 +826,31 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             bldType, floors, 2.0, parapetSlotId,
             dem0, dem1,
             0.85, 0.88, 0.92
+          );
+
+          // 4) 옥상 테두리(난간 바로 안쪽 0.8m 구간): 빗물 배수로 라인 및 짙은 구석 그림자(Corner AO)
+          const GUTTER_WIDTH = 0.8;
+          const p1g = { x: p1i.x + inNx * GUTTER_WIDTH, y: p1i.y + inNz * GUTTER_WIDTH };
+          const p2g = { x: p2i.x + inNx * GUTTER_WIDTH, y: p2i.y + inNz * GUTTER_WIDTH };
+
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: p1i.x, y: totalH + 0.055, z: -p1i.y },
+            { x: p2i.x, y: totalH + 0.055, z: -p2i.y },
+            { x: p2g.x, y: totalH + 0.055, z: -p2g.y },
+            { x: p1g.x, y: totalH + 0.055, z: -p1g.y },
+            0, 1, 0,
+            { u: 0, v: 0 },
+            { u: segLen * 0.1, v: 0 },
+            { u: segLen * 0.1, v: 1.0 },
+            { u: 0, v: 1.0 },
+            bldType,
+            floors,
+            1.0, // partType 1.0 = 지붕
+            roofSlotId,
+            dem0, dem1,
+            roofR * 0.52, roofG * 0.52, roofB * 0.52 // 구석 앰비언트 오클루전 그림자 톤
           );
         }
 
