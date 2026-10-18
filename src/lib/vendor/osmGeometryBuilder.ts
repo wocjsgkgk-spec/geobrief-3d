@@ -78,6 +78,78 @@ function signedArea(pts: Point2D[]): number {
 }
 
 /**
+ * 다각형의 안쪽 수직 법선 방향으로 insetDist(미터)만큼 축소(Inset)한 다각형을 계산합니다.
+ */
+function computePolygonInset(pts: Point2D[], insetDist: number): Point2D[] {
+  const n = pts.length;
+  if (n < 3) return pts;
+  const result: Point2D[] = [];
+
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p.x; cy += p.y; }
+  cx /= n; cy /= n;
+
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+
+    const d1x = curr.x - prev.x;
+    const d1y = curr.y - prev.y;
+    const l1 = Math.hypot(d1x, d1y);
+    if (l1 < 1e-4) { result.push({ ...curr }); continue; }
+    const inN1x = -d1y / l1;
+    const inN1y = d1x / l1;
+
+    const d2x = next.x - curr.x;
+    const d2y = next.y - curr.y;
+    const l2 = Math.hypot(d2x, d2y);
+    if (l2 < 1e-4) { result.push({ ...curr }); continue; }
+    const inN2x = -d2y / l2;
+    const inN2y = d2x / l2;
+
+    let avgNx = inN1x + inN2x;
+    let avgNy = inN1y + inN2y;
+    const avgLen = Math.hypot(avgNx, avgNy);
+    if (avgLen < 1e-4) {
+      const toCx = cx - curr.x;
+      const toCy = cy - curr.y;
+      const toCLen = Math.hypot(toCx, toCy);
+      if (toCLen > 1e-4) {
+        result.push({ x: curr.x + (toCx / toCLen) * insetDist, y: curr.y + (toCy / toCLen) * insetDist });
+      } else {
+        result.push({ ...curr });
+      }
+      continue;
+    }
+
+    avgNx /= avgLen;
+    avgNy /= avgLen;
+
+    const sinHalfAngle = inN1x * avgNx + inN1y * avgNy;
+    const miterScale = Math.min(2.0, Math.max(0.7, 1.0 / Math.max(0.3, sinHalfAngle)));
+
+    result.push({
+      x: curr.x + avgNx * insetDist * miterScale,
+      y: curr.y + avgNy * insetDist * miterScale,
+    });
+  }
+
+  // 면적이 너무 작아지거나 뒤집히면 중심 방향 스케일링으로 폴백
+  const origArea = signedArea(pts);
+  const insetArea = signedArea(result);
+  if (insetArea <= 0 || insetArea < origArea * 0.25) {
+    const scale = Math.max(0.75, 1.0 - (insetDist * 2.0) / Math.max(10.0, Math.sqrt(Math.abs(origArea))));
+    return pts.map(p => ({
+      x: cx + (p.x - cx) * scale,
+      y: cy + (p.y - cy) * scale,
+    }));
+  }
+
+  return result;
+}
+
+/**
  * 사각 쿼드(Quad)를 2개의 삼각형(6 버텍스)으로 버퍼에 직렬화
  */
 function addQuadVertices(
@@ -531,18 +603,34 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
         rawHolesRings.push(rawHole);
       }
 
-      // 최장 벽면 길이 산출 (측벽 코어 판정용)
+      // 최장 벽면 길이 산출 (측벽 코어 및 아파트 주진입면 판정용)
       let maxEdgeLen = 0;
+      let maxEdgeIdx = 0;
       for (let i = 0; i < outerPts.length; i++) {
         const next = (i + 1) % outerPts.length;
         const edx = outerPts[next].x - outerPts[i].x;
         const edy = outerPts[next].y - outerPts[i].y;
         const elen = Math.sqrt(edx * edx + edy * edy);
-        if (elen > maxEdgeLen) maxEdgeLen = elen;
+        if (elen > maxEdgeLen) {
+          maxEdgeLen = elen;
+          maxEdgeIdx = i;
+        }
       }
 
       // -----------------------------------------------------------------------
-      // [1. 기단부(0~3.5m) + 본동 외벽(3.5m~H)] 외벽 압출 (외부 링 + 내부 중정 링)
+      // [1. 건물 용도별 다단 스텝(Multi-Step Setback) 입체 지오메트리 판정]
+      // - 중·대형 상업/업무 빌딩 (높이 20m 이상, 면적 600㎡ 이상):
+      //   1~3층(0m ~ 11m): 원래 건물 바닥 폴리곤(100% 면적)으로 넓은 상가·로비 포디움(Podium) 기단부 생성 및 옥상 테라스 마감.
+      //   4층~최상층(11m ~ H): 폴리곤을 안쪽으로 15~20% 축소(Inset 2.5m)하여 본동 타워가 기단부 위로 솟아오름.
+      // -----------------------------------------------------------------------
+      const hasCommercialSetback = (isComm || (!isApt && !isMilitary)) && totalH >= 20.0 && approxArea >= 600;
+      const PODIUM_SETBACK_HEIGHT = 11.0;
+      const effectivePodiumH = hasCommercialSetback ? PODIUM_SETBACK_HEIGHT : podiumH;
+      const insetTowerPts = hasCommercialSetback ? computePolygonInset(outerPts, 2.5) : outerPts;
+      const roofTargetPts = hasCommercialSetback ? insetTowerPts : outerPts;
+
+      // -----------------------------------------------------------------------
+      // [1-A. 외벽 압출 파이프라인]
       // -----------------------------------------------------------------------
       const allRings = [{ pts: outerPts, raw: rawOuterRing, isHole: false }].concat(
         holesPts.map((hPts, idx) => ({ pts: hPts, raw: rawHolesRings[idx], isHole: true }))
@@ -621,9 +709,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             0.28, 0.33, 0.41 // 콘크리트 화강석 기초 기단부 (#475569)
           );
 
-          // (a) 1층 기단부 (0 ~ 3.8m)
+          // (a) 저층 기단부/포디움 외벽 (0 ~ effectivePodiumH)
           const vBase0 = 0.0;
-          const vPodiumTop = podiumH / STORY_HEIGHT;
+          const vPodiumTop = effectivePodiumH / STORY_HEIGHT;
           const curPodiumR = isComm ? 0.16 : 0.20;
           const curPodiumG = isComm ? 0.20 : 0.24;
           const curPodiumB = isComm ? 0.26 : 0.30;
@@ -633,8 +721,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             masterBuildingData, masterDemCoords,
             { x: p1.x, y: 0, z: -p1.y },
             { x: p2.x, y: 0, z: -p2.y },
-            { x: p2.x, y: podiumH, z: -p2.y },
-            { x: p1.x, y: podiumH, z: -p1.y },
+            { x: p2.x, y: effectivePodiumH, z: -p2.y },
+            { x: p1.x, y: effectivePodiumH, z: -p1.y },
             nx, 0, -nz,
             { u: u0, v: vBase0 },
             { u: u1, v: vBase0 },
@@ -648,72 +736,74 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             curPodiumR, curPodiumG, curPodiumB
           );
 
-          // (b) 본동 외벽 (3.8m ~ H) 및 최상층 0.4m 두겁석(Cornice) 분리
-          const corniceH = 0.4;
-          if (totalH > podiumH + corniceH) {
-            const wallH = totalH - corniceH;
-            const vWallTop = wallH / STORY_HEIGHT;
-            addQuadVertices(
-              masterPositions, masterNormals, masterUvs, masterColors,
-              masterBuildingData, masterDemCoords,
-              { x: p1.x, y: podiumH, z: -p1.y },
-              { x: p2.x, y: podiumH, z: -p2.y },
-              { x: p2.x, y: wallH, z: -p2.y },
-              { x: p1.x, y: wallH, z: -p1.y },
-              nx, 0, -nz,
-              { u: u0, v: vPodiumTop },
-              { u: u1, v: vPodiumTop },
-              { u: u1, v: vWallTop },
-              { u: u0, v: vWallTop },
-              bldType,
-              floors,
-              partType,
-              currentWallSlot,
-              dem0, dem1,
-              wallR, wallG, wallB
-            );
+          // 상업 빌딩 세트백이 아닐 경우 원래 링으로 본동 외벽 계속 압출
+          if (!hasCommercialSetback) {
+            const corniceH = 0.4;
+            if (totalH > effectivePodiumH + corniceH) {
+              const wallH = totalH - corniceH;
+              const vWallTop = wallH / STORY_HEIGHT;
+              addQuadVertices(
+                masterPositions, masterNormals, masterUvs, masterColors,
+                masterBuildingData, masterDemCoords,
+                { x: p1.x, y: effectivePodiumH, z: -p1.y },
+                { x: p2.x, y: effectivePodiumH, z: -p2.y },
+                { x: p2.x, y: wallH, z: -p2.y },
+                { x: p1.x, y: wallH, z: -p1.y },
+                nx, 0, -nz,
+                { u: u0, v: vPodiumTop },
+                { u: u1, v: vPodiumTop },
+                { u: u1, v: vWallTop },
+                { u: u0, v: vWallTop },
+                bldType,
+                floors,
+                partType,
+                currentWallSlot,
+                dem0, dem1,
+                wallR, wallG, wallB
+              );
 
-            // (c) 최상층 0.4m 두겁석 (Cornice 띠 - 선명한 화이트 콘크리트 마감)
-            addQuadVertices(
-              masterPositions, masterNormals, masterUvs, masterColors,
-              masterBuildingData, masterDemCoords,
-              { x: p1.x, y: wallH, z: -p1.y },
-              { x: p2.x, y: wallH, z: -p2.y },
-              { x: p2.x, y: totalH, z: -p2.y },
-              { x: p1.x, y: totalH, z: -p1.y },
-              nx, 0, -nz,
-              { u: 0, v: 0 },
-              { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
-              { u: segLen / WINDOW_BAY_WIDTH, v: 1.0 },
-              { u: 0, v: 1.0 },
-              bldType,
-              floors,
-              2.0, // partType: 2.0 (두겁석/난간)
-              21.0, // 21=parapet_concrete
-              dem0, dem1,
-              0.92, 0.94, 0.96 // 밝은 콘크리트 #e2e8f0 ~ #f1f5f9
-            );
-          } else if (totalH > podiumH) {
-            const vWallTop = totalH / STORY_HEIGHT;
-            addQuadVertices(
-              masterPositions, masterNormals, masterUvs, masterColors,
-              masterBuildingData, masterDemCoords,
-              { x: p1.x, y: podiumH, z: -p1.y },
-              { x: p2.x, y: podiumH, z: -p2.y },
-              { x: p2.x, y: totalH, z: -p2.y },
-              { x: p1.x, y: totalH, z: -p1.y },
-              nx, 0, -nz,
-              { u: u0, v: vPodiumTop },
-              { u: u1, v: vPodiumTop },
-              { u: u1, v: vWallTop },
-              { u: u0, v: vWallTop },
-              bldType,
-              floors,
-              partType,
-              currentWallSlot,
-              dem0, dem1,
-              wallR, wallG, wallB
-            );
+              // 최상층 0.4m 두겁석 (Cornice 띠)
+              addQuadVertices(
+                masterPositions, masterNormals, masterUvs, masterColors,
+                masterBuildingData, masterDemCoords,
+                { x: p1.x, y: wallH, z: -p1.y },
+                { x: p2.x, y: wallH, z: -p2.y },
+                { x: p2.x, y: totalH, z: -p2.y },
+                { x: p1.x, y: totalH, z: -p1.y },
+                nx, 0, -nz,
+                { u: 0, v: 0 },
+                { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+                { u: segLen / WINDOW_BAY_WIDTH, v: 1.0 },
+                { u: 0, v: 1.0 },
+                bldType,
+                floors,
+                2.0, // partType: 2.0 (두겁석/난간)
+                21.0, // 21=parapet_concrete
+                dem0, dem1,
+                0.92, 0.94, 0.96 // 밝은 콘크리트 #e2e8f0 ~ #f1f5f9
+              );
+            } else if (totalH > effectivePodiumH) {
+              const vWallTop = totalH / STORY_HEIGHT;
+              addQuadVertices(
+                masterPositions, masterNormals, masterUvs, masterColors,
+                masterBuildingData, masterDemCoords,
+                { x: p1.x, y: effectivePodiumH, z: -p1.y },
+                { x: p2.x, y: effectivePodiumH, z: -p2.y },
+                { x: p2.x, y: totalH, z: -p2.y },
+                { x: p1.x, y: totalH, z: -p1.y },
+                nx, 0, -nz,
+                { u: u0, v: vPodiumTop },
+                { u: u1, v: vPodiumTop },
+                { u: u1, v: vWallTop },
+                { u: u0, v: vWallTop },
+                bldType,
+                floors,
+                partType,
+                currentWallSlot,
+                dem0, dem1,
+                wallR, wallG, wallB
+              );
+            }
           }
 
           // 외곽 링에 대해 접지 그림자 및 태양광 투영 그림자 생성
@@ -756,9 +846,209 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
         }
       }
 
-      // Bounding box for roof geometries
+      // -----------------------------------------------------------------------
+      // [1-B. 상업 빌딩 세트백(Setback) 본동 타워(11m ~ H) 및 포디움 테라스 슬래브]
+      // -----------------------------------------------------------------------
+      if (hasCommercialSetback) {
+        const inLen = insetTowerPts.length;
+
+        // 1) 11.0m 포디움 옥상 테라스 난간 (높이 0.8m)
+        const oLen = outerPts.length;
+        for (let i = 0; i < oLen; i++) {
+          const nextIdx = (i + 1) % oLen;
+          const p1 = outerPts[i];
+          const p2 = outerPts[nextIdx];
+          const edgeDx = p2.x - p1.x;
+          const edgeDy = p2.y - p1.y;
+          const segLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+          if (segLen < 0.1) continue;
+          const outNx = edgeDy / segLen;
+          const outNz = -edgeDx / segLen;
+
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: p1.x, y: PODIUM_SETBACK_HEIGHT, z: -p1.y },
+            { x: p2.x, y: PODIUM_SETBACK_HEIGHT, z: -p2.y },
+            { x: p2.x, y: PODIUM_SETBACK_HEIGHT + 0.8, z: -p2.y },
+            { x: p1.x, y: PODIUM_SETBACK_HEIGHT + 0.8, z: -p1.y },
+            outNx, 0, -outNz,
+            { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+            { u: segLen / WINDOW_BAY_WIDTH, v: 1.0 }, { u: 0, v: 1.0 },
+            bldType, floors, 2.0, 21.0,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            0.88, 0.90, 0.94
+          );
+        }
+
+        // 2) 11.0m 포디움과 인셋 타워 사이의 옥상 테라스 슬래브 쿼드 연결
+        for (let i = 0; i < oLen; i++) {
+          const nextIdx = (i + 1) % oLen;
+          const p1 = outerPts[i];
+          const p2 = outerPts[nextIdx];
+          const ip1 = insetTowerPts[i % inLen];
+          const ip2 = insetTowerPts[nextIdx % inLen];
+
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: p1.x, y: PODIUM_SETBACK_HEIGHT + 0.05, z: -p1.y },
+            { x: p2.x, y: PODIUM_SETBACK_HEIGHT + 0.05, z: -p2.y },
+            { x: ip2.x, y: PODIUM_SETBACK_HEIGHT + 0.05, z: -ip2.y },
+            { x: ip1.x, y: PODIUM_SETBACK_HEIGHT + 0.05, z: -ip1.y },
+            0, 1, 0,
+            { u: 0, v: 0 }, { u: 1, v: 0 }, { u: 1, v: 1 }, { u: 0, v: 1 },
+            bldType, floors, 1.0, roofSlotId,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            roofR, roofG, roofB
+          );
+        }
+
+        // 3) 4층~최상층 축소된 본동 타워 외벽 (11.0m ~ H)
+        let towerCumLen = 0;
+        const towerWallH = totalH - 0.4;
+        for (let i = 0; i < inLen; i++) {
+          const nextIdx = (i + 1) % inLen;
+          const p1 = insetTowerPts[i];
+          const p2 = insetTowerPts[nextIdx];
+          const edgeDx = p2.x - p1.x;
+          const edgeDy = p2.y - p1.y;
+          const segLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+          if (segLen < 0.05) continue;
+          const outNx = edgeDy / segLen;
+          const outNz = -edgeDx / segLen;
+
+          const u0 = towerCumLen / WINDOW_BAY_WIDTH;
+          const u1 = (towerCumLen + segLen) / WINDOW_BAY_WIDTH;
+          const v0 = PODIUM_SETBACK_HEIGHT / STORY_HEIGHT;
+          const v1 = towerWallH / STORY_HEIGHT;
+
+          // 본동 타워 외벽
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: p1.x, y: PODIUM_SETBACK_HEIGHT, z: -p1.y },
+            { x: p2.x, y: PODIUM_SETBACK_HEIGHT, z: -p2.y },
+            { x: p2.x, y: towerWallH, z: -p2.y },
+            { x: p1.x, y: towerWallH, z: -p1.y },
+            outNx, 0, -outNz,
+            { u: u0, v: v0 }, { u: u1, v: v0 }, { u: u1, v: v1 }, { u: u0, v: v1 },
+            bldType, floors, 0.0, defaultWallSlotId,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            wallR, wallG, wallB
+          );
+
+          // 본동 타워 최상층 0.4m 두겁석
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: p1.x, y: towerWallH, z: -p1.y },
+            { x: p2.x, y: towerWallH, z: -p2.y },
+            { x: p2.x, y: totalH, z: -p2.y },
+            { x: p1.x, y: totalH, z: -p1.y },
+            outNx, 0, -outNz,
+            { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+            { u: segLen / WINDOW_BAY_WIDTH, v: 1.0 }, { u: 0, v: 1.0 },
+            bldType, floors, 2.0, 21.0,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            0.92, 0.94, 0.96
+          );
+
+          towerCumLen += segLen;
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // [1-C. 한국형 아파트 1층 공동현관 캐노피 포치(돌출 포치)]
+      // (높이 30m 이상 아파트 전면 중앙 하단에 폭 3.8m, 돌출 2.0m, 높이 3.2m 포치 결합)
+      // -----------------------------------------------------------------------
+      if (isApt && totalH >= 30.0 && maxEdgeLen >= 14.0) {
+        const pA = outerPts[maxEdgeIdx];
+        const pB = outerPts[(maxEdgeIdx + 1) % outerPts.length];
+        const eDx = pB.x - pA.x;
+        const eDy = pB.y - pA.y;
+        const eLen = Math.hypot(eDx, eDy);
+        if (eLen >= 12.0) {
+          const fwdNx = eDy / eLen;
+          const fwdNz = -eDx / eLen;
+          const midX = (pA.x + pB.x) * 0.5;
+          const midY = (pA.y + pB.y) * 0.5;
+          const tanX = eDx / eLen;
+          const tanY = eDy / eLen;
+          const porchHalfW = 1.9;
+          const porchDepth = 2.0;
+          const porchH = 3.2;
+
+          const poBL = { x: midX - tanX * porchHalfW, y: midY - tanY * porchHalfW };
+          const poBR = { x: midX + tanX * porchHalfW, y: midY + tanY * porchHalfW };
+          const poTR = { x: poBR.x + fwdNx * porchDepth, y: poBR.y + fwdNz * porchDepth };
+          const poTL = { x: poBL.x + fwdNx * porchDepth, y: poBL.y + fwdNz * porchDepth };
+
+          // 1) 포치 상판 캐노피 슬래브 (y: 3.2m ~ 3.35m)
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: poBL.x, y: 3.35, z: -poBL.y },
+            { x: poBR.x, y: 3.35, z: -poBR.y },
+            { x: poTR.x, y: 3.35, z: -poTR.y },
+            { x: poTL.x, y: 3.35, z: -poTL.y },
+            0, 1, 0,
+            { u: 0, v: 0 }, { u: 1, v: 0 }, { u: 1, v: 1 }, { u: 0, v: 1 },
+            bldType, floors, 4.0, 21.0,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            0.82, 0.85, 0.88
+          );
+
+          // 2) 포치 전면 벽면 / 자동문 출입구 (y: 0m ~ 3.2m)
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: poTL.x, y: 0, z: -poTL.y },
+            { x: poTR.x, y: 0, z: -poTR.y },
+            { x: poTR.x, y: porchH, z: -poTR.y },
+            { x: poTL.x, y: porchH, z: -poTL.y },
+            fwdNx, 0, -fwdNz,
+            { u: 0, v: 0 }, { u: 1, v: 0 }, { u: 1, v: 1 }, { u: 0, v: 1 },
+            bldType, floors, 4.0, 23.0,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            0.18, 0.22, 0.28
+          );
+
+          // 3) 포치 좌측면 (y: 0m ~ 3.2m)
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: poBL.x, y: 0, z: -poBL.y },
+            { x: poTL.x, y: 0, z: -poTL.y },
+            { x: poTL.x, y: porchH, z: -poTL.y },
+            { x: poBL.x, y: porchH, z: -poBL.y },
+            -tanX, 0, tanY,
+            { u: 0, v: 0 }, { u: 0.6, v: 0 }, { u: 0.6, v: 1 }, { u: 0, v: 1 },
+            bldType, floors, 4.0, 23.0,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            0.22, 0.25, 0.30
+          );
+
+          // 4) 포치 우측면 (y: 0m ~ 3.2m)
+          addQuadVertices(
+            masterPositions, masterNormals, masterUvs, masterColors,
+            masterBuildingData, masterDemCoords,
+            { x: poTR.x, y: 0, z: -poTR.y },
+            { x: poBR.x, y: 0, z: -poBR.y },
+            { x: poBR.x, y: porchH, z: -poBR.y },
+            { x: poTR.x, y: porchH, z: -poTR.y },
+            tanX, 0, -tanY,
+            { u: 0, v: 0 }, { u: 0.6, v: 0 }, { u: 0.6, v: 1 }, { u: 0, v: 1 },
+            bldType, floors, 4.0, 23.0,
+            { u: 0, v: 0 }, { u: 1, v: 1 },
+            0.22, 0.25, 0.30
+          );
+        }
+      }
+
+      // Bounding box for roof geometries (상업 빌딩 세트백 시 축소 타워 단면 기준)
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const p of outerPts) {
+      for (const p of roofTargetPts) {
         if (p.x < minX) minX = p.x;
         if (p.x > maxX) maxX = p.x;
         if (p.y < minY) minY = p.y;
@@ -769,112 +1059,216 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       const demMid = { u: (rawOuterRing[0][0] - minLng) / rangeLng, v: (rawOuterRing[0][1] - minLat) / rangeLat };
 
       // -----------------------------------------------------------------------
-      // [2. 평지붕(Flat Roof) 분기: 난간(Parapet) + 옥상 슬래브 + 엘리베이터 옥탑]
+      // [2. 평지붕(Flat Roof) 분기: 난간(Parapet) / 경사형 지붕 캡 + 옥상 슬래브 + 엘리베이터/계단실 코어]
       // -----------------------------------------------------------------------
       if (!hasPitchedRoof) {
-        // (a) 가변 옥상 난간 (Parapet, 높이 0.8m ~ 1.25m)
-        const parapetH = 0.8 + ((buildingSeed * 73.19) % 1.0) * 0.45;
-        const parapetSlotId = seedGeom < 0.6 ? 21.0 : 22.0; // 21=parapet_concrete, 22=parapet_dark
-        const parapetTopY = totalH + parapetH;
+        const isKoreanAptHighrise = isApt && totalH >= 30.0;
+        const oLen = roofTargetPts.length;
 
-        const oLen = outerPts.length;
-        for (let i = 0; i < oLen; i++) {
-          const nextIdx = (i + 1) % oLen;
-          const p1 = outerPts[i];
-          const p2 = outerPts[nextIdx];
-          const c1 = rawOuterRing[i];
-          const c2 = rawOuterRing[nextIdx];
+        // (a) 가변 옥상 난간 (Parapet) / 한국형 아파트 경사 파라펫 캡 (Mansard Cap)
+        if (isKoreanAptHighrise) {
+          // 한국 아파트 특유의 경사형 지붕 캡 (장식용 경사 파라펫 구조물):
+          // 높이 1.8m, 상단 1.2m 안쪽으로 꺾여 올라가는 다크 슬레이트 파라펫 캡
+          const CAP_H = 1.8;
+          const CAP_INSET = 1.2;
+          const capTopY = totalH + CAP_H;
 
-          const edgeDx = p2.x - p1.x;
-          const edgeDy = p2.y - p1.y;
-          const segLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
-          if (segLen < 0.1) continue;
+          for (let i = 0; i < oLen; i++) {
+            const nextIdx = (i + 1) % oLen;
+            const p1 = roofTargetPts[i];
+            const p2 = roofTargetPts[nextIdx];
+            const c1 = rawOuterRing[i % rawOuterRing.length];
+            const c2 = rawOuterRing[nextIdx % rawOuterRing.length];
 
-          const outNx = edgeDy / segLen;
-          const outNz = -edgeDx / segLen;
-          const inNx = -outNx;
-          const inNz = -outNz;
+            const edgeDx = p2.x - p1.x;
+            const edgeDy = p2.y - p1.y;
+            const segLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+            if (segLen < 0.1) continue;
 
-          const p1i = { x: p1.x + inNx * PARAPET_THICKNESS, y: p1.y + inNz * PARAPET_THICKNESS };
-          const p2i = { x: p2.x + inNx * PARAPET_THICKNESS, y: p2.y + inNz * PARAPET_THICKNESS };
+            const outNx = edgeDy / segLen;
+            const outNz = -edgeDx / segLen;
+            const inNx = -outNx;
+            const inNz = -outNz;
 
-          const dem0 = { u: (c1[0] - minLng) / rangeLng, v: (c1[1] - minLat) / rangeLat };
-          const dem1 = { u: (c2[0] - minLng) / rangeLng, v: (c2[1] - minLat) / rangeLat };
+            const p1Top = { x: p1.x + inNx * CAP_INSET, y: p1.y + inNz * CAP_INSET };
+            const p2Top = { x: p2.x + inNx * CAP_INSET, y: p2.y + inNz * CAP_INSET };
+            const p1In = { x: p1Top.x + inNx * 0.25, y: p1Top.y + inNz * 0.25 };
+            const p2In = { x: p2Top.x + inNx * 0.25, y: p2Top.y + inNz * 0.25 };
 
-          // 1) 난간 외벽면
-          addQuadVertices(
-            masterPositions, masterNormals, masterUvs, masterColors,
-            masterBuildingData, masterDemCoords,
-            { x: p1.x, y: totalH, z: -p1.y },
-            { x: p2.x, y: totalH, z: -p2.y },
-            { x: p2.x, y: parapetTopY, z: -p2.y },
-            { x: p1.x, y: parapetTopY, z: -p1.y },
-            outNx, 0, -outNz,
-            { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
-            { u: segLen / WINDOW_BAY_WIDTH, v: parapetH / STORY_HEIGHT },
-            { u: 0, v: parapetH / STORY_HEIGHT },
-            bldType, floors, 2.0, parapetSlotId,
-            dem0, dem1,
-            0.85, 0.88, 0.92
-          );
+            const dem0 = { u: (c1[0] - minLng) / rangeLng, v: (c1[1] - minLat) / rangeLat };
+            const dem1 = { u: (c2[0] - minLng) / rangeLng, v: (c2[1] - minLat) / rangeLat };
 
-          // 2) 난간 상단 코핑
-          addQuadVertices(
-            masterPositions, masterNormals, masterUvs, masterColors,
-            masterBuildingData, masterDemCoords,
-            { x: p1.x, y: parapetTopY, z: -p1.y },
-            { x: p1i.x, y: parapetTopY, z: -p1i.y },
-            { x: p2i.x, y: parapetTopY, z: -p2i.y },
-            { x: p2.x, y: parapetTopY, z: -p2.y },
-            0, 1, 0,
-            { u: 0, v: 0 }, { u: 0, v: PARAPET_THICKNESS },
-            { u: segLen, v: PARAPET_THICKNESS }, { u: segLen, v: 0 },
-            bldType, floors, 2.0, parapetSlotId,
-            dem0, dem1,
-            0.80, 0.83, 0.88
-          );
+            // 1) 경사 파라펫 외벽면 (Mansard Sloped Surface)
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1.x, y: totalH, z: -p1.y },
+              { x: p2.x, y: totalH, z: -p2.y },
+              { x: p2Top.x, y: capTopY, z: -p2Top.y },
+              { x: p1Top.x, y: capTopY, z: -p1Top.y },
+              outNx * 0.707, 0.707, -outNz * 0.707,
+              { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+              { u: segLen / WINDOW_BAY_WIDTH, v: 1.0 }, { u: 0, v: 1.0 },
+              bldType, floors, 6.0, 22.0, // 22=parapet_dark
+              dem0, dem1,
+              0.22, 0.26, 0.32
+            );
 
-          // 3) 난간 내측 벽면
-          addQuadVertices(
-            masterPositions, masterNormals, masterUvs, masterColors,
-            masterBuildingData, masterDemCoords,
-            { x: p2i.x, y: totalH, z: -p2i.y },
-            { x: p1i.x, y: totalH, z: -p1i.y },
-            { x: p1i.x, y: parapetTopY, z: -p1i.y },
-            { x: p2i.x, y: parapetTopY, z: -p2i.y },
-            inNx, 0, -inNz,
-            { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
-            { u: segLen / WINDOW_BAY_WIDTH, v: parapetH / STORY_HEIGHT },
-            { u: 0, v: parapetH / STORY_HEIGHT },
-            bldType, floors, 2.0, parapetSlotId,
-            dem0, dem1,
-            0.85, 0.88, 0.92
-          );
+            // 2) 캡 상단 두겁석
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1Top.x, y: capTopY, z: -p1Top.y },
+              { x: p1In.x, y: capTopY, z: -p1In.y },
+              { x: p2In.x, y: capTopY, z: -p2In.y },
+              { x: p2Top.x, y: capTopY, z: -p2Top.y },
+              0, 1, 0,
+              { u: 0, v: 0 }, { u: 0, v: 0.25 },
+              { u: segLen, v: 0.25 }, { u: segLen, v: 0 },
+              bldType, floors, 2.0, 22.0,
+              dem0, dem1,
+              0.18, 0.22, 0.28
+            );
 
-          // 4) 옥상 테두리(난간 바로 안쪽 0.8m 구간): 빗물 배수로 라인 및 짙은 구석 그림자(Corner AO)
-          const GUTTER_WIDTH = 0.8;
-          const p1g = { x: p1i.x + inNx * GUTTER_WIDTH, y: p1i.y + inNz * GUTTER_WIDTH };
-          const p2g = { x: p2i.x + inNx * GUTTER_WIDTH, y: p2i.y + inNz * GUTTER_WIDTH };
+            // 3) 캡 내측 수직 벽면
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p2In.x, y: totalH, z: -p2In.y },
+              { x: p1In.x, y: totalH, z: -p1In.y },
+              { x: p1In.x, y: capTopY, z: -p1In.y },
+              { x: p2In.x, y: capTopY, z: -p2In.y },
+              inNx, 0, -inNz,
+              { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+              { u: segLen / WINDOW_BAY_WIDTH, v: CAP_H / STORY_HEIGHT },
+              { u: 0, v: CAP_H / STORY_HEIGHT },
+              bldType, floors, 2.0, 21.0,
+              dem0, dem1,
+              0.85, 0.88, 0.92
+            );
 
-          addQuadVertices(
-            masterPositions, masterNormals, masterUvs, masterColors,
-            masterBuildingData, masterDemCoords,
-            { x: p1i.x, y: totalH + 0.055, z: -p1i.y },
-            { x: p2i.x, y: totalH + 0.055, z: -p2i.y },
-            { x: p2g.x, y: totalH + 0.055, z: -p2g.y },
-            { x: p1g.x, y: totalH + 0.055, z: -p1g.y },
-            0, 1, 0,
-            { u: 0, v: 0 },
-            { u: segLen * 0.1, v: 0 },
-            { u: segLen * 0.1, v: 1.0 },
-            { u: 0, v: 1.0 },
-            bldType,
-            floors,
-            1.0, // partType 1.0 = 지붕
-            roofSlotId,
-            dem0, dem1,
-            roofR * 0.52, roofG * 0.52, roofB * 0.52 // 구석 앰비언트 오클루전 그림자 톤
-          );
+            // 4) 옥상 안쪽 빗물 배수로 및 구석 음영 (Corner AO)
+            const p1g = { x: p1In.x + inNx * 0.8, y: p1In.y + inNz * 0.8 };
+            const p2g = { x: p2In.x + inNx * 0.8, y: p2In.y + inNz * 0.8 };
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1In.x, y: totalH + 0.055, z: -p1In.y },
+              { x: p2In.x, y: totalH + 0.055, z: -p2In.y },
+              { x: p2g.x, y: totalH + 0.055, z: -p2g.y },
+              { x: p1g.x, y: totalH + 0.055, z: -p1g.y },
+              0, 1, 0,
+              { u: 0, v: 0 }, { u: segLen * 0.1, v: 0 },
+              { u: segLen * 0.1, v: 1.0 }, { u: 0, v: 1.0 },
+              bldType, floors, 1.0, roofSlotId,
+              dem0, dem1,
+              roofR * 0.52, roofG * 0.52, roofB * 0.52
+            );
+          }
+        } else {
+          // 일반 수직 옥상 난간 (Parapet, 높이 0.8m ~ 1.25m)
+          const parapetH = 0.8 + ((buildingSeed * 73.19) % 1.0) * 0.45;
+          const parapetSlotId = seedGeom < 0.6 ? 21.0 : 22.0; // 21=parapet_concrete, 22=parapet_dark
+          const parapetTopY = totalH + parapetH;
+
+          for (let i = 0; i < oLen; i++) {
+            const nextIdx = (i + 1) % oLen;
+            const p1 = roofTargetPts[i];
+            const p2 = roofTargetPts[nextIdx];
+            const c1 = rawOuterRing[i % rawOuterRing.length];
+            const c2 = rawOuterRing[nextIdx % rawOuterRing.length];
+
+            const edgeDx = p2.x - p1.x;
+            const edgeDy = p2.y - p1.y;
+            const segLen = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+            if (segLen < 0.1) continue;
+
+            const outNx = edgeDy / segLen;
+            const outNz = -edgeDx / segLen;
+            const inNx = -outNx;
+            const inNz = -outNz;
+
+            const p1i = { x: p1.x + inNx * PARAPET_THICKNESS, y: p1.y + inNz * PARAPET_THICKNESS };
+            const p2i = { x: p2.x + inNx * PARAPET_THICKNESS, y: p2.y + inNz * PARAPET_THICKNESS };
+
+            const dem0 = { u: (c1[0] - minLng) / rangeLng, v: (c1[1] - minLat) / rangeLat };
+            const dem1 = { u: (c2[0] - minLng) / rangeLng, v: (c2[1] - minLat) / rangeLat };
+
+            // 1) 난간 외벽면
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1.x, y: totalH, z: -p1.y },
+              { x: p2.x, y: totalH, z: -p2.y },
+              { x: p2.x, y: parapetTopY, z: -p2.y },
+              { x: p1.x, y: parapetTopY, z: -p1.y },
+              outNx, 0, -outNz,
+              { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+              { u: segLen / WINDOW_BAY_WIDTH, v: parapetH / STORY_HEIGHT },
+              { u: 0, v: parapetH / STORY_HEIGHT },
+              bldType, floors, 2.0, parapetSlotId,
+              dem0, dem1,
+              0.85, 0.88, 0.92
+            );
+
+            // 2) 난간 상단 코핑
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1.x, y: parapetTopY, z: -p1.y },
+              { x: p1i.x, y: parapetTopY, z: -p1i.y },
+              { x: p2i.x, y: parapetTopY, z: -p2i.y },
+              { x: p2.x, y: parapetTopY, z: -p2.y },
+              0, 1, 0,
+              { u: 0, v: 0 }, { u: 0, v: PARAPET_THICKNESS },
+              { u: segLen, v: PARAPET_THICKNESS }, { u: segLen, v: 0 },
+              bldType, floors, 2.0, parapetSlotId,
+              dem0, dem1,
+              0.80, 0.83, 0.88
+            );
+
+            // 3) 난간 내측 벽면
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p2i.x, y: totalH, z: -p2i.y },
+              { x: p1i.x, y: totalH, z: -p1i.y },
+              { x: p1i.x, y: parapetTopY, z: -p1i.y },
+              { x: p2i.x, y: parapetTopY, z: -p2i.y },
+              inNx, 0, -inNz,
+              { u: 0, v: 0 }, { u: segLen / WINDOW_BAY_WIDTH, v: 0 },
+              { u: segLen / WINDOW_BAY_WIDTH, v: parapetH / STORY_HEIGHT },
+              { u: 0, v: parapetH / STORY_HEIGHT },
+              bldType, floors, 2.0, parapetSlotId,
+              dem0, dem1,
+              0.85, 0.88, 0.92
+            );
+
+            // 4) 옥상 테두리(난간 바로 안쪽 0.8m 구간): 빗물 배수로 라인 및 짙은 구석 그림자(Corner AO)
+            const GUTTER_WIDTH = 0.8;
+            const p1g = { x: p1i.x + inNx * GUTTER_WIDTH, y: p1i.y + inNz * GUTTER_WIDTH };
+            const p2g = { x: p2i.x + inNx * GUTTER_WIDTH, y: p2i.y + inNz * GUTTER_WIDTH };
+
+            addQuadVertices(
+              masterPositions, masterNormals, masterUvs, masterColors,
+              masterBuildingData, masterDemCoords,
+              { x: p1i.x, y: totalH + 0.055, z: -p1i.y },
+              { x: p2i.x, y: totalH + 0.055, z: -p2i.y },
+              { x: p2g.x, y: totalH + 0.055, z: -p2g.y },
+              { x: p1g.x, y: totalH + 0.055, z: -p1g.y },
+              0, 1, 0,
+              { u: 0, v: 0 },
+              { u: segLen * 0.1, v: 0 },
+              { u: segLen * 0.1, v: 1.0 },
+              { u: 0, v: 1.0 },
+              bldType,
+              floors,
+              1.0, // partType 1.0 = 지붕
+              roofSlotId,
+              dem0, dem1,
+              roofR * 0.52, roofG * 0.52, roofB * 0.52
+            );
+          }
         }
 
         // (b) 옥상 슬래브 (Roof Slab) earcut 삼각화
@@ -882,21 +1276,23 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
         const holeIndices: number[] = [];
         const allVertsList: { pt: Point2D; raw: [number, number] }[] = [];
 
-        for (let i = 0; i < outerPts.length; i++) {
-          flatCoords.push(outerPts[i].x, outerPts[i].y);
-          allVertsList.push({ pt: outerPts[i], raw: rawOuterRing[i] });
+        for (let i = 0; i < roofTargetPts.length; i++) {
+          flatCoords.push(roofTargetPts[i].x, roofTargetPts[i].y);
+          allVertsList.push({ pt: roofTargetPts[i], raw: rawOuterRing[i % rawOuterRing.length] });
         }
 
-        let offset = outerPts.length;
-        for (let h = 0; h < holesPts.length; h++) {
-          holeIndices.push(offset);
-          const hPts = holesPts[h];
-          const hRaw = rawHolesRings[h];
-          for (let i = 0; i < hPts.length; i++) {
-            flatCoords.push(hPts[i].x, hPts[i].y);
-            allVertsList.push({ pt: hPts[i], raw: hRaw[i] });
+        if (!hasCommercialSetback) {
+          let offset = roofTargetPts.length;
+          for (let h = 0; h < holesPts.length; h++) {
+            holeIndices.push(offset);
+            const hPts = holesPts[h];
+            const hRaw = rawHolesRings[h];
+            for (let i = 0; i < hPts.length; i++) {
+              flatCoords.push(hPts[i].x, hPts[i].y);
+              allVertsList.push({ pt: hPts[i], raw: hRaw[i] });
+            }
+            offset += hPts.length;
           }
-          offset += hPts.length;
         }
 
         const triangles = earcut(flatCoords, holeIndices.length > 0 ? holeIndices : null, 2);
@@ -948,38 +1344,62 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           }
         }
 
-        // (c) 엘리베이터 옥탑방 (Penthouse): 위치 다양성 및 복수 코어 배치
+        // (c) 엘리베이터 옥탑방 (Penthouse) 및 계단실 코어:
+        // 한국 아파트(높이 30m 이상): 2.8m 돌출된 동 중앙/양측 계단실 코어 생성
         if (floors >= 4 || totalH >= 12.0) {
           let cx = 0, cy = 0;
-          for (const p of outerPts) {
+          for (const p of roofTargetPts) {
             cx += p.x;
             cy += p.y;
           }
-          cx /= outerPts.length;
-          cy /= outerPts.length;
+          cx /= roofTargetPts.length;
+          cy /= roofTargetPts.length;
 
-          const boxW = Math.max(3.2, Math.min(bW * 0.35, 11.0));
-          const boxD = Math.max(3.2, Math.min(bD * 0.35, 11.0));
+          const pHouseH = isKoreanAptHighrise ? 2.8 : (2.6 + ((buildingSeed * 103.7) % 1.0) * 0.9);
+          const pHouseTop = roofH + pHouseH;
+          const pHouseSlot = isKoreanAptHighrise ? 19.0 : (((buildingSeed * 89.23) % 1.0) < 0.5 ? 19.0 : 20.0);
+
+          let boxW = Math.max(3.2, Math.min(bW * 0.35, 11.0));
+          let boxD = Math.max(3.2, Math.min(bD * 0.35, 11.0));
+          if (isKoreanAptHighrise) {
+            boxW = Math.max(3.8, Math.min(bW * 0.18, 6.8));
+            boxD = Math.max(3.8, Math.min(bD * 0.32, 7.8));
+          }
           const hw = boxW * 0.5;
           const hd = boxD * 0.5;
 
-          const seedPent = (buildingSeed * 89.23) % 1.0;
-          const pHouseH = 2.6 + ((buildingSeed * 103.7) % 1.0) * 0.9;
-          const pHouseTop = roofH + pHouseH;
-          const pHouseSlot = seedPent < 0.5 ? 19.0 : 20.0; // 19=penthouse_wall, 20=penthouse_metal
-
-          // 대형 판상형 건물(bW >= 36m)은 2개 계단실 코어 분할 배치, 그 외는 중앙/좌/우 편심 배치
           const coreOffsets: { ox: number; oy: number }[] = [];
-          if (bW >= 36.0) {
-            coreOffsets.push({ ox: -bW * 0.25, oy: 0 });
-            coreOffsets.push({ ox: bW * 0.25, oy: 0 });
-          } else if (bD >= 36.0) {
-            coreOffsets.push({ ox: 0, oy: -bD * 0.25 });
-            coreOffsets.push({ ox: 0, oy: bD * 0.25 });
+          if (isKoreanAptHighrise) {
+            // 한국형 판상형 아파트: 동 중앙 및 양측 계단실 코어 분할 배치
+            if (bW >= 42.0) {
+              coreOffsets.push({ ox: -bW * 0.30, oy: 0 });
+              coreOffsets.push({ ox: 0, oy: 0 });
+              coreOffsets.push({ ox: bW * 0.30, oy: 0 });
+            } else if (bW >= 24.0) {
+              coreOffsets.push({ ox: -bW * 0.22, oy: 0 });
+              coreOffsets.push({ ox: bW * 0.22, oy: 0 });
+            } else if (bD >= 42.0) {
+              coreOffsets.push({ ox: 0, oy: -bD * 0.30 });
+              coreOffsets.push({ ox: 0, oy: 0 });
+              coreOffsets.push({ ox: 0, oy: bD * 0.30 });
+            } else if (bD >= 24.0) {
+              coreOffsets.push({ ox: 0, oy: -bD * 0.22 });
+              coreOffsets.push({ ox: 0, oy: bD * 0.22 });
+            } else {
+              coreOffsets.push({ ox: 0, oy: 0 });
+            }
           } else {
-            const posSeed = (buildingSeed * 53.11) % 1.0;
-            const ox = posSeed < 0.35 ? 0 : (posSeed < 0.68 ? -(bW - boxW) * 0.25 : (bW - boxW) * 0.25);
-            coreOffsets.push({ ox, oy: 0 });
+            if (bW >= 36.0) {
+              coreOffsets.push({ ox: -bW * 0.25, oy: 0 });
+              coreOffsets.push({ ox: bW * 0.25, oy: 0 });
+            } else if (bD >= 36.0) {
+              coreOffsets.push({ ox: 0, oy: -bD * 0.25 });
+              coreOffsets.push({ ox: 0, oy: bD * 0.25 });
+            } else {
+              const posSeed = (buildingSeed * 53.11) % 1.0;
+              const ox = posSeed < 0.35 ? 0 : (posSeed < 0.68 ? -(bW - boxW) * 0.25 : (bW - boxW) * 0.25);
+              coreOffsets.push({ ox, oy: 0 });
+            }
           }
 
           for (const core of coreOffsets) {

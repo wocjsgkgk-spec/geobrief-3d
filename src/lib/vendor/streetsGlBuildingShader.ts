@@ -162,6 +162,55 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     return sky;
   }
 
+  // ---------------------------------------------------------------------------
+  // [창호 15cm 깊이감] 창틀 내부 그림자 (Window Recess Inner Shadow)
+  // 외벽 콘크리트 면보다 15cm 안쪽으로 들어간 창틀 상단과 측면에 짙은 내부 그림자 드리움
+  // ---------------------------------------------------------------------------
+  float getWindowRecessShadow(vec2 roomUv, vec3 N, vec3 L) {
+    // 1) 상단 처마 15cm 인셋으로 인한 짙은 드롭 섀도우 (Inner Top Shadow)
+    float topShadow = smoothstep(0.72, 0.98, roomUv.y) * 0.58;
+
+    // 2) 태양 입사각에 따른 측면 창틀 인셋 그림자 (빛의 반대 방향 측면에 그림자)
+    vec3 tangentX = normalize(cross(vec3(0.0, 1.0, 0.0), N));
+    float sunSide = dot(L, tangentX);
+    float leftShadow = smoothstep(0.25, 0.02, roomUv.x) * clamp(sunSide * 0.7 + 0.3, 0.0, 1.0) * 0.48;
+    float rightShadow = smoothstep(0.75, 0.98, roomUv.x) * clamp(-sunSide * 0.7 + 0.3, 0.0, 1.0) * 0.48;
+
+    // 3) 4방향 코너 앰비언트 오클루전 (Corner AO)
+    float cornerAO = (1.0 - smoothstep(0.0, 0.10, roomUv.x) * (1.0 - smoothstep(0.90, 1.0, roomUv.x))) * 0.18;
+
+    float totalShadow = clamp(topShadow + leftShadow + rightShadow + cornerAO, 0.0, 0.75);
+    return 1.0 - totalShadow;
+  }
+
+  // ---------------------------------------------------------------------------
+  // [외벽 마이크로 범프] 콘크리트 및 벽돌/타일 줄눈 법선 교란 (Normal Perturbation)
+  // 태양 각도에 따라 실제 벽면 요철 질감 및 줄눈 그림자 형성
+  // ---------------------------------------------------------------------------
+  vec3 getPerturbedNormal(vec3 N, vec2 worldXz, float heightMeters, float bldType) {
+    vec3 T = normalize(cross(vec3(0.0, 1.0, 0.0), N));
+    vec3 B = vec3(0.0, 1.0, 0.0);
+
+    float microNoise = sin(worldXz.x * 14.0 + heightMeters * 11.0) * cos(worldXz.y * 14.0);
+    float fineGrain = sin(worldXz.x * 48.0) * sin(heightMeters * 42.0) * 0.5;
+
+    float groutBump = 0.0;
+    if (bldType <= 0.5) {
+      vec2 bUv = fract(vec2(length(worldXz) / 0.25, heightMeters / 0.12));
+      groutBump = (sin(bUv.x * 6.283) + sin(bUv.y * 6.283)) * 0.22;
+    } else if (bldType > 0.5 && bldType <= 1.5) {
+      vec2 tUv = fract(vec2(length(worldXz) / 1.0, heightMeters / 0.6));
+      groutBump = (sin(tUv.x * 6.283) + sin(tUv.y * 6.283)) * 0.16;
+    } else {
+      vec2 aUv = fract(vec2(length(worldXz) / 3.4, heightMeters / 3.0));
+      groutBump = sin(aUv.x * 6.283) * 0.12;
+    }
+
+    float strength = 0.045;
+    vec3 perturbed = N + (T * (microNoise * 0.5 + groutBump) + B * (fineGrain + groutBump * 0.5)) * strength;
+    return normalize(perturbed);
+  }
+
   void main() {
     float bldType = vBuildingData.x;  // 0: 주택/빌라, 1: 상업/오피스, 2: 아파트, 3: 군부대/공공
     float floors = vBuildingData.y;   // 층수
@@ -204,28 +253,41 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         surfaceColor = applyRealisticRoofAging(surfaceColor, vWorldPos.xz, slotId);
       }
 
-      // PBR 조명 합성
-      float NdotL = max(0.0, dot(N, L));
-      vec3 diffuse = uSunColor * NdotL * uSunIntensity;
-      vec3 ambient = mix(uAmbientGround, uAmbientSky, N.y * 0.4 + 0.6) * uAmbientIntensity;
-
       // 유리창 영역 감지 (어두운 복층유리 창문 픽셀) 및 창문별 가변 스페큘러 하이라이트
       float lum = dot(surfaceColor, vec3(0.299, 0.587, 0.114));
       float isGlass = step(lum, 0.38) * (1.0 - step(1.5, partType));
-      
+
+      // 외벽 마이크로 범프 적용 (유리창 제외 콘크리트 외벽 요철)
+      vec3 effN = N;
+      if (isGlass < 0.5 && partType != 1.0) {
+        effN = getPerturbedNormal(N, vWorldPos.xz, vWorldPos.y, bldType);
+      }
+
+      // PBR 조명 합성
+      float NdotL = max(0.0, dot(effN, L));
+      vec3 diffuse = uSunColor * NdotL * uSunIntensity;
+      vec3 ambient = mix(uAmbientGround, uAmbientSky, effN.y * 0.4 + 0.6) * uAmbientIntensity;
+
+      // [창호 깊이감] 창틀 내부 15cm 인셋 그림자 (상단 드롭 섀도우 + 측면 창틀 그림자)
+      if (isGlass > 0.5) {
+        float recessShadow = getWindowRecessShadow(fract(innerUv * vec2(2.0, 3.0)), effN, L);
+        surfaceColor *= recessShadow;
+      }
+
       vec3 specular;
       if (isGlass > 0.5) {
-        specular = getWindowDynamicSpecular(uSunColor, N, L, V, vWorldPos, floor(vUv.y), floor(vUv.x));
+        specular = getWindowDynamicSpecular(uSunColor, effN, L, V, vWorldPos, floor(vUv.y), floor(vUv.x));
       } else {
         vec3 H = normalize(L + V);
-        float NdotH = max(0.0, dot(N, H));
+        float NdotH = max(0.0, dot(effN, H));
         specular = uSunColor * pow(NdotH, 16.0) * 0.08;
       }
 
       // 프레넬 하늘 반사 (유리창 영역)
       if (isGlass > 0.5) {
-        float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.5);
-        vec3 skyReflection = getSkyReflection(R);
+        vec3 effR = reflect(-V, effN);
+        float fresnel = pow(1.0 - max(0.0, dot(effN, V)), 3.5);
+        vec3 skyReflection = getSkyReflection(effR);
         surfaceColor = mix(surfaceColor, skyReflection, clamp(fresnel * 0.55, 0.0, 0.85));
       }
 
@@ -503,6 +565,9 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       float roomSeed = floorIdx * 37.17 + bayIdx * 19.43;
       vec3 interiorColor = getInteriorRoom(roomUv, V, roomSeed);
 
+      // [창호 15cm 깊이감] 창틀 내부 그림자 (상단 처마 인셋 + 측면 태양광 차폐 음영)
+      float recessShadow = getWindowRecessShadow(roomUv, N, L);
+
       // 하늘빛 프레넬 반사 (Fresnel Reflection)
       float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.5);
       vec3 skyReflection = getSkyReflection(R);
@@ -510,11 +575,11 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       if (bldType > 0.5 && bldType <= 1.5) {
         // [상업/오피스]: 스카이 블루/슬레이트 유리 커튼월 반사 극대화
         vec3 curtainGlass = vec3(0.08, 0.22, 0.38);
-        vec3 glassFinal = mix(curtainGlass, skyReflection, clamp(fresnel + 0.45, 0.0, 0.95));
+        vec3 glassFinal = mix(curtainGlass, skyReflection, clamp(fresnel + 0.45, 0.0, 0.95)) * recessShadow;
         surfaceColor = mix(surfaceColor, glassFinal, isWindow);
       } else {
-        // [아파트/주택]: 실내 방 조명 + 표면 프레넬 하늘 반사
-        vec3 glassFinal = mix(interiorColor, skyReflection, clamp(fresnel + 0.28, 0.0, 0.88));
+        // [아파트/주택]: 실내 방 조명 + 표면 프레넬 하늘 반사 + 15cm 인셋 그림자
+        vec3 glassFinal = mix(interiorColor, skyReflection, clamp(fresnel + 0.28, 0.0, 0.88)) * recessShadow;
         surfaceColor = mix(surfaceColor, glassFinal, isWindow);
       }
     } else if (bldType > 1.5 && inFloor < 0.38 && inFloor >= slabBorder) {
@@ -529,14 +594,16 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     // -------------------------------------------------------------------------
     // [6. 물리 기반 셰이딩(PBR Lighting) 및 스페큘러 반사]
     // -------------------------------------------------------------------------
-    float NdotL = max(0.0, dot(N, L));
+    // 외벽 마이크로 범프(Normal Perturbation) 적용
+    vec3 effN = (isWindow > 0.5) ? N : getPerturbedNormal(N, vWorldPos.xz, heightMeters, bldType);
+    float NdotL = max(0.0, dot(effN, L));
     vec3 diffuse = uSunColor * NdotL * uSunIntensity;
-    vec3 ambient = mix(uAmbientGround, uAmbientSky, N.y * 0.4 + 0.6) * uAmbientIntensity;
+    vec3 ambient = mix(uAmbientGround, uAmbientSky, effN.y * 0.4 + 0.6) * uAmbientIntensity;
 
     // 유리창 및 금속 섀시 스페큘러 하이라이트 (창문별 가변 Roughness / 스페큘러)
     vec3 specular;
     if (isWindow > 0.5) {
-      specular = getWindowDynamicSpecular(uSunColor, N, L, V, vWorldPos, floorIdx, bayIdx);
+      specular = getWindowDynamicSpecular(uSunColor, effN, L, V, vWorldPos, floorIdx, bayIdx);
     } else {
       vec3 H = normalize(L + V);
       float NdotH = max(0.0, dot(N, H));
