@@ -259,6 +259,24 @@ export function generateCrosswalksGeoJSON(
         coordinates: customCenter,
         arms: [0, 90, 180, 270],
       });
+
+      // 대상 부지 주변 주요 도심 교차로망 (동·서·남·북 250m~380m) 자동 연동
+      const offsets = [
+        { id: 'site-north-x', name: '북측 연계 사거리', dx: 0, dy: 300, arms: [0, 90, 180, 270] },
+        { id: 'site-south-x', name: '남측 연계 삼거리', dx: 0, dy: -280, arms: [0, 90, 270] },
+        { id: 'site-east-x', name: '동측 간선 사거리', dx: 340, dy: 40, arms: [0, 90, 180, 270] },
+        { id: 'site-west-x', name: '서측 진입 삼거리', dx: -320, dy: -30, arms: [90, 180, 270] },
+      ];
+
+      for (const off of offsets) {
+        const coord = offsetMetersToLngLat(customCenter[0], customCenter[1], off.dx, off.dy);
+        targetList.push({
+          id: off.id,
+          name: off.name,
+          coordinates: coord,
+          arms: off.arms,
+        });
+      }
     }
   }
 

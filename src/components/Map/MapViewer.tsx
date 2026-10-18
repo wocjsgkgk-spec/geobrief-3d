@@ -78,9 +78,11 @@ import { registerFacadeImagesToMap } from '@/utils/facadeGenerator';
 import { registerFacadeTexturesToMap } from '@/utils/facadeTextures';
 import { generateCrosswalksGeoJSON } from '@/utils/crosswalkGenerator';
 import {
-  STREETS_GL_ROAD_LAYER_IDS,
-  getStreetsGlRoadLayerDefinitions,
-} from '@/lib/vendor/streetsGlRoadLayers';
+  KOREAN_ROAD_LAYER_IDS,
+  getKoreanRoadLayerDefinitions,
+  KOREAN_ROAD_LAYER_IDS as STREETS_GL_ROAD_LAYER_IDS,
+  getKoreanRoadLayerDefinitions as getStreetsGlRoadLayerDefinitions,
+} from '@/utils/koreanRoadRenderer';
 import { elevationCache, clearElevationCache } from '@/utils/elevationCache';
 import {
   registerNativeBuildingPatterns,
@@ -2615,7 +2617,10 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        const beforeRoads = map.getLayer('buffer-2km-fill') ? 'buffer-2km-fill' : undefined;
+        // 3D 건물 및 건물 접지 그림자보다 항상 아래에 위치하도록 Z-Order 무결성 보장
+        const beforeRoads = map.getLayer('lod2-building-engine-layer')
+          ? 'lod2-building-engine-layer'
+          : (map.getLayer('buffer-2km-fill') ? 'buffer-2km-fill' : undefined);
 
         // 지적 필지선 오버레이
         if (!map.getLayer('cadastral-parcels-line')) {
@@ -2638,7 +2643,7 @@ export const MapViewer: React.FC = () => {
         }
 
         // ---------------------------------------------------------------------
-        // [3단계: 실측 미터(m) 폭 기반 3D 아스팔트 노면·차선·횡단보도 렌더링 엔진 (Streets-GL)]
+        // [2단계: 한국형 실측 도로망(아스팔트 노면·차선·횡단보도·보도블록 연석) 정밀 렌더링]
         // ---------------------------------------------------------------------
         // 1) 교차로 횡단보도 및 회전교차로 GeoJSON 소스 초기화
         if (!map.getSource('crosswalks-source')) {
@@ -2652,8 +2657,8 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        // 2) Streets-GL 기반 실측 폭 아스팔트 노면·차선·중앙선·연석 레이어 일괄 등록
-        const roadLayerDefs = getStreetsGlRoadLayerDefinitions(
+        // 2) 한국형 실측 폭 아스팔트 노면·차선·중앙선·연석 레이어 일괄 등록
+        const roadLayerDefs = getKoreanRoadLayerDefinitions(
           'openmaptiles-vector',
           'transportation',
           'crosswalks-source'
@@ -3540,7 +3545,7 @@ export const MapViewer: React.FC = () => {
 
     const roadVis = layers.roads ? 'visible' : 'none';
 
-    for (const lid of STREETS_GL_ROAD_LAYER_IDS) {
+    for (const lid of KOREAN_ROAD_LAYER_IDS) {
       if (map.getLayer(lid)) {
         map.setLayoutProperty(lid, 'visibility', roadVis);
       }
@@ -5365,10 +5370,14 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty('buffer-1km-fill', 'visibility', 'none');
           map.setLayoutProperty('buffer-1km-line', 'visibility', 'none');
         }
-        if (map.getLayer('roads-highways')) {
+        if (map.getLayer('roads-overview-highway')) {
+          map.setLayoutProperty('roads-overview-highway', 'visibility', 'visible');
+        } else if (map.getLayer('roads-highways')) {
           map.setLayoutProperty('roads-highways', 'visibility', 'visible');
         }
-        if (map.getLayer('roads-secondary')) {
+        if (map.getLayer('roads-overview-secondary')) {
+          map.setLayoutProperty('roads-overview-secondary', 'visibility', 'visible');
+        } else if (map.getLayer('roads-secondary')) {
           map.setLayoutProperty('roads-secondary', 'visibility', 'visible');
         }
 
