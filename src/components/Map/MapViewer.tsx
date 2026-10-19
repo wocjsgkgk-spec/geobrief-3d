@@ -717,33 +717,45 @@ export const MapViewer: React.FC = () => {
         msgText.includes('ResizeObserver') ||
         msgText.includes('Script error') ||
         msgText.includes('AbortError') ||
+        msgText.includes('aborted') ||
         msgText.includes('canceled') ||
         msgText.includes('cancelled') ||
+        msgText.includes('Failed to fetch') ||
+        msgText.includes('Load failed') ||
+        msgText.includes('NetworkError') ||
         msgText.includes('Non-Error promise rejection')
       ) {
         return;
       }
       const filename = event.filename ? event.filename.split('/').pop() : 'unknown';
       const msg = `[Window Error] ${msgText} (${filename}:${event.lineno || 0}:${event.colno || 0})`;
-      console.error('[ErrorOverlay]', msg);
+      console.warn('[ErrorOverlay]', msg);
       setDebugErrors((prev) => [...prev.slice(-19), msg]);
     };
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason?.stack || event.reason?.message || String(event.reason);
-      // 취소된 요청(AbortError), 일반 타일 404, 네트워크 실패 등 무해한 비동기 이벤트는 바이패스
+      // 취소된 요청(AbortError), 일반 타일 404/500, 네트워크 실패 등 무해한 비동기 이벤트는 바이패스
       if (
         reason.includes('AbortError') ||
+        reason.includes('aborted') ||
         reason.includes('canceled') ||
         reason.includes('cancelled') ||
         reason.includes('404') ||
+        reason.includes('500') ||
+        reason.includes('502') ||
+        reason.includes('503') ||
         reason.includes('Failed to fetch') ||
+        reason.includes('fetch failed') ||
+        reason.includes('Load failed') ||
         reason.includes('NetworkError') ||
-        reason.includes('Failed to load tile')
+        reason.includes('Failed to load tile') ||
+        reason.includes('User aborted') ||
+        reason.includes('Non-Error promise rejection')
       ) {
         return;
       }
       const msg = `[Promise Rejection] ${reason}`;
-      console.error('[ErrorOverlay]', msg);
+      console.warn('[ErrorOverlay]', msg);
       setDebugErrors((prev) => [...prev.slice(-19), msg]);
     };
 
@@ -1103,7 +1115,7 @@ export const MapViewer: React.FC = () => {
             tiles: [
               `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=dt_d002,lt_l_toisdepcntah&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&KEY=${
                 process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
-              }`,
+              }&DOMAIN=localhost`,
             ],
             tileSize: 256,
             maxzoom: 19,
@@ -2637,9 +2649,9 @@ export const MapViewer: React.FC = () => {
           map.addSource('vworld-cadastral-wms', {
             type: 'raster',
             tiles: [
-              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=LP_PA_CBND_BUBUN,LP_PA_CBND_BONBUN&STYLES=LP_PA_CBND_BUBUN,LP_PA_CBND_BONBUN&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&BGCOLOR=0xFFFFFF&EXCEPTIONS=text/xml&KEY=${
+              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun&STYLES=lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&BGCOLOR=0xFFFFFF&EXCEPTIONS=text/xml&KEY=${
                 process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
-              }`,
+              }&DOMAIN=localhost`,
             ],
             tileSize: 256,
             maxzoom: 20,
@@ -3164,8 +3176,13 @@ export const MapViewer: React.FC = () => {
         message.includes('DOMException') ||
         message.includes('cannot calculate elevation') ||
         message.includes('hillshade') ||
+        message.includes('Failed to fetch') ||
+        message.includes('NetworkError') ||
         sourceId.includes('vworld-contour') ||
-        sourceId.includes('vworld-cadastral');
+        sourceId.includes('vworld-cadastral') ||
+        sourceId.includes('openmaptiles') ||
+        sourceId.includes('satellite') ||
+        sourceId.includes('terrarium');
 
       if (isTileOrNetworkWarning) {
         console.warn(`[MapLibre Tile Notice] (${sourceId}/${layerId}): ${message}`);

@@ -961,6 +961,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                   } else {
                     this.buildFallbackSync(workingFeatures);
                   }
+                })
+                .catch(() => {
+                  this.buildFallbackSync(workingFeatures);
                 });
             }
           })

@@ -96,19 +96,23 @@ function parseJimok(raw: string = '') {
 }
 
 // -----------------------------------------------------------------------------
-// [1. 브이월드 WFS 수집기: 2초 타임아웃]
+// [1. 브이월드 Data 2.0 수집기: 3.5초 타임아웃]
 // -----------------------------------------------------------------------------
-async function fetchVworldWfsLayer(
+async function fetchVworldDataLayer(
   layerName: string,
   bbox: [number, number, number, number],
   apiKey: string,
-  timeoutMs = 2000
+  timeoutMs = 3500
 ): Promise<any[]> {
   const [minLng, minLat, maxLng, maxLat] = bbox;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const url = `https://api.vworld.kr/req/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=${layerName}&BBOX=${minLng},${minLat},${maxLng},${maxLat},EPSG:4326&SRSNAME=EPSG:4326&OUTPUT=application/json&KEY=${apiKey}`;
+  const cleanKey = apiKey.replace(/['"`]/g, '').trim();
+  const domain = process.env.VWORLD_DOMAIN || 'localhost';
+  const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=${layerName}&key=${encodeURIComponent(
+    cleanKey
+  )}&domain=${encodeURIComponent(domain)}&geomFilter=BOX(${minLng},${minLat},${maxLng},${maxLat})&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
 
   try {
     const res = await fetch(url, {
@@ -121,7 +125,7 @@ async function fetchVworldWfsLayer(
     if (!res.ok) return [];
 
     const json = await res.json();
-    return json?.response?.result?.featureCollection?.features || json?.features || [];
+    return json?.response?.result?.featureCollection?.features || [];
   } catch {
     clearTimeout(timeoutId);
     return [];
@@ -375,7 +379,7 @@ export async function GET(req: NextRequest) {
   // (1) 브이월드 건물통합정보
   if (requestedLayers.includes('buildings')) {
     promises.push(
-      fetchVworldWfsLayer('LT_C_SPBD', bbox, vworldApiKey, 2000).catch(() => [])
+      fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 3500).catch(() => [])
     );
   } else {
     promises.push(Promise.resolve([]));
@@ -384,7 +388,7 @@ export async function GET(req: NextRequest) {
   // (2) 브이월드 연속지적도
   if (requestedLayers.includes('parcels')) {
     promises.push(
-      fetchVworldWfsLayer('LP_PA_CBND_BUBUN', bbox, vworldApiKey, 2000).catch(() => [])
+      fetchVworldDataLayer('LP_PA_CBND_BUBUN', bbox, vworldApiKey, 3500).catch(() => [])
     );
   } else {
     promises.push(Promise.resolve([]));
@@ -394,10 +398,10 @@ export async function GET(req: NextRequest) {
   if (requestedLayers.includes('zoning')) {
     promises.push(
       Promise.allSettled([
-        fetchVworldWfsLayer('LT_C_UQ111', bbox, vworldApiKey, 1800), // 주거
-        fetchVworldWfsLayer('LT_C_UQ112', bbox, vworldApiKey, 1800), // 상업
-        fetchVworldWfsLayer('LT_C_UQ113', bbox, vworldApiKey, 1800), // 공업
-        fetchVworldWfsLayer('LT_C_UQ114', bbox, vworldApiKey, 1800), // 녹지
+        fetchVworldDataLayer('LT_C_UQ111', bbox, vworldApiKey, 2500), // 주거
+        fetchVworldDataLayer('LT_C_UQ112', bbox, vworldApiKey, 2500), // 상업
+        fetchVworldDataLayer('LT_C_UQ113', bbox, vworldApiKey, 2500), // 공업
+        fetchVworldDataLayer('LT_C_UQ114', bbox, vworldApiKey, 2500), // 녹지
       ]).then((settled) => {
         const list: any[] = [];
         settled.forEach((s) => {
@@ -481,14 +485,15 @@ export async function GET(req: NextRequest) {
   // (B) 지적도 필지 가공
   const parsedParcels = rawParcels.map((f: any, idx: number) => {
     const p = f.properties || {};
-    const jimokInfo = parseJimok(p.jimok || p.jibun_jimok || '');
+    const rawJimok = p.jimok || p.jibun_jimok || (p.jibun ? p.jibun.replace(/[0-9-\s]/g, '') : '');
+    const jimokInfo = parseJimok(rawJimok);
     return {
       type: 'Feature',
       id: f.id || `parcel-${p.pnu || idx}`,
       properties: {
         pnu: p.pnu || '',
         jibun: p.jibun || '',
-        jimok: p.jimok || '',
+        jimok: rawJimok,
         jimokLabel: jimokInfo.label,
         category: jimokInfo.category,
         fillColor: jimokInfo.color,

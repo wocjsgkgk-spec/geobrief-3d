@@ -330,20 +330,34 @@ export class SpatialTileCache {
     if (!db) return;
 
     try {
-      // 복사본 ArrayBuffer 생성 (Transfer 방지)
+      const safeClone = (arr?: Float32Array): ArrayBuffer => {
+        if (!arr || arr.length === 0) return new ArrayBuffer(0);
+        try {
+          if (arr.byteOffset === 0 && arr.byteLength === arr.buffer.byteLength) {
+            return arr.buffer.slice(0) as ArrayBuffer;
+          }
+        } catch {
+          // detached fallback
+        }
+        const copy = new Float32Array(arr.length);
+        copy.set(arr);
+        return copy.buffer as ArrayBuffer;
+      };
+
+      // 복사본 ArrayBuffer 생성 (Transfer 및 Detached Buffer 예외 방지)
       const record: CachedTileGeometryRecord = {
         tileKey,
         timestamp: Date.now(),
         buildingCount: result.buildingCount || 0,
         demBounds: result.demBounds || [0, 0, 0, 0],
-        positions: result.positions.buffer.slice(0) as ArrayBuffer,
-        normals: result.normals.buffer.slice(0) as ArrayBuffer,
-        uvs: result.uvs.buffer.slice(0) as ArrayBuffer,
-        colors: result.colors.buffer.slice(0) as ArrayBuffer,
-        buildingData: result.buildingData.buffer.slice(0) as ArrayBuffer,
-        demCoords: result.demCoords.buffer.slice(0) as ArrayBuffer,
-        shadowPositions: result.shadowPositions.buffer.slice(0) as ArrayBuffer,
-        shadowColors: result.shadowColors.buffer.slice(0) as ArrayBuffer,
+        positions: safeClone(result.positions),
+        normals: safeClone(result.normals),
+        uvs: safeClone(result.uvs),
+        colors: safeClone(result.colors),
+        buildingData: safeClone(result.buildingData),
+        demCoords: safeClone(result.demCoords),
+        shadowPositions: safeClone(result.shadowPositions),
+        shadowColors: safeClone(result.shadowColors),
       };
 
       const tx = db.transaction(STORE_GEOMETRIES, 'readwrite');
