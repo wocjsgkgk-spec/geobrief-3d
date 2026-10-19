@@ -54,7 +54,7 @@ import {
   disposeVWorldAtlas,
 } from '@/utils/vworldStyleAtlas';
 import { buildOsmBuildingGeometry } from '@/lib/vendor/osmGeometryBuilder';
-import { spatialTileCache, lngLatToTile } from '@/utils/spatialTileCache';
+import { spatialTileCache, lngLatToTile, prioritizeTilesByCamera } from '@/utils/spatialTileCache';
 
 
 // =============================================================================
@@ -832,6 +832,38 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
     this.lastFeatures = features;
 
+    // [4단계 Frustum & 시선 벡터 우선순위 정렬] 카메라 정면 및 가시 영역 건물 우선 배치
+    let workingFeatures = features;
+    if (features.length > 1 && this.map) {
+      try {
+        const center = this.map.getCenter();
+        const bearingRad = (this.map.getBearing() * Math.PI) / 180;
+        const forwardX = Math.sin(bearingRad);
+        const forwardY = Math.cos(bearingRad);
+
+        workingFeatures = [...features].sort((a, b) => {
+          const cA = a.geometry?.type === 'Polygon' ? a.geometry.coordinates[0]?.[0] : (a.geometry as any)?.coordinates?.[0]?.[0];
+          const cB = b.geometry?.type === 'Polygon' ? b.geometry.coordinates[0]?.[0] : (b.geometry as any)?.coordinates?.[0]?.[0];
+          if (!cA || !cB) return 0;
+          const dxA = cA[0] - center.lng;
+          const dyA = cA[1] - center.lat;
+          const distSqA = dxA * dxA + dyA * dyA;
+          const dotA = distSqA > 0 ? (dxA * forwardX + dyA * forwardY) / Math.sqrt(distSqA) : 1;
+
+          const dxB = cB[0] - center.lng;
+          const dyB = cB[1] - center.lat;
+          const distSqB = dxB * dxB + dyB * dyB;
+          const dotB = distSqB > 0 ? (dxB * forwardX + dyB * forwardY) / Math.sqrt(distSqB) : 1;
+
+          const scoreA = Math.sqrt(distSqA) * (1.0 + (1.0 - dotA) * 1.75);
+          const scoreB = Math.sqrt(distSqB) * (1.0 + (1.0 - dotB) * 1.75);
+          return scoreA - scoreB;
+        });
+      } catch {
+        workingFeatures = features;
+      }
+    }
+
     if (newOriginLngLat) {
       this.originLngLat = newOriginLngLat;
     } else if (this.map) {
@@ -856,7 +888,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     }
 
     // [4단계: 1차 메모리 캐시 및 2차 IndexedDB 영구 캐시 선조회 (0.02초 이내 GPU 직결 로드)]
-    const chunkKey = this.computeChunkKey(features, this.originLngLat, this.currentZoomLOD);
+    const chunkKey = this.computeChunkKey(workingFeatures, this.originLngLat, this.currentZoomLOD);
     if (this.chunkMeshCache.has(chunkKey)) {
       const cached = this.chunkMeshCache.get(chunkKey)!;
       // LRU 갱신
@@ -884,7 +916,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         // 캐시 미스: Web Worker 기반 고속 건물 지오메트리 백그라운드 연산
         buildingMeshWorkerClient
           .buildBuildings({
-            features,
+            features: workingFeatures,
             originLngLat: this.originLngLat,
             sunDirection: [
               this.sunLightDirection.x,
@@ -907,7 +939,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             } else {
               geometryWorkerClient
                 .buildBuildings({
-                  features,
+                  features: workingFeatures,
                   originLngLat: this.originLngLat,
                   sunDirection: [
                     this.sunLightDirection.x,
@@ -927,21 +959,21 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
 
                     this.applyWorkerResult(fallbackResult);
                   } else {
-                    this.buildFallbackSync(features);
+                    this.buildFallbackSync(workingFeatures);
                   }
                 });
             }
           })
           .catch((err) => {
             console.warn('[LOD2BuildingEngine] buildingMeshWorker error, falling back:', err);
-            this.buildFallbackSync(features);
+            this.buildFallbackSync(workingFeatures);
           });
       })
       .catch(() => {
         // IndexedDB 조회 실패 시 Worker로 직접 진행
         buildingMeshWorkerClient
           .buildBuildings({
-            features,
+            features: workingFeatures,
             originLngLat: this.originLngLat,
             sunDirection: [
               this.sunLightDirection.x,
@@ -955,11 +987,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
               this.chunkMeshCache.set(chunkKey, workerResult);
               this.applyWorkerResult(workerResult);
             } else {
-              this.buildFallbackSync(features);
+              this.buildFallbackSync(workingFeatures);
             }
           })
           .catch(() => {
-            this.buildFallbackSync(features);
+            this.buildFallbackSync(workingFeatures);
           });
       });
   }

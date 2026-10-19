@@ -18,9 +18,8 @@
  */
 
 import type maplibregl from 'maplibre-gl';
-import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
-import { spatialTileCache, bboxToTileKeys } from '@/utils/spatialTileCache';
+import { spatialTileCache, bboxToTileKeys, prioritizeTilesByCamera } from '@/utils/spatialTileCache';
 
 
 export interface ExternalSpatialBuildingProperties {
@@ -642,6 +641,19 @@ export async function fetchExternalSpatialData(
     onImmediate?: (result: ExternalSpatialResult) => void;
   }
 ): Promise<ExternalSpatialResult> {
+  // [4단계 Frustum & IndexedDB 우선순위 스트리밍]
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  const tileKeys = bboxToTileKeys(bbox, 15);
+  let prioritizedTileKeys = tileKeys;
+  try {
+    const center = map.getCenter();
+    const bearing = map.getBearing();
+    const prioritized = prioritizeTilesByCamera(tileKeys, center.lng, center.lat, bearing);
+    prioritizedTileKeys = prioritized.map((p) => p.tileKey);
+  } catch {
+    // fallback
+  }
+
   // 1단계: 0ms 레이턴시로 OpenFreeMap 실시간 타일 피처 즉각 추출
   const ofmFeatures = extractOpenFreeMapBuildings(map);
   const ofmCount = ofmFeatures.length;
@@ -664,7 +676,29 @@ export async function fetchExternalSpatialData(
     options.onImmediate(immediateResult);
   }
 
-  const [minLng, minLat, maxLng, maxLat] = bbox;
+  // 1-2단계: IndexedDB 영구 캐시에서 정면 우선 타일 피처 선조회 (0.02초 이내 초고속 직결 반환)
+  if (prioritizedTileKeys[0]) {
+    spatialTileCache
+      .getFeatures(prioritizedTileKeys[0])
+      .then((idbCached) => {
+        if (idbCached && idbCached.length > 0 && options?.onImmediate) {
+          options.onImmediate({
+            success: true,
+            totalCount: idbCached.length,
+            openFreeMapCount: ofmCount,
+            overpassCount: 0,
+            vworldCount: 0,
+            status: 'connected',
+            message: `IndexedDB 영구 캐시 실시간 건물 로드 (${idbCached.length.toLocaleString()}건 < 20ms)`,
+            features: {
+              type: 'FeatureCollection',
+              features: idbCached,
+            },
+          });
+        }
+      })
+      .catch(() => {});
+  }
 
   // 2단계: 백그라운드에서 강원권 광역 공공 공간정보 통합 게이트웨이(/api/gangwon-spatial) 1차 연동 (2.5초 타임아웃)
   try {
@@ -707,9 +741,8 @@ export async function fetchExternalSpatialData(
       const regName = gwJson.region?.name ? `${gwJson.region.name} ` : '';
       const regCode = gwJson.region?.admCode ? `(${gwJson.region.admCode}) ` : '';
 
-      const tileKeys = bboxToTileKeys(bbox, 15);
-      if (tileKeys[0]) {
-        spatialTileCache.saveFeatures(tileKeys[0], mergedFeatures);
+      for (const tk of prioritizedTileKeys.slice(0, 8)) {
+        spatialTileCache.saveFeatures(tk, mergedFeatures);
       }
 
       return {
@@ -747,9 +780,8 @@ export async function fetchExternalSpatialData(
   const mergedFeatures = mergeSpatialFeatures(ofmFeatures, vworldFeatures, overpassFeatures);
   const totalCount = Math.max(mergedFeatures.length, ofmCount);
 
-  const tileKeysFallback = bboxToTileKeys(bbox, 15);
-  if (tileKeysFallback[0]) {
-    spatialTileCache.saveFeatures(tileKeysFallback[0], mergedFeatures);
+  for (const tk of prioritizedTileKeys.slice(0, 8)) {
+    spatialTileCache.saveFeatures(tk, mergedFeatures);
   }
 
   return {
