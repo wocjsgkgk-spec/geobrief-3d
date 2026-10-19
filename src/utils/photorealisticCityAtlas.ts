@@ -18,6 +18,13 @@
  */
 
 import * as THREE from 'three';
+import {
+  drawAptSideWallWithDong,
+  drawAptRearStairwell,
+  drawAptGroundLobby,
+  drawCommercialSignboardBand,
+  drawHVACCoolingTower,
+} from './koreanAptDetailer';
 
 export const PHOTOREALISTIC_ATLAS_SIZE = 2048;
 export const PHOTOREALISTIC_COLS = 6;
@@ -30,6 +37,7 @@ export const CITY_SLOT_NAME_TO_ID: Record<string, number> = {
   apt_warm_cream: 0,
   apt_sand_beige: 1,
   apt_warm_gray: 2,
+  apt_rear_stairwell: 2,
   apt_modern_twotone: 3,
   apt_side: 4,
   comm_granite_beige: 5,
@@ -48,10 +56,11 @@ export const CITY_SLOT_NAME_TO_ID: Record<string, number> = {
   roof_zinc_blue: 18,
   penthouse_wall: 19,
   penthouse_metal: 20,
+  cooling_tower: 20,
   parapet_concrete: 21,
-  parapet_dark: 22,
+  parapet_dark: 21,
+  apt_pilotis_lobby: 22,
   public_military: 23,
-  apt_pilotis_lobby: 23,
 };
 
 export interface UVRect {
@@ -837,44 +846,48 @@ function drawRoofBaseGutterAndAO(
   y: number,
   w: number,
   h: number,
-  gutterDepth = 28
+  gutterDepth = 34 // 1.2m 구간 실측 스케일
 ): void {
-  // 테두리 1.0m 난간 내측 그림자 (Corner AO)
+  // 테두리 1.2m 난간 내측 부드러운 검은색 그라데이션 음영 (Corner AO)
   const topAO = ctx.createLinearGradient(x, y, x, y + gutterDepth);
-  topAO.addColorStop(0, 'rgba(2, 6, 23, 0.70)');
-  topAO.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  topAO.addColorStop(0, 'rgba(0, 0, 0, 0.78)');
+  topAO.addColorStop(0.45, 'rgba(0, 0, 0, 0.40)');
+  topAO.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
   ctx.fillStyle = topAO;
   ctx.fillRect(x, y, w, gutterDepth);
 
   const btmAO = ctx.createLinearGradient(x, y + h, x, y + h - gutterDepth);
-  btmAO.addColorStop(0, 'rgba(2, 6, 23, 0.70)');
-  btmAO.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  btmAO.addColorStop(0, 'rgba(0, 0, 0, 0.78)');
+  btmAO.addColorStop(0.45, 'rgba(0, 0, 0, 0.40)');
+  btmAO.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
   ctx.fillStyle = btmAO;
   ctx.fillRect(x, y + h - gutterDepth, w, gutterDepth);
 
   const leftAO = ctx.createLinearGradient(x, y, x + gutterDepth, y);
-  leftAO.addColorStop(0, 'rgba(2, 6, 23, 0.70)');
-  leftAO.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  leftAO.addColorStop(0, 'rgba(0, 0, 0, 0.78)');
+  leftAO.addColorStop(0.45, 'rgba(0, 0, 0, 0.40)');
+  leftAO.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
   ctx.fillStyle = leftAO;
   ctx.fillRect(x, y, gutterDepth, h);
 
   const rightAO = ctx.createLinearGradient(x + w, y, x + w - gutterDepth, y);
-  rightAO.addColorStop(0, 'rgba(2, 6, 23, 0.70)');
-  rightAO.addColorStop(1, 'rgba(2, 6, 23, 0.0)');
+  rightAO.addColorStop(0, 'rgba(0, 0, 0, 0.78)');
+  rightAO.addColorStop(0.45, 'rgba(0, 0, 0, 0.40)');
+  rightAO.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
   ctx.fillStyle = rightAO;
   ctx.fillRect(x + w - gutterDepth, y, gutterDepth, h);
 
   // 빗물 배수로 홈 라인 (Gutter Trench)
-  ctx.strokeStyle = 'rgba(2, 6, 23, 0.85)';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x + 18, y + 18, w - 36, h - 36);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.88)';
+  ctx.lineWidth = 3.5;
+  ctx.strokeRect(x + 22, y + 22, w - 44, h - 44);
 
   // 모서리 루프 드레인 배수구
   ctx.fillStyle = '#020617';
   ctx.beginPath();
-  ctx.arc(x + 28, y + 28, 10, 0, Math.PI * 2);
+  ctx.arc(x + 30, y + 30, 10, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#64748b';
+  ctx.strokeStyle = '#475569';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 }
@@ -925,6 +938,15 @@ function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: numbe
   grad.addColorStop(1, '#2b4c3d');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
+
+  // 미세한 방수재 줄눈 격자 (Waterproofing Joint Grid)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+  for (let px = x; px < x + w; px += 36) {
+    ctx.fillRect(px, y, 1.5, h);
+  }
+  for (let py = y; py < y + h; py += 36) {
+    ctx.fillRect(x, py, w, 1.5);
+  }
 
   // 표면 코팅 광택 및 덧칠 수리 패치 흔적 (한국 우레탄 옥상 고유 디테일)
   for (let i = 0; i < 6; i++) {
@@ -1095,16 +1117,26 @@ export function createPhotorealisticCityAtlasCanvas(): HTMLCanvasElement {
   const cellH = PHOTOREALISTIC_CELL_H;
 
   const drawers = [
-    drawAptWarmIvory,        // 0: 아파트 Type A (웜 아이보리)
-    drawAptSandBeige,        // 1: 아파트 Type B (샌드 베이지)
-    drawAptWarmGray,         // 2: 아파트 Type C (웜 그레이)
-    drawAptModernTwotone,    // 3: 아파트 Type D (모던 투톤)
-    drawAptSideWall,         // 4: 한국형 아파트 좁은 측벽 (창문X, 브랜드 밴드, 동 번호)
+    drawAptWarmIvory,        // 0: 아파트 Type A (웜 아이보리 전면 발코니)
+    drawAptSandBeige,        // 1: 아파트 Type B (샌드 베이지 전면 발코니)
+    (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+      drawAptRearStairwell(c, x, y, w, h);
+      applyConcreteGrainNoise(c, x, y, w, h, 0.05);
+    },                       // 2: 한국형 아파트 배면 (계단실/복도식 수직 채광창 + 보일러 연통/실외기)
+    drawAptModernTwotone,    // 3: 아파트 Type D (모던 투톤 전면 발코니)
+    (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+      drawAptSideWallWithDong(c, x, y, w, h, '101', 0);
+      applyVerticalRainGrime(c, x, y, w, h, y + 24, 35, 0.18);
+      applyConcreteGrainNoise(c, x, y, w, h, 0.04);
+    },                       // 4: 한국형 아파트 좁은 측벽 (건설사 브랜드 수직 밴드 + 동 번호 스텐실)
     drawCommGraniteBeige,    // 5: 상가 Type A (화강석 석재 타일)
     drawCommDarkMetal,       // 6: 상가 Type B (알루미늄 복합패널)
     drawCommRedBrick,        // 7: 상가 Type C (적벽돌 상가)
     drawCommCurtainwall,     // 8: 상가 Type D (블루/그린 틴티드 커튼월)
-    drawCommGroundShop,      // 9: 1층 상가 통유리 쇼윈도 + 간판 띠장 (0m~4m)
+    (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+      drawCommercialSignboardBand(c, x, y, w, h);
+      applyConcreteGrainNoise(c, x, y, w, h, 0.05);
+    },                       // 9: 1층 상가 쇼윈도 + 정돈된 한국형 가로 간판 블록 (0m~4m)
     drawVillaRedBrick,       // 10: 주택 Type A (적벽돌 빌라 + 필로티 주차장 기둥)
     drawVillaGranite,        // 11: 주택 Type B (화강석 빌라)
     drawHouseCream,          // 12: 주택 Type C (아이보리 드라이비트 주택)
@@ -1115,9 +1147,15 @@ export function createPhotorealisticCityAtlasCanvas(): HTMLCanvasElement {
     drawRoofUrethaneSage,    // 17: 옥상 25% (실사 딥 세이지 우레탄 그린)
     drawRoofZincBlue,        // 18: 옥상 8%  (청회색/네이비 금속 징크 지붕)
     drawPenthouseWall,       // 19: 옥탑 엘리베이터 권상기실 외벽
-    drawPenthouseMetal,      // 20: 옥탑 다크 메탈 패널
+    (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+      drawHVACCoolingTower(c, x, y, w, h);
+      applyConcreteGrainNoise(c, x, y, w, h, 0.04);
+    },                       // 20: 옥상 설비 HVAC 냉각탑 루버 & 상단 팬 그릴 & 철제 사다리
     drawParapetConcrete,     // 21: 콘크리트 난간 + 두겁석
-    drawParapetDark,         // 22: 다크 스톤 코핑
+    (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+      drawAptGroundLobby(c, x, y, w, h);
+      applyConcreteGrainNoise(c, x, y, w, h, 0.05);
+    },                       // 22: 한국형 아파트 1층 짙은 화강석 기단부 + 공동현관 캐노피 포치 & 자동문
     drawPublicMilitary,      // 23: 공공청사 / 군부대 막사 단정 외벽
   ];
 

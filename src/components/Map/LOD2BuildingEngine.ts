@@ -55,6 +55,7 @@ import {
 } from '@/utils/vworldStyleAtlas';
 import { buildOsmBuildingGeometry } from '@/lib/vendor/osmGeometryBuilder';
 import { spatialTileCache, lngLatToTile, prioritizeTilesByCamera } from '@/utils/spatialTileCache';
+import { sampleBuildingRoofColors, SatelliteRoofColor } from '@/utils/satelliteRoofSampler';
 
 
 // =============================================================================
@@ -913,88 +914,99 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           return;
         }
 
-        // 캐시 미스: Web Worker 기반 고속 건물 지오메트리 백그라운드 연산
-        buildingMeshWorkerClient
-          .buildBuildings({
-            features: workingFeatures,
-            originLngLat: this.originLngLat,
-            sunDirection: [
-              this.sunLightDirection.x,
-              this.sunLightDirection.y,
-              this.sunLightDirection.z,
-            ],
-            zoom: this.currentZoomLOD,
-          })
-          .then((workerResult) => {
-            if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
-              // 1차 메모리 LRU 캐시 및 2차 IndexedDB 영구 캐시 동시 저장
-              if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
-                const oldest = this.chunkMeshCache.keys().next().value;
-                if (oldest) this.chunkMeshCache.delete(oldest);
-              }
-              this.chunkMeshCache.set(chunkKey, workerResult);
-              spatialTileCache.saveGeometry(chunkKey, workerResult);
-
-              this.applyWorkerResult(workerResult);
-            } else {
-              geometryWorkerClient
-                .buildBuildings({
-                  features: workingFeatures,
-                  originLngLat: this.originLngLat,
-                  sunDirection: [
-                    this.sunLightDirection.x,
-                    this.sunLightDirection.y,
-                    this.sunLightDirection.z,
-                  ],
-                  zoom: this.currentZoomLOD,
-                })
-                .then((fallbackResult) => {
-                  if (fallbackResult && fallbackResult.positions && fallbackResult.positions.length > 0) {
-                    if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
-                      const oldest = this.chunkMeshCache.keys().next().value;
-                      if (oldest) this.chunkMeshCache.delete(oldest);
-                    }
-                    this.chunkMeshCache.set(chunkKey, fallbackResult as any);
-                    spatialTileCache.saveGeometry(chunkKey, fallbackResult as any);
-
-                    this.applyWorkerResult(fallbackResult);
-                  } else {
-                    this.buildFallbackSync(workingFeatures);
+        // 캐시 미스: 위성 픽셀 색상 실시간 샘플링 후 Web Worker 기반 고속 지오메트리 빌드
+        sampleBuildingRoofColors(workingFeatures, 16)
+          .catch(() => ({} as Record<string | number, SatelliteRoofColor>))
+          .then((satelliteRoofColors) => {
+            buildingMeshWorkerClient
+              .buildBuildings({
+                features: workingFeatures,
+                originLngLat: this.originLngLat,
+                sunDirection: [
+                  this.sunLightDirection.x,
+                  this.sunLightDirection.y,
+                  this.sunLightDirection.z,
+                ],
+                zoom: this.currentZoomLOD,
+                satelliteRoofColors,
+              })
+              .then((workerResult) => {
+                if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
+                  // 1차 메모리 LRU 캐시 및 2차 IndexedDB 영구 캐시 동시 저장
+                  if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
+                    const oldest = this.chunkMeshCache.keys().next().value;
+                    if (oldest) this.chunkMeshCache.delete(oldest);
                   }
-                })
-                .catch(() => {
-                  this.buildFallbackSync(workingFeatures);
-                });
-            }
-          })
-          .catch((err) => {
-            console.warn('[LOD2BuildingEngine] buildingMeshWorker error, falling back:', err);
-            this.buildFallbackSync(workingFeatures);
+                  this.chunkMeshCache.set(chunkKey, workerResult);
+                  spatialTileCache.saveGeometry(chunkKey, workerResult);
+
+                  this.applyWorkerResult(workerResult);
+                } else {
+                  geometryWorkerClient
+                    .buildBuildings({
+                      features: workingFeatures,
+                      originLngLat: this.originLngLat,
+                      sunDirection: [
+                        this.sunLightDirection.x,
+                        this.sunLightDirection.y,
+                        this.sunLightDirection.z,
+                      ],
+                      zoom: this.currentZoomLOD,
+                      satelliteRoofColors,
+                    })
+                    .then((fallbackResult) => {
+                      if (fallbackResult && fallbackResult.positions && fallbackResult.positions.length > 0) {
+                        if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
+                          const oldest = this.chunkMeshCache.keys().next().value;
+                          if (oldest) this.chunkMeshCache.delete(oldest);
+                        }
+                        this.chunkMeshCache.set(chunkKey, fallbackResult as any);
+                        spatialTileCache.saveGeometry(chunkKey, fallbackResult as any);
+
+                        this.applyWorkerResult(fallbackResult);
+                      } else {
+                        this.buildFallbackSync(workingFeatures, satelliteRoofColors);
+                      }
+                    })
+                    .catch(() => {
+                      this.buildFallbackSync(workingFeatures, satelliteRoofColors);
+                    });
+                }
+              })
+              .catch((err) => {
+                console.warn('[LOD2BuildingEngine] buildingMeshWorker error, falling back:', err);
+                this.buildFallbackSync(workingFeatures, satelliteRoofColors);
+              });
           });
       })
       .catch(() => {
-        // IndexedDB 조회 실패 시 Worker로 직접 진행
-        buildingMeshWorkerClient
-          .buildBuildings({
-            features: workingFeatures,
-            originLngLat: this.originLngLat,
-            sunDirection: [
-              this.sunLightDirection.x,
-              this.sunLightDirection.y,
-              this.sunLightDirection.z,
-            ],
-            zoom: this.currentZoomLOD,
-          })
-          .then((workerResult) => {
-            if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
-              this.chunkMeshCache.set(chunkKey, workerResult);
-              this.applyWorkerResult(workerResult);
-            } else {
-              this.buildFallbackSync(workingFeatures);
-            }
-          })
-          .catch(() => {
-            this.buildFallbackSync(workingFeatures);
+        // IndexedDB 조회 실패 시에도 위성 지붕 색상 샘플링 후 Worker 진행
+        sampleBuildingRoofColors(workingFeatures, 16)
+          .catch(() => ({} as Record<string | number, SatelliteRoofColor>))
+          .then((satelliteRoofColors) => {
+            buildingMeshWorkerClient
+              .buildBuildings({
+                features: workingFeatures,
+                originLngLat: this.originLngLat,
+                sunDirection: [
+                  this.sunLightDirection.x,
+                  this.sunLightDirection.y,
+                  this.sunLightDirection.z,
+                ],
+                zoom: this.currentZoomLOD,
+                satelliteRoofColors,
+              })
+              .then((workerResult) => {
+                if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
+                  this.chunkMeshCache.set(chunkKey, workerResult);
+                  this.applyWorkerResult(workerResult);
+                } else {
+                  this.buildFallbackSync(workingFeatures, satelliteRoofColors);
+                }
+              })
+              .catch(() => {
+                this.buildFallbackSync(workingFeatures, satelliteRoofColors);
+              });
           });
       });
   }
@@ -1002,7 +1014,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   /**
    * Worker 미지원 또는 예외 발생 시 동기식 폴백 빌더
    */
-  private buildFallbackSync(features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]): void {
+  private buildFallbackSync(
+    features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
+    satelliteRoofColors?: Record<string | number, SatelliteRoofColor>
+  ): void {
     // [1순위: 24종 실사 아틀라스 & 다중 지붕 지오메트리 동기 빌더 직결]
     try {
       const osmResult = buildOsmBuildingGeometry({
@@ -1014,6 +1029,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           this.sunLightDirection.z,
         ],
         zoom: this.currentZoomLOD,
+        satelliteRoofColors,
       });
       if (osmResult && osmResult.positions && osmResult.positions.length > 0) {
         this.applyWorkerResult(osmResult);
@@ -1265,10 +1281,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const STORY_HEIGHT = 3.0;
 
         const buildingSeed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
+        const featId = (feat.id !== undefined && feat.id !== null) ? feat.id : (props.id ?? props.fid ?? props._id);
+        const sampledRoof = featId !== undefined ? satelliteRoofColors?.[featId] : undefined;
         const seedRoof = Math.abs(Math.sin(obb.centroid.x * 45.164 + obb.centroid.y * 91.733)) % 1;
         let roofSlotId = 14;
         let roofR = 0.43, roofG = 0.41, roofB = 0.39; // 35%: 노후 콘크리트 슬래브 웜 그레이 (#6e6a64)
-        if (seedRoof < 0.35) {
+        if (sampledRoof) {
+          roofSlotId = sampledRoof.slotId ?? sampledRoof.matchedSlotId ?? 14;
+          roofR = sampledRoof.r;
+          roofG = sampledRoof.g;
+          roofB = sampledRoof.b;
+        } else if (seedRoof < 0.35) {
           roofSlotId = 14; roofR = 0.43; roofG = 0.41; roofB = 0.39; // 35%: 노후 콘크리트
         } else if (seedRoof < 0.60) {
           roofSlotId = 17; roofR = 0.21; roofG = 0.37; roofB = 0.29; // 25%: 실사 딥세이지 우레탄 그린 (#355e4b)
@@ -1280,11 +1303,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           roofSlotId = 18; roofR = 0.17; roofG = 0.26; roofB = 0.34; // 8%: 청회색 징크 (#2c4257)
         }
 
-        const podiumSlotId = isComm ? 9 : 5;
+        const podiumSlotId = isApt ? 22 : (isComm ? 9 : 5);
         const fndUV = getVWorldAtlasSlotUV(podiumSlotId);
         const skirtUV = getVWorldAtlasSlotUV(21); // 21: parapet_concrete / 옹벽 콘크리트
-        const aptFrontSlot = Math.floor(buildingSeed * 4); // 0, 1, 2, 3
-        const aptFrontUV = getVWorldAtlasSlotUV(aptFrontSlot);
+        const aptFrontSlot = Math.floor(buildingSeed * 3); // 0, 1, 3 (skip 2 which is rear)
+        const frontSlotId = aptFrontSlot === 2 ? 3 : aptFrontSlot;
+        const aptFrontUV = getVWorldAtlasSlotUV(frontSlotId);
+        const aptRearUV = getVWorldAtlasSlotUV(2); // 2: apt_rear_stairwell
         const aptSideUV = getVWorldAtlasSlotUV(4); // 4: apt_side
         const commSlot = 5 + Math.floor(buildingSeed * 4);
         const resSlot = isMilitary ? 23 : 10 + Math.floor(buildingSeed * 4);
@@ -1366,7 +1391,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                   0.98, 0.98, 0.99
                 );
               } else {
-                // (2) 한국형 아파트 전/후면: 세대별 베란다 창문 격자 및 실외기 루버 (3m 층고 단위 격자)
+                // (2) 한국형 아파트 전/후면: 북향(outNz < -0.15)은 배면 계단실/복도식, 남향은 전면 베란다
+                const isRearFacing = outNz < -0.15;
+                const chosenAptUV = isRearFacing ? aptRearUV : aptFrontUV;
+
                 for (let b = 0; b < nBays; b++) {
                   const t0 = b / nBays;
                   const t1 = (b + 1) / nBays;
@@ -1386,10 +1414,10 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                       { x: bx1, y: y1, z: bz1 },
                       { x: bx0, y: y1, z: bz0 },
                       outNx, 0, outNz,
-                      { u: aptFrontUV.u0, v: aptFrontUV.v0 },
-                      { u: aptFrontUV.u1, v: aptFrontUV.v0 },
-                      { u: aptFrontUV.u1, v: aptFrontUV.v1 },
-                      { u: aptFrontUV.u0, v: aptFrontUV.v1 },
+                      { u: chosenAptUV.u0, v: chosenAptUV.v0 },
+                      { u: chosenAptUV.u1, v: chosenAptUV.v0 },
+                      { u: chosenAptUV.u1, v: chosenAptUV.v1 },
+                      { u: chosenAptUV.u0, v: chosenAptUV.v1 },
                       0.98, 0.98, 0.99
                     );
                   }

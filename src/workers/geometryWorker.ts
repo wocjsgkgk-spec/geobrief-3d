@@ -366,6 +366,7 @@ export interface BuildBuildingsPayload {
   demBounds?: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
   sunDirection?: [number, number, number];       // [sX, sY, sZ]
   zoom?: number;                                 // 카메라 줌 레벨 (LOD 분기용)
+  satelliteRoofColors?: Record<string | number, any>;
 }
 
 export interface BuildBuildingsResult {

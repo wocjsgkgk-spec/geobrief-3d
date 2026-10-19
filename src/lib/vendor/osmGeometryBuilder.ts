@@ -10,6 +10,7 @@
 
 import earcut from 'earcut';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
+import type { SatelliteRoofColor } from '@/utils/satelliteRoofSampler';
 
 export interface OSMGeometryOptions {
   features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
@@ -17,6 +18,7 @@ export interface OSMGeometryOptions {
   demBounds?: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
   sunDirection?: [number, number, number];       // [sX, sY, sZ]
   zoom?: number;
+  satelliteRoofColors?: Record<string | number, SatelliteRoofColor>;
 }
 
 export interface OSMGeometryResult {
@@ -254,6 +256,60 @@ function addQuadVertices(
     colors.push(r, g, b);
     buildingDatas.push(bldType, floors, partType, slotId);
   }
+
+  uvs.push(uv0.u, uv0.v, uv1.u, uv1.v, uv2.u, uv2.v);
+  uvs.push(uv0.u, uv0.v, uv2.u, uv2.v, uv3.u, uv3.v);
+
+  demCoords.push(dem0.u, dem0.v, dem1.u, dem1.v, dem1.u, dem1.v);
+  demCoords.push(dem0.u, dem0.v, dem1.u, dem1.v, dem0.u, dem0.v);
+}
+
+/**
+ * 4개 정점별로 색상 그라데이션이 적용되는 쿼드 생성기 (1.2m 난간 내측 AO 전용)
+ */
+function addQuadGradientVertices(
+  positions: number[],
+  normals: number[],
+  uvs: number[],
+  colors: number[],
+  buildingDatas: number[],
+  demCoords: number[],
+  p0: { x: number; y: number; z: number }, // BL
+  p1: { x: number; y: number; z: number }, // BR
+  p2: { x: number; y: number; z: number }, // TR
+  p3: { x: number; y: number; z: number }, // TL
+  nx: number,
+  ny: number,
+  nz: number,
+  uv0: { u: number; v: number },
+  uv1: { u: number; v: number },
+  uv2: { u: number; v: number },
+  uv3: { u: number; v: number },
+  bldType: number,
+  floors: number,
+  partType: number,
+  slotId: number,
+  dem0: { u: number; v: number },
+  dem1: { u: number; v: number },
+  c0: [number, number, number],
+  c1: [number, number, number],
+  c2: [number, number, number],
+  c3: [number, number, number]
+): void {
+  // Triangle 1: p0 -> p1 -> p2
+  positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+  // Triangle 2: p0 -> p2 -> p3
+  positions.push(p0.x, p0.y, p0.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z);
+
+  for (let k = 0; k < 6; k++) {
+    normals.push(nx, ny, nz);
+    buildingDatas.push(bldType, floors, partType, slotId);
+  }
+
+  // Tri 1: c0 -> c1 -> c2
+  colors.push(c0[0], c0[1], c0[2], c1[0], c1[1], c1[2], c2[0], c2[1], c2[2]);
+  // Tri 2: c0 -> c2 -> c3
+  colors.push(c0[0], c0[1], c0[2], c2[0], c2[1], c2[2], c3[0], c3[1], c3[2]);
 
   uvs.push(uv0.u, uv0.v, uv1.u, uv1.v, uv2.u, uv2.v);
   uvs.push(uv0.u, uv0.v, uv2.u, uv2.v, uv3.u, uv3.v);
@@ -513,8 +569,16 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
     const hasGabledRoof = regStyle.roofShape === 'gabled' || regStyle.roofShape === 'greenhouse';
     const hasHippedRoof = regStyle.roofShape === 'hipped';
 
-    // 평지붕 건물에 대해 한국 도시 옥상 실측 비율 (35% 콘크리트, 25% 우레탄, 20% 아스팔트, 12% 기와, 8% 징크) 엄격 적용
-    if (!hasPitchedRoof) {
+    // [1단계: 위성 픽셀 실시간 샘플링 지붕 색상 우선 적용, CORS/로드 실패 시 5대 실사 지붕 팔레트 안전 폴백]
+    const featId = feat.id ?? props.id ?? props.buld_id ?? buildingCount;
+    const sampledRoof = options.satelliteRoofColors?.[featId];
+
+    if (sampledRoof && sampledRoof.isSampled) {
+      roofR = sampledRoof.r;
+      roofG = sampledRoof.g;
+      roofB = sampledRoof.b;
+      roofSlotId = sampledRoof.matchedSlotId;
+    } else if (!hasPitchedRoof) {
       if (seedRoof < 0.35) {
         roofSlotId = 14.0; roofR = 0.43; roofG = 0.41; roofB = 0.39; // 35%: 노후 콘크리트 슬래브 웜 그레이 (#6e6a64)
       } else if (seedRoof < 0.60) {
@@ -635,15 +699,30 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           let partType = 0.0;
           let isSideWall = false;
           // [한국형 아파트 좁은 측벽 자동 판별]: edgeLength < 15m 또는 단축 비율 조건
-          if (!isHole && (regStyle.bldType === 2.0 || regStyle.sideWallStripe) && (floors >= 5.0 || totalH >= 14.0) && maxEdgeLen >= 15.0) {
-            if (segLen < 15.0 || segLen <= maxEdgeLen * 0.48) {
+          if (!isHole && (regStyle.bldType === 2.0 || regStyle.sideWallStripe || isApt) && (floors >= 4.0 || totalH >= 12.0) && maxEdgeLen >= 15.0) {
+            if (segLen < 15.0 || segLen <= maxEdgeLen * 0.45) {
               partType = 3.0; // 3=측벽 수직 코어
               isSideWall = true;
             }
           }
 
-          const currentWallSlot = ((regStyle.bldType === 2.0 || regStyle.sideWallStripe) && isSideWall) ? 4.0 : defaultWallSlotId; // 4=apt_side
-          const currentPodiumSlot = regStyle.podiumWallSlotId || (bldType === 1.0 ? 9.0 : 21.0);
+          let currentWallSlot = ((regStyle.bldType === 2.0 || regStyle.sideWallStripe || isApt) && isSideWall) ? 4.0 : defaultWallSlotId; // 4=apt_side
+
+          // [한국형 아파트 전면(베란다) vs 배면(계단실/복도/보일러연통) 분기]
+          if (!isHole && !isSideWall && (regStyle.bldType === 2.0 || isApt)) {
+            // Outward normal in map meter space: (-nz) points North/South
+            // 북향(-nz < -0.10)은 배면 계단실/복도식 타일 (Slot 2: apt_rear_stairwell)
+            // 남향(-nz >= -0.10)은 전면 발코니 창호 타일 (0, 1, 3)
+            if (-nz < -0.10) {
+              currentWallSlot = 2.0; // 2=apt_rear_stairwell
+            }
+          }
+
+          // [1층 기단부 0m ~ 4m 슬롯 분기]:
+          // - 아파트: slot 22 (apt_pilotis_lobby: 짙은 화강석 석재 마감 + 공동현관 캐노피 포치 & 자동문)
+          // - 상업/오피스: slot 9 (comm_ground_shop: 1층 쇼윈도 + 정돈된 한국형 가로 간판 블록)
+          const currentPodiumSlot = regStyle.podiumWallSlotId ||
+            (isApt || bldType === 2.0 ? 22.0 : (bldType === 1.0 ? 9.0 : 21.0));
 
           const dem0 = { u: (c1[0] - minLng) / rangeLng, v: (c1[1] - minLat) / rangeLat };
           const dem1 = { u: (c2[0] - minLng) / rangeLng, v: (c2[1] - minLat) / rangeLat };
@@ -1033,7 +1112,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       // [2. 평지붕(Flat Roof) 분기: 난간(Parapet) / 경사형 지붕 캡 + 옥상 슬래브 + 엘리베이터/계단실 코어]
       // -----------------------------------------------------------------------
       if (!hasPitchedRoof) {
-        const isKoreanAptHighrise = isApt && totalH >= 30.0;
+        const isKoreanAptHighrise = isApt && (totalH >= 24.0 || floors >= 7);
         const oLen = roofTargetPts.length;
 
         // (a) 가변 옥상 난간 (Parapet) / 한국형 아파트 경사 파라펫 캡 (Mansard Cap)
@@ -1118,10 +1197,10 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               0.85, 0.88, 0.92
             );
 
-            // 4) 옥상 안쪽 빗물 배수로 및 구석 음영 (Corner AO)
-            const p1g = { x: p1In.x + inNx * 0.8, y: p1In.y + inNz * 0.8 };
-            const p2g = { x: p2In.x + inNx * 0.8, y: p2In.y + inNz * 0.8 };
-            addQuadVertices(
+            // 4) 옥상 안쪽 빗물 배수로 및 구석 음영 (Corner AO 1.2m 구간 실측 스케일)
+            const p1g = { x: p1In.x + inNx * 1.2, y: p1In.y + inNz * 1.2 };
+            const p2g = { x: p2In.x + inNx * 1.2, y: p2In.y + inNz * 1.2 };
+            addQuadGradientVertices(
               masterPositions, masterNormals, masterUvs, masterColors,
               masterBuildingData, masterDemCoords,
               { x: p1In.x, y: totalH + 0.055, z: -p1In.y },
@@ -1133,7 +1212,10 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               { u: segLen * 0.1, v: 1.0 }, { u: 0, v: 1.0 },
               bldType, floors, 1.0, roofSlotId,
               dem0, dem1,
-              roofR * 0.52, roofG * 0.52, roofB * 0.52
+              [roofR * 0.22, roofG * 0.22, roofB * 0.22],
+              [roofR * 0.22, roofG * 0.22, roofB * 0.22],
+              [roofR, roofG, roofB],
+              [roofR, roofG, roofB]
             );
           }
         } else {
@@ -1215,12 +1297,12 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               0.85, 0.88, 0.92
             );
 
-            // 4) 옥상 테두리(난간 바로 안쪽 0.8m 구간): 빗물 배수로 라인 및 짙은 구석 그림자(Corner AO)
-            const GUTTER_WIDTH = 0.8;
+            // 4) 옥상 테두리(난간 바로 안쪽 1.2m 구간 실측 스케일): 빗물 배수로 라인 및 짙은 구석 그림자(Corner AO)
+            const GUTTER_WIDTH = 1.2;
             const p1g = { x: p1i.x + inNx * GUTTER_WIDTH, y: p1i.y + inNz * GUTTER_WIDTH };
             const p2g = { x: p2i.x + inNx * GUTTER_WIDTH, y: p2i.y + inNz * GUTTER_WIDTH };
 
-            addQuadVertices(
+            addQuadGradientVertices(
               masterPositions, masterNormals, masterUvs, masterColors,
               masterBuildingData, masterDemCoords,
               { x: p1i.x, y: totalH + 0.055, z: -p1i.y },
@@ -1237,7 +1319,10 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               1.0, // partType 1.0 = 지붕
               roofSlotId,
               dem0, dem1,
-              roofR * 0.52, roofG * 0.52, roofB * 0.52
+              [roofR * 0.22, roofG * 0.22, roofB * 0.22],
+              [roofR * 0.22, roofG * 0.22, roofB * 0.22],
+              [roofR, roofG, roofB],
+              [roofR, roofG, roofB]
             );
           }
         }
@@ -1538,32 +1623,70 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               demMid, demMid,
               0.64, 0.74, 0.82
             );
-            // (1) 대단지 브랜드 아파트: 옥상 경사형 장식 캡 (Architectural Decorative Cap)
-            if (regStyle.hasRoofCoreCap) {
-              const capH = pHouseTop + 1.6;
-              const capInset = 0.25;
+            // (1) 대단지 브랜드 아파트 및 고층 건물: 옥상 경사형 장식 캡 (Hipped Roof Cap)
+            if (regStyle.hasRoofCoreCap || isKoreanAptHighrise) {
+              const capH = pHouseTop + 1.8;
+              const overhang = 0.35;
+              const b0 = { x: corners[0].x - overhang, y: pHouseTop, z: -(corners[0].y - overhang) };
+              const b1 = { x: corners[1].x + overhang, y: pHouseTop, z: -(corners[1].y - overhang) };
+              const b2 = { x: corners[2].x + overhang, y: pHouseTop, z: -(corners[2].y + overhang) };
+              const b3 = { x: corners[3].x - overhang, y: pHouseTop, z: -(corners[3].y + overhang) };
+
+              // 중심 용마루 능선 (Ridge line)
+              const rLen = Math.max(1.0, boxW * 0.40);
+              const r0 = { x: ccx - rLen * 0.5, y: capH, z: -ccy };
+              const r1 = { x: ccx + rLen * 0.5, y: capH, z: -ccy };
+
+              // 1) 남측 경사면 (b0 -> b1 -> r1 -> r0)
               addQuadVertices(
                 masterPositions, masterNormals, masterUvs, masterColors,
                 masterBuildingData, masterDemCoords,
-                { x: corners[0].x - capInset, y: pHouseTop, z: -(corners[0].y - capInset) },
-                { x: corners[1].x + capInset, y: pHouseTop, z: -(corners[1].y - capInset) },
-                { x: corners[2].x + capInset, y: capH, z: -(corners[2].y + capInset) },
-                { x: corners[3].x - capInset, y: capH, z: -(corners[3].y + capInset) },
-                0, 0.85, -0.52,
+                b0, b1, r1, r0,
+                0, 0.707, -0.707,
                 { u: 0, v: 0 }, { u: 1, v: 0 }, { u: 1, v: 1 }, { u: 0, v: 1 },
                 bldType, floors, 6.0, 15.0, // 다크 차콜 슬레이트 캡 (#334155)
                 demMid, demMid,
-                0.20, 0.25, 0.33
+                0.22, 0.26, 0.32
               );
+              // 2) 북측 경사면 (b2 -> b3 -> r0 -> r1)
+              addQuadVertices(
+                masterPositions, masterNormals, masterUvs, masterColors,
+                masterBuildingData, masterDemCoords,
+                b2, b3, r0, r1,
+                0, 0.707, 0.707,
+                { u: 0, v: 0 }, { u: 1, v: 0 }, { u: 1, v: 1 }, { u: 0, v: 1 },
+                bldType, floors, 6.0, 15.0,
+                demMid, demMid,
+                0.18, 0.21, 0.27
+              );
+              // 3) 서측 박공 삼각형 (b3 -> b0 -> r0)
+              masterPositions.push(b3.x, b3.y, b3.z, b0.x, b0.y, b0.z, r0.x, r0.y, r0.z);
+              for (let k = 0; k < 3; k++) {
+                masterNormals.push(-0.707, 0.707, 0);
+                masterColors.push(0.20, 0.24, 0.30);
+                masterBuildingData.push(bldType, floors, 6.0, 15.0);
+              }
+              masterUvs.push(0, 0, 1, 0, 0.5, 1);
+              masterDemCoords.push(demMid.u, demMid.v, demMid.u, demMid.v, demMid.u, demMid.v);
+
+              // 4) 동측 박공 삼각형 (b1 -> b2 -> r1)
+              masterPositions.push(b1.x, b1.y, b1.z, b2.x, b2.y, b2.z, r1.x, r1.y, r1.z);
+              for (let k = 0; k < 3; k++) {
+                masterNormals.push(0.707, 0.707, 0);
+                masterColors.push(0.20, 0.24, 0.30);
+                masterBuildingData.push(bldType, floors, 6.0, 15.0);
+              }
+              masterUvs.push(0, 0, 1, 0, 0.5, 1);
+              masterDemCoords.push(demMid.u, demMid.v, demMid.u, demMid.v, demMid.u, demMid.v);
             }
 
-            // (2) 옥탑 옆 소형 실외기/환기구 설비 큐브 (Equipment Box / HVAC Units)
+            // (2) 옥탑 옆 소형 실외기/환기구 설비 큐브 및 HVAC 냉각탑 (Equipment Box / HVAC Units)
             // 평평한 옥상에 실사 도시 디테일 부여 (단일 버퍼 병합, Draw Call 증가 없음)
             const equipCount = isKoreanAptHighrise ? 2 : 1;
             for (let eqIdx = 0; eqIdx < equipCount; eqIdx++) {
-              const eqW = 1.4 + ((buildingSeed * 37.1 + eqIdx * 13.7) % 0.4); // 1.4m ~ 1.8m
-              const eqD = 1.2 + ((buildingSeed * 53.3 + eqIdx * 19.1) % 0.4); // 1.2m ~ 1.6m
-              const eqH = 0.9 + ((buildingSeed * 71.9 + eqIdx * 23.3) % 0.3); // 0.9m ~ 1.2m
+              const eqW = 1.6 + ((buildingSeed * 37.1 + eqIdx * 13.7) % 0.6); // 1.6m ~ 2.2m
+              const eqD = 1.4 + ((buildingSeed * 53.3 + eqIdx * 19.1) % 0.6); // 1.4m ~ 2.0m
+              const eqH = 1.2 + ((buildingSeed * 71.9 + eqIdx * 23.3) % 0.4); // 1.2m ~ 1.6m
 
               // 옥탑 측면에 오프셋 배치
               const sideSign = eqIdx === 0 ? 1 : -1;

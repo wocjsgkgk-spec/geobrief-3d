@@ -47,6 +47,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
   // aBuildingData: x: bldType, y: floors, z: partType, w: slotId
   attribute vec4 aBuildingData;
   attribute vec2 aDemCoord;
+  attribute vec3 color;
 
   uniform sampler2D uDemTexture;
   uniform bool uUseDemTexture;
@@ -59,6 +60,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
   varying vec2 vUv;
   varying vec4 vBuildingData;
   varying vec3 vViewDir;
+  varying vec3 vColor;
 
   // Terrarium DEM 해발고도 디코딩 (R * 256 + G + B / 256 - 32768)
   float decodeTerrarium(vec4 color) {
@@ -70,6 +72,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
     vNormal = normalize(normalMatrix * normal);
     vLocalNormal = normalize(normal);
     vBuildingData = aBuildingData;
+    vColor = color;
 
     vec3 pos = position;
 
@@ -112,6 +115,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
   varying vec2 vUv;
   varying vec4 vBuildingData;
   varying vec3 vViewDir;
+  varying vec3 vColor;
 
   // ---------------------------------------------------------------------------
   // [Streets-GL 코어] fwidth() 도함수 기반 안티앨리어싱 필터링
@@ -266,9 +270,11 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec4 atlasTex = texture2D(uAtlasTexture, atlasUv);
       vec3 surfaceColor = atlasTex.rgb;
 
-      // [옥상 슬래브]: 다층 웨더링 얼룩 및 방수 코팅 톤 변화
-      if (partType == 1.0 || (slotId >= 14.0 && slotId <= 18.0)) {
-        surfaceColor = applyRealisticRoofAging(surfaceColor, vWorldPos.xz, slotId);
+      // [옥상 슬래브 & 박공지붕]: 위성 픽셀 샘플링된 옥상 베이스 컬러(vColor)에 옥상 디테일(방수재 줄눈, 1.2m 난간 AO, 콘크리트 거칠기 노이즈)을 곱하기(Multiply) 블렌딩
+      if (partType == 1.0 || (slotId >= 14.0 && slotId <= 18.0) || partType == 6.0) {
+        vec3 bakedDetail = atlasTex.rgb / max(vec3(0.01), vec3(0.52));
+        vec3 bakedRoofColor = clamp(vColor * bakedDetail, 0.0, 1.0);
+        surfaceColor = applyRealisticRoofAging(bakedRoofColor, vWorldPos.xz, slotId);
       }
 
       // [창호 영역 감지] 어두운 창문 픽셀 감지 및 창틀 인셋 그림자 적용 (인공적 유리 반사는 제거)
@@ -292,10 +298,22 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         surfaceColor *= recessShadow;
       }
 
+      // [2단계: 커튼월 빌딩 창문별 법선 미세 교란 (Per-Window Normal Jitter) & 하늘/구름 반사]
+      if (slotId == 8.0 && partType == 0.0) {
+        vec2 windowPane = floor(innerUv * vec2(4.0, 3.0));
+        float paneSeed = fract(sin(dot(windowPane + floor(vWorldPos.xz * 0.25), vec2(12.9898, 78.233))) * 43758.5453);
+        vec3 jitterTangent = normalize(cross(vec3(0.0, 1.0, 0.0), N));
+        vec3 jitterN = normalize(N + jitterTangent * (fract(paneSeed * 17.1) - 0.5) * 0.06 + vec3(0.0, (fract(paneSeed * 31.7) - 0.5) * 0.05, 0.0));
+        vec3 jitterR = reflect(-V, jitterN);
+        vec3 skyRefl = getSkyReflection(jitterR);
+        float fresnel = pow(1.0 - max(0.0, dot(V, jitterN)), 3.0) * 0.40 + 0.15;
+        surfaceColor = mix(surfaceColor, skyRefl, fresnel);
+      }
+
       // [사용자 지침]: 인공적 유리창 반사/스페큘러 완전 배제 -> 매트한 건축 외벽 미세 반사만 유지
       vec3 H = normalize(L + V);
       float NdotH = max(0.0, dot(effN, H));
-      vec3 specular = (isGlass > 0.5) ? vec3(0.0) : (uSunColor * pow(NdotH, 16.0) * 0.02);
+      vec3 specular = (isGlass > 0.5 && slotId != 8.0) ? vec3(0.0) : (uSunColor * pow(NdotH, 16.0) * 0.02);
 
       vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
