@@ -175,32 +175,40 @@ export function createDynamicLanesWidthExpr(
   minPx = 1.0,
   multiplier = 1.0
 ): any[] {
-  const scaleExpr: any[] = [
+  const defaultLanes = Math.max(1, Math.round(fallbackMeters / 3.35));
+  const effectiveLaneWidthMeters = 3.35 * multiplier;
+
+  const lanesCountExpr: any[] = [
+    'case',
+    ['all', ['has', 'lanes'], ['>', ['to-number', ['get', 'lanes'], 0], 0]],
+    ['to-number', ['get', 'lanes'], defaultLanes],
+    defaultLanes,
+  ];
+
+  // 줌 17 기준 1m = 1.05px (base 2 지수 스케일링)
+  const calcStop = (zoom: number) => {
+    const scale = 1.05 * Math.pow(2, zoom - 17);
+    const pxPerLane = Number((effectiveLaneWidthMeters * scale).toFixed(3));
+    if (zoom <= 12) {
+      const px = Math.max(minPx, defaultLanes * effectiveLaneWidthMeters * scale);
+      return Number(px.toFixed(1));
+    }
+    return ['max', minPx, ['*', lanesCountExpr, pxPerLane]];
+  };
+
+  return [
     'interpolate',
     ['exponential', 2],
     ['zoom'],
-    12, (1.05 / 32.0),
-    13, (1.05 / 16.0),
-    14, (1.05 / 8.0),
-    15, (1.05 / 4.0),
-    16, (1.05 / 2.0),
-    17, 1.05,
-    18, 1.05 * 2.0,
-    19, 1.05 * 4.0,
-    20, 1.05 * 8.0,
-  ];
-
-  const meterExpr: any[] = [
-    'case',
-    ['all', ['has', 'lanes'], ['>', ['to-number', ['get', 'lanes'], 0], 0]],
-    ['*', ['to-number', ['get', 'lanes'], 2], 3.35 * multiplier],
-    fallbackMeters * multiplier,
-  ];
-
-  return [
-    'max',
-    minPx,
-    ['*', meterExpr, scaleExpr] as any,
+    12, calcStop(12),
+    13, calcStop(13),
+    14, calcStop(14),
+    15, calcStop(15),
+    16, calcStop(16),
+    17, calcStop(17),
+    18, calcStop(18),
+    19, calcStop(19),
+    20, calcStop(20),
   ];
 }
 
