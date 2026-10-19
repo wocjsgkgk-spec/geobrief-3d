@@ -18,6 +18,7 @@ import { BUILDING_MASS_PRESETS } from '@/types/map';
 import { isVworldConfigured, fetchVworldBuildings } from '@/services/vworldService';
 import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
 import { fetchHybridSpatialBuildings, extractRenderedVectorBuildings } from '@/utils/spatialDataFetcher';
+import { fetchExternalSpatialData } from '@/utils/externalSpatialData';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
@@ -623,6 +624,85 @@ export const MapViewer: React.FC = () => {
     setViewMode,
     setTerrainEnabled,
   } = useMapStore();
+
+  // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화 엔진]
+  const syncAbortControllerRef = useRef<AbortController | null>(null);
+
+  const syncExternalSpatialBuildings = useCallback(
+    (mapInstance: maplibregl.Map) => {
+      if (!mapInstance) return;
+      if (!useMapStore.getState().layers.buildings3D) return;
+
+      try {
+        const bounds = mapInstance.getBounds();
+        const bbox: [number, number, number, number] = [
+          bounds.getWest(),
+          bounds.getSouth(),
+          bounds.getEast(),
+          bounds.getNorth(),
+        ];
+
+        if (syncAbortControllerRef.current) {
+          syncAbortControllerRef.current.abort();
+        }
+        const controller = new AbortController();
+        syncAbortControllerRef.current = controller;
+
+        fetchExternalSpatialData(mapInstance, bbox, {
+          signal: controller.signal,
+          onImmediate: (immediate) => {
+            const merged = mergeIntoPersistentBuildingCache(immediate.features.features);
+            const count = Math.max(merged.length, immediate.totalCount);
+            if (count > 0) {
+              setVworldDiagnostic({
+                status: 'connected',
+                message: `오픈 벡터 타일 실시간 건물 렌더링 (${count.toLocaleString()}건 로드)`,
+                lastChecked: Date.now(),
+                featureCount: count,
+              });
+              const currentMode = useMapStore.getState().renderMode3D;
+              if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
+                lod2BuildingEngineRef.current.updateBuildings(merged);
+                lod2BuildingEngineRef.current.updateBridges();
+              }
+              if (deck3DTilesManagerRef.current) {
+                deck3DTilesManagerRef.current.setBuildingFeatures(merged);
+              }
+            }
+          },
+        })
+          .then((result) => {
+            if (controller.signal.aborted) return;
+            const merged = mergeIntoPersistentBuildingCache(result.features.features);
+            const count = Math.max(merged.length, result.totalCount);
+            if (count > 0) {
+              setVworldDiagnostic({
+                status: 'connected',
+                message: `3대 실측 공간정보(V-World · Overpass · OFM) 연동 완료 (${count.toLocaleString()}건 로드)`,
+                lastChecked: Date.now(),
+                featureCount: count,
+              });
+              const currentMode = useMapStore.getState().renderMode3D;
+              if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
+                lod2BuildingEngineRef.current.updateBuildings(merged);
+                lod2BuildingEngineRef.current.updateBridges();
+              }
+              if (deck3DTilesManagerRef.current) {
+                deck3DTilesManagerRef.current.setBuildingFeatures(merged);
+              }
+            }
+          })
+          .catch((err) => {
+            if (err?.name !== 'AbortError') {
+              console.warn('[MapViewer] External spatial data sync notice:', err);
+            }
+          });
+      } catch (e) {
+        // ignore
+      }
+    },
+    [mergeIntoPersistentBuildingCache, setVworldDiagnostic]
+  );
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
@@ -2366,29 +2446,8 @@ export const MapViewer: React.FC = () => {
           setCurrentLat(center.lat);
         }
 
-        // [신규] 화면 내 실제 건물 벡터 피처 실시간 추출 및 좌측 패널/엔진 동기화
-        try {
-          const bldgs = extractRenderedVectorBuildings(map);
-          const count = bldgs?.length || 0;
-          if (count > 0) {
-            setVworldDiagnostic({
-              status: 'connected',
-              message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
-              lastChecked: Date.now(),
-              featureCount: count,
-            });
-            const currentMode = useMapStore.getState().renderMode3D;
-            if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
-              lod2BuildingEngineRef.current.updateBuildings(bldgs);
-              lod2BuildingEngineRef.current.updateBridges();
-            }
-            if (deck3DTilesManagerRef.current) {
-              deck3DTilesManagerRef.current.setBuildingFeatures(bldgs);
-            }
-          }
-        } catch (e) {
-          // ignore
-        }
+        // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
+        syncExternalSpatialBuildings(map);
       }, 350);
     };
 
@@ -2441,28 +2500,8 @@ export const MapViewer: React.FC = () => {
     map.on('zoomend', handleInteractionEnd);
 
     const handleMapIdle = () => {
-      try {
-        const bldgs = extractRenderedVectorBuildings(map);
-        const count = bldgs?.length || 0;
-        if (count > 0) {
-          setVworldDiagnostic({
-            status: 'connected',
-            message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
-            lastChecked: Date.now(),
-            featureCount: count,
-          });
-          const currentMode = useMapStore.getState().renderMode3D;
-          if ((currentMode === 'facade' || currentMode === 'tiles3d') && lod2BuildingEngineRef.current) {
-            lod2BuildingEngineRef.current.updateBuildings(bldgs);
-            lod2BuildingEngineRef.current.updateBridges();
-          }
-          if (deck3DTilesManagerRef.current) {
-            deck3DTilesManagerRef.current.setBuildingFeatures(bldgs);
-          }
-        }
-      } catch {
-        // ignore
-      }
+      // [2단계: 지도 안정화 시 3대 외부 실측 건물 데이터 정밀 통합 갱신]
+      syncExternalSpatialBuildings(map);
     };
     map.on('idle', handleMapIdle);
 
@@ -3736,19 +3775,7 @@ export const MapViewer: React.FC = () => {
       }
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
-        try {
-          const bldgs = extractRenderedVectorBuildings(map);
-          const count = bldgs?.length || 0;
-          if (count > 0) {
-            lod2BuildingEngineRef.current.updateBuildings(bldgs);
-            setVworldDiagnostic({
-              status: 'connected',
-              message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
-              lastChecked: Date.now(),
-              featureCount: count,
-            });
-          }
-        } catch {}
+        syncExternalSpatialBuildings(map);
       }
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setLodMode('lod1');
@@ -3769,15 +3796,7 @@ export const MapViewer: React.FC = () => {
       }
     } else if (renderMode3D === 'tiles3d') {
       // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (4대 프리셋 완벽 분기)
-      try {
-        const bldgs = extractRenderedVectorBuildings(map);
-        if (bldgs && bldgs.length > 0) {
-          lod2BuildingEngineRef.current?.updateBuildings(bldgs);
-          deck3DTilesManagerRef.current?.setBuildingFeatures(bldgs);
-        }
-      } catch (err) {
-        // ignore
-      }
+      syncExternalSpatialBuildings(map);
 
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setVisible(false);
@@ -3992,20 +4011,9 @@ export const MapViewer: React.FC = () => {
 
     if (!layers.buildings3D) return;
 
-    // [1단계: 지도 멈춤 유발 코드 전면 제거 및 엔진 경량화]
-    // 지도 이동(move, rotate, pitch, zoom) 시 발생하던 외부 Overpass API / WFS 실시간 네트워크 요청 및
-    // 무거운 queryTerrainElevation() 반복 루프를 전면 중단하여 메인 스레드 블로킹 차단.
-    // 전 세계 및 한국 건물 폴리곤이 내장된 OpenFreeMap 벡터 타일(https://tiles.openfreemap.org/planet)을
-    // GPU 네이티브 fill-extrusion 파이프라인으로 직결하여 60fps 무중단 렌더링 유지.
-    const bldgs = extractRenderedVectorBuildings(map);
-    const count = bldgs && bldgs.length > 0 ? bldgs.length : 0;
-    setVworldDiagnostic({
-      status: 'connected',
-      message: '오픈 벡터 타일 실시간 건물 렌더링 (OpenFreeMap Planet)',
-      lastChecked: Date.now(),
-      featureCount: count,
-    });
-  }, [isMapLoaded, layers.buildings3D, setVworldDiagnostic]);
+    // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
+    syncExternalSpatialBuildings(map);
+  }, [isMapLoaded, layers.buildings3D, syncExternalSpatialBuildings]);
 
   // 9. 베이스맵 전환
   useEffect(() => {
