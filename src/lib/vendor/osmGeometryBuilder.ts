@@ -1316,6 +1316,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               const b0 = outsetBasePts[baseTriangles[bt]];
               const b1 = outsetBasePts[baseTriangles[bt + 1]];
               const b2 = outsetBasePts[baseTriangles[bt + 2]];
+              if (!b0 || !b1 || !b2) continue;
 
               masterPositions.push(b0.x, baseElevY, -b0.y);
               masterPositions.push(b1.x, baseElevY, -b1.y);
@@ -1332,13 +1333,15 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               masterUvs.push(b1.x, b1.y);
               masterUvs.push(b2.x, b2.y);
 
-              const bRaw0 = rawOuterRing[baseTriangles[bt] % rawOuterRing.length];
-              const bRaw1 = rawOuterRing[baseTriangles[bt + 1] % rawOuterRing.length];
-              const bRaw2 = rawOuterRing[baseTriangles[bt + 2] % rawOuterRing.length];
+              const demMidU = (cLng - minLng) / rangeLng;
+              const demMidV = (cLat - minLat) / rangeLat;
+              const bRaw0 = (rawOuterRing && rawOuterRing.length > 0) ? rawOuterRing[baseTriangles[bt] % rawOuterRing.length] : null;
+              const bRaw1 = (rawOuterRing && rawOuterRing.length > 0) ? rawOuterRing[baseTriangles[bt + 1] % rawOuterRing.length] : null;
+              const bRaw2 = (rawOuterRing && rawOuterRing.length > 0) ? rawOuterRing[baseTriangles[bt + 2] % rawOuterRing.length] : null;
 
-              masterDemCoords.push((bRaw0[0] - minLng) / rangeLng, (bRaw0[1] - minLat) / rangeLat);
-              masterDemCoords.push((bRaw1[0] - minLng) / rangeLng, (bRaw1[1] - minLat) / rangeLat);
-              masterDemCoords.push((bRaw2[0] - minLng) / rangeLng, (bRaw2[1] - minLat) / rangeLat);
+              masterDemCoords.push(bRaw0 ? (bRaw0[0] - minLng) / rangeLng : demMidU, bRaw0 ? (bRaw0[1] - minLat) / rangeLat : demMidV);
+              masterDemCoords.push(bRaw1 ? (bRaw1[0] - minLng) / rangeLng : demMidU, bRaw1 ? (bRaw1[1] - minLat) / rangeLat : demMidV);
+              masterDemCoords.push(bRaw2 ? (bRaw2[0] - minLng) / rangeLng : demMidU, bRaw2 ? (bRaw2[1] - minLat) / rangeLat : demMidV);
             }
 
             // -----------------------------------------------------------------
@@ -1350,52 +1353,55 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             const kerbOuterPts = computePolygonOutset(outsetBasePts, KERB_WIDTH);
             const kLen = outsetBasePts.length;
 
-            for (let ki = 0; ki < kLen; ki++) {
-              const nextKi = (ki + 1) % kLen;
-              const kp1 = outsetBasePts[ki];
-              const kp2 = outsetBasePts[nextKi];
-              const kop1 = kerbOuterPts[ki];
-              const kop2 = kerbOuterPts[nextKi];
+            if (kerbOuterPts && kerbOuterPts.length === kLen && kLen >= 3) {
+              for (let ki = 0; ki < kLen; ki++) {
+                const nextKi = (ki + 1) % kLen;
+                const kp1 = outsetBasePts[ki];
+                const kp2 = outsetBasePts[nextKi];
+                const kop1 = kerbOuterPts[ki];
+                const kop2 = kerbOuterPts[nextKi];
+                if (!kp1 || !kp2 || !kop1 || !kop2 || !Number.isFinite(kop1.x) || !Number.isFinite(kop2.x)) continue;
 
-              const kDx = kp2.x - kp1.x;
-              const kDy = kp2.y - kp1.y;
-              const kSegLen = Math.hypot(kDx, kDy);
-              if (kSegLen < 0.1) continue;
+                const kDx = kp2.x - kp1.x;
+                const kDy = kp2.y - kp1.y;
+                const kSegLen = Math.hypot(kDx, kDy);
+                if (kSegLen < 0.1) continue;
 
-              const kOutNx = kDy / kSegLen;
-              const kOutNz = -kDx / kSegLen;
+                const kOutNx = kDy / kSegLen;
+                const kOutNz = -kDx / kSegLen;
 
-              // 1) 연석 외측 수직면 (y: 0.018m ~ 0.168m)
-              addQuadVertices(
-                masterPositions, masterNormals, masterUvs, masterColors,
-                masterBuildingData, masterDemCoords,
-                { x: kop1.x, y: baseElevY, z: -kop1.y },
-                { x: kop2.x, y: baseElevY, z: -kop2.y },
-                { x: kop2.x, y: baseElevY + KERB_H, z: -kop2.y },
-                { x: kop1.x, y: baseElevY + KERB_H, z: -kop1.y },
-                kOutNx, 0, -kOutNz,
-                { u: 0, v: 0 }, { u: kSegLen / 1.0, v: 0 },
-                { u: kSegLen / 1.0, v: 1.0 }, { u: 0, v: 1.0 },
-                bldType, floors, 4.0, 21.0,
-                { u: 0, v: 0 }, { u: 1, v: 1 },
-                0.72, 0.76, 0.82 // 화강석 연석 외측면
-              );
+                // 1) 연석 외측 수직면 (y: 0.018m ~ 0.168m)
+                addQuadVertices(
+                  masterPositions, masterNormals, masterUvs, masterColors,
+                  masterBuildingData, masterDemCoords,
+                  { x: kop1.x, y: baseElevY, z: -kop1.y },
+                  { x: kop2.x, y: baseElevY, z: -kop2.y },
+                  { x: kop2.x, y: baseElevY + KERB_H, z: -kop2.y },
+                  { x: kop1.x, y: baseElevY + KERB_H, z: -kop1.y },
+                  kOutNx, 0, -kOutNz,
+                  { u: 0, v: 0 }, { u: kSegLen / 1.0, v: 0 },
+                  { u: kSegLen / 1.0, v: 1.0 }, { u: 0, v: 1.0 },
+                  bldType, floors, 4.0, 21.0,
+                  { u: 0, v: 0 }, { u: 1, v: 1 },
+                  0.72, 0.76, 0.82 // 화강석 연석 외측면
+                );
 
-              // 2) 연석 상단 수평면 (y: 0.168m)
-              addQuadVertices(
-                masterPositions, masterNormals, masterUvs, masterColors,
-                masterBuildingData, masterDemCoords,
-                { x: kop1.x, y: baseElevY + KERB_H, z: -kop1.y },
-                { x: kop2.x, y: baseElevY + KERB_H, z: -kop2.y },
-                { x: kp2.x, y: baseElevY + KERB_H, z: -kp2.y },
-                { x: kp1.x, y: baseElevY + KERB_H, z: -kp1.y },
-                0, 1, 0,
-                { u: 0, v: 0 }, { u: kSegLen / 1.0, v: 0 },
-                { u: kSegLen / 1.0, v: 0.2 }, { u: 0, v: 0.2 },
-                bldType, floors, 4.0, 21.0,
-                { u: 0, v: 0 }, { u: 1, v: 1 },
-                0.80, 0.84, 0.89 // 화강석 연석 상단면
-              );
+                // 2) 연석 상단 수평면 (y: 0.168m)
+                addQuadVertices(
+                  masterPositions, masterNormals, masterUvs, masterColors,
+                  masterBuildingData, masterDemCoords,
+                  { x: kop1.x, y: baseElevY + KERB_H, z: -kop1.y },
+                  { x: kop2.x, y: baseElevY + KERB_H, z: -kop2.y },
+                  { x: kp2.x, y: baseElevY + KERB_H, z: -kp2.y },
+                  { x: kp1.x, y: baseElevY + KERB_H, z: -kp1.y },
+                  0, 1, 0,
+                  { u: 0, v: 0 }, { u: kSegLen / 1.0, v: 0 },
+                  { u: kSegLen / 1.0, v: 0.2 }, { u: 0, v: 0.2 },
+                  bldType, floors, 4.0, 21.0,
+                  { u: 0, v: 0 }, { u: 1, v: 1 },
+                  0.80, 0.84, 0.89 // 화강석 연석 상단면
+                );
+              }
             }
           }
         }

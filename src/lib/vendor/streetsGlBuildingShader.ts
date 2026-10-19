@@ -179,17 +179,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     return sky;
   }
 
-  // ---------------------------------------------------------------------------
-  // [대기 원근감 연무 (Aerial Perspective Distance Fog)]
-  // 카메라와의 거리에 따라 원거리 건물과 지형이 은은한 하늘빛으로 물드는 실제 항공뷰 효과
-  // ---------------------------------------------------------------------------
-  vec3 applyAerialPerspectiveFog(vec3 inColor, vec3 worldPos, vec3 skyColor) {
-    float dist = length(cameraPosition - worldPos);
-    // 800m부터 시작하여 6500m에서 은은하게 대기 산란 (최대 42% 블렌딩)
-    float fogFactor = smoothstep(800.0, 6500.0, dist);
-    vec3 aerialHaze = mix(skyColor, vec3(0.85, 0.90, 0.96), 0.35);
-    return mix(inColor, aerialHaze, fogFactor * 0.42);
-  }
 
   // ---------------------------------------------------------------------------
   // [창호 15cm 깊이감] 창틀 내부 그림자 (Window Recess Inner Shadow)
@@ -309,7 +298,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 specular = (isGlass > 0.5) ? vec3(0.0) : (uSunColor * pow(NdotH, 16.0) * 0.02);
 
       vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
-      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
@@ -354,7 +342,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = roofColor * (diffuse + ambient);
-      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -371,7 +358,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = parapetColor * (diffuse + ambient);
-      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -395,7 +381,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = pentColor * (diffuse + ambient);
-      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
@@ -455,7 +440,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = graniteColor * (diffuse + ambient) * groundAO;
-      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -488,7 +472,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.6) * uAmbientIntensity;
       vec3 finalColor = coreWall * (diffuse + ambient);
-      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -623,7 +606,6 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     }
 
     vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
-    finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
     gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
   }
 `;
