@@ -332,8 +332,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
   const WINDOW_BAY_WIDTH = 3.2;
   const STORY_HEIGHT = 3.0;
   const PODIUM_MAX_HEIGHT = 3.8;
-  const PARAPET_THICKNESS = 0.35; // 옥상 난간 실측 두께 0.35m
-  const PARAPET_HEIGHT = 0.9;     // 옥상 난간 실측 높이 0.9m
+  const PARAPET_THICKNESS = 0.4; // 옥상 난간 실측 두께 0.4m
+  const PARAPET_HEIGHT = 1.0;    // 옥상 난간 실측 돌출 높이 1.0m
 
   let buildingCount = 0;
 
@@ -515,40 +515,36 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
     }
 
     // -------------------------------------------------------------------------
-    // [3. 100% 초록색 지붕 폐기 -> 실제 항공사진 지붕 비율 (30%:25%:20%:15%:10%)]
+    // [3. 실제 항공사진 5대 지붕 규격 및 엄격한 비율 (35% : 25% : 20% : 12% : 8%)]
+    // ① 웨더링된 콘크리트 웜 그레이 (#64748b, 35%)
+    // ② 다크 차콜 슬레이트 (#334155, 25%)
+    // ③ 차분한 우레탄 세이지 그린 (#2e5a44, 20%)
+    // ④ 테라코타 브라운 기와 (#7c2d12, 12%)
+    // ⑤ 징크 네이비 (#1e3a8a, 8%)
     // -------------------------------------------------------------------------
     let roofSlotId = 14.0;
-    let roofR = 0.47, roofG = 0.44, roofB = 0.42;
+    let roofR = 0.392, roofG = 0.455, roofB = 0.545; // 기본 #64748b
 
-    if (isApt || totalH >= 45.0) {
-      // 대단지 아파트 및 고층 건물
-      if (seedRoof < 0.55) {
-        roofSlotId = 14.0; roofR = 0.47; roofG = 0.44; roofB = 0.42; // roof_concrete_warmgray
-      } else if (seedRoof < 0.80) {
-        roofSlotId = 15.0; roofR = 0.20; roofG = 0.25; roofB = 0.33; // roof_asphalt_charcoal
-      } else if (seedRoof < 0.95) {
-        roofSlotId = 17.0; roofR = 0.23; roofG = 0.32; roofB = 0.29; // roof_urethane_sage
-      } else {
-        roofSlotId = 18.0; roofR = 0.17; roofG = 0.26; roofB = 0.34; // roof_zinc_blue
-      }
+    if (seedRoof < 0.35) {
+      // ① 35%: 웨더링된 콘크리트 웜 그레이 (#64748b)
+      roofSlotId = 14.0;
+      roofR = 0.392; roofG = 0.455; roofB = 0.545;
+    } else if (seedRoof < 0.60) {
+      // ② 25%: 다크 차콜 슬레이트 (#334155)
+      roofSlotId = 15.0;
+      roofR = 0.200; roofG = 0.255; roofB = 0.333;
+    } else if (seedRoof < 0.80) {
+      // ③ 20%: 차분한 우레탄 세이지 그린 (#2e5a44)
+      roofSlotId = 17.0;
+      roofR = 0.180; roofG = 0.353; roofB = 0.267;
+    } else if (seedRoof < 0.92) {
+      // ④ 12%: 테라코타 브라운 기와 (#7c2d12)
+      roofSlotId = 16.0;
+      roofR = 0.486; roofG = 0.176; roofB = 0.071;
     } else {
-      // 저·중층 건물 전 지역: 실제 항공사진 지붕 비율 엄격 적용
-      if (seedRoof < 0.30) {
-        // 30%: 노후 콘크리트 슬래브 웜 그레이 (#78716c ~ #57534e)
-        roofSlotId = 14.0; roofR = 0.47; roofG = 0.44; roofB = 0.42;
-      } else if (seedRoof < 0.55) {
-        // 25%: 어두운 아스팔트 슁글 / 차콜 그레이 (#334155 ~ #1e293b)
-        roofSlotId = 15.0; roofR = 0.20; roofG = 0.25; roofB = 0.33;
-      } else if (seedRoof < 0.75) {
-        // 20%: 적갈색 기와 / 브라운 박공지붕 (#6b2d1f ~ #78350f)
-        roofSlotId = 16.0; roofR = 0.42; roofG = 0.18; roofB = 0.12;
-      } else if (seedRoof < 0.90) {
-        // 15%: 물 빠진 저채도 우레탄 세이지 그린 (#3b5249, 쨍한 초록색 완전 배제)
-        roofSlotId = 17.0; roofR = 0.23; roofG = 0.32; roofB = 0.29;
-      } else {
-        // 10%: 청회색 징크 / 네이비 강판 지붕 (#2c4257)
-        roofSlotId = 18.0; roofR = 0.17; roofG = 0.26; roofB = 0.34;
-      }
+      // ⑤ 8%: 징크 네이비 (#1e3a8a)
+      roofSlotId = 18.0;
+      roofR = 0.118; roofG = 0.227; roofB = 0.541;
     }
 
     // -------------------------------------------------------------------------
@@ -1168,8 +1164,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             );
           }
         } else {
-          // 일반 수직 옥상 난간 (Parapet, 높이 0.8m ~ 1.25m)
-          const parapetH = 0.8 + ((buildingSeed * 73.19) % 1.0) * 0.45;
+          // 일반 수직 옥상 난간 (Parapet, 실측 높이 1.0m 엄격 돌출)
+          const parapetH = 1.0;
           const parapetSlotId = seedGeom < 0.6 ? 21.0 : 22.0; // 21=parapet_concrete, 22=parapet_dark
           const parapetTopY = totalH + parapetH;
 

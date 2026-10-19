@@ -323,28 +323,22 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 roofColor;
       float roofHash = fract(sin(dot(floor(vWorldPos.xz * 0.05), vec2(12.9898, 78.233))) * 43758.5453);
 
-      if (bldType > 1.5 || floors >= 10.0) {
-        // [대단지 아파트 및 대형 오피스 옥상]: 콘크리트 그레이 & 차콜 슁글
-        if (roofHash < 0.60) {
-          roofColor = vec3(0.47, 0.44, 0.42); // 웜 그레이 #78716c
-        } else if (roofHash < 0.85) {
-          roofColor = vec3(0.20, 0.25, 0.33); // 차콜 그레이 #334155
-        } else {
-          roofColor = vec3(0.23, 0.32, 0.29); // 차분한 세이지 그린 #3b5249
-        }
+      // [실제 항공사진 5대 지붕 규격 및 엄격한 비율 (35% : 25% : 20% : 12% : 8%)]
+      if (roofHash < 0.35) {
+        // ① 35%: 웨더링된 콘크리트 웜 그레이 (#64748b)
+        roofColor = vec3(0.392, 0.455, 0.545);
+      } else if (roofHash < 0.60) {
+        // ② 25%: 다크 차콜 슬레이트 (#334155)
+        roofColor = vec3(0.200, 0.255, 0.333);
+      } else if (roofHash < 0.80) {
+        // ③ 20%: 차분한 우레탄 세이지 그린 (#2e5a44)
+        roofColor = vec3(0.180, 0.353, 0.267);
+      } else if (roofHash < 0.92) {
+        // ④ 12%: 테라코타 브라운 기와 (#7c2d12)
+        roofColor = vec3(0.486, 0.176, 0.071);
       } else {
-        // [실제 항공사진 지붕 비율]: 콘크리트(30%), 아스팔트(25%), 적갈색 기와(20%), 세이지 그린(15%), 징크(10%)
-        if (roofHash < 0.30) {
-          roofColor = vec3(0.47, 0.44, 0.42); // 노후 콘크리트 #78716c
-        } else if (roofHash < 0.55) {
-          roofColor = vec3(0.20, 0.25, 0.33); // 차콜 슁글 #334155
-        } else if (roofHash < 0.75) {
-          roofColor = vec3(0.42, 0.18, 0.12); // 적갈색 기와 #6b2d1f
-        } else if (roofHash < 0.90) {
-          roofColor = vec3(0.23, 0.32, 0.29); // 저채도 세이지 그린 #3b5249
-        } else {
-          roofColor = vec3(0.17, 0.26, 0.34); // 청회색 징크 #2c4257
-        }
+        // ⑤ 8%: 징크 네이비 (#1e3a8a)
+        roofColor = vec3(0.118, 0.227, 0.541);
       }
 
       // 슬래브 미세 콘크리트 패널 줄눈 및 방수 코팅 결

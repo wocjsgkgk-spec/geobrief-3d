@@ -3803,20 +3803,45 @@ export const MapViewer: React.FC = () => {
       }
 
       const presetId = tile3DStream.presetId;
-      if (presetId === 'vworld_3d_buildings' || presetId === 'sample_city') {
+      if (presetId === 'vworld_3d_buildings') {
+        // [1. 브이월드 실사 3D]: 위성 지붕 색감과 실사 창문 패턴이 결합된 풀 컬러 포토리얼리스틱
         if (deck3DTilesManagerRef.current) {
           deck3DTilesManagerRef.current.detachFromMap();
         }
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
-          lod2BuildingEngineRef.current.setStyleMode(
-            presetId === 'vworld_3d_buildings' ? 'photorealistic' : 'clean_mass'
-          );
+          lod2BuildingEngineRef.current.setStyleMode('photorealistic');
           lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
           lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
         }
+      } else if (presetId === 'sample_city') {
+        // [2. 도시 모델 (b3dm)]: 정교한 화이트/아이보리 건축 모형(Mass Study) + 다크 그레이 창문 음영
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.detachFromMap();
+        }
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
+          lod2BuildingEngineRef.current.setStyleMode('clean_mass');
+          lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
+          lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
+        }
+      } else if (presetId === 'sample_pointcloud') {
+        // [3. LiDAR 점군 (pnts)]: 건물과 지형 위에 고도별 컬러 LiDAR 포인트 클라우드 100% 중첩 표출
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
+          lod2BuildingEngineRef.current.setStyleMode('clean_mass');
+          lod2BuildingEngineRef.current.setOpacity(Math.min(0.65, tile3DStream.opacity ?? 0.65));
+        }
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.attachToMap(map);
+          const cachedFeats = Array.from(persistentBuildingCacheRef.current.values());
+          if (cachedFeats.length > 0) {
+            deck3DTilesManagerRef.current.setBuildingFeatures(cachedFeats);
+          }
+          deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
+        }
       } else {
-        // 'sample_pointcloud' | 'custom'
+        // 사용자 지정 3D Tileset URL
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }
@@ -3826,7 +3851,7 @@ export const MapViewer: React.FC = () => {
         }
       }
 
-      const tilesCount = (presetId === 'vworld_3d_buildings' || presetId === 'sample_city')
+      const tilesCount = (presetId === 'vworld_3d_buildings' || presetId === 'sample_city' || presetId === 'sample_pointcloud')
         ? (lod2BuildingEngineRef.current ? lod2BuildingEngineRef.current.getBuildingCount() : 0)
         : 1;
       for (const lyr of nativeBuildingLayers) {
@@ -5153,11 +5178,9 @@ export const MapViewer: React.FC = () => {
 
     if (renderMode3D === 'tiles3d') {
       const presetId = tile3DStream.presetId;
-      if (presetId === 'vworld_3d_buildings' || presetId === 'sample_city') {
+      if (presetId === 'vworld_3d_buildings') {
         if (lod2BuildingEngineRef.current) {
-          lod2BuildingEngineRef.current.setStyleMode(
-            presetId === 'vworld_3d_buildings' ? 'photorealistic' : 'clean_mass'
-          );
+          lod2BuildingEngineRef.current.setStyleMode('photorealistic');
           lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
           lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
           lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
@@ -5165,8 +5188,35 @@ export const MapViewer: React.FC = () => {
         if (deck3DTilesManagerRef.current) {
           deck3DTilesManagerRef.current.detachFromMap();
         }
+      } else if (presetId === 'sample_city') {
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setStyleMode('clean_mass');
+          lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
+          lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
+        }
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.detachFromMap();
+        }
+      } else if (presetId === 'sample_pointcloud') {
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setStyleMode('clean_mass');
+          lod2BuildingEngineRef.current.setOpacity(Math.min(0.65, tile3DStream.opacity ?? 0.65));
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D && tile3DStream.enabled);
+        }
+        if (deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.attachToMap(map);
+          const cachedFeats = Array.from(persistentBuildingCacheRef.current.values());
+          if (cachedFeats.length > 0) {
+            deck3DTilesManagerRef.current.setBuildingFeatures(cachedFeats);
+          }
+          deck3DTilesManagerRef.current.update({
+            ...tile3DStream,
+            enabled: tile3DStream.enabled,
+          });
+        }
       } else {
-        // 'sample_pointcloud' | 'custom'
+        // 'custom'
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }

@@ -135,21 +135,26 @@ export function drawRealisticRoofCanvasTile(
   let isUrethane = false;
 
   if (type === 'concrete') {
-    baseColor1 = '#78716c';
-    baseColor2 = '#57534e';
+    // ① 웨더링된 콘크리트 웜 그레이 (#64748b, 35%)
+    baseColor1 = '#64748b';
+    baseColor2 = '#475569';
   } else if (type === 'asphalt') {
+    // ② 다크 차콜 슬레이트 (#334155, 25%)
     baseColor1 = '#334155';
     baseColor2 = '#1e293b';
-  } else if (type === 'terracotta') {
-    baseColor1 = '#853726';
-    baseColor2 = '#6b2d1f';
   } else if (type === 'urethane') {
-    baseColor1 = '#4a6b5e';
-    baseColor2 = '#2d3f38';
+    // ③ 차분한 우레탄 세이지 그린 (#2e5a44, 20%)
+    baseColor1 = '#2e5a44';
+    baseColor2 = '#1c382a';
     isUrethane = true;
+  } else if (type === 'terracotta') {
+    // ④ 테라코타 브라운 기와 (#7c2d12, 12%)
+    baseColor1 = '#7c2d12';
+    baseColor2 = '#581c0c';
   } else if (type === 'zinc') {
-    baseColor1 = '#3d566e';
-    baseColor2 = '#223344';
+    // ⑤ 징크 네이비 (#1e3a8a, 8%)
+    baseColor1 = '#1e3a8a';
+    baseColor2 = '#172554';
   }
 
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.7);
