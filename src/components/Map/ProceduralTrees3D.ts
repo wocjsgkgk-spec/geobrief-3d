@@ -144,6 +144,156 @@ export function createUnifiedTreeGeometry(): THREE.BufferGeometry {
   return createGangwonDeciduousGeometry();
 }
 
+/**
+ * [한국형 간선도로 가로등 기둥 (Street Light Pole)]
+ * - 7.5m 강철 기둥 (#64748b) + 도로 방향 2.2m 캔틸레버 암 + LED 조명 헤드(#cbd5e1) 및 발광 렌즈(#fef08a)
+ */
+export function createStreetLightPoleGeometry(): THREE.BufferGeometry {
+  const base = new THREE.CylinderGeometry(0.28, 0.32, 0.25, 6).toNonIndexed();
+  base.deleteAttribute('uv');
+  base.translate(0, 0.125, 0);
+
+  const pole = new THREE.CylinderGeometry(0.12, 0.18, 7.2, 6).toNonIndexed();
+  pole.deleteAttribute('uv');
+  pole.translate(0, 3.725, 0);
+
+  const arm = new THREE.CylinderGeometry(0.08, 0.10, 2.2, 5).toNonIndexed();
+  arm.deleteAttribute('uv');
+  arm.rotateZ(Math.PI / 3.2);
+  arm.translate(0.9, 7.3, 0);
+
+  const head = new THREE.BoxGeometry(0.35, 0.12, 0.65).toNonIndexed();
+  head.deleteAttribute('uv');
+  head.translate(1.9, 7.6, 0);
+
+  const lens = new THREE.BoxGeometry(0.26, 0.03, 0.52).toNonIndexed();
+  lens.deleteAttribute('uv');
+  lens.translate(1.9, 7.53, 0);
+
+  const setGeoColor = (geo: THREE.BufferGeometry, r: number, g: number, b: number) => {
+    const arr = new Float32Array(geo.attributes.position.count * 3);
+    for (let i = 0; i < geo.attributes.position.count; i++) {
+      arr[i * 3] = r;
+      arr[i * 3 + 1] = g;
+      arr[i * 3 + 2] = b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  };
+
+  setGeoColor(base, 0.32, 0.36, 0.42);
+  setGeoColor(pole, 0.45, 0.50, 0.56);
+  setGeoColor(arm, 0.45, 0.50, 0.56);
+  setGeoColor(head, 0.72, 0.76, 0.82);
+  setGeoColor(lens, 1.0, 0.96, 0.78);
+
+  const merged = BufferGeometryUtils.mergeGeometries([base, pole, arm, head, lens]);
+  merged.computeVertexNormals();
+  return merged;
+}
+
+/**
+ * [한국형 교차로 신호등 지주 (Traffic Signal Mast)]
+ * - 6.5m 수직 지주 + 4.5m 수평 캔틸레버 지주 + 삼색등(적/황/녹) 하우징
+ */
+export function createTrafficSignalMastGeometry(): THREE.BufferGeometry {
+  const base = new THREE.CylinderGeometry(0.32, 0.36, 0.30, 6).toNonIndexed();
+  base.deleteAttribute('uv');
+  base.translate(0, 0.15, 0);
+
+  const mast = new THREE.CylinderGeometry(0.18, 0.22, 6.5, 6).toNonIndexed();
+  mast.deleteAttribute('uv');
+  mast.translate(0, 3.4, 0);
+
+  const horizArm = new THREE.CylinderGeometry(0.10, 0.12, 4.5, 5).toNonIndexed();
+  horizArm.deleteAttribute('uv');
+  horizArm.rotateZ(Math.PI / 2);
+  horizArm.translate(2.25, 6.2, 0);
+
+  const housing = new THREE.BoxGeometry(1.2, 0.42, 0.28).toNonIndexed();
+  housing.deleteAttribute('uv');
+  housing.translate(3.2, 6.2, 0);
+
+  const redLens = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8).toNonIndexed();
+  redLens.deleteAttribute('uv');
+  redLens.rotateX(Math.PI / 2);
+  redLens.translate(2.8, 6.2, 0.14);
+
+  const yellowLens = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8).toNonIndexed();
+  yellowLens.deleteAttribute('uv');
+  yellowLens.rotateX(Math.PI / 2);
+  yellowLens.translate(3.2, 6.2, 0.14);
+
+  const greenLens = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8).toNonIndexed();
+  greenLens.deleteAttribute('uv');
+  greenLens.rotateX(Math.PI / 2);
+  greenLens.translate(3.6, 6.2, 0.14);
+
+  const setGeoColor = (geo: THREE.BufferGeometry, r: number, g: number, b: number) => {
+    const arr = new Float32Array(geo.attributes.position.count * 3);
+    for (let i = 0; i < geo.attributes.position.count; i++) {
+      arr[i * 3] = r;
+      arr[i * 3 + 1] = g;
+      arr[i * 3 + 2] = b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  };
+
+  setGeoColor(base, 0.25, 0.28, 0.32);
+  setGeoColor(mast, 0.35, 0.38, 0.42);
+  setGeoColor(horizArm, 0.35, 0.38, 0.42);
+  setGeoColor(housing, 0.12, 0.14, 0.16);
+  setGeoColor(redLens, 0.95, 0.20, 0.20);
+  setGeoColor(yellowLens, 0.95, 0.65, 0.10);
+  setGeoColor(greenLens, 0.10, 0.85, 0.40);
+
+  const merged = BufferGeometryUtils.mergeGeometries([base, mast, horizArm, housing, redLens, yellowLens, greenLens]);
+  merged.computeVertexNormals();
+  return merged;
+}
+
+export interface StreetFurnitureInstanceData {
+  x: number;
+  z: number;
+  y: number;
+  rotationY: number;
+  type: 'streetlight' | 'trafficlight';
+}
+
+export function generateStreetFurnitureData(): {
+  streetLights: StreetFurnitureInstanceData[];
+  trafficLights: StreetFurnitureInstanceData[];
+} {
+  const streetLights: StreetFurnitureInstanceData[] = [];
+  const trafficLights: StreetFurnitureInstanceData[] = [];
+
+  // 1. 남북 간선도로변 가로등 (35m 간격)
+  for (let z = -840; z <= 840; z += 35) {
+    if (Math.abs(z) < 25) continue;
+    streetLights.push({ x: -16.5, z, y: 0, rotationY: 0, type: 'streetlight' });
+    streetLights.push({ x: 16.5, z, y: 0, rotationY: Math.PI, type: 'streetlight' });
+  }
+
+  // 2. 동서 간선도로변 가로등 (35m 간격)
+  for (let x = -770; x <= 770; x += 35) {
+    if (Math.abs(x) < 30) continue;
+    streetLights.push({ x, z: -14.0, y: 0, rotationY: Math.PI * 0.5, type: 'streetlight' });
+    streetLights.push({ x, z: 14.0, y: 0, rotationY: -Math.PI * 0.5, type: 'streetlight' });
+  }
+
+  // 3. 주요 사거리 교차로 4개 코너 신호등 지주 (Traffic Signal Masts)
+  const intersectionOffsets = [
+    { x: -16.5, z: -14.0, rot: 0 },
+    { x: 16.5, z: -14.0, rot: Math.PI * 0.5 },
+    { x: 16.5, z: 14.0, rot: Math.PI },
+    { x: -16.5, z: 14.0, rot: -Math.PI * 0.5 },
+  ];
+  for (const item of intersectionOffsets) {
+    trafficLights.push({ x: item.x, z: item.z, y: 0, rotationY: item.rot, type: 'trafficlight' });
+  }
+
+  return { streetLights, trafficLights };
+}
+
 // =============================================================================
 // 2. 수목 인스턴스 위치 생성 엔진 (가로수, 공원 녹지, 산악 경사지)
 // =============================================================================
@@ -385,6 +535,10 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   private deciduousTreeMesh: THREE.InstancedMesh | null = null;
   private unifiedTreeMesh: THREE.InstancedMesh | null = null; // 호환용 레퍼런스
   private treeMaterial: THREE.MeshStandardMaterial | null = null;
+  // [3단계: 경량 InstancedMesh] 가로등 기둥 및 교차로 신호등 지주 (Zoom >= 15.5 표시)
+  private streetLightMesh: THREE.InstancedMesh | null = null;
+  private trafficLightMesh: THREE.InstancedMesh | null = null;
+  private furnitureMaterial: THREE.MeshStandardMaterial | null = null;
 
   private directionalLight: THREE.DirectionalLight | null = null;
   private hemisphereLight: THREE.HemisphereLight | null = null;
@@ -424,6 +578,9 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
     if (this.coniferTreeMesh) this.coniferTreeMesh.visible = visible;
     if (this.deciduousTreeMesh) this.deciduousTreeMesh.visible = visible;
     if (this.unifiedTreeMesh) this.unifiedTreeMesh.visible = visible;
+    const showPoles = visible && (this.map ? this.map.getZoom() >= 15.5 : true);
+    if (this.streetLightMesh) this.streetLightMesh.visible = showPoles;
+    if (this.trafficLightMesh) this.trafficLightMesh.visible = showPoles;
     if (this.map) {
       this.map.triggerRepaint();
     }
@@ -514,6 +671,18 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       this.unifiedTreeMesh.geometry.dispose();
       this.unifiedTreeMesh.dispose();
       this.unifiedTreeMesh = null;
+    }
+    if (this.streetLightMesh) {
+      this.scene.remove(this.streetLightMesh);
+      this.streetLightMesh.geometry.dispose();
+      this.streetLightMesh.dispose();
+      this.streetLightMesh = null;
+    }
+    if (this.trafficLightMesh) {
+      this.scene.remove(this.trafficLightMesh);
+      this.trafficLightMesh.geometry.dispose();
+      this.trafficLightMesh.dispose();
+      this.trafficLightMesh = null;
     }
 
     if (!this.treeMaterial) {
@@ -654,6 +823,88 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       this.scene.add(this.deciduousTreeMesh);
     }
 
+    // 3) [한국형 가로시설물] 가로등 기둥 및 교차로 신호등 지주 (InstancedMesh)
+    const furnitureData = generateStreetFurnitureData();
+    if (!this.furnitureMaterial) {
+      this.furnitureMaterial = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.45,
+        metalness: 0.65,
+      });
+    }
+
+    if (furnitureData.streetLights.length > 0) {
+      const slGeo = createStreetLightPoleGeometry();
+      this.streetLightMesh = new THREE.InstancedMesh(
+        slGeo,
+        this.furnitureMaterial,
+        furnitureData.streetLights.length
+      );
+      this.streetLightMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.streetLightMesh.castShadow = true;
+      this.streetLightMesh.receiveShadow = true;
+
+      for (let i = 0; i < furnitureData.streetLights.length; i++) {
+        const item = furnitureData.streetLights[i];
+        let poleY = item.y;
+        if (this.map) {
+          const elev = elevationCache.getFromMap(this.map, [
+            this.centerLngLat[0] + (item.x / 111000) * 1.25,
+            this.centerLngLat[1] + (item.z / 111000),
+          ]);
+          if (elev !== null && elev !== undefined && !Number.isNaN(elev)) {
+            poleY = Math.max(-15, Math.min(60, elev - this.clampedAltitude));
+          }
+        }
+        dummy.position.set(item.x, poleY, item.z);
+        dummy.scale.set(1.0, 1.0, 1.0);
+        dummy.rotation.set(0, item.rotationY, 0);
+        dummy.updateMatrix();
+        this.streetLightMesh.setMatrixAt(i, dummy.matrix);
+      }
+      this.streetLightMesh.instanceMatrix.needsUpdate = true;
+      const showPoles = this.isVisible && (this.map ? this.map.getZoom() >= 15.5 : true);
+      this.streetLightMesh.visible = showPoles;
+      this.streetLightMesh.frustumCulled = false;
+      this.scene.add(this.streetLightMesh);
+    }
+
+    if (furnitureData.trafficLights.length > 0) {
+      const tlGeo = createTrafficSignalMastGeometry();
+      this.trafficLightMesh = new THREE.InstancedMesh(
+        tlGeo,
+        this.furnitureMaterial,
+        furnitureData.trafficLights.length
+      );
+      this.trafficLightMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.trafficLightMesh.castShadow = true;
+      this.trafficLightMesh.receiveShadow = true;
+
+      for (let i = 0; i < furnitureData.trafficLights.length; i++) {
+        const item = furnitureData.trafficLights[i];
+        let poleY = item.y;
+        if (this.map) {
+          const elev = elevationCache.getFromMap(this.map, [
+            this.centerLngLat[0] + (item.x / 111000) * 1.25,
+            this.centerLngLat[1] + (item.z / 111000),
+          ]);
+          if (elev !== null && elev !== undefined && !Number.isNaN(elev)) {
+            poleY = Math.max(-15, Math.min(60, elev - this.clampedAltitude));
+          }
+        }
+        dummy.position.set(item.x, poleY, item.z);
+        dummy.scale.set(1.0, 1.0, 1.0);
+        dummy.rotation.set(0, item.rotationY, 0);
+        dummy.updateMatrix();
+        this.trafficLightMesh.setMatrixAt(i, dummy.matrix);
+      }
+      this.trafficLightMesh.instanceMatrix.needsUpdate = true;
+      const showPoles = this.isVisible && (this.map ? this.map.getZoom() >= 15.5 : true);
+      this.trafficLightMesh.visible = showPoles;
+      this.trafficLightMesh.frustumCulled = false;
+      this.scene.add(this.trafficLightMesh);
+    }
+
     // 하위 호환용 대표 레퍼런스
     this.unifiedTreeMesh = this.coniferTreeMesh || this.deciduousTreeMesh;
   }
@@ -661,22 +912,26 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.isVisible || !this.renderer) return;
 
-    // [근접 상세 뷰 (Zoom 15.2 이상)] 3D 수목 및 식생 활성화 & 줌 15.2~16.0 거리 페이드 (Distance Fade)
+    // [근접 상세 뷰] 3D 수목(Zoom >= 15.2) 및 가로시설물(가로등/신호등, Zoom >= 15.5)
     if (this.map) {
       const zoom = this.map.getZoom();
+      const showPoles = this.isVisible && zoom >= 15.5;
+      if (this.streetLightMesh) this.streetLightMesh.visible = showPoles;
+      if (this.trafficLightMesh) this.trafficLightMesh.visible = showPoles;
+
       if (zoom < 15.2) {
         if (this.coniferTreeMesh) this.coniferTreeMesh.visible = false;
         if (this.deciduousTreeMesh) this.deciduousTreeMesh.visible = false;
-        return;
+        if (!showPoles) return;
+      } else {
+        const fade = Math.min(1.0, Math.max(0.0, (zoom - 15.2) / 0.8));
+        if (this.treeMaterial) {
+          this.treeMaterial.transparent = fade < 1.0;
+          this.treeMaterial.opacity = fade;
+        }
+        if (this.coniferTreeMesh) this.coniferTreeMesh.visible = this.isVisible;
+        if (this.deciduousTreeMesh) this.deciduousTreeMesh.visible = this.isVisible;
       }
-
-      const fade = Math.min(1.0, Math.max(0.0, (zoom - 15.2) / 0.8));
-      if (this.treeMaterial) {
-        this.treeMaterial.transparent = fade < 1.0;
-        this.treeMaterial.opacity = fade;
-      }
-      if (this.coniferTreeMesh) this.coniferTreeMesh.visible = this.isVisible;
-      if (this.deciduousTreeMesh) this.deciduousTreeMesh.visible = this.isVisible;
     }
 
     try {
@@ -759,6 +1014,23 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       this.deciduousTreeMesh = null;
     }
     this.unifiedTreeMesh = null;
+
+    if (this.streetLightMesh) {
+      this.scene.remove(this.streetLightMesh);
+      this.streetLightMesh.geometry.dispose();
+      this.streetLightMesh.dispose();
+      this.streetLightMesh = null;
+    }
+    if (this.trafficLightMesh) {
+      this.scene.remove(this.trafficLightMesh);
+      this.trafficLightMesh.geometry.dispose();
+      this.trafficLightMesh.dispose();
+      this.trafficLightMesh = null;
+    }
+    if (this.furnitureMaterial) {
+      this.furnitureMaterial.dispose();
+      this.furnitureMaterial = null;
+    }
 
     if (this.directionalLight) {
       this.scene.remove(this.directionalLight);

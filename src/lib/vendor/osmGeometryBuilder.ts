@@ -1402,9 +1402,10 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           // -------------------------------------------------------------------
           // [지면 인페인팅 바닥 슬래브 (Ground Footprint Inpainting Buffer)]
           // 위성사진 바닥에 원래 인쇄된 2D 평면 지붕 잔상을 100% 가리는 지면 차폐 패드
-          // 건물 외곽선보다 0.35m 바깥으로 확장(Outset)한 폴리곤을 지면 고도(y = 0.018m)에 배치
-          // -------------------------------------------------------------------
-          const outsetBasePts = computePolygonOutset(outerPts, 0.35);
+          // 건물 용도별 지면 에이프런(광장/주차구획선 패드) 확장
+          // 아파트 단지: 2.5m, 상업 빌딩: 2.0m, 일반: 0.5m
+          const groundPadOutset = (isApt || bldType === 2.0) ? 2.5 : (bldType === 1.0 ? 2.0 : 0.5);
+          const outsetBasePts = computePolygonOutset(outerPts, groundPadOutset);
           if (outsetBasePts.length >= 3) {
             const baseFlatCoords: number[] = [];
             for (const bp of outsetBasePts) {

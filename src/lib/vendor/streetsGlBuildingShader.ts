@@ -61,6 +61,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
   varying vec4 vBuildingData;
   varying vec3 vViewDir;
   varying vec3 vColor;
+  varying float vDist;
 
   // Terrarium DEM 해발고도 디코딩 (R * 256 + G + B / 256 - 32768)
   float decodeTerrarium(vec4 color) {
@@ -88,6 +89,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
 
     vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
     vWorldPos = worldPosition.xyz;
+    vDist = length(cameraPosition - worldPosition.xyz);
     vViewDir = normalize(cameraPosition - vWorldPos);
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
@@ -116,6 +118,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
   varying vec4 vBuildingData;
   varying vec3 vViewDir;
   varying vec3 vColor;
+  varying float vDist;
 
   // ---------------------------------------------------------------------------
   // [Streets-GL 코어] fwidth() 도함수 기반 안티앨리어싱 필터링
@@ -233,6 +236,25 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     return normalize(perturbed);
   }
 
+  // ---------------------------------------------------------------------------
+  // [3단계: 항공 실사 대기 원근법 (Aerial Perspective / Exponential Height Fog)]
+  // - 근거리: 선명한 대비와 본래 텍스처 질감 유지 (< 200m)
+  // - 원거리 지평선: 대기 공기층에 의해 은은한 스카이 블루/그레이(#cbd5e1)로 부드럽게 융합
+  // ---------------------------------------------------------------------------
+  vec3 applyAerialPerspective(vec3 color, vec3 worldPos, float dist) {
+    float distFactor = clamp((dist - 200.0) / 2200.0, 0.0, 1.0);
+    float fogDensity = 1.0 - exp(-pow(distFactor * 1.5, 1.35));
+    float heightFactor = clamp(1.0 - (worldPos.y / 280.0), 0.35, 1.0);
+    float finalFog = clamp(fogDensity * heightFactor, 0.0, 0.65);
+
+    vec3 hazeColor = vec3(0.796, 0.835, 0.882); // #cbd5e1 스카이 블루/그레이
+    vec3 dir = -normalize(vViewDir);
+    float sunScattering = max(0.0, dot(dir, uSunDirection));
+    hazeColor = mix(hazeColor, vec3(0.92, 0.94, 0.98), pow(sunScattering, 4.0) * 0.30);
+
+    return mix(color, hazeColor, finalFog);
+  }
+
   void main() {
     float bldType = vBuildingData.x;  // 0: 주택/빌라, 1: 상업/오피스, 2: 아파트, 3: 군부대/공공
     float floors = vBuildingData.y;   // 층수
@@ -277,13 +299,43 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         surfaceColor = applyRealisticRoofAging(bakedRoofColor, vWorldPos.xz, slotId);
       }
 
+      // [3단계: 단지 내 지상 인프라 - 아스팔트/보도블록 포장 톤 & 지상 주차장 구획선 패턴]
+      if (partType == 4.0 && N.y > 0.7) {
+        vec3 groundBase = vec3(0.22, 0.24, 0.27); // 깔끔한 아스팔트 차콜
+        vec2 paverGrid = fract(vWorldPos.xz / vec2(0.30, 0.15));
+        float paverJoint = smoothstep(0.03, 0.08, paverGrid.x) * smoothstep(0.04, 0.09, paverGrid.y);
+        groundBase = mix(groundBase * 0.82, groundBase * 1.06, paverJoint);
+
+        if (bldType >= 1.0) {
+          vec2 parkingGrid = fract((vWorldPos.xz + vec2(1.25, 2.5)) / vec2(2.5, 5.0));
+          float lineX = step(0.95, parkingGrid.x) + step(parkingGrid.x, 0.05);
+          float lineZ = step(0.95, parkingGrid.y) + step(parkingGrid.y, 0.05);
+          float parkingLine = clamp(lineX + lineZ, 0.0, 1.0) * step(0.25, fract(sin(dot(floor(vWorldPos.xz / 5.0), vec2(12.9898, 78.233))) * 43758.5453));
+          groundBase = mix(groundBase, vec3(0.92, 0.94, 0.96), parkingLine * 0.75);
+        }
+        surfaceColor = groundBase;
+      }
+
+      // [3단계: 경사지 아파트 단지 및 군부대 절개지 콘크리트 옹벽 (Retaining Wall)]
+      if (partType == 4.0 && N.y < 0.7) {
+        vec2 wallUv = fract(vec2(wallLength / 2.0, (vWorldPos.y + 10.0) / 1.2));
+        float joint = smoothstep(0.02, 0.06, wallUv.x) * smoothstep(0.03, 0.07, wallUv.y);
+        vec3 retainingColor = vec3(0.34, 0.37, 0.40) * (0.85 + 0.15 * joint);
+
+        // 3m 간격 배수 파이프 구멍 (Weep Hole)
+        vec2 weepUv = fract(vec2(wallLength / 3.0, (vWorldPos.y + 10.0 + 0.6) / 1.5));
+        float weepHole = smoothstep(0.09, 0.04, length(weepUv - 0.5));
+        retainingColor = mix(retainingColor, vec3(0.08, 0.10, 0.12), weepHole * 0.88);
+        surfaceColor = retainingColor;
+      }
+
       // [창호 영역 감지] 어두운 창문 픽셀 감지 및 창틀 인셋 그림자 적용 (인공적 유리 반사는 제거)
       float lum = dot(surfaceColor, vec3(0.299, 0.587, 0.114));
       float isGlass = step(lum, 0.38) * (1.0 - step(1.5, partType));
 
       // 외벽 마이크로 범프 적용 (유리창 제외 콘크리트 외벽 요철)
       vec3 effN = N;
-      if (isGlass < 0.5 && partType != 1.0) {
+      if (isGlass < 0.5 && partType != 1.0 && partType != 4.0) {
         effN = getPerturbedNormal(N, vWorldPos.xz, vWorldPos.y, bldType);
       }
 
@@ -316,6 +368,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 specular = (isGlass > 0.5 && slotId != 8.0) ? vec3(0.0) : (uSunColor * pow(NdotH, 16.0) * 0.02);
 
       vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
+      finalColor = applyAerialPerspective(finalColor, vWorldPos, vDist);
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
@@ -490,6 +543,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.6) * uAmbientIntensity;
       vec3 finalColor = coreWall * (diffuse + ambient);
+      finalColor = applyAerialPerspective(finalColor, vWorldPos, vDist);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -624,6 +678,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     }
 
     vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
+    finalColor = applyAerialPerspective(finalColor, vWorldPos, vDist);
     gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
   }
 `;
