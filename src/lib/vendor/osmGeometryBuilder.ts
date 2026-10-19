@@ -396,8 +396,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
   const WINDOW_BAY_WIDTH = 3.2;
   const STORY_HEIGHT = 3.0;
   const PODIUM_MAX_HEIGHT = 3.8;
-  const PARAPET_THICKNESS = 0.4; // 옥상 난간 실측 두께 0.4m
-  const PARAPET_HEIGHT = 1.0;    // 옥상 난간 실측 돌출 높이 1.0m
+  const PARAPET_THICKNESS = 0.35; // 옥상 난간 실측 두께 0.35m
+  const PARAPET_HEIGHT = 0.9;    // 옥상 난간 실측 돌출 높이 0.9m
 
   let buildingCount = 0;
 
@@ -777,25 +777,25 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
           // 외곽 링에 대해 1.5m 접지 음영(Contact AO) 및 태양광 투영 그림자 생성
           if (!isHole) {
-            // [접지 음영(Contact AO): 건물 하단 0.8m 밀착 림으로 지면 안착감 부여]
+            // [접지 음영(Contact AO): 건물 하단 0.85m 밀착 림으로 지면 안착감 부여]
             const aoWidth = 0.85;
             addShadowQuad(
               shadowPositions, shadowColors,
-              { x: p1.x, y: 0.02, z: -p1.y, a: 0.22 },
-              { x: p2.x, y: 0.02, z: -p2.y, a: 0.22 },
+              { x: p1.x, y: 0.02, z: -p1.y, a: 0.35 },
+              { x: p2.x, y: 0.02, z: -p2.y, a: 0.35 },
               { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
               { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
-              0.020, 0.028, 0.038
+              0.035, 0.050, 0.080
             );
 
             if (isNearDetail) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.025, z: -p1.y, a: 0.15 },
-                { x: p2.x, y: 0.025, z: -p2.y, a: 0.15 },
+                { x: p1.x, y: 0.025, z: -p1.y, a: 0.28 },
+                { x: p2.x, y: 0.025, z: -p2.y, a: 0.28 },
                 { x: p2.x + nx * 0.45, y: 0.022, z: -(p2.y - nz * 0.45), a: 0.0 },
                 { x: p1.x + nx * 0.45, y: 0.022, z: -(p1.y - nz * 0.45), a: 0.0 },
-                0.012, 0.018, 0.026
+                0.020, 0.030, 0.055
               );
             }
 
@@ -804,11 +804,11 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             if (nDotL < 0.20 && totalH >= 3.0) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.02, z: -p1.y, a: 0.15 },
-                { x: p2.x, y: 0.02, z: -p2.y, a: 0.15 },
-                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.15 },
-                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.15 },
-                0.035, 0.045, 0.065
+                { x: p1.x, y: 0.02, z: -p1.y, a: 0.35 },
+                { x: p2.x, y: 0.02, z: -p2.y, a: 0.35 },
+                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.35 },
+                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.35 },
+                0.035, 0.050, 0.080
               );
             }
           }
@@ -1137,8 +1137,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             );
           }
         } else {
-          // 일반 수직 옥상 난간 (Parapet, 실측 높이 1.0m 엄격 돌출)
-          const parapetH = 1.0;
+          // 일반 수직 옥상 난간 (Parapet, 실측 높이 0.9m 엄격 돌출)
+          const parapetH = 0.9;
           const parapetSlotId = seedGeom < 0.6 ? 21.0 : 22.0; // 21=parapet_concrete, 22=parapet_dark
           const parapetTopY = totalH + parapetH;
 
@@ -1436,7 +1436,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
         // 한국 아파트(높이 30m 이상): 2.8m 돌출된 동 중앙/양측 계단실 코어 생성
         if (floors >= 4 || totalH >= 12.0) {
 
-          const pHouseH = isKoreanAptHighrise ? 2.8 : (2.6 + ((buildingSeed * 103.7) % 1.0) * 0.9);
+          const pHouseH = isKoreanAptHighrise
+            ? (2.8 + ((buildingSeed * 73.1) % 0.7))
+            : (2.8 + ((buildingSeed * 103.7) % 0.7)); // 실측 2.8m ~ 3.5m 직사각형 옥탑방
           const pHouseTop = roofH + pHouseH;
           const pHouseSlot = isKoreanAptHighrise ? 19.0 : (((buildingSeed * 89.23) % 1.0) < 0.5 ? 19.0 : 20.0);
 
@@ -1553,6 +1555,75 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
                 demMid, demMid,
                 0.20, 0.25, 0.33
               );
+            }
+
+            // (2) 옥탑 옆 소형 실외기/환기구 설비 큐브 (Equipment Box / HVAC Units)
+            // 평평한 옥상에 실사 도시 디테일 부여 (단일 버퍼 병합, Draw Call 증가 없음)
+            const equipCount = isKoreanAptHighrise ? 2 : 1;
+            for (let eqIdx = 0; eqIdx < equipCount; eqIdx++) {
+              const eqW = 1.4 + ((buildingSeed * 37.1 + eqIdx * 13.7) % 0.4); // 1.4m ~ 1.8m
+              const eqD = 1.2 + ((buildingSeed * 53.3 + eqIdx * 19.1) % 0.4); // 1.2m ~ 1.6m
+              const eqH = 0.9 + ((buildingSeed * 71.9 + eqIdx * 23.3) % 0.3); // 0.9m ~ 1.2m
+
+              // 옥탑 측면에 오프셋 배치
+              const sideSign = eqIdx === 0 ? 1 : -1;
+              const eqCx = ccx + (hw + eqW * 0.6 + 0.4) * (bW >= bD ? 0 : sideSign);
+              const eqCy = ccy + (hd + eqD * 0.6 + 0.4) * (bW >= bD ? sideSign : 0);
+
+              // 옥상 경계 내에 있는지 안전 체크 (중심 기준 bW*0.42, bD*0.42 이내)
+              if (Math.abs(eqCx - cx) < bW * 0.42 && Math.abs(eqCy - cy) < bD * 0.42) {
+                const eqHw = eqW * 0.5;
+                const eqHd = eqD * 0.5;
+                const eqTop = roofH + eqH;
+                const eqCorners = [
+                  { x: eqCx - eqHw, y: eqCy - eqHd },
+                  { x: eqCx + eqHw, y: eqCy - eqHd },
+                  { x: eqCx + eqHw, y: eqCy + eqHd },
+                  { x: eqCx - eqHw, y: eqCy + eqHd },
+                ];
+
+                // 4개 측벽 (slot 20: penthouse_metal)
+                for (let k = 0; k < 4; k++) {
+                  const nextK = (k + 1) % 4;
+                  const k1 = eqCorners[k];
+                  const k2 = eqCorners[nextK];
+                  const kdx = k2.x - k1.x;
+                  const kdy = k2.y - k1.y;
+                  const kLen = Math.hypot(kdx, kdy);
+                  if (kLen < 0.05) continue;
+                  const knx = kdy / kLen;
+                  const knz = -kdx / kLen;
+
+                  addQuadVertices(
+                    masterPositions, masterNormals, masterUvs, masterColors,
+                    masterBuildingData, masterDemCoords,
+                    { x: k1.x, y: roofH, z: -k1.y },
+                    { x: k2.x, y: roofH, z: -k2.y },
+                    { x: k2.x, y: eqTop, z: -k2.y },
+                    { x: k1.x, y: eqTop, z: -k1.y },
+                    knx, 0, -knz,
+                    { u: 0, v: 0 }, { u: 1.0, v: 0 },
+                    { u: 1.0, v: 1.0 }, { u: 0, v: 1.0 },
+                    bldType, floors, 5.0, 20.0, // 20: penthouse_metal
+                    demMid, demMid,
+                    0.72, 0.76, 0.82 // 메탈릭 실버 그레이
+                  );
+                }
+                // 설비 상단
+                addQuadVertices(
+                  masterPositions, masterNormals, masterUvs, masterColors,
+                  masterBuildingData, masterDemCoords,
+                  { x: eqCorners[0].x, y: eqTop, z: -eqCorners[0].y },
+                  { x: eqCorners[1].x, y: eqTop, z: -eqCorners[1].y },
+                  { x: eqCorners[2].x, y: eqTop, z: -eqCorners[2].y },
+                  { x: eqCorners[3].x, y: eqTop, z: -eqCorners[3].y },
+                  0, 1, 0,
+                  { u: 0, v: 0 }, { u: 1, v: 0 }, { u: 1, v: 1 }, { u: 0, v: 1 },
+                  bldType, floors, 1.0, 20.0,
+                  demMid, demMid,
+                  0.65, 0.70, 0.76
+                );
+              }
             }
           }
         }

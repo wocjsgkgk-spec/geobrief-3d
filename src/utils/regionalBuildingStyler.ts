@@ -167,6 +167,8 @@ export function classifyRegionalBuildingStyle(
     name.includes('병영') || name.includes('정비') || name.includes('탄약') ||
     name.includes('보급') || name.includes('사령부') || name.includes('생활관') ||
     name.includes('사단') || name.includes('연대') || name.includes('대대') ||
+    name.includes('군지사') || name.includes('1군지사') || name.includes('캠프롱') ||
+    name.includes('camp') || name.includes('camplong') ||
     rawType.includes('military') || rawType.includes('barracks');
 
   const isAptKeyword =
@@ -211,6 +213,44 @@ export function classifyRegionalBuildingStyle(
   // [1. 원주·춘천 도시/혁신도시권]
   // ---------------------------------------------------------------------------
   if (zone === 'urban_innovation') {
+    // 1-0) 원주 1군지사·캠프 롱 영내 군부대 막사 및 군수 물류창고 (용마루 선이 살아있는 ㅅ자형 박공지붕)
+    if (isMilitaryKeyword) {
+      const isDepot = name.includes('창고') || name.includes('정비') || name.includes('보급') || name.includes('탄약') || approxArea >= 350;
+      const calcFloors = rawLevels > 0 ? rawLevels : (isDepot ? 1 : Math.round(Math.max(1, Math.min(3, 1 + seed * 2))));
+      const calcHeight = rawHeight > 0 ? rawHeight : (isDepot ? 6.5 : calcFloors * 3.4);
+
+      return {
+        zone,
+        category: isDepot ? 'military_depot' : 'military_barracks',
+        categoryLabel: isDepot ? '군수 물류창고·정비창' : '원주 영내 통합막사·군부대',
+        height: Math.max(4.5, calcHeight),
+        levels: calcFloors,
+        bldType: 3.0,
+        defaultWallSlotId: isDepot ? 13.0 : 23.0, // facility_panel or public_military
+        podiumWallSlotId: 21.0,
+        roofSlotId: isDepot ? 18.0 : (seedRoof > 0.5 ? 16.0 : 15.0),
+        parapetSlotId: 21.0,
+        wallR: isDepot ? 0.82 : 0.90,
+        wallG: isDepot ? 0.85 : 0.88,
+        wallB: isDepot ? 0.89 : 0.84,
+        roofR: isDepot ? 0.16 : 0.38,
+        roofG: isDepot ? 0.28 : 0.32,
+        roofB: isDepot ? 0.44 : 0.30,
+        podiumR: 0.38, podiumG: 0.40, podiumB: 0.42,
+        skirtDepth: -5.0,
+        hasCommercialSetback: false,
+        hasSolarPanels: false,
+        hasRoofTerrace: false,
+        hasRoofCoreCap: false,
+        hasWaterTank: false,
+        roofShape: 'gabled', // 용마루 선이 살아있는 ㅅ자형 박공지붕
+        roofPitchAngle: 20,
+        isPitchedRoof: true,
+        isCylindricalSilo: false,
+        sideWallStripe: false,
+      };
+    }
+
     // 1-1) 혁신도시 대형 공공기관 청사 / 관공서 본원
     // (반곡동 혁신도시 혁신로, 무실동 시청/법조타운, 퇴계동/석사동 공공기관)
     const isBanGokOrInnovation =
@@ -249,7 +289,7 @@ export function classifyRegionalBuildingStyle(
       };
     }
 
-    // 1-2) 대단지 브랜드 아파트 (15~29층 실측 층수 반영, 투톤, 측벽 브랜드 라인)
+    // 1-2) 대단지 브랜드 아파트 (15~25층, 45m ~ 75m 실측 스카이라인 형성)
     const isApartment =
       isAptKeyword ||
       (!isMilitaryKeyword &&
@@ -257,8 +297,8 @@ export function classifyRegionalBuildingStyle(
          (dimMin >= 12.0 && dimMax >= 30.0 && approxArea >= 380)));
 
     if (isApartment) {
-      const calcFloors = rawLevels > 0 ? rawLevels : Math.round(Math.max(15, Math.min(29, 15 + seed * 14)));
-      const calcHeight = rawHeight > 0 ? rawHeight : calcFloors * 2.95;
+      const calcFloors = rawLevels > 0 ? rawLevels : Math.round(Math.max(15, Math.min(25, 15 + seed * 10)));
+      const calcHeight = rawHeight > 0 ? rawHeight : (calcFloors * 3.0);
 
       const aptVariant = Math.floor(seed * 3.0);
       const wallSlot = aptVariant === 0 ? 0.0 : aptVariant === 1 ? 1.0 : 2.0;
@@ -267,7 +307,7 @@ export function classifyRegionalBuildingStyle(
         zone,
         category: 'brand_apartment',
         categoryLabel: '대단지 브랜드 아파트',
-        height: Math.max(38.0, calcHeight),
+        height: Math.max(45.0, Math.min(75.0, calcHeight)), // 15층~25층 (45m ~ 75m)
         levels: calcFloors,
         bldType: 2.0, // 아파트
         defaultWallSlotId: wallSlot, // apt_warm_cream / modern_gray / ivory_white
@@ -291,29 +331,116 @@ export function classifyRegionalBuildingStyle(
       };
     }
 
-    // 1-3) 구도심/역세권 상가 블록 (우산동, 중앙동, 명륜동, 조운동, 석사동 등)
-    // 1층 어두운 화강석 쇼윈도 + 2~5층 타일/벽돌 + 세이지 그린 우레탄 옥상
-    const calcFloors = rawLevels > 0 ? rawLevels : Math.round(Math.max(2, Math.min(6, 2 + seed * 3)));
-    const calcHeight = rawHeight > 0 ? rawHeight : calcFloors * 3.2;
+    // 1-3) 주택가 빌라 및 단독주택 (2층~4층, 6m~12m & 1~2층 입체 박공/우진각 경사지붕)
+    const isVillaKeyword =
+      name.includes('빌라') || name.includes('연립') || name.includes('맨션') ||
+      name.includes('원룸') || name.includes('다세대') || rawType.includes('villa');
+
+    const isHouseKeyword =
+      name.includes('주택') || name.includes('단독') ||
+      rawType.includes('house') || rawType.includes('detached') || rawType.includes('residential');
+
+    const isLowRiseResidential =
+      isVillaKeyword || isHouseKeyword ||
+      (!isPublicOrHQKeyword && approxArea <= 220 && (rawLevels <= 4 || rawHeight <= 14) && !rawType.includes('commercial') && !rawType.includes('retail'));
+
+    if (isLowRiseResidential) {
+      const isSingleHouse = isHouseKeyword || (!isVillaKeyword && (approxArea <= 150 || rawLevels <= 2));
+
+      if (isSingleHouse) {
+        // 1~2층 단독주택: 용마루 선이 살아있는 ㅅ자형 박공지붕 및 우진각지붕
+        const calcFloors = rawLevels > 0 ? Math.min(rawLevels, 2) : (seed > 0.4 ? 2 : 1);
+        const calcHeight = rawHeight > 0 ? rawHeight : (calcFloors * 3.2);
+
+        return {
+          zone,
+          category: 'rural_house',
+          categoryLabel: '도심 단독주택·경사지붕',
+          height: Math.max(4.0, Math.min(8.0, calcHeight)),
+          levels: calcFloors,
+          bldType: 0.0,
+          defaultWallSlotId: seed > 0.5 ? 10.0 : 12.0, // villa_red_brick or house_cream
+          podiumWallSlotId: 11.0,
+          roofSlotId: seedRoof > 0.4 ? 16.0 : 18.0, // 적갈색 기와 or 청색 강판
+          parapetSlotId: 21.0,
+          wallR: seed > 0.5 ? 0.76 : 0.94,
+          wallG: seed > 0.5 ? 0.45 : 0.92,
+          wallB: seed > 0.5 ? 0.35 : 0.86,
+          roofR: seedRoof > 0.4 ? 0.486 : 0.16,
+          roofG: seedRoof > 0.4 ? 0.176 : 0.28,
+          roofB: seedRoof > 0.4 ? 0.071 : 0.44,
+          podiumR: 0.45, podiumG: 0.42, podiumB: 0.40,
+          skirtDepth: -5.0,
+          hasCommercialSetback: false,
+          hasSolarPanels: false,
+          hasRoofTerrace: false,
+          hasRoofCoreCap: false,
+          hasWaterTank: false,
+          roofShape: seedRoof > 0.5 ? 'gabled' : 'hipped',
+          roofPitchAngle: 22,
+          isPitchedRoof: true,
+          isCylindricalSilo: false,
+          sideWallStripe: false,
+        };
+      } else {
+        // 2~4층 다세대 빌라 (6m ~ 12m)
+        const calcFloors = rawLevels > 0 ? Math.min(rawLevels, 4) : Math.round(Math.max(2, Math.min(4, 2 + seed * 2)));
+        const calcHeight = rawHeight > 0 ? rawHeight : (calcFloors * 3.0);
+
+        return {
+          zone,
+          category: 'rural_house',
+          categoryLabel: '주택가 다세대 빌라',
+          height: Math.max(6.0, Math.min(12.0, calcHeight)), // 2층~4층 (6m ~ 12m)
+          levels: calcFloors,
+          bldType: 0.0,
+          defaultWallSlotId: seed > 0.5 ? 10.0 : 11.0, // villa_red_brick or villa_granite
+          podiumWallSlotId: 11.0, // 필로티 주차장 기둥 음영
+          roofSlotId: seedRoof > 0.5 ? 16.0 : 15.0,
+          parapetSlotId: 21.0,
+          wallR: seed > 0.5 ? 0.72 : 0.88,
+          wallG: seed > 0.5 ? 0.42 : 0.86,
+          wallB: seed > 0.5 ? 0.32 : 0.82,
+          roofR: 0.28, roofG: 0.30, roofB: 0.35,
+          podiumR: 0.35, podiumG: 0.38, podiumB: 0.42,
+          skirtDepth: -5.0,
+          hasCommercialSetback: false,
+          hasSolarPanels: false,
+          hasRoofTerrace: false,
+          hasRoofCoreCap: false,
+          hasWaterTank: false,
+          roofShape: seedRoof > 0.6 ? 'hipped' : 'flat',
+          roofPitchAngle: 18,
+          isPitchedRoof: seedRoof > 0.6,
+          isCylindricalSilo: false,
+          sideWallStripe: false,
+        };
+      }
+    }
+
+    // 1-4) 시내 대로변 상가 / 오피스 빌딩 및 구도심 상가 블록
+    // 4층~10층 (14m ~ 32m)으로 층고의 고저차 리듬감 부여
+    const calcFloors = rawLevels > 0 ? rawLevels : Math.round(Math.max(4, Math.min(10, 4 + seed * 6)));
+    const calcHeight = rawHeight > 0 ? rawHeight : (calcFloors * 3.2);
 
     return {
       zone,
       category: 'commercial_old_downtown',
-      categoryLabel: '구도심·역세권 상가 블록',
-      height: Math.max(6.5, calcHeight),
+      categoryLabel: '시내 대로변 상가·오피스 빌딩',
+      height: Math.max(14.0, Math.min(32.0, calcHeight)), // 4층~10층 (14m ~ 32m)
       levels: calcFloors,
       bldType: 1.0,
-      defaultWallSlotId: seed > 0.5 ? 7.0 : 5.0, // comm_red_brick or granite_beige
-      podiumWallSlotId: 9.0, // comm_ground_shop (어두운 화강석 상가 쇼윈도)
+      defaultWallSlotId: seed > 0.6 ? 6.0 : (seed > 0.3 ? 5.0 : 7.0), // dark_metal, granite_beige, or red_brick
+      podiumWallSlotId: 9.0, // comm_ground_shop (1층 어두운 상가 쇼윈도 + 간판 띠)
       roofSlotId: 17.0,      // roof_urethane_sage (차분한 세이지 그린 우레탄 #2e5a44)
       parapetSlotId: 22.0,
-      wallR: seed > 0.5 ? 0.72 : 0.86,
-      wallG: seed > 0.5 ? 0.38 : 0.84,
-      wallB: seed > 0.5 ? 0.28 : 0.80,
+      wallR: seed > 0.6 ? 0.35 : (seed > 0.3 ? 0.86 : 0.72),
+      wallG: seed > 0.6 ? 0.38 : (seed > 0.3 ? 0.84 : 0.38),
+      wallB: seed > 0.6 ? 0.42 : (seed > 0.3 ? 0.80 : 0.28),
       roofR: 0.18, roofG: 0.353, roofB: 0.267, // 세이지 그린 (#2e5a44)
       podiumR: 0.20, podiumG: 0.22, podiumB: 0.26, // 어두운 화강석 쇼윈도
       skirtDepth: -5.0,
-      hasCommercialSetback: false,
+      hasCommercialSetback: calcFloors >= 6,
       hasSolarPanels: false,
       hasRoofTerrace: false,
       hasRoofCoreCap: false,

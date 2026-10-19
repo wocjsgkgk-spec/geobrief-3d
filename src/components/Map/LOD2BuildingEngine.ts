@@ -486,8 +486,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           precision highp float;
           varying vec4 vColor;
           void main() {
-            // 건물 밑동 접지 AO(0.22) 및 태양광 투영 그림자(0.15) 표출 허용
-            float alpha = min(vColor.a, 0.22);
+            // 건물 밑동 접지 AO 및 태양광 투영 그림자(0.35) 표출 허용
+            float alpha = min(vColor.a, 0.35);
             gl_FragColor = vec4(vColor.rgb, alpha);
           }
         `,
@@ -624,7 +624,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.masterAtlasMaterial.needsUpdate = true;
     }
     if (this.contactShadowMaterial) {
-      (this.contactShadowMaterial as any).opacity = Math.min(this.opacity * 0.15, 0.12);
+      (this.contactShadowMaterial as any).opacity = Math.min(this.opacity * 0.35, 0.35);
       this.contactShadowMaterial.transparent = true;
       this.contactShadowMaterial.needsUpdate = true;
     }
@@ -767,12 +767,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.originLngLat = [center.lng, center.lat];
 
       // 1. [화사한 주간 태양광 3점 조명 시스템 - 검은색 벽면 방지 & 아이보리 톤 극대화]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.25);
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
       this.directionalLight.position.set(120, 180, 100).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 0.90);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 0.95);
       this.scene.add(this.hemisphereLight);
 
       this.ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
@@ -1229,23 +1229,23 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           addShadowQuad(
             shadowPositions,
             shadowColors,
-            { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.12 },
-            { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.12 },
+            { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.35 },
+            { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.35 },
             { x: p1_out_x, y: relElev + 0.015, z: p1_out_z, a: 0.0 },
             { x: p0_out_x, y: relElev + 0.015, z: p0_out_z, a: 0.0 },
-            0.015, 0.025, 0.045
+            0.035, 0.050, 0.080
           );
 
-          // (2) 실시간 태양광 투영 그림자 (Planar Shadow: 투명도 0.10 이하)
+          // (2) 실시간 태양광 투영 그림자 (Planar Shadow: 투명도 0.35)
           if (totalH >= 3.0 && (outNx * sX + outNz * sZ) < 0.20) {
             addShadowQuad(
               shadowPositions,
               shadowColors,
-              { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.10 },
-              { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.10 },
-              { x: p1.x + dropDx, y: relElev + 0.015, z: p1.y + dropDz, a: 0.10 },
-              { x: p0.x + dropDx, y: relElev + 0.015, z: p0.y + dropDz, a: 0.10 },
-              0.0392, 0.0588, 0.1176
+              { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.35 },
+              { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.35 },
+              { x: p1.x + dropDx, y: relElev + 0.015, z: p1.y + dropDz, a: 0.35 },
+              { x: p0.x + dropDx, y: relElev + 0.015, z: p0.y + dropDz, a: 0.35 },
+              0.035, 0.050, 0.080
             );
           }
         }
