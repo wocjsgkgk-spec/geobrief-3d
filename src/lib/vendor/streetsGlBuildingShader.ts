@@ -40,6 +40,7 @@ export interface StreetsGlBuildingMaterialOptions {
   atlasTexture?: THREE.Texture | null;
   useAtlasTexture?: boolean;
   opacity?: number;
+  originElevation?: number;
 }
 
 export const streetsGlBuildingVertexShader = /* glsl */ `
@@ -50,6 +51,7 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
   uniform sampler2D uDemTexture;
   uniform bool uUseDemTexture;
   uniform float uDemExaggeration;
+  uniform float uOriginElevation;
 
   varying vec3 vWorldPos;
   varying vec3 vNormal;
@@ -71,18 +73,21 @@ export const streetsGlBuildingVertexShader = /* glsl */ `
 
     vec3 pos = position;
 
-    // GPU Terrain Clamping: DEM 텍스처를 읽어 정점 높이를 지표면에 즉시 안착
+    // GPU Terrain Clamping: DEM 텍스처를 읽어 정점 높이를 지표면에 안착
+    // Camera matrix는 이미 origin elevation(clampedAltitude)만큼 이동되어 있으므로,
+    // 정점에는 원점 대비 로컬 지형 고도 차이(terrainElev - uOriginElevation)만 반영합니다.
     if (uUseDemTexture) {
       vec4 demTex = texture2D(uDemTexture, aDemCoord);
       float terrainElev = decodeTerrarium(demTex) * uDemExaggeration;
-      pos.y += terrainElev;
+      float relElev = terrainElev - uOriginElevation;
+      pos.y += clamp(relElev, -50.0, 50.0);
     }
 
     vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
     vWorldPos = worldPosition.xyz;
     vViewDir = normalize(cameraPosition - vWorldPos);
 
-    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
 `;
 
@@ -658,6 +663,7 @@ export function createStreetsGlBuildingMaterial(
       uDemTexture: { value: options.demTexture || null },
       uUseDemTexture: { value: !!options.demTexture },
       uDemExaggeration: { value: 1.0 },
+      uOriginElevation: { value: options.originElevation ?? 0.0 },
       uAtlasTexture: { value: options.atlasTexture || null },
       uUseAtlasTexture: { value: options.useAtlasTexture !== undefined ? options.useAtlasTexture : !!options.atlasTexture },
       uOpacity: { value: opacity },

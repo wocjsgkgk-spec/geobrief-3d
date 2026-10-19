@@ -244,12 +244,59 @@ export function extractRenderedVectorBuildings(
       });
     }
 
+    // [Overzoom 방어 1] 추출된 피처를 전역 오버줌 캐시에 누적
+    for (const uf of uniqueFeatures) {
+      const k = String(uf.id || JSON.stringify(uf.geometry.coordinates[0]?.[0]));
+      buildingOverzoomCache.set(k, uf);
+    }
+
+    // [Overzoom 방어 2] 줌 15.0 이상 초상세 뷰포트에서 오버줌 캐시 결합 (주변 1.5km 건물 무중단 유지)
+    if (map.getZoom && map.getZoom() >= 15.0 && map.getBounds) {
+      try {
+        const b = map.getBounds();
+        const lngPadding = (b.getEast() - b.getWest()) * 0.8;
+        const latPadding = (b.getNorth() - b.getSouth()) * 0.8;
+        const minX = b.getWest() - lngPadding;
+        const maxX = b.getEast() + lngPadding;
+        const minY = b.getSouth() - latPadding;
+        const maxY = b.getNorth() + latPadding;
+
+        for (const [k, cachedFeat] of buildingOverzoomCache.entries()) {
+          if (seen.has(k)) continue;
+          const polyCoords = cachedFeat.geometry.type === 'Polygon'
+            ? cachedFeat.geometry.coordinates[0]
+            : cachedFeat.geometry.coordinates[0]?.[0];
+          if (polyCoords && polyCoords[0]) {
+            const pt = polyCoords[0];
+            if (pt[0] >= minX && pt[0] <= maxX && pt[1] >= minY && pt[1] <= maxY) {
+              seen.add(k);
+              uniqueFeatures.push(cachedFeat);
+            }
+          }
+        }
+      } catch {
+        // ignore bounds calculation error
+      }
+    }
+
+    // 캐시 용량 제어 (LRU)
+    if (buildingOverzoomCache.size > 8000) {
+      let toDelete = 3000;
+      for (const k of buildingOverzoomCache.keys()) {
+        buildingOverzoomCache.delete(k);
+        if (--toDelete <= 0) break;
+      }
+    }
+
     return uniqueFeatures;
   } catch (err) {
     console.warn('[spatialDataFetcher] queryRenderedFeatures notice:', err);
     return [];
   }
 }
+
+// 고배율(Lv 16~20) 오버줌 시 뷰포트 축소로 인한 건물 깜빡임/증발 방지용 전역 피처 캐시
+const buildingOverzoomCache = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>();
 
 // Overpass API 응답 캐시 (60초 유지, Rate-limit 방어)
 const overpassCache = new Map<string, { timestamp: number; data: any }>();

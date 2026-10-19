@@ -247,6 +247,16 @@ const baseStyle: maplibregl.StyleSpecification = {
       url: 'https://tiles.openfreemap.org/planet',
       maxzoom: 14,
     },
+    'openmaptiles': {
+      type: 'vector',
+      url: 'https://tiles.openfreemap.org/planet',
+      maxzoom: 14,
+    },
+    'openfreemap': {
+      type: 'vector',
+      url: 'https://tiles.openfreemap.org/planet',
+      maxzoom: 14,
+    },
     'terrarium-dem': {
       type: 'raster-dem',
       encoding: 'terrarium',
@@ -911,6 +921,16 @@ export const MapViewer: React.FC = () => {
             maxzoom: 19,
           },
           'openmaptiles-vector': {
+            type: 'vector',
+            url: 'https://tiles.openfreemap.org/planet',
+            maxzoom: 14,
+          },
+          'openmaptiles': {
+            type: 'vector',
+            url: 'https://tiles.openfreemap.org/planet',
+            maxzoom: 14,
+          },
+          'openfreemap': {
             type: 'vector',
             url: 'https://tiles.openfreemap.org/planet',
             maxzoom: 14,
@@ -2615,12 +2635,15 @@ export const MapViewer: React.FC = () => {
       // [외부 데이터 독립 분리 2] 오픈 벡터 타일 (도로망 및 3D 건축물) 안전 주입
       // ---------------------------------------------------------------------
       try {
-        if (!map.getSource('openmaptiles-vector')) {
-          map.addSource('openmaptiles-vector', {
-            type: 'vector',
-            url: 'https://tiles.openfreemap.org/planet',
-            maxzoom: 14,
-          });
+        const vectorSourceUrl = 'https://tiles.openfreemap.org/planet';
+        for (const sId of ['openmaptiles-vector', 'openmaptiles', 'openfreemap']) {
+          if (!map.getSource(sId)) {
+            map.addSource(sId, {
+              type: 'vector',
+              url: vectorSourceUrl,
+              maxzoom: 14,
+            });
+          }
         }
 
         // 3D 건물 및 건물 접지 그림자보다 항상 아래에 위치하도록 Z-Order 무결성 보장
@@ -2704,10 +2727,11 @@ export const MapViewer: React.FC = () => {
         }
 
         // ---------------------------------------------------------------------
-        // [1단계: 초록색 단색 박스를 유발하는 MapLibre fill-extrusion 건물 레이어 전면 제거]
-        // - Three.js LOD2BuildingEngine이 법선(Normal) 기반 외벽 vs 옥상 100% 물리적 분리 렌더링을 전담하므로
-        //   단색으로 칠해버리는 기존 fill-extrusion 및 검은색 그림자 레이어(building-ground-ao)를 전면 비활성화/제거합니다.
-        // - MapLibre가 OpenFreeMap의 'building' 벡터 타일을 정상 수신할 수 있도록 투명(opacity 0) 캐리어 레이어만 등록합니다.
+        // [3단계: 하이브리드 3D 렌더링 & 이중 안전망(Fail-safe Fallback)]
+        // - Three.js LOD2 메쉬 생성이 지연되거나 오버줌 시에도 MapLibre 네이티브 GPU fill-extrusion
+        //   본체(building-body, building-roof-cap)가 든든하게 백업되어 건물이 항상 우뚝 서도록 보장합니다.
+        // - 모든 건물 레이어에 minzoom: 12, maxzoom: 24를 명시하여 줌 16~20에서도 타일을 100% 오버줌 유지합니다.
+        // ---------------------------------------------------------------------
         if (!map.getLayer('building-vector-carrier')) {
           map.addLayer({
             id: 'building-vector-carrier',
@@ -2715,10 +2739,73 @@ export const MapViewer: React.FC = () => {
             source: 'openmaptiles-vector',
             'source-layer': 'building',
             minzoom: 12,
+            maxzoom: 24,
             paint: {
               'fill-opacity': 0,
             },
             layout: { visibility: 'visible' },
+          });
+        }
+
+        // [Layer 3 - 본동 외벽 및 창문 (building-body, minzoom 12, maxzoom 24)]
+        if (!map.getLayer('building-body')) {
+          map.addLayer({
+            id: 'building-body',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-pattern': buildingPatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // [Layer 4 - 옥상 마감 슬래브 (building-roof-cap, H ~ H + 0.4m, maxzoom 24)]
+        if (!map.getLayer('building-roof-cap')) {
+          map.addLayer({
+            id: 'building-roof-cap',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 13.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-color': buildingRoofColorExpr,
+              'fill-extrusion-height': buildingRoofHeightExpr,
+              'fill-extrusion-base': buildingRoofBaseExpr,
+              'fill-extrusion-opacity': 0.98,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // 하위 호환 3D 본동 레이어 (3d-buildings, maxzoom 24)
+        if (!map.getLayer('3d-buildings')) {
+          map.addLayer({
+            id: '3d-buildings',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-pattern': buildingPatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: 'none' },
           });
         }
 
@@ -3669,9 +3756,15 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.clearFacadesGroup();
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
+      const threeCount = lod2BuildingEngineRef.current ? lod2BuildingEngineRef.current.getBuildingCount() : 0;
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
-          map.setLayoutProperty(lyr, 'visibility', 'none');
+          // [이중 안전망 Fail-safe Fallback]: Three.js 로딩 중이거나 0건일 때 빈 땅이 되지 않도록 네이티브 본체 백업
+          if ((lyr === 'building-body' || lyr === 'building-roof-cap' || lyr === '3d-buildings') && threeCount === 0) {
+            map.setLayoutProperty(lyr, 'visibility', bldgVis);
+          } else {
+            map.setLayoutProperty(lyr, 'visibility', 'none');
+          }
         }
       }
     } else if (renderMode3D === 'tiles3d') {
@@ -3714,9 +3807,16 @@ export const MapViewer: React.FC = () => {
         }
       }
 
+      const tilesCount = (presetId === 'vworld_3d_buildings' || presetId === 'sample_city')
+        ? (lod2BuildingEngineRef.current ? lod2BuildingEngineRef.current.getBuildingCount() : 0)
+        : 1;
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
-          map.setLayoutProperty(lyr, 'visibility', 'none');
+          if ((lyr === 'building-body' || lyr === 'building-roof-cap' || lyr === '3d-buildings') && tilesCount === 0) {
+            map.setLayoutProperty(lyr, 'visibility', bldgVis);
+          } else {
+            map.setLayoutProperty(lyr, 'visibility', 'none');
+          }
         }
       }
     }

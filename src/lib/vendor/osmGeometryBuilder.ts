@@ -808,12 +808,12 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
           // 외곽 링에 대해 1.5m 접지 음영(Contact AO) 및 태양광 투영 그림자 생성
           if (!isHole) {
-            // [3단계: 건물 벽면과 지면이 만나는 경계선에 1.5m 폭의 짙은 접지 음영(Contact AO)]
+            // [접지 음영(Contact AO): 투명도 0.12 이하로 자연스러운 음영 연출]
             const aoWidth = 1.5;
             addShadowQuad(
               shadowPositions, shadowColors,
-              { x: p1.x, y: 0.02, z: -p1.y, a: 0.85 },
-              { x: p2.x, y: 0.02, z: -p2.y, a: 0.85 },
+              { x: p1.x, y: 0.02, z: -p1.y, a: 0.12 },
+              { x: p2.x, y: 0.02, z: -p2.y, a: 0.12 },
               { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
               { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
               0.015, 0.025, 0.045
@@ -822,23 +822,23 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             if (isNearDetail) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.025, z: -p1.y, a: 0.92 },
-                { x: p2.x, y: 0.025, z: -p2.y, a: 0.92 },
-                { x: p2.x + nx * 0.75, y: 0.022, z: -(p2.y - nz * 0.75), a: 0.35 },
-                { x: p1.x + nx * 0.75, y: 0.022, z: -(p1.y - nz * 0.75), a: 0.35 },
+                { x: p1.x, y: 0.025, z: -p1.y, a: 0.12 },
+                { x: p2.x, y: 0.025, z: -p2.y, a: 0.12 },
+                { x: p2.x + nx * 0.75, y: 0.022, z: -(p2.y - nz * 0.75), a: 0.05 },
+                { x: p1.x + nx * 0.75, y: 0.022, z: -(p1.y - nz * 0.75), a: 0.05 },
                 0.008, 0.015, 0.030
               );
             }
 
-            // [태양광 방향 일치 평면 투영 그림자 (Planar Shadow): rgba(10, 15, 30, 0.38)]
+            // [태양광 방향 일치 평면 투영 그림자 (Planar Shadow): 투명도 0.10 이하로 잔상 얼룩 방지]
             const nDotL = nx * sX + (-nz) * sZ;
             if (nDotL < 0.20 && totalH >= 3.0) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.02, z: -p1.y, a: 0.38 },
-                { x: p2.x, y: 0.02, z: -p2.y, a: 0.38 },
-                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.38 },
-                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.38 },
+                { x: p1.x, y: 0.02, z: -p1.y, a: 0.10 },
+                { x: p2.x, y: 0.02, z: -p2.y, a: 0.10 },
+                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.10 },
+                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.10 },
                 0.0392, 0.0588, 0.1176
               );
             }
@@ -1337,9 +1337,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
               addShadowTriangle(
                 shadowPositions, shadowColors,
-                { x: v0.pt.x + dropDx, y: 0.012, z: -v0.pt.y + dropDz, a: 0.38 },
-                { x: v1.pt.x + dropDx, y: 0.012, z: -v1.pt.y + dropDz, a: 0.38 },
-                { x: v2.pt.x + dropDx, y: 0.012, z: -v2.pt.y + dropDz, a: 0.38 },
+                { x: v0.pt.x + dropDx, y: 0.012, z: -v0.pt.y + dropDz, a: 0.10 },
+                { x: v1.pt.x + dropDx, y: 0.012, z: -v1.pt.y + dropDz, a: 0.10 },
+                { x: v2.pt.x + dropDx, y: 0.012, z: -v2.pt.y + dropDz, a: 0.10 },
                 0.0392, 0.0588, 0.1176
               );
             }

@@ -255,7 +255,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#0F172A',
         'line-width': createMeterScaleWidthExpr(33.0, 12.5, 3.8) as any,
-        'line-opacity': 0.58,
+        'line-opacity': 0.12,
         'line-blur': 1.0,
       },
       layout: {
@@ -460,7 +460,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#1C1917',
         'line-width': createMeterScaleWidthExpr(6.4, 11, 1.8) as any,
-        'line-opacity': 0.45,
+        'line-opacity': 0.12,
         'line-blur': 0.6,
       },
       layout: {
@@ -648,7 +648,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#334155',
         'line-width': createMeterScaleWidthExpr(28.5, 13.5, 2.8) as any,
-        'line-opacity': 0.40,
+        'line-opacity': 0.10,
         'line-blur': 0.5,
       },
       layout: {
@@ -667,7 +667,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#334155',
         'line-width': createMeterScaleWidthExpr(16.3, 13.5, 2.0) as any,
-        'line-opacity': 0.38,
+        'line-opacity': 0.10,
         'line-blur': 0.5,
       },
       layout: {
@@ -686,7 +686,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#475569',
         'line-width': createMeterScaleWidthExpr(8.9, 14.0, 1.4) as any,
-        'line-opacity': 0.32,
+        'line-opacity': 0.10,
         'line-blur': 0.4,
       },
       layout: {
@@ -705,7 +705,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#334155',
         'line-width': createMeterScaleWidthExpr(7.8, 13.5, 1.4) as any,
-        'line-opacity': 0.35,
+        'line-opacity': 0.10,
         'line-blur': 0.4,
       },
       layout: {
@@ -1054,7 +1054,7 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#0F172A',
         'line-width': createMeterScaleWidthExpr(2.8, 13.5, 1.8) as any,
-        'line-opacity': 0.45,
+        'line-opacity': 0.10,
         'line-blur': 0.6,
       },
       layout: {

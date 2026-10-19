@@ -453,6 +453,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         atlasTexture: vworldTex,
         useAtlasTexture: isPhotorealistic && !!vworldTex,
         opacity: this.opacity,
+        originElevation: this.clampedAltitude,
       });
     } else if (this.realisticCityMaterial.uniforms) {
       if (vworldTex && this.realisticCityMaterial.uniforms.uAtlasTexture) {
@@ -463,6 +464,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       }
       if (this.realisticCityMaterial.uniforms.uOpacity) {
         this.realisticCityMaterial.uniforms.uOpacity.value = this.opacity;
+      }
+      if (this.realisticCityMaterial.uniforms.uOriginElevation) {
+        this.realisticCityMaterial.uniforms.uOriginElevation.value = this.clampedAltitude;
       }
       this.realisticCityMaterial.transparent = this.opacity < 0.99;
       this.realisticCityMaterial.needsUpdate = true;
@@ -481,7 +485,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           precision highp float;
           varying vec4 vColor;
           void main() {
-            gl_FragColor = vColor;
+            // 검은색 사각형 얼룩 및 유령 그림자 방지: 최대 알파 0.12로 clamp
+            float alpha = min(vColor.a, 0.12);
+            gl_FragColor = vec4(vColor.rgb, alpha);
           }
         `,
         transparent: true,
@@ -562,6 +568,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.realisticCityMaterial.uniforms.uDemTexture.value = this.threeDemTexture;
     this.realisticCityMaterial.uniforms.uUseDemTexture.value = true;
     this.realisticCityMaterial.uniforms.uDemExaggeration.value = exaggeration;
+    if (this.realisticCityMaterial.uniforms.uOriginElevation) {
+      this.realisticCityMaterial.uniforms.uOriginElevation.value = this.clampedAltitude;
+    }
     this.realisticCityMaterial.needsUpdate = true;
   }
 
@@ -614,7 +623,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.masterAtlasMaterial.needsUpdate = true;
     }
     if (this.contactShadowMaterial) {
-      (this.contactShadowMaterial as any).opacity = this.opacity * 0.70;
+      (this.contactShadowMaterial as any).opacity = Math.min(this.opacity * 0.15, 0.12);
       this.contactShadowMaterial.transparent = true;
       this.contactShadowMaterial.needsUpdate = true;
     }
@@ -1130,7 +1139,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const outNx = dz / segLen;
           const outNz = -dx / segLen;
 
-          // (1) 1.5m 폭의 짙은 접지 음영 (Contact Ambient Occlusion)
+          // (1) 접지 음영 (Contact Ambient Occlusion: 투명도 0.12 이하)
           const aoWidth = 1.5;
           const p0_out_x = p0.x + outNx * aoWidth;
           const p0_out_z = p0.y + outNz * aoWidth;
@@ -1140,22 +1149,22 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           addShadowQuad(
             shadowPositions,
             shadowColors,
-            { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.85 },
-            { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.85 },
+            { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.12 },
+            { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.12 },
             { x: p1_out_x, y: relElev + 0.015, z: p1_out_z, a: 0.0 },
             { x: p0_out_x, y: relElev + 0.015, z: p0_out_z, a: 0.0 },
             0.015, 0.025, 0.045
           );
 
-          // (2) 실시간 태양광 투영 그림자 (Planar Shadow: rgba(10, 15, 30, 0.38))
+          // (2) 실시간 태양광 투영 그림자 (Planar Shadow: 투명도 0.10 이하)
           if (totalH >= 3.0 && (outNx * sX + outNz * sZ) < 0.20) {
             addShadowQuad(
               shadowPositions,
               shadowColors,
-              { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.38 },
-              { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.38 },
-              { x: p1.x + dropDx, y: relElev + 0.015, z: p1.y + dropDz, a: 0.38 },
-              { x: p0.x + dropDx, y: relElev + 0.015, z: p0.y + dropDz, a: 0.38 },
+              { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.10 },
+              { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.10 },
+              { x: p1.x + dropDx, y: relElev + 0.015, z: p1.y + dropDz, a: 0.10 },
+              { x: p0.x + dropDx, y: relElev + 0.015, z: p0.y + dropDz, a: 0.10 },
               0.0392, 0.0588, 0.1176
             );
           }
@@ -2093,12 +2102,19 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         if (Number.isFinite(queried)) {
           if (this.clampedAltitude === 0 && queried > 5.0) {
             this.clampedAltitude = queried;
+            if (this.realisticCityMaterial?.uniforms?.uOriginElevation) {
+              this.realisticCityMaterial.uniforms.uOriginElevation.value = queried;
+            }
             if (this.lastFeatures && this.lastFeatures.length > 0) {
               this.updateBuildings(this.lastFeatures, this.originLngLat);
               return;
             }
           }
         }
+      }
+
+      if (this.realisticCityMaterial?.uniforms?.uOriginElevation) {
+        this.realisticCityMaterial.uniforms.uOriginElevation.value = this.clampedAltitude;
       }
 
       const mercator = maplibregl.MercatorCoordinate.fromLngLat(
