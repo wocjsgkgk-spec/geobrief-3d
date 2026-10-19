@@ -20,6 +20,8 @@
 import type maplibregl from 'maplibre-gl';
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
+import { spatialTileCache, bboxToTileKeys } from '@/utils/spatialTileCache';
+
 
 export interface ExternalSpatialBuildingProperties {
   id?: string | number;
@@ -705,6 +707,11 @@ export async function fetchExternalSpatialData(
       const regName = gwJson.region?.name ? `${gwJson.region.name} ` : '';
       const regCode = gwJson.region?.admCode ? `(${gwJson.region.admCode}) ` : '';
 
+      const tileKeys = bboxToTileKeys(bbox, 15);
+      if (tileKeys[0]) {
+        spatialTileCache.saveFeatures(tileKeys[0], mergedFeatures);
+      }
+
       return {
         success: true,
         totalCount,
@@ -739,6 +746,11 @@ export async function fetchExternalSpatialData(
   // 4단계: 3대 소스 공간 융합 및 실측 스카이라인 적용
   const mergedFeatures = mergeSpatialFeatures(ofmFeatures, vworldFeatures, overpassFeatures);
   const totalCount = Math.max(mergedFeatures.length, ofmCount);
+
+  const tileKeysFallback = bboxToTileKeys(bbox, 15);
+  if (tileKeysFallback[0]) {
+    spatialTileCache.saveFeatures(tileKeysFallback[0], mergedFeatures);
+  }
 
   return {
     success: true,

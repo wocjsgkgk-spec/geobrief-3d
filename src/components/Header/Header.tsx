@@ -37,6 +37,7 @@ import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
 import { RenderMode3D } from '@/types/map';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
+import { GANGWON_18_REGIONS, getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
 
 type DropdownCategory = 'site' | 'view' | 'analysis' | 'tactical' | 'export' | null;
 
@@ -45,6 +46,8 @@ export const Header: React.FC = () => {
     metadata,
     selectedIdleSiteId,
     selectIdleSite,
+    selectedRegionId,
+    selectRegion,
     isOrbiting,
     toggleOrbiting,
     resetProject,
@@ -91,9 +94,15 @@ export const Header: React.FC = () => {
   } = useMapStore();
 
   const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
+  const [siteTab, setSiteTab] = useState<'regions' | 'hubs'>('regions');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+
+  const currentRegion = getGangwonRegionByIdOrName(selectedRegionId || '');
+  const currentMilitarySite = getGangwonMilitarySiteById(selectedIdleSiteId || '');
+  const currentDisplayName = currentMilitarySite?.shortName || currentRegion?.name || '원주시';
+
 
   // 외부 클릭 시 열린 드롭다운 자동 닫힘
   useEffect(() => {
@@ -209,69 +218,146 @@ export const Header: React.FC = () => {
                 ? 'bg-amber-600/35 border-amber-400/90 text-amber-200 shadow-md ring-1 ring-amber-500/50'
                 : 'bg-[#18261c] border-[#2e4735] text-emerald-300 hover:text-white hover:bg-[#203325]'
             }`}
-            title="강원권 핵심 군 유휴지 3D 스마트 복합단지(LOD2) 거점 선택 및 3D 항공 뷰 전환"
+            title="강원도 18개 시·군 전역 및 3D 스마트 복합단지 거점 선택 및 3D 항공 뷰 전환"
           >
             <MapPin className="w-3.5 h-3.5 text-emerald-400" />
             <span className="text-slate-300 hidden lg:inline">분석 대상지:</span>
             <span className="font-bold text-emerald-300">
-              {(getGangwonMilitarySiteById(selectedIdleSiteId || 'first-logistics-wonju') || GANGWON_MILITARY_SITES[0]).shortName}
+              {currentDisplayName}
             </span>
             <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'site' ? 'rotate-180' : ''}`} />
           </button>
 
           {activeDropdown === 'site' && (
-            <div className="absolute top-11 left-0 w-80 bg-[#131c15]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-2 z-50 flex flex-col space-y-1.5 animate-in fade-in zoom-in-95 duration-100 max-h-[80vh] overflow-y-auto">
-              <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-[#243529] pb-1.5">
-                <span className="flex items-center gap-1 text-emerald-300">
+            <div className="absolute top-11 left-0 w-88 bg-[#131c15]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-2 z-50 flex flex-col space-y-2 animate-in fade-in zoom-in-95 duration-100 max-h-[80vh] overflow-y-auto">
+              {/* 탭 헤더: 18개 시·군 전역 vs 스마트 복합단지 */}
+              <div className="grid grid-cols-2 gap-1 bg-[#0e1610] p-1 rounded-lg border border-[#223528]">
+                <button
+                  onClick={() => setSiteTab('regions')}
+                  className={`py-1 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    siteTab === 'regions'
+                      ? 'bg-emerald-600/40 text-emerald-200 border border-emerald-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
                   <MapPin className="w-3 h-3 text-emerald-400" />
-                  강원권 3D 스마트 복합단지(LOD2) 거점
-                </span>
-                <span className="text-emerald-400 font-mono font-semibold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-700/60">
-                  {GANGWON_MILITARY_SITES.length}개소
-                </span>
+                  18개 시·군 전역 (18)
+                </button>
+                <button
+                  onClick={() => setSiteTab('hubs')}
+                  className={`py-1 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    siteTab === 'hubs'
+                      ? 'bg-emerald-600/40 text-emerald-200 border border-emerald-500/50 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Box className="w-3 h-3 text-emerald-400" />
+                  스마트 복합단지 (5)
+                </button>
               </div>
 
-              {/* 거점 목록 */}
-              {GANGWON_MILITARY_SITES.map((site) => {
-                const isSelected =
-                  selectedIdleSiteId === site.id || site.aliasIds.includes(selectedIdleSiteId || '');
-                return (
-                  <button
-                    key={site.id}
-                    onClick={() => {
-                      selectIdleSite(site.id);
-                      setActiveDropdown(null);
-                    }}
-                    className={`w-full px-2.5 py-2 text-xs rounded-lg text-left transition-all flex items-center justify-between ${
-                      isSelected
-                        ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 shadow-inner'
-                        : 'hover:bg-[#1e2e22] text-slate-200 border border-transparent'
-                    }`}
-                  >
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9.5px] px-1.5 py-0.5 rounded font-mono font-semibold bg-[#17251c] text-emerald-300 border border-[#263c2c]">
-                          {site.hubCategoryLabel}
-                        </span>
-                        <span className="font-bold text-slate-100 truncate">
-                          {site.shortName}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
-                        {site.themeTitle}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end flex-shrink-0 text-[10px] font-mono">
-                      <span className="text-emerald-400 font-semibold">
-                        약 {site.areaPyeong.toLocaleString()}평
-                      </span>
-                      <span className="text-slate-400">
-                        {site.recommendedCamera.pitch}° 3D
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+              {/* 1) 강원특별자치도 18개 시·군 목록 */}
+              {siteTab === 'regions' && (
+                <div className="flex flex-col space-y-1">
+                  <div className="px-1.5 py-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-[#243529] pb-1">
+                    <span className="text-emerald-300">강원 18개 시·군 행정구역 거점</span>
+                    <span className="text-emerald-400 font-mono text-[9.5px]">클릭 시 3D 항공 비행</span>
+                  </div>
+                  <div className="flex flex-col space-y-1 max-h-[55vh] overflow-y-auto pr-1">
+                    {GANGWON_18_REGIONS.map((region) => {
+                      const isSelected = selectedRegionId === region.id;
+                      return (
+                        <button
+                          key={region.id}
+                          onClick={() => {
+                            selectRegion(region.id);
+                            setActiveDropdown(null);
+                          }}
+                          className={`w-full px-2.5 py-1.5 text-xs rounded-lg text-left transition-all flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 shadow-inner'
+                              : 'hover:bg-[#1e2e22] text-slate-200 border border-transparent'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9.5px] px-1.5 py-0.5 rounded font-mono font-semibold bg-[#17251c] text-emerald-300 border border-[#263c2c]">
+                                {region.subregion}
+                              </span>
+                              <span className="font-bold text-slate-100">
+                                {region.name}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
+                              {region.terrainCharacteristic}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end flex-shrink-0 text-[10px] font-mono">
+                            <span className="text-emerald-400 font-semibold">
+                              {region.type}
+                            </span>
+                            <span className="text-slate-400">
+                              {region.pitch}° 3D
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 2) 강원권 3D 스마트 복합단지(LOD2) 5대 거점 */}
+              {siteTab === 'hubs' && (
+                <div className="flex flex-col space-y-1">
+                  <div className="px-1.5 py-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-[#243529] pb-1">
+                    <span className="text-emerald-300">LOD2 실사 건물 스마트 복합단지</span>
+                    <span className="text-emerald-400 font-mono text-[9.5px]">{GANGWON_MILITARY_SITES.length}개소</span>
+                  </div>
+                  <div className="flex flex-col space-y-1 max-h-[55vh] overflow-y-auto pr-1">
+                    {GANGWON_MILITARY_SITES.map((site) => {
+                      const isSelected =
+                        selectedIdleSiteId === site.id || site.aliasIds.includes(selectedIdleSiteId || '');
+                      return (
+                        <button
+                          key={site.id}
+                          onClick={() => {
+                            selectIdleSite(site.id);
+                            setActiveDropdown(null);
+                          }}
+                          className={`w-full px-2.5 py-2 text-xs rounded-lg text-left transition-all flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 shadow-inner'
+                              : 'hover:bg-[#1e2e22] text-slate-200 border border-transparent'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9.5px] px-1.5 py-0.5 rounded font-mono font-semibold bg-[#17251c] text-emerald-300 border border-[#263c2c]">
+                                {site.hubCategoryLabel}
+                              </span>
+                              <span className="font-bold text-slate-100 truncate">
+                                {site.shortName}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
+                              {site.themeTitle}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end flex-shrink-0 text-[10px] font-mono">
+                            <span className="text-emerald-400 font-semibold">
+                              약 {site.areaPyeong.toLocaleString()}평
+                            </span>
+                            <span className="text-slate-400">
+                              {site.recommendedCamera.pitch}° 3D
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

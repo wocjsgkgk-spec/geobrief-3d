@@ -616,6 +616,7 @@ export const useMapStore = create<MapStoreState>()(
           };
           set({
             selectedRegionId: regionId,
+            selectedIdleSiteId: null,
             isBorderDistrict: isBorder,
             borderSecurityVisible: isBorder, // 접경지역 선택 시 즉시 visible, 비접경지는 none
             viewport: targetVp,

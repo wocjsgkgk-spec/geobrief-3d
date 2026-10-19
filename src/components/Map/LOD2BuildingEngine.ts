@@ -54,6 +54,8 @@ import {
   disposeVWorldAtlas,
 } from '@/utils/vworldStyleAtlas';
 import { buildOsmBuildingGeometry } from '@/lib/vendor/osmGeometryBuilder';
+import { spatialTileCache, lngLatToTile } from '@/utils/spatialTileCache';
+
 
 // =============================================================================
 // 1. 기하 유틸리티 (OBB, 좌표 변환, 삼각화, 쿼드 버퍼)
@@ -382,12 +384,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private sseQuality = 16;
   private styleMode: 'photorealistic' | 'clean_mass' = 'photorealistic';
 
-  // [3단계: 타일/피처 단위 청크 메쉬 캐시 (60fps 무중단 화면 유지)]
+  // [4단계: 타일 좌표(Z/X/Y) 기반 IndexedDB 영구 캐시 및 150개 청크 LRU VRAM 관리]
   private chunkMeshCache = new Map<string, OSMGeometryResult>();
-  private readonly MAX_CHUNK_CACHE_ENTRIES = 64;
+  private readonly MAX_CHUNK_CACHE_ENTRIES = 150;
 
   /**
-   * 지도 이동/회전 시 0ms 즉각 재사용을 위한 청크 고유 해시 키 계산
+   * 지도 이동/회전 시 0ms 즉각 재사용을 위한 타일 좌표(Z/X/Y) 기반 청크 고유 해시 키 계산
    */
   private computeChunkKey(
     features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
@@ -396,14 +398,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   ): string {
     const len = features.length;
     if (len === 0) return 'empty';
+    const tile = lngLatToTile(origin[0], origin[1], Math.max(12, Math.min(18, Math.round(zoom))));
     const firstId = String(features[0]?.id || features[0]?.properties?.name || '0');
     const midIdx = Math.floor(len / 2);
     const midId = String(features[midIdx]?.id || features[midIdx]?.properties?.name || 'mid');
     const lastId = String(features[len - 1]?.id || features[len - 1]?.properties?.name || 'end');
-    const rx = Math.round(origin[0] * 200) / 200; // ~500m 타일 그리드
-    const ry = Math.round(origin[1] * 200) / 200;
     const lod = zoom < 13.5 ? 0 : zoom < 15.2 ? 1 : 2;
-    return `${rx}_${ry}_cnt${len}_${firstId}_${midId}_${lastId}_lod${lod}`;
+    return `${tile.tileKey}_cnt${len}_${firstId}_${midId}_${lastId}_lod${lod}`;
   }
 
   public clearChunkCache(): void {
@@ -854,7 +855,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.initMaterials();
     }
 
-    // [3단계: 타일 단위 청크 메쉬 캐시 선조회 (0ms 즉시 화면 유지, 60fps)]
+    // [4단계: 1차 메모리 캐시 및 2차 IndexedDB 영구 캐시 선조회 (0.02초 이내 GPU 직결 로드)]
     const chunkKey = this.computeChunkKey(features, this.originLngLat, this.currentZoomLOD);
     if (this.chunkMeshCache.has(chunkKey)) {
       const cached = this.chunkMeshCache.get(chunkKey)!;
@@ -865,57 +866,101 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       return;
     }
 
-    // [1단계: Web Worker 기반 고속 건물 지오메트리 엔진 구축]
-    // OSMBuildings & mapbox/earcut 벤더링 전용 buildingMeshWorker(Transferable Objects)로 백그라운드 0ms 연산
-    buildingMeshWorkerClient
-      .buildBuildings({
-        features,
-        originLngLat: this.originLngLat,
-        sunDirection: [
-          this.sunLightDirection.x,
-          this.sunLightDirection.y,
-          this.sunLightDirection.z,
-        ],
-        zoom: this.currentZoomLOD,
-      })
-      .then((workerResult) => {
-        if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
-          // 청크 캐시에 등록 (LRU 용량 제어)
+    // 2차 IndexedDB 영구 캐시 비동기 선조회 (재방문/새로고침 시 0.02초 이내 즉각 반환)
+    spatialTileCache
+      .getGeometry(chunkKey)
+      .then((idbCached) => {
+        if (idbCached && idbCached.positions && idbCached.positions.length > 0) {
+          // LRU 용량 제어 (최대 150개 청크)
           if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
             const oldest = this.chunkMeshCache.keys().next().value;
             if (oldest) this.chunkMeshCache.delete(oldest);
           }
-          this.chunkMeshCache.set(chunkKey, workerResult);
-          this.applyWorkerResult(workerResult);
-        } else {
-          geometryWorkerClient
-            .buildBuildings({
-              features,
-              originLngLat: this.originLngLat,
-              sunDirection: [
-                this.sunLightDirection.x,
-                this.sunLightDirection.y,
-                this.sunLightDirection.z,
-              ],
-              zoom: this.currentZoomLOD,
-            })
-            .then((fallbackResult) => {
-              if (fallbackResult && fallbackResult.positions && fallbackResult.positions.length > 0) {
-                if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
-                  const oldest = this.chunkMeshCache.keys().next().value;
-                  if (oldest) this.chunkMeshCache.delete(oldest);
-                }
-                this.chunkMeshCache.set(chunkKey, fallbackResult as any);
-                this.applyWorkerResult(fallbackResult);
-              } else {
-                this.buildFallbackSync(features);
-              }
-            });
+          this.chunkMeshCache.set(chunkKey, idbCached);
+          this.applyWorkerResult(idbCached);
+          return;
         }
+
+        // 캐시 미스: Web Worker 기반 고속 건물 지오메트리 백그라운드 연산
+        buildingMeshWorkerClient
+          .buildBuildings({
+            features,
+            originLngLat: this.originLngLat,
+            sunDirection: [
+              this.sunLightDirection.x,
+              this.sunLightDirection.y,
+              this.sunLightDirection.z,
+            ],
+            zoom: this.currentZoomLOD,
+          })
+          .then((workerResult) => {
+            if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
+              // 1차 메모리 LRU 캐시 및 2차 IndexedDB 영구 캐시 동시 저장
+              if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
+                const oldest = this.chunkMeshCache.keys().next().value;
+                if (oldest) this.chunkMeshCache.delete(oldest);
+              }
+              this.chunkMeshCache.set(chunkKey, workerResult);
+              spatialTileCache.saveGeometry(chunkKey, workerResult);
+
+              this.applyWorkerResult(workerResult);
+            } else {
+              geometryWorkerClient
+                .buildBuildings({
+                  features,
+                  originLngLat: this.originLngLat,
+                  sunDirection: [
+                    this.sunLightDirection.x,
+                    this.sunLightDirection.y,
+                    this.sunLightDirection.z,
+                  ],
+                  zoom: this.currentZoomLOD,
+                })
+                .then((fallbackResult) => {
+                  if (fallbackResult && fallbackResult.positions && fallbackResult.positions.length > 0) {
+                    if (this.chunkMeshCache.size >= this.MAX_CHUNK_CACHE_ENTRIES) {
+                      const oldest = this.chunkMeshCache.keys().next().value;
+                      if (oldest) this.chunkMeshCache.delete(oldest);
+                    }
+                    this.chunkMeshCache.set(chunkKey, fallbackResult as any);
+                    spatialTileCache.saveGeometry(chunkKey, fallbackResult as any);
+
+                    this.applyWorkerResult(fallbackResult);
+                  } else {
+                    this.buildFallbackSync(features);
+                  }
+                });
+            }
+          })
+          .catch((err) => {
+            console.warn('[LOD2BuildingEngine] buildingMeshWorker error, falling back:', err);
+            this.buildFallbackSync(features);
+          });
       })
-      .catch((err) => {
-        console.warn('[LOD2BuildingEngine] buildingMeshWorker error, falling back:', err);
-        this.buildFallbackSync(features);
+      .catch(() => {
+        // IndexedDB 조회 실패 시 Worker로 직접 진행
+        buildingMeshWorkerClient
+          .buildBuildings({
+            features,
+            originLngLat: this.originLngLat,
+            sunDirection: [
+              this.sunLightDirection.x,
+              this.sunLightDirection.y,
+              this.sunLightDirection.z,
+            ],
+            zoom: this.currentZoomLOD,
+          })
+          .then((workerResult) => {
+            if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
+              this.chunkMeshCache.set(chunkKey, workerResult);
+              this.applyWorkerResult(workerResult);
+            } else {
+              this.buildFallbackSync(features);
+            }
+          })
+          .catch(() => {
+            this.buildFallbackSync(features);
+          });
       });
   }
 
