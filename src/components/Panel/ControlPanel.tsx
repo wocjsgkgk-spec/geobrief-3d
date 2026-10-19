@@ -63,6 +63,7 @@ import {
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
+import { getGangwonZone } from '@/utils/regionalBuildingStyler';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
 import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
@@ -687,6 +688,30 @@ export const ControlPanel: React.FC = () => {
           GANGWON_REGIONS.find((r) => r.id === selectedRegionId) || GANGWON_REGIONS[0];
         const cities = GANGWON_REGIONS.filter((r) => r.type === '시');
         const counties = GANGWON_REGIONS.filter((r) => r.type === '군');
+        const zone = getGangwonZone(currentRegion.id, currentRegion.center[0], currentRegion.center[1]);
+        const zoneLabels: Record<string, { label: string; desc: string; badge: string }> = {
+          urban_innovation: {
+            label: '도시·혁신도시권',
+            desc: '청사 커튼월/루버 + 아파트 투톤 + 구도심 상가',
+            badge: 'bg-blue-950/70 border-blue-700/60 text-blue-300',
+          },
+          border_military: {
+            label: '접경·군사거점권',
+            desc: '통합막사 박공 + 군수 물류창고 징크 + 농촌 주택',
+            badge: 'bg-amber-950/70 border-amber-700/60 text-amber-300',
+          },
+          coastal_belt: {
+            label: '동해안 해양권',
+            desc: '오션뷰 리조트 통유리 + 항만 사일로/공장',
+            badge: 'bg-cyan-950/70 border-cyan-700/60 text-cyan-300',
+          },
+          mountain_highland: {
+            label: '산악·고원권',
+            desc: '급경사 옹벽(-8m) + 30° 다설형 급경사 박공',
+            badge: 'bg-emerald-950/70 border-emerald-700/60 text-emerald-300',
+          },
+        };
+        const currentZoneInfo = zoneLabels[zone] || zoneLabels.urban_innovation;
 
         return (
           <section className="p-4 border-b border-[#242f27] space-y-2.5">
@@ -755,6 +780,22 @@ export const ControlPanel: React.FC = () => {
                   <span className="line-clamp-1">{currentRegion.terrainCharacteristic}</span>
                 </div>
               )}
+
+              {/* 강원권 4대 맞춤형 실사 건축 권역 배지 */}
+              <div className="text-[10px] bg-[#141d16] px-2 py-1 rounded border border-[#233226] space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="w-3 h-3 text-emerald-400" />
+                    <span className="text-slate-200 font-semibold">{currentZoneInfo.label} 실사 건축</span>
+                  </div>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${currentZoneInfo.badge}`}>
+                    권역 맞춤 렌더링
+                  </span>
+                </div>
+                <p className="text-[9.5px] text-slate-400 font-mono leading-tight">
+                  {currentZoneInfo.desc}
+                </p>
+              </div>
 
               {/* 지형 및 부지 특성 설명 텍스트 (Description) */}
               <p className="text-[11px] text-slate-300 leading-relaxed bg-[#121914] p-2 rounded border border-[#202c23]">

@@ -19,6 +19,7 @@
 
 import type maplibregl from 'maplibre-gl';
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
+import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
 
 export interface ExternalSpatialBuildingProperties {
   id?: string | number;
@@ -42,6 +43,8 @@ export interface ExternalSpatialBuildingProperties {
   };
   grnd_flr?: number;
   ugrnd_flr?: number;
+  regionalStyle?: RegionalBuildingStyle;
+  skirtDepth?: number;
   [key: string]: any;
 }
 
@@ -154,75 +157,15 @@ export function applyKoreanSkylineRules(
   roofShape: string;
   roofColour: string;
   isMilitaryOrPublic: boolean;
+  regionalStyle?: RegionalBuildingStyle;
+  skirtDepth?: number;
 } {
   const { cLng, cLat, dimMin, dimMax, approxArea, aspectRatio } = metrics;
   const name = String(rawProps.name || rawProps.name_ko || rawProps.buld_nm || rawProps.buildingName || '');
-  const rawType = String(
-    rawProps.bld_category || rawProps.usageType || rawProps.type || rawProps.building || rawProps.class || ''
-  ).toLowerCase();
 
-  // (1) 군부대 영내 건물 판정 (원주 1군지사 우산동, 캠프 롱 태장동, 접경 군부대, 군 태그)
-  const isWonjuMilitarySite =
-    (cLat >= 37.355 && cLat <= 37.375 && cLng >= 127.930 && cLng <= 127.948) || // 1군지사
-    (cLat >= 37.370 && cLat <= 37.390 && cLng >= 127.945 && cLng <= 127.965);   // 캠프 롱
-  const isBorderMilitaryZone = cLat >= 38.0;
-  const isMilitaryName =
-    name.includes('부대') || name.includes('군') || name.includes('막사') ||
-    name.includes('병영') || name.includes('창고') || name.includes('보급') ||
-    name.includes('사령부') || rawType.includes('military') || rawType.includes('barracks');
+  // 강원 4대 권역별 맞춤형 실사 건축 스타일러 실행
+  const regStyle = classifyRegionalBuildingStyle(rawProps, metrics);
 
-  const isMilitary =
-    isMilitaryName ||
-    (isWonjuMilitarySite && dimMin <= 24 && dimMax >= 16) ||
-    (isBorderMilitaryZone && isMilitaryName) ||
-    rawProps.isMilitaryOrPublic === true;
-
-  // (2) 대학 / 병원 / 공공청사 판정 (원주 상지대학교, 원주시청, 원주의료원 등)
-  const isPublicOrCampusName =
-    name.includes('상지대') || name.includes('대학교') || name.includes('대학') ||
-    name.includes('시청') || name.includes('구청') || name.includes('군청') ||
-    name.includes('청사') || name.includes('의료원') || name.includes('병원') ||
-    name.includes('세브란스') || name.includes('보건소') || name.includes('경찰서') ||
-    name.includes('소방서') || name.includes('우체국') || name.includes('주민센터') ||
-    name.includes('행정복지센터') || name.includes('법원') || name.includes('검찰') ||
-    rawType.includes('public') || rawType.includes('school') || rawType.includes('university') ||
-    rawType.includes('hospital');
-
-  const isPublicOrCampus = !isMilitary && isPublicOrCampusName;
-
-  // (3) 아파트 단지 판정
-  const isAptByName =
-    name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
-    name.includes('푸르지오') || name.includes('자이') || name.includes('힐스테이트') ||
-    name.includes('래미안') || name.includes('e편한') || name.includes('더샵') ||
-    name.includes('아이파크') || name.includes('롯데캐슬') || name.includes('한신') ||
-    name.includes('삼호') || name.includes('두산') || name.includes('우성') ||
-    name.includes('현대') || name.includes('동보') || name.includes('세경') ||
-    name.includes('코아루') || name.includes('부영') || name.includes('주공') ||
-    name.includes('호반') || name.includes('중흥') || name.includes('센트럴') ||
-    rawType.includes('apartment');
-
-  // 한국형 판상형 아파트 기하학적 형태: 폭 9~20m, 길이 32~95m, 면적 >= 320m², 종횡비 >= 1.8
-  const isAptByGeometry =
-    !isMilitary && !isPublicOrCampus &&
-    ((dimMin >= 9.0 && dimMin <= 20.0 && dimMax >= 32.0 && approxArea >= 320 && aspectRatio >= 1.8) ||
-     (dimMin >= 12.0 && dimMax >= 30.0 && approxArea >= 380));
-
-  const isApartment = isAptByName || isAptByGeometry;
-
-  // (4) 중대형 상업 / 업무 빌딩
-  const isCommName =
-    name.includes('타워') || name.includes('빌딩') || name.includes('센터') ||
-    name.includes('상가') || name.includes('마트') || name.includes('스퀘어') ||
-    name.includes('프라자') || name.includes('호텔') || name.includes('백화점') ||
-    rawType.includes('commercial') || rawType.includes('office') || rawType.includes('retail');
-
-  const isCommByGeometry = !isMilitary && !isPublicOrCampus && !isApartment &&
-    ((approxArea >= 320 && aspectRatio < 2.0) || approxArea >= 550);
-
-  const isCommercial = isCommName || isCommByGeometry;
-
-  // 실측 층수 및 높이 추출
   const rawLevels = Number(
     rawProps.grnd_flr || rawProps.GRND_FLR || rawProps.gro_flo_co || rawProps.GRO_FLO_CO ||
     rawProps.levels || rawProps['building:levels'] || rawProps.building_levels || 0
@@ -232,94 +175,36 @@ export function applyKoreanSkylineRules(
   );
 
   let finalHeight = rawHeight > 0 ? rawHeight : (rawLevels > 0 ? rawLevels * 3.1 : 0);
-
-  // 실측 데이터 누락 시 한국형 실제 도시 스카이라인 규칙 적용
   if (!finalHeight || finalHeight <= 4.0) {
-    if (isMilitary) {
-      // 1) 군부대 영내 건물: 1~3층 (4.5m~10m) 막사/창고/정비고
-      const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
-      const milStories = approxArea < 180 ? 1 : (approxArea < 350 ? 2 : Math.round(2 + seed));
-      finalHeight = milStories * 3.4; // 4.5m ~ 10.2m
-    } else if (isPublicOrCampus) {
-      // 2) 대학/병원/공공청사: 5~12층 (18m~40m) 캠퍼스 및 관공서 매스
-      const seed = Math.abs(Math.sin(cLng * 139.7 + cLat * 257.9 + approxArea * 0.11)) % 1;
-      const pubStories = Math.round(5 + seed * 7); // 5~12층
-      finalHeight = pubStories * 3.3; // 16.5m ~ 39.6m
-    } else if (isApartment) {
-      // 3) 아파트 단지: 실측 동별 15~25층 (45m~75m)
-      const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
-      const aptStories = Math.round(15 + seed * 10); // 15~25층
-      finalHeight = aptStories * 3.0; // 45m ~ 75m
-    } else if (isCommercial) {
-      // 4) 간선도로변 중대형 상업 빌딩: 4~10층 (14m~32m)
-      const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
-      const commStories = Math.round(4 + seed * 6); // 4~10층
-      finalHeight = commStories * 3.2; // 13m ~ 32m
-    } else {
-      // 5) 저층 주택가: 2~4층 (6m~12m)
-      const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-      const villaStories = approxArea < 110 ? 2 : Math.round(2 + seed * 2);
-      finalHeight = villaStories * 3.0; // 6m ~ 12m
-    }
+    finalHeight = regStyle.height;
   }
-
   const finalLevels = rawLevels > 0 ? rawLevels : Math.max(1, Math.round(finalHeight / 3.0));
 
-  // 색상 및 지붕 형태 매핑
-  let bld_category = 'residential';
-  let bld_category_label = '단독·연립주택';
-  let usageType: 'residential' | 'commercial' | 'public' | 'military' | 'general' | 'apartment' = 'residential';
-  let color = '#FDE68A';
-  let roofShape = rawProps['roof:shape'] || rawProps.roof_shape || 'flat';
-  let roofColour = rawProps['roof:colour'] || rawProps.roof_color || '#334155';
-
-  if (isMilitary) {
-    bld_category = 'military';
-    bld_category_label = '군사시설·영내막사';
-    usageType = 'military';
-    color = '#CBD5E1';
-    roofShape = 'gabled'; // 박공지붕
-    roofColour = '#1e3a8a'; // 국방 슬레이트 블루 또는 다크 슬레이트
-  } else if (isPublicOrCampus) {
-    bld_category = 'public_military';
-    bld_category_label = '공공청사·대학·의료시설';
-    usageType = 'public';
-    color = '#93C5FD'; // 밝은 화강석 및 유리 파사드
-    roofShape = 'flat';
-    roofColour = '#475569';
-  } else if (isApartment) {
-    bld_category = 'apartment';
-    bld_category_label = '공동주택·아파트';
-    usageType = 'apartment';
-    color = '#F8FAFC'; // 현대적 아파트 오프화이트
-    roofShape = 'flat';
-    roofColour = '#059669'; // 한국 아파트 옥상 방수 우레탄 녹색
-  } else if (isCommercial) {
-    bld_category = 'commercial';
-    bld_category_label = '상업·업무시설';
-    usageType = 'commercial';
-    color = '#BAE6FD';
-    roofShape = 'flat';
-    roofColour = '#334155';
-  }
-
-  // 외부 OSM/V-World에서 전달받은 커스텀 색상 우선 존중
+  let color = regStyle.wallR > 0.9 && regStyle.wallB > 0.9 ? '#F8FAFC' : (regStyle.bldType === 1.0 ? '#BAE6FD' : (regStyle.bldType === 3.0 ? '#CBD5E1' : '#FDE68A'));
   if (rawProps['building:colour'] || rawProps.building_colour) {
     color = rawProps['building:colour'] || rawProps.building_colour;
   } else if (rawProps.color) {
     color = rawProps.color;
   }
 
+  const roofShape = rawProps['roof:shape'] || rawProps.roof_shape || regStyle.roofShape;
+  const roofColour = rawProps['roof:colour'] || rawProps.roof_color || (regStyle.roofSlotId === 17.0 ? '#2e5a44' : regStyle.roofSlotId === 16.0 ? '#7c2d12' : regStyle.roofSlotId === 18.0 ? '#1e3a8a' : '#334155');
+
+  const isMilitary = regStyle.bldType === 3.0 || rawProps.isMilitaryOrPublic === true;
+  const isPublicOrCampus = regStyle.category === 'public_innovation_hq' || regStyle.bldType === 1.0;
+
   return {
     height: finalHeight,
     levels: finalLevels,
-    bld_category,
-    bld_category_label,
-    usageType,
+    bld_category: regStyle.category,
+    bld_category_label: regStyle.categoryLabel,
+    usageType: (regStyle.bldType === 2.0 ? 'apartment' : regStyle.bldType === 1.0 ? 'commercial' : regStyle.bldType === 3.0 ? 'military' : regStyle.bldType === 4.0 ? 'public' : 'residential') as any,
     color,
     roofShape,
     roofColour,
     isMilitaryOrPublic: isMilitary || isPublicOrCampus,
+    regionalStyle: regStyle,
+    skirtDepth: regStyle.skirtDepth,
   };
 }
 
