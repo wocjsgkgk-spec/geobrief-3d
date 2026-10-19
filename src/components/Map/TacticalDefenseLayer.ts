@@ -9,6 +9,7 @@ import {
   LosAnalysisResult,
   LosPoint,
 } from '@/types/map';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 /**
  * [3단계 신규: 지휘통제 및 보안 관제]
@@ -131,7 +132,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
     }
 
     try {
-      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);

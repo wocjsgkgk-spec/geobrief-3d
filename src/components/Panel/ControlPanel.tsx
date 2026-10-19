@@ -253,60 +253,32 @@ export const ControlPanel: React.FC = () => {
 
   const handleTabChange = (tab: typeof activeSidebarTab) => {
     setLocalActiveTab(tab);
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        setActiveSidebarTab(tab);
-      });
-    });
+    setActiveSidebarTab(tab);
   };
 
   const handleSelectRenderMode3D = (mode: typeof renderMode3D) => {
     setLocalRenderMode3D(mode);
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        setRenderMode3D(mode);
-      });
-    });
+    setRenderMode3D(mode);
   };
 
   const handleToggleLayer = (key: keyof typeof layers) => {
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        toggleLayer(key);
-      });
-    });
+    toggleLayer(key);
   };
 
   const handleToggleFlightCeiling3D = () => {
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        toggleFlightCeiling3D();
-      });
-    });
+    toggleFlightCeiling3D();
   };
 
   const handleToggleBuildingMass3D = () => {
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        toggleBuildingMass3D();
-      });
-    });
+    toggleBuildingMass3D();
   };
 
   const handleToggleSlopeAnalysis = () => {
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        toggleSlopeAnalysis();
-      });
-    });
+    toggleSlopeAnalysis();
   };
 
   const handleSetTerrainEnabled = (enabled: boolean) => {
-    startTransition(() => {
-      requestAnimationFrame(() => {
-        setTerrainEnabled(enabled);
-      });
-    });
+    setTerrainEnabled(enabled);
   };
 
   const handleCreateBookmark = (e: React.FormEvent) => {
@@ -2906,11 +2878,7 @@ export const ControlPanel: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => {
-                startTransition(() => {
-                  requestAnimationFrame(() => {
-                    setBaseMap('satellite');
-                  });
-                });
+                setBaseMap('satellite');
               }}
               className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
                 baseMap === 'satellite'
@@ -2926,11 +2894,7 @@ export const ControlPanel: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                startTransition(() => {
-                  requestAnimationFrame(() => {
-                    setBaseMap('clean');
-                  });
-                });
+                setBaseMap('clean');
               }}
               className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
                 baseMap === 'clean'
@@ -3425,12 +3389,7 @@ export const ControlPanel: React.FC = () => {
                 type="checkbox"
                 checked={borderSecurityVisible}
                 onChange={(e) => {
-                  const val = e.target.checked;
-                  startTransition(() => {
-                    requestAnimationFrame(() => {
-                      setBorderSecurityVisible(val);
-                    });
-                  });
+                  setBorderSecurityVisible(e.target.checked);
                 }}
                 className="sr-only peer"
               />

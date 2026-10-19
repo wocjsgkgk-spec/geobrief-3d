@@ -671,6 +671,7 @@ export const MapViewer: React.FC = () => {
               if (deck3DTilesManagerRef.current) {
                 deck3DTilesManagerRef.current.setBuildingFeatures(merged);
               }
+              updateRealtimeMetrics();
             }
           },
         })
@@ -693,6 +694,7 @@ export const MapViewer: React.FC = () => {
               if (deck3DTilesManagerRef.current) {
                 deck3DTilesManagerRef.current.setBuildingFeatures(merged);
               }
+              updateRealtimeMetrics();
             }
           })
           .catch((err) => {
@@ -709,6 +711,76 @@ export const MapViewer: React.FC = () => {
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
+
+  // [2단계: 실시간 3D 렌더링 자가 진단 메트릭 상태]
+  const [realtimeMetrics, setRealtimeMetrics] = useState<{
+    renderedBuildingCount: number;
+    activeLayersCount: number;
+  }>({
+    renderedBuildingCount: 0,
+    activeLayersCount: 0,
+  });
+
+  const updateRealtimeMetrics = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    try {
+      // 1) 화면 내 실제로 렌더링 중인 3D 건물 수 집계
+      let count = 0;
+      const buildingLayers = [
+        'building-body',
+        'building-roof-cap',
+        '3d-buildings',
+        'vworld-buildings-3d',
+        'fusion-buildings-3d',
+        'sample-buildings-3d',
+      ].filter((id) => {
+        try {
+          return map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none';
+        } catch {
+          return false;
+        }
+      });
+
+      if (buildingLayers.length > 0) {
+        const features = map.queryRenderedFeatures(undefined, { layers: buildingLayers });
+        const uniqueKeys = new Set<string>();
+        for (const f of features) {
+          const k = f.id !== undefined && f.id !== null ? String(f.id) : JSON.stringify(f.geometry);
+          uniqueKeys.add(k);
+        }
+        count = uniqueKeys.size;
+      }
+
+      // Three.js LOD2 메쉬 건물이 구축되어 있는 경우 더 큰 실제 건물 수 반영
+      if (lod2BuildingEngineRef.current) {
+        const lod2Count = lod2BuildingEngineRef.current.getBuildingCount();
+        if (lod2Count > count) {
+          count = lod2Count;
+        }
+      }
+
+      // 2) 활성 레이어 수 집계
+      const styleLayers = map.getStyle()?.layers || [];
+      const activeCount = styleLayers.filter((l) => {
+        try {
+          return map.getLayoutProperty(l.id, 'visibility') !== 'none';
+        } catch {
+          return false;
+        }
+      }).length;
+
+      setRealtimeMetrics((prev) => {
+        if (prev.renderedBuildingCount === count && prev.activeLayersCount === activeCount) {
+          return prev;
+        }
+        return { renderedBuildingCount: count, activeLayersCount: activeCount };
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // [긴급 에러 오버레이] Window Error & Unhandled Promise Rejection 실시간 감지 리스너
   useEffect(() => {
@@ -1454,12 +1526,12 @@ export const MapViewer: React.FC = () => {
             },
             layout: { visibility: 'none' },
           },
-          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 1 - 저층 기단부 (0m ~ 3.5m: 1층 상가/로비 다크 화강석 그레이 #64748b)
+          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 12.0+)] Layer 1 - 저층 기단부 (0m ~ 3.5m: 1층 상가/로비 다크 화강석 그레이 #64748b)
           {
             id: 'fusion-buildings-foundation',
             type: 'fill-extrusion',
             source: 'fusion-buildings',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-color': '#64748b',
               'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
@@ -1468,19 +1540,19 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 1.0,
+                12.0, 0.0,
+                12.4, 1.0,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'none' },
           },
-          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 2 - 본동 외벽 (3.5m ~ H: 캔버스 경량 가로 줄무늬 층수 파사드 패턴 + 실사 외장 컬러)
+          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 12.0+)] Layer 2 - 본동 외벽 (3.5m ~ H: 캔버스 경량 가로 줄무늬 층수 파사드 패턴 + 실사 외장 컬러)
           {
             id: 'fusion-buildings-3d',
             type: 'fill-extrusion',
             source: 'fusion-buildings',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-pattern': facadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
@@ -1490,19 +1562,19 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.95,
+                12.0, 0.0,
+                12.4, 0.95,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'none' },
           },
-          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m: 한국형 초록 우레탄 #15803d / 다크 슬레이트 #334155)
+          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 12.0+)] Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m: 한국형 초록 우레탄 #15803d / 다크 슬레이트 #334155)
           {
             id: 'fusion-buildings-roof',
             type: 'fill-extrusion',
             source: 'fusion-buildings',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
@@ -1511,8 +1583,8 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.98,
+                12.0, 0.0,
+                12.4, 0.98,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1523,7 +1595,7 @@ export const MapViewer: React.FC = () => {
             id: 'fusion-buildings-edge',
             type: 'line',
             source: 'fusion-buildings',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'line-color': '#0F172A',
               'line-width': 0.8,
@@ -1531,8 +1603,8 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.5,
+                12.0, 0.0,
+                12.4, 0.5,
               ],
             },
             layout: { visibility: 'visible' },
@@ -1605,7 +1677,7 @@ export const MapViewer: React.FC = () => {
             id: 'vworld-buildings-foundation',
             type: 'fill-extrusion',
             source: 'vworld-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-color': '#64748b',
               'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
@@ -1614,19 +1686,19 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 1.0,
+                12.0, 0.0,
+                12.4, 1.0,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
           },
-          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 2 - 본동 외벽 (3.5m ~ H: 캔버스 패턴 + 실사 외장 컬러)
+          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 12.0+)] Layer 2 - 본동 외벽 (3.5m ~ H: 캔버스 패턴 + 실사 외장 컬러)
           {
             id: 'vworld-buildings-3d',
             type: 'fill-extrusion',
             source: 'vworld-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-pattern': facadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
@@ -1636,19 +1708,19 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.95,
+                12.0, 0.0,
+                12.4, 0.95,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'visible' },
           },
-          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m: 초록 우레탄 / 다크 슬레이트)
+          // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 12.0+)] Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m: 초록 우레탄 / 다크 슬레이트)
           {
             id: 'vworld-buildings-roof',
             type: 'fill-extrusion',
             source: 'vworld-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
@@ -1657,8 +1729,8 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.98,
+                12.0, 0.0,
+                12.4, 0.98,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1669,7 +1741,7 @@ export const MapViewer: React.FC = () => {
             id: 'vworld-buildings-edge',
             type: 'line',
             source: 'vworld-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'line-color': '#0F172A',
               'line-width': 0.8,
@@ -1677,8 +1749,8 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.5,
+                12.0, 0.0,
+                12.4, 0.5,
               ],
             },
             layout: { visibility: 'none' },
@@ -1747,12 +1819,12 @@ export const MapViewer: React.FC = () => {
             },
             layout: { visibility: 'none' },
           },
-          // [샘플 건축물 Layer 1 - 저층 기단부 (0m ~ 3.5m: 줌 13.5+)]
+          // [샘플 건축물 Layer 1 - 저층 기단부 (0m ~ 3.5m: 줌 12.0+)]
           {
             id: 'sample-buildings-foundation',
             type: 'fill-extrusion',
             source: 'sample-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-color': '#64748b',
               'fill-extrusion-height': ['min', 3.5, buildingHeightExpr],
@@ -1761,19 +1833,19 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 1.0,
+                12.0, 0.0,
+                12.4, 1.0,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'none' },
           },
-          // [샘플 건축물 Layer 2 - 본동 외벽 (3.5m ~ H: 파사드 패턴, 줌 13.5+)]
+          // [샘플 건축물 Layer 2 - 본동 외벽 (3.5m ~ H: 파사드 패턴, 줌 12.0+)]
           {
             id: 'sample-buildings-3d',
             type: 'fill-extrusion',
             source: 'sample-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-pattern': facadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
@@ -1783,19 +1855,19 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.95,
+                12.0, 0.0,
+                12.4, 0.95,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
             layout: { visibility: 'none' },
           },
-          // [샘플 건축물 Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m, 줌 13.5+)]
+          // [샘플 건축물 Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m, 줌 12.0+)]
           {
             id: 'sample-buildings-roof',
             type: 'fill-extrusion',
             source: 'sample-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'fill-extrusion-color': buildingRoofColorExpr,
               'fill-extrusion-height': buildingRoofHeightExpr,
@@ -1804,8 +1876,8 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.98,
+                12.0, 0.0,
+                12.4, 0.98,
               ],
               'fill-extrusion-vertical-gradient': true,
             },
@@ -1815,7 +1887,7 @@ export const MapViewer: React.FC = () => {
             id: 'sample-buildings-edge',
             type: 'line',
             source: 'sample-buildings-source',
-            minzoom: 13.2,
+            minzoom: 12.0,
             paint: {
               'line-color': '#0F172A',
               'line-width': 0.8,
@@ -1823,8 +1895,8 @@ export const MapViewer: React.FC = () => {
                 'interpolate',
                 ['linear'],
                 ['zoom'],
-                13.2, 0.0,
-                13.5, 0.9,
+                12.0, 0.0,
+                12.4, 0.9,
               ],
             },
             layout: { visibility: 'visible' },
@@ -2465,6 +2537,7 @@ export const MapViewer: React.FC = () => {
 
         // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
         syncExternalSpatialBuildings(map);
+        updateRealtimeMetrics();
       }, 350);
     };
 
@@ -2519,11 +2592,25 @@ export const MapViewer: React.FC = () => {
     const handleMapIdle = () => {
       // [2단계: 지도 안정화 시 3대 외부 실측 건물 데이터 정밀 통합 갱신]
       syncExternalSpatialBuildings(map);
+      updateRealtimeMetrics();
     };
     map.on('idle', handleMapIdle);
 
+    const handleSourceData = (e: any) => {
+      if (
+        (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openmaptiles' || e.sourceId === 'openfreemap') &&
+        e.isSourceLoaded &&
+        e.sourceDataType !== 'metadata'
+      ) {
+        syncExternalSpatialBuildings(map);
+        updateRealtimeMetrics();
+      }
+    };
+    map.on('sourcedata', handleSourceData);
+
     map.on('zoom', () => {
       lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
+      updateRealtimeMetrics();
     });
 
     let hasInitializedMapLayers = false;
@@ -2532,6 +2619,8 @@ export const MapViewer: React.FC = () => {
       if (hasInitializedMapLayers) return;
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
+      syncExternalSpatialBuildings(map);
+      updateRealtimeMetrics();
 
       // [1. 검은색 background 레이어 존재 시 제거하여 위성 타일 가림 방지]
       try {
@@ -2831,7 +2920,7 @@ export const MapViewer: React.FC = () => {
             type: 'fill-extrusion',
             source: 'openmaptiles-vector',
             'source-layer': 'building',
-            minzoom: 13.0,
+            minzoom: 12.0,
             maxzoom: 24,
             paint: {
               'fill-extrusion-color': buildingRoofColorExpr,
@@ -2951,7 +3040,8 @@ export const MapViewer: React.FC = () => {
         lod2BuildingEngineRef.current = lod2Engine;
         (window as any).__lod2Engine = lod2Engine;
         if (initRenderMode === 'facade') {
-          lod2Engine.updateBuildings(SAMPLE_BUILDINGS.features as any);
+          syncExternalSpatialBuildings(map);
+          updateRealtimeMetrics();
         }
       } catch (lod2Err) {
         console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
@@ -3299,6 +3389,7 @@ export const MapViewer: React.FC = () => {
         map.off('dragend', handleInteractionEnd);
         map.off('zoomend', handleInteractionEnd);
         map.off('idle', handleMapIdle);
+        map.off('sourcedata', handleSourceData);
       } catch {}
       resizeObserver.disconnect();
       map.remove();
@@ -3805,11 +3896,22 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.clearFacadesGroup();
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
-      // [실사 메쉬 단일화]: 기존 네이티브 단색/초록색 박스 레이어 완전 비활성화 및 Three.js 실사 메쉬 전담
-      for (const lyr of nativeBuildingLayers) {
+      // [다층 fill-extrusion 실사 파사드 스택 기본 베이스 상시 가동]:
+      // 타일 로드 즉시 MapLibre GPU 엔진이 3D 건물을 무조건 솟아오르게 하고,
+      // 벡터 타일 피처가 querySourceFeatures로 지속 수신되도록 보장
+      const primaryNativeLayers = ['building-vector-carrier', 'building-body', 'building-roof-cap'];
+      for (const lyr of primaryNativeLayers) {
         if (map.getLayer(lyr)) {
+          map.setLayoutProperty(lyr, 'visibility', bldgVis);
+        }
+      }
+      for (const lyr of nativeBuildingLayers) {
+        if (!primaryNativeLayers.includes(lyr) && map.getLayer(lyr)) {
           map.setLayoutProperty(lyr, 'visibility', 'none');
         }
+      }
+      if (bldgVis === 'visible') {
+        promoteBuildingLayersToTop(map);
       }
     } else if (renderMode3D === 'tiles3d') {
       // 3. 모드 C: 고정밀 3D 타일셋 스트리밍 (4대 프리셋 완벽 분기)
@@ -3882,6 +3984,7 @@ export const MapViewer: React.FC = () => {
       }
     }
 
+    updateRealtimeMetrics();
     map.triggerRepaint();
   }, [
     renderMode3D,
@@ -3893,6 +3996,7 @@ export const MapViewer: React.FC = () => {
     tile3DStream.maximumScreenSpaceError,
     tile3DStream.pointSize,
     isMapLoaded,
+    updateRealtimeMetrics,
   ]);
 
   // 8-0-0. [2단계 신규: 국토지리정보원 정밀 등고선(Contour) 레이어 가시성 및 실시간 생성 동기화]
@@ -5983,7 +6087,12 @@ export const MapViewer: React.FC = () => {
               {debugErrors.length > 0 ? (
                 <span className="text-red-400">🚨 렌더링 에러 {debugErrors.length}건 감지</span>
               ) : (
-                <span className="text-emerald-300">✅ WebGL 3D 엔진 정상 (강원 18개 시·군 연동)</span>
+                <span className="text-emerald-300 flex items-center gap-1.5 flex-wrap">
+                  <span>✅ WebGL 3D 엔진 정상</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
+                    [활성 모드: {renderMode3D === 'native' ? '모드 A' : renderMode3D === 'facade' ? '모드 B' : '모드 C'} | 화면 내 렌더링 건물 수: {realtimeMetrics.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetrics.activeLayersCount}개]
+                  </span>
+                </span>
               )}
             </span>
             {debugErrors.length > 0 ? (

@@ -23,6 +23,7 @@ import {
   GangwonMilitarySite,
 } from '@/constants/gangwonMilitarySites';
 import { elevationCache } from '@/utils/elevationCache';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 export const FIRST_LOGISTICS_WONJU_CENTER: [number, number] = [127.9358, 37.3592];
 
@@ -1616,10 +1617,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
     }
 
     try {
-      const rawMatrix =
-        options?.defaultProjectionData?.mainMatrix ||
-        options?.modelViewProjectionMatrix ||
-        options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       // 0. 부드러운 솟아오름(Rise-Up) 보간 애니메이션 (0.05 -> 1.0)

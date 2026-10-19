@@ -14,6 +14,7 @@ import {
 import { generateLOD2RoofsGroup, disposeRoofMaterialsCache } from '@/utils/roofGeometryBuilder';
 import { generateBuildingFacadesGroup, disposeFacadeMaterialsCache } from '@/utils/proceduralFacades';
 import { elevationCache } from '@/utils/elevationCache';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 /**
  * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
@@ -319,13 +320,13 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     }
 
     try {
-      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
-      // [LOD 뷰포트 레벨 체크] 줌 13.5 이상에서 Threebox 정밀 입체 지붕 및 절차적 실감 외벽(LOD2) 렌더링 활성화 (기본 뷰포트 14.5 지원)
+      // [LOD 뷰포트 레벨 체크] 줌 12.0 이상에서 Threebox 정밀 입체 지붕 및 절차적 실감 외벽(LOD2) 렌더링 활성화
       if (this.map) {
         const zoom = this.map.getZoom();
-        const isHighDetailZoom = zoom >= 13.5 && this.lodMode === 'lod2';
+        const isHighDetailZoom = zoom >= 12.0 && this.lodMode === 'lod2';
         if (this.roofsGroup.visible !== isHighDetailZoom) {
           this.roofsGroup.visible = isHighDetailZoom;
         }

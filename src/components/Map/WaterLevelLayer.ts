@@ -1,5 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 /**
  * 강원권 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어
@@ -170,7 +171,7 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
     }
 
     try {
-      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       // 수위 슬라이더 조작 시 부드러운 수위 상승/하강 보간 (Lerp)

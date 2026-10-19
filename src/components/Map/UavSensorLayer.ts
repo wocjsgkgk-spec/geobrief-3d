@@ -4,6 +4,7 @@ import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import * as TWEEN from '@tweenjs/tween.js';
 import { SurveillanceSensor, UavFlightState } from '@/types/map';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 export interface UavTelemetry {
   coords: [number, number]; // [lng, lat]
@@ -116,7 +117,7 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
     if (!this.map || !this.renderer || !this.isVisible) return;
 
     try {
-      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       // 1. MapLibre 뷰 행렬 바인딩

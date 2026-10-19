@@ -37,6 +37,7 @@ import {
 } from '@/utils/koreanBuildingTextures';
 import { updateFacadeShaderLights } from '@/shaders/buildingFacadeShader';
 import { elevationCache } from '@/utils/elevationCache';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 import {
   getKoreanCityAtlasMaterial,
   disposeKoreanCityAtlas,
@@ -667,13 +668,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (!this.isVisible) return;
     this.currentZoomLOD = currentZoom;
 
-    const standardThreshold = this.sseQuality <= 8 ? 12.8 : this.sseQuality <= 16 ? 13.5 : 14.2;
-    const detailThreshold = this.sseQuality <= 8 ? 14.0 : this.sseQuality <= 16 ? 15.2 : 16.0;
+    // [줌 레벨 제한 해제]: 줌 12.0 이상(Lv 14.8 포함)에서 모든 3D 건물이 즉시 렌더링되도록 기준 완화
+    const standardThreshold = 12.0;
+    const detailThreshold = this.sseQuality <= 8 ? 13.5 : this.sseQuality <= 16 ? 14.2 : 15.0;
 
     const isStandardOrAbove = currentZoom >= standardThreshold;
     const isNearDetail = currentZoom >= detailThreshold;
 
-    // 1) 건물 본체 파사드 및 접지 그림자: Zoom 13.5 이상 표준 조감도 뷰에서 활성화
+    // 1) 건물 본체 파사드 및 접지 그림자: Zoom 12.0 이상 표준 조감도 뷰에서 상시 활성화
     if (this.masterCityMesh) {
       this.masterCityMesh.visible = isStandardOrAbove;
     }
@@ -2179,19 +2181,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       return;
     }
 
-    // 줌 13.5 미만 광역 뷰에서는 Three.js 렌더링 패스 완전 스킵 (초경량 GPU Extrusion 레이어가 전담)
+    // 줌 12.0 미만 광역 뷰에서는 Three.js 렌더링 패스 완전 스킵 (초경량 GPU Extrusion 레이어가 전담)
     if (this.map) {
       const zoom = this.map.getZoom();
-      if (zoom < 13.5) {
+      if (zoom < 12.0) {
         return;
       }
     }
 
     try {
-      const rawMatrix =
-        options?.defaultProjectionData?.mainMatrix ||
-        options?.modelViewProjectionMatrix ||
-        options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       // DEM 표고 실시간 적응 (초기 로드 후 DEM 타일 수신 시 자동 재스냅 - 회전/이동 중에는 고도 쿼리 스킵)

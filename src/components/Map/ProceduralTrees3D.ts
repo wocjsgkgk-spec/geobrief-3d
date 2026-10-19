@@ -17,6 +17,7 @@ import {
   getGangwonMilitarySiteById,
 } from '@/constants/gangwonMilitarySites';
 import { elevationCache } from '@/utils/elevationCache';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 export const WONJU_1ST_LOGISTICS_CENTER: [number, number] = [127.9358, 37.3592];
 
@@ -935,10 +936,7 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
     }
 
     try {
-      const rawMatrix =
-        options?.defaultProjectionData?.mainMatrix ||
-        options?.modelViewProjectionMatrix ||
-        options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       // 1. 지형 DEM 표고 쿼리 (Terrain Elevation Clamping) - 인터랙션 중에는 스킵

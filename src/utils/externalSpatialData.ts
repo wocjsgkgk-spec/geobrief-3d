@@ -448,8 +448,8 @@ export function extractOpenFreeMapBuildings(
       externalBuildingCache.set(key, externalFeat);
     }
 
-    // [Overzoom 방어] 줌 15.0 이상 초상세 뷰포트에서 주변 캐시 병합 (건물 증발 차단)
-    if (map.getZoom && map.getZoom() >= 15.0 && map.getBounds) {
+    // [Overzoom 방어] 줌 12.0 이상 뷰포트에서 주변 캐시 병합 (건물 증발 차단)
+    if (map.getZoom && map.getZoom() >= 12.0 && map.getBounds) {
       try {
         const b = map.getBounds();
         const lngPadding = (b.getEast() - b.getWest()) * 0.8;

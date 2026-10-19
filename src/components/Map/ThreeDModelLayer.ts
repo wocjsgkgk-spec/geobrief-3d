@@ -2,6 +2,7 @@ import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import { BuildingMassPresetId } from '@/types/map';
 import { buildPreset3DModel, loadExternalGLTFModel } from '@/utils/buildingModels3D';
+import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 /**
  * MapLibre GL JS용 Three.js 커스텀 3D 레이어 (CustomLayerInterface 구현)
@@ -79,7 +80,7 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
     }
 
     try {
-      const rawMatrix = options?.modelViewProjectionMatrix || options;
+      const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
       // 1. 위경도 + 해발고도를 Mercator 좌표계로 투영
       const mercator = maplibregl.MercatorCoordinate.fromLngLat(

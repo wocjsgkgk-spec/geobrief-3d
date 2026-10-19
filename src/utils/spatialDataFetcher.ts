@@ -250,8 +250,8 @@ export function extractRenderedVectorBuildings(
       buildingOverzoomCache.set(k, uf);
     }
 
-    // [Overzoom 방어 2] 줌 15.0 이상 초상세 뷰포트에서 오버줌 캐시 결합 (주변 1.5km 건물 무중단 유지)
-    if (map.getZoom && map.getZoom() >= 15.0 && map.getBounds) {
+    // [Overzoom 방어 2] 줌 12.0 이상 뷰포트에서 오버줌 캐시 결합 (주변 1.5km 건물 무중단 유지)
+    if (map.getZoom && map.getZoom() >= 12.0 && map.getBounds) {
       try {
         const b = map.getBounds();
         const lngPadding = (b.getEast() - b.getWest()) * 0.8;
