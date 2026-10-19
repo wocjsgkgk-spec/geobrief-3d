@@ -1267,17 +1267,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         const buildingSeed = Math.abs(Math.sin(obb.centroid.x * 12.9898 + obb.centroid.y * 78.233)) % 1;
         const seedRoof = Math.abs(Math.sin(obb.centroid.x * 45.164 + obb.centroid.y * 91.733)) % 1;
         let roofSlotId = 14;
-        let roofR = 0.47, roofG = 0.44, roofB = 0.42; // 30%: 노후 콘크리트 슬래브 웜 그레이
-        if (seedRoof < 0.30) {
-          roofSlotId = 14; roofR = 0.47; roofG = 0.44; roofB = 0.42;
-        } else if (seedRoof < 0.55) {
-          roofSlotId = 15; roofR = 0.20; roofG = 0.25; roofB = 0.33; // 25%: 아스팔트 차콜
-        } else if (seedRoof < 0.75) {
-          roofSlotId = 16; roofR = 0.42; roofG = 0.18; roofB = 0.12; // 20%: 적갈색 기와
-        } else if (seedRoof < 0.90) {
-          roofSlotId = 17; roofR = 0.23; roofG = 0.32; roofB = 0.29; // 15%: 세이지 그린
+        let roofR = 0.43, roofG = 0.41, roofB = 0.39; // 35%: 노후 콘크리트 슬래브 웜 그레이 (#6e6a64)
+        if (seedRoof < 0.35) {
+          roofSlotId = 14; roofR = 0.43; roofG = 0.41; roofB = 0.39; // 35%: 노후 콘크리트
+        } else if (seedRoof < 0.60) {
+          roofSlotId = 17; roofR = 0.21; roofG = 0.37; roofB = 0.29; // 25%: 실사 딥세이지 우레탄 그린 (#355e4b)
+        } else if (seedRoof < 0.80) {
+          roofSlotId = 15; roofR = 0.22; roofG = 0.24; roofB = 0.26; // 20%: 다크 아스팔트 차콜 (#383e42)
+        } else if (seedRoof < 0.92) {
+          roofSlotId = 16; roofR = 0.41; roofG = 0.21; roofB = 0.16; // 12%: 적갈색 기와 (#693628)
         } else {
-          roofSlotId = 18; roofR = 0.17; roofG = 0.26; roofB = 0.34; // 10%: 청회색 징크
+          roofSlotId = 18; roofR = 0.17; roofG = 0.26; roofB = 0.34; // 8%: 청회색 징크 (#2c4257)
         }
 
         const podiumSlotId = isComm ? 9 : 5;
@@ -1347,8 +1347,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const nStories = Math.max(1, Math.round(towerH / STORY_HEIGHT));
 
             if (cls.category === 'apartment') {
-              // 아파트 측벽 판별: OBB 단축(dirV)과의 방향 일치율 > 0.65
-              const isNarrowSide = Math.abs(dx * obb.dirV.x + dz * obb.dirV.y) / segLen > 0.65;
+              // [한국형 아파트 좁은 측벽 자동 판별]: edgeLength < 15m 또는 OBB 단축 일치율 > 0.65
+              const isNarrowSide = segLen < 15.0 || (Math.abs(dx * obb.dirV.x + dz * obb.dirV.y) / segLen > 0.65);
 
               if (isNarrowSide) {
                 // (1) 한국형 아파트 측벽: 밝은 크림 아이보리(#f8fafc) + 측벽 수직 코어 라인 + 상단 동 번호 마킹

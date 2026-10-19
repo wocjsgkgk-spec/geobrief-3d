@@ -935,97 +935,32 @@ function drawAptPilotisLobby(ctx: CanvasRenderingContext2D, x: number, y: number
 }
 
 // =============================================================================
+import {
+  createPhotorealisticCityAtlasCanvas,
+  getPhotorealisticCityAtlasTexture,
+  disposePhotorealisticCityAtlas,
+  PHOTOREALISTIC_ATLAS_SIZE,
+  PHOTOREALISTIC_COLS,
+  PHOTOREALISTIC_ROWS,
+  PHOTOREALISTIC_CELL_W,
+  PHOTOREALISTIC_CELL_H,
+  getPhotorealisticSlotUV,
+} from './photorealisticCityAtlas';
+
 // 아틀라스 캔버스 생성 및 Three.js Texture 싱글톤 관리
 // =============================================================================
 
-let cachedVWorldCanvas: HTMLCanvasElement | null = null;
-let cachedVWorldTexture: THREE.CanvasTexture | null = null;
-
 export function createVWorldAtlasCanvas(): HTMLCanvasElement {
-  if (typeof document === 'undefined') {
-    return {} as HTMLCanvasElement;
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = VWORLD_ATLAS_SIZE;
-  canvas.height = VWORLD_ATLAS_SIZE;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-
-  // 전체 배경 초기화
-  ctx.fillStyle = '#e7e5e4';
-  ctx.fillRect(0, 0, VWORLD_ATLAS_SIZE, VWORLD_ATLAS_SIZE);
-
-  const cellW = VWORLD_CELL_W;
-  const cellH = VWORLD_CELL_H;
-
-  const drawers = [
-    drawAptWarmCream,     // 0
-    drawAptModernGray,    // 1
-    drawAptIvoryWhite,    // 2
-    drawAptGlassStone,    // 3
-    drawAptSide,          // 4
-    drawCommGraniteBeige, // 5
-    drawCommDarkMetal,    // 6
-    drawCommRedBrick,     // 7
-    drawCommCurtainwall,  // 8
-    drawCommGroundShop,   // 9
-    drawVillaRedBrick,    // 10
-    drawVillaGranite,     // 11
-    drawHouseCream,       // 12
-    drawFacilityPanel,    // 13
-    drawRoofConcreteWarmGray, // 14 (30%)
-    drawRoofAsphaltCharcoal,  // 15 (25%)
-    drawRoofTerracottaTile,   // 16 (20%)
-    drawRoofUrethaneSage,     // 17 (15%)
-    drawRoofZincBlue,         // 18 (10%)
-    drawPenthouseWall,    // 19
-    drawPenthouseMetal,   // 20
-    drawParapetConcrete,  // 21
-    drawParapetDark,      // 22
-    drawAptPilotisLobby,  // 23 (아파트/빌라 1층 공동현관 및 필로티)
-  ];
-
-  for (let i = 0; i < drawers.length; i++) {
-    const col = i % VWORLD_COLS;
-    const row = Math.floor(i / VWORLD_COLS);
-    const x = col * cellW;
-    const y = row * cellH;
-    drawers[i](ctx, x, y, cellW, cellH);
-  }
-
-  return canvas;
+  return createPhotorealisticCityAtlasCanvas();
 }
 
 /**
- * Three.js 고성능 CanvasTexture 반환 (anisotropy: 16, mipmaps: true)
+ * Three.js 고성능 CanvasTexture 반환 (anisotropy: 16, mipmaps: true, LinearMipmapLinearFilter)
  */
 export function getVWorldAtlasTexture(): THREE.CanvasTexture | null {
-  if (typeof window === 'undefined') return null;
-
-  if (cachedVWorldTexture) {
-    return cachedVWorldTexture;
-  }
-
-  cachedVWorldCanvas = createVWorldAtlasCanvas();
-  const tex = new THREE.CanvasTexture(cachedVWorldCanvas);
-  tex.anisotropy = 16;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-
-  cachedVWorldTexture = tex;
-  return tex;
+  return getPhotorealisticCityAtlasTexture();
 }
 
 export function disposeVWorldAtlas(): void {
-  if (cachedVWorldTexture) {
-    cachedVWorldTexture.dispose();
-    cachedVWorldTexture = null;
-  }
-  cachedVWorldCanvas = null;
+  disposePhotorealisticCityAtlas();
 }

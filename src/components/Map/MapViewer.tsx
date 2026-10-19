@@ -892,8 +892,8 @@ export const MapViewer: React.FC = () => {
       0.4,
     ];
 
-    // [Layer 4 - 한국형 우레탄/콘크리트 옥상 마감 색상]
-    // * 높이 25m 미만 중·저층 건물 옥상: 한국 도시 특유의 차분한 우레탄 방수 그린(#2e5a44)
+    // [Layer 4 - 한국형 실사 옥상 마감 색상 (단색 녹색 제거 및 웜 그레이/차콜 적용)]
+    // * 높이 25m 미만 중·저층 건물 옥상: 노후 콘크리트 슬래브 웜 그레이(#52504c)
     // * 높이 25m 이상 고층 아파트/빌딩 옥상: 콘크리트 다크 그레이(#334155)
     // * 저층 단독주택/군 막사: 테라코타 브라운(#7c2d12)
     const buildingRoofColorExpr: any = [
@@ -909,7 +909,7 @@ export const MapViewer: React.FC = () => {
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['residential', 'house', 'detached', 'villa', 'military', 'barracks', 'depot'],
           '#7c2d12', // 저층 단독주택/군 막사: 테라코타 브라운 (#7c2d12)
-          '#2e5a44', // 25m 미만 중·저층 상가/일반 건물: 한국형 우레탄 방수 그린 (#2e5a44)
+          '#52504c', // 25m 미만 중·저층 상가/일반 건물: 노후 콘크리트 슬래브 웜그레이 (#52504c)
         ],
       ],
     ];
@@ -1452,7 +1452,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 1 - 저층 기단부 (0m ~ 3.5m: 1층 상가/로비 다크 화강석 그레이 #64748b)
           {
@@ -1473,7 +1473,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 2 - 본동 외벽 (3.5m ~ H: 캔버스 경량 가로 줄무늬 층수 파사드 패턴 + 실사 외장 컬러)
           {
@@ -1495,7 +1495,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [LOD 2 - 표준 조감도 및 상세 뷰 (줌 13.5+)] Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m: 한국형 초록 우레탄 #15803d / 다크 슬레이트 #334155)
           {
@@ -1516,7 +1516,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [국토교통부 x 브이월드 x OSM 융합 건축물 모서리 와이어프레임 엣지]
           {
@@ -1662,7 +1662,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [브이월드 건축물 외곽 모서리 와이어프레임 엣지 - 선명한 CAD 엣지 라인 (0.8px)]
           {
@@ -1681,7 +1681,7 @@ export const MapViewer: React.FC = () => {
                 13.5, 0.5,
               ],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [전략 대상지 샘플 건축물 바닥 접지 그림자 레이어]
@@ -1720,7 +1720,7 @@ export const MapViewer: React.FC = () => {
                 18.0, 0.85,
               ],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [전략 대상지 샘플 건축물 광역 개요 (줌 11 ~ 13.5)]
@@ -1745,7 +1745,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [샘플 건축물 Layer 1 - 저층 기단부 (0m ~ 3.5m: 줌 13.5+)]
           {
@@ -1766,7 +1766,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [샘플 건축물 Layer 2 - 본동 외벽 (3.5m ~ H: 파사드 패턴, 줌 13.5+)]
           {
@@ -1788,7 +1788,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // [샘플 건축물 Layer 3 - 옥상 슬래브 마감 (H ~ H + 0.3m, 줌 13.5+)]
           {
@@ -1809,7 +1809,7 @@ export const MapViewer: React.FC = () => {
               ],
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'sample-buildings-edge',
@@ -3805,15 +3805,10 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.clearFacadesGroup();
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
-      const threeCount = lod2BuildingEngineRef.current ? lod2BuildingEngineRef.current.getBuildingCount() : 0;
+      // [실사 메쉬 단일화]: 기존 네이티브 단색/초록색 박스 레이어 완전 비활성화 및 Three.js 실사 메쉬 전담
       for (const lyr of nativeBuildingLayers) {
         if (map.getLayer(lyr)) {
-          // [이중 안전망 Fail-safe Fallback]: Three.js 로딩 중이거나 0건일 때 빈 땅이 되지 않도록 네이티브 본체 백업
-          if ((lyr === 'building-body' || lyr === 'building-roof-cap' || lyr === '3d-buildings') && threeCount === 0) {
-            map.setLayoutProperty(lyr, 'visibility', bldgVis);
-          } else {
-            map.setLayoutProperty(lyr, 'visibility', 'none');
-          }
+          map.setLayoutProperty(lyr, 'visibility', 'none');
         }
       }
     } else if (renderMode3D === 'tiles3d') {

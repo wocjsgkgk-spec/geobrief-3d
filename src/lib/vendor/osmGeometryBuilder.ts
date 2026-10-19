@@ -501,17 +501,32 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
     const floors = rawFlr > 0 ? rawFlr : regStyle.levels;
     const bldType = regStyle.bldType;
 
-    // 외벽/지붕 슬롯 및 정점 컬러 (regionalStyle 직결)
+    // 외벽/지붕 슬롯 및 정점 컬러 (regionalStyle 직결 및 실사 옥상 5대 비율 배분)
     const defaultWallSlotId = regStyle.defaultWallSlotId;
     const wallR = regStyle.wallR, wallG = regStyle.wallG, wallB = regStyle.wallB;
-    const roofSlotId = regStyle.roofSlotId;
-    const roofR = regStyle.roofR, roofG = regStyle.roofG, roofB = regStyle.roofB;
+    let roofSlotId = regStyle.roofSlotId;
+    let roofR = regStyle.roofR, roofG = regStyle.roofG, roofB = regStyle.roofB;
     const parapetSlotId = regStyle.parapetSlotId;
 
     // 지붕 형태 분기
     const hasPitchedRoof = regStyle.isPitchedRoof;
     const hasGabledRoof = regStyle.roofShape === 'gabled' || regStyle.roofShape === 'greenhouse';
     const hasHippedRoof = regStyle.roofShape === 'hipped';
+
+    // 평지붕 건물에 대해 한국 도시 옥상 실측 비율 (35% 콘크리트, 25% 우레탄, 20% 아스팔트, 12% 기와, 8% 징크) 엄격 적용
+    if (!hasPitchedRoof) {
+      if (seedRoof < 0.35) {
+        roofSlotId = 14.0; roofR = 0.43; roofG = 0.41; roofB = 0.39; // 35%: 노후 콘크리트 슬래브 웜 그레이 (#6e6a64)
+      } else if (seedRoof < 0.60) {
+        roofSlotId = 17.0; roofR = 0.21; roofG = 0.37; roofB = 0.29; // 25%: 실사 딥세이지 우레탄 그린 (#355e4b)
+      } else if (seedRoof < 0.80) {
+        roofSlotId = 15.0; roofR = 0.22; roofG = 0.24; roofB = 0.26; // 20%: 다크 아스팔트 슁글 (#383e42)
+      } else if (seedRoof < 0.92) {
+        roofSlotId = 16.0; roofR = 0.41; roofG = 0.21; roofB = 0.16; // 12%: 적갈색 기와/슁글 (#693628)
+      } else {
+        roofSlotId = 18.0; roofR = 0.17; roofG = 0.26; roofB = 0.34; // 8%: 청회색 징크 금속 지붕 (#2c4257)
+      }
+    }
 
     // 기단부(Podium) 색상 및 높이
     const podiumR = regStyle.podiumR, podiumG = regStyle.podiumG, podiumB = regStyle.podiumB;
@@ -619,8 +634,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
           let partType = 0.0;
           let isSideWall = false;
-          if (!isHole && (regStyle.bldType === 2.0 || regStyle.sideWallStripe) && floors >= 7.0 && maxEdgeLen >= 18.0) {
-            if (segLen <= 16.0 || segLen <= maxEdgeLen * 0.45) {
+          // [한국형 아파트 좁은 측벽 자동 판별]: edgeLength < 15m 또는 단축 비율 조건
+          if (!isHole && (regStyle.bldType === 2.0 || regStyle.sideWallStripe) && (floors >= 5.0 || totalH >= 14.0) && maxEdgeLen >= 15.0) {
+            if (segLen < 15.0 || segLen <= maxEdgeLen * 0.48) {
               partType = 3.0; // 3=측벽 수직 코어
               isSideWall = true;
             }
