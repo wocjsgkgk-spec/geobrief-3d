@@ -9,9 +9,11 @@ import {
   KOREAN_ROAD_LAYER_IDS,
   getKoreanRoadLayerDefinitions,
   createMeterScaleWidthExpr,
+  createDynamicLanesWidthExpr,
   createOffsetExpr,
 } from '@/utils/koreanRoadRenderer';
 
 export const STREETS_GL_ROAD_LAYER_IDS = KOREAN_ROAD_LAYER_IDS;
 export const getStreetsGlRoadLayerDefinitions = getKoreanRoadLayerDefinitions;
-export { createMeterScaleWidthExpr, createOffsetExpr };
+export { createMeterScaleWidthExpr, createDynamicLanesWidthExpr, createOffsetExpr };
+

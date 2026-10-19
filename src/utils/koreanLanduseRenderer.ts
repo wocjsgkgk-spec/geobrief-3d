@@ -46,6 +46,14 @@ export const KOREAN_LANDUSE_LAYER_IDS: string[] = [
   'landuse-parking-lines',
   'landuse-plaza-fill',
   'landuse-plaza-boundary',
+
+  // 4. 강원권 하천·호수 수계 및 강변 모래톱/둔치 (소양강, 북한강, 섬강, 원주천, 남대천 등)
+  'water-river-fill',
+  'water-river-shallow',
+  'water-river-sandbar',
+  'water-river-edge',
+  'waterway-stream-casing',
+  'waterway-stream-line',
 ];
 
 /**
@@ -390,5 +398,153 @@ export function getKoreanLanduseLayerDefinitions(
         visibility: 'visible',
       },
     },
+
+    // -------------------------------------------------------------------------
+    // 4. 강원권 하천·호수 수계 및 강변 모래톱/둔치 (소양강, 북한강, 섬강, 원주천, 남대천 등)
+    // -------------------------------------------------------------------------
+    // (a) 하천/호수 본류 수면 폴리곤 - 깊은 심수 에메랄드/코발트 블루 (#0284c7 ~ #0369a1)
+    {
+      id: 'water-river-fill',
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'water',
+      minzoom: 11.0,
+      paint: {
+        'fill-color': [
+          'interpolate', ['linear'], ['zoom'],
+          11.0, '#0284C7',
+          14.0, '#0369A1',
+          16.5, '#075985',
+        ] as any,
+        'fill-opacity': [
+          'interpolate', ['linear'], ['zoom'],
+          11.0, 0.40,
+          13.5, 0.55,
+          15.5, 0.68,
+          17.5, 0.78,
+        ] as any,
+      },
+      layout: { visibility: 'visible' },
+    },
+    // (b) 천수/모래톱 수변 가장자리 에메랄드 톤 반사광 (#38bdf8)
+    {
+      id: 'water-river-shallow',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'water',
+      minzoom: 12.5,
+      paint: {
+        'line-color': '#38BDF8', // 얕은 여울/모래톱 에메랄드 수변
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          12.5, 1.2,
+          14.5, 3.2,
+          16.5, 7.5,
+          18.5, 16.0,
+        ] as any,
+        'line-blur': 2.0,
+        'line-opacity': 0.60,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (c) 강변 모래톱/자갈밭 둔치 경계선 (소양강·섬강·원주천 모래톱 자연 블렌딩)
+    {
+      id: 'water-river-sandbar',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'water',
+      minzoom: 13.5,
+      paint: {
+        'line-color': '#CBD5E1', // 마사토/자갈 둔치 경계
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 1.5,
+          15.0, 3.8,
+          17.0, 9.0,
+          19.0, 18.0,
+        ] as any,
+        'line-blur': 1.5,
+        'line-opacity': 0.48,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (d) 하천 제방 및 외곽 테두리선
+    {
+      id: 'water-river-edge',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'water',
+      minzoom: 14.0,
+      paint: {
+        'line-color': '#64748B', // 하천 석축/콘크리트 제방 라인
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          14.0, 0.8,
+          16.0, 1.8,
+          18.0, 3.2,
+        ] as any,
+        'line-opacity': 0.70,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (e) 세부 지류/실개천 수로 케이싱 (waterway)
+    {
+      id: 'waterway-stream-casing',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'waterway',
+      minzoom: 13.0,
+      paint: {
+        'line-color': '#0284C7',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.0, 1.4,
+          15.0, 3.2,
+          17.0, 6.8,
+        ] as any,
+        'line-opacity': 0.65,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (f) 세부 지류/실개천 코어 라인
+    {
+      id: 'waterway-stream-line',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'waterway',
+      minzoom: 13.0,
+      paint: {
+        'line-color': '#38BDF8',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.0, 0.8,
+          15.0, 1.8,
+          17.0, 4.0,
+        ] as any,
+        'line-opacity': 0.85,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
   ];
 }
+

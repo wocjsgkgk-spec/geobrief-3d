@@ -18,7 +18,7 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
   private renderer: THREE.WebGLRenderer | null = null;
 
   private waterMesh: THREE.Mesh | null = null;
-  private waterMaterial: THREE.MeshStandardMaterial | null = null;
+  private waterMaterial: THREE.ShaderMaterial | THREE.MeshStandardMaterial | null = null;
 
   private isVisible = false;
   private targetElevation = 100; // 목표 해발고도 (m)
@@ -32,29 +32,107 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
   }
 
   private initWaterMesh() {
-    // 8km x 8km 고해상도 수면 지오메트리
+    // 8km x 8km 고해상도 수면 지오메트리 (128x128 서브디비전으로 자연스러운 잔물결 정점 파동)
     const geometry = new THREE.PlaneGeometry(
       this.planeSizeMeters,
       this.planeSizeMeters,
-      32,
-      32
+      128,
+      128
     );
 
-    // 반투명 에메랄드 블루(#0284C7) 수면 재질
-    this.waterMaterial = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+    // [강원권 수계 특화 Fresnel 수면 반사 셰이더]
+    // - 소양강, 북한강, 섬강, 원주천, 남대천 등 청정 하천의 에메랄드/코발트 블루 (#0284c7 ~ #0369a1)
+    // - 시선 각도에 따른 주변 산세/하늘빛 Fresnel 반사 (pow(1.0 - dot(N, V), 3.0))
+    // - 강변 모래톱/둔치 경계 소프트 블렌딩
+    this.waterMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uDeepWaterColor: { value: new THREE.Color(0x0369a1) },    // 심수 코발트 블루
+        uShallowWaterColor: { value: new THREE.Color(0x38bdf8) }, // 천수/모래톱 수변 에메랄드
+        uSkyReflectionColor: { value: new THREE.Color(0xe0f2fe) },// 주변 산세 & 하늘빛 반사
+        uSunDir: { value: new THREE.Vector3(0.5, 0.8, 0.4).normalize() },
+      },
+      vertexShader: `
+        uniform float uTime;
+        varying vec3 vWorldPosition;
+        varying vec3 vNormal;
+        varying vec3 vViewDir;
+        varying vec2 vUv;
+
+        void main() {
+          vUv = uv;
+          vec3 pos = position;
+
+          // 실시간 수면 파동 애니메이션 (다중 사인파 노이즈 결합)
+          float wave1 = sin(pos.x * 0.015 + uTime * 1.8) * cos(pos.y * 0.012 + uTime * 1.4) * 0.45;
+          float wave2 = sin(pos.x * 0.040 - uTime * 2.3) * sin(pos.y * 0.035 + uTime * 1.9) * 0.20;
+          float wave3 = cos((pos.x + pos.y) * 0.08 + uTime * 3.1) * 0.08;
+          pos.z += wave1 + wave2 + wave3;
+
+          vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+          vWorldPosition = worldPos.xyz;
+
+          // 노멀 변위 근사
+          float dWx = cos(pos.x * 0.015 + uTime * 1.8) * 0.015 * 0.45;
+          float dWy = -sin(pos.y * 0.012 + uTime * 1.4) * 0.012 * 0.45;
+          vec3 perturbedNormal = normalize(vec3(-dWx, -dWy, 1.0));
+          vNormal = normalize(mat3(modelMatrix) * perturbedNormal);
+
+          vViewDir = normalize(cameraPosition - worldPos.xyz);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uDeepWaterColor;
+        uniform vec3 uShallowWaterColor;
+        uniform vec3 uSkyReflectionColor;
+        uniform vec3 uSunDir;
+        uniform float uTime;
+
+        varying vec3 vWorldPosition;
+        varying vec3 vNormal;
+        varying vec3 vViewDir;
+        varying vec2 vUv;
+
+        void main() {
+          vec3 N = normalize(vNormal);
+          vec3 V = normalize(vViewDir);
+          vec3 L = normalize(uSunDir);
+
+          // 1. Fresnel 수면 반사 계수 (시선이 수평에 가까울수록 하늘빛/주변 산세 반사 극대화)
+          float NdotV = max(dot(N, V), 0.0);
+          float fresnel = pow(1.0 - NdotV, 3.2);
+
+          // 2. 수면 베이스 컬러 (모래톱 천수 -> 깊은 심수 보간)
+          float depthNoise = sin(vWorldPosition.x * 0.005) * cos(vWorldPosition.y * 0.005) * 0.5 + 0.5;
+          vec3 waterBase = mix(uDeepWaterColor, uShallowWaterColor, depthNoise * 0.35);
+
+          // 3. 하늘빛 및 주변 산세 반사 합성
+          vec3 waterWithSky = mix(waterBase, uSkyReflectionColor, fresnel * 0.68);
+
+          // 4. 태양광 스펙큘러 하이라이트 (Sun Glint / Ripple Specular)
+          vec3 H = normalize(L + V);
+          float NdotH = max(dot(N, H), 0.0);
+          float specular = pow(NdotH, 64.0);
+          vec3 sunGlint = vec3(1.0, 0.98, 0.90) * specular * 0.75;
+
+          // 5. 모래톱/둔치 가장자리 부드러운 페이드 (Edge Blending)
+          float edgeDist = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
+          float edgeAlpha = smoothstep(0.0, 0.06, edgeDist);
+          float finalAlpha = mix(0.58, 0.88, fresnel) * edgeAlpha;
+
+          gl_FragColor = vec4(waterWithSky + sunGlint, finalAlpha);
+        }
+      `,
       transparent: true,
-      opacity: 0.48,
-      roughness: 0.1,
-      metalness: 0.25,
+      depthWrite: false,
       side: THREE.DoubleSide,
-      depthWrite: false, // 투명 수면이므로 depthWrite를 false로 두어 지형과 자연스럽게 블렌딩
     });
 
     this.waterMesh = new THREE.Mesh(geometry, this.waterMaterial);
     this.scene.add(this.waterMesh);
 
-    // 수면 반사/입체감을 위한 조명
+    // 수면 반사/입체감을 위한 보조 조명
     const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
     sunLight.position.set(50, -50, 100).normalize();
     this.scene.add(sunLight);
@@ -104,11 +182,15 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
         this.currentElevation = this.targetElevation;
       }
 
-      // 수면 반사광 잔물결 애니메이션
-      this.animTime += 0.015;
+      // 수면 반사광 잔물결 애니메이션 (uTime 갱신)
+      this.animTime += 0.016;
       if (this.waterMaterial) {
-        const pulse = Math.sin(this.animTime) * 0.03;
-        this.waterMaterial.opacity = 0.45 + pulse;
+        if ('uniforms' in this.waterMaterial && this.waterMaterial.uniforms.uTime) {
+          this.waterMaterial.uniforms.uTime.value = this.animTime;
+        } else {
+          const pulse = Math.sin(this.animTime) * 0.03;
+          this.waterMaterial.opacity = 0.45 + pulse;
+        }
       }
 
       // Mercator 좌표 변환 (지정된 해발고도 표고 적용)

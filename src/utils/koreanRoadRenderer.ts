@@ -28,7 +28,7 @@ import type { LayerSpecification } from 'maplibre-gl';
  * 한국형 실측 도로 렌더링에 등록되는 전체 레이어 ID 목록
  */
 export const KOREAN_ROAD_LAYER_IDS: string[] = [
-  // 0. 하천·계곡 횡단 교량 입체 구조 (거더·상판·방호벽 난간)
+  // 0. 하천·계곡 횡단 교량 입체 구조 (거더·상판·방호벽 난간·하부 원기둥 교각)
   'road-bridge-shadow',
   'road-bridge-girder',
   'road-bridge-casing',
@@ -37,7 +37,19 @@ export const KOREAN_ROAD_LAYER_IDS: string[] = [
   'road-bridge-barrier-right-motorway',
   'road-bridge-barrier-left-secondary',
   'road-bridge-barrier-right-secondary',
+  'road-bridge-piers-shadow',
+  'road-bridge-piers-column',
+  'road-bridge-piers-cap',
   'road-bridge-piers-marker',
+
+  // 0-C. 산악 지형 관통 터널(Tunnel) 및 반원형 콘크리트 터널 갱문(Portal)
+  'road-tunnel-shadow',
+  'road-tunnel-casing',
+  'road-tunnel-asphalt',
+  'road-tunnel-centerline',
+  'tunnel-portal-headwall',
+  'tunnel-portal-arch',
+  'tunnel-portal-dark-mouth',
 
   // 1. 철도 선로 (자갈 도상·침목·은백색 듀얼 강철 레일)
   'rail-ballast-shadow',
@@ -153,6 +165,46 @@ export function createMeterScaleWidthExpr(
 }
 
 /**
+ * 차로 수(lanes) 속성 반영 실측 미터(m) 폭 지수 보간 (base 2)
+ * - OSM/OpenFreeMap 피처에 'lanes' 속성이 있을 경우 차로당 3.35m 폭을 가변 계산
+ * - 'lanes' 속성이 없을 경우 도로 등급별 기본 폭(fallbackMeters) 적용
+ */
+export function createDynamicLanesWidthExpr(
+  fallbackMeters: number,
+  minZoom = 12,
+  minPx = 1.0,
+  multiplier = 1.0
+): any[] {
+  const scaleExpr: any[] = [
+    'interpolate',
+    ['exponential', 2],
+    ['zoom'],
+    12, (1.05 / 32.0),
+    13, (1.05 / 16.0),
+    14, (1.05 / 8.0),
+    15, (1.05 / 4.0),
+    16, (1.05 / 2.0),
+    17, 1.05,
+    18, 1.05 * 2.0,
+    19, 1.05 * 4.0,
+    20, 1.05 * 8.0,
+  ];
+
+  const meterExpr: any[] = [
+    'case',
+    ['all', ['has', 'lanes'], ['>', ['to-number', ['get', 'lanes'], 0], 0]],
+    ['*', ['to-number', ['get', 'lanes'], 2], 3.35 * multiplier],
+    fallbackMeters * multiplier,
+  ];
+
+  return [
+    'max',
+    minPx,
+    ['*', meterExpr, scaleExpr] as any,
+  ];
+}
+
+/**
  * 줌 레벨 연동 차선 오프셋(미터) 지수 보간 헬퍼
  */
 export function createOffsetExpr(baseOffsetMeters: number): any[] {
@@ -186,43 +238,47 @@ export function getKoreanRoadLayerDefinitions(
   sourceLayer = 'transportation',
   crosswalkSourceId = 'crosswalks-source'
 ): LayerSpecification[] {
-  // 1) 4차선 이상 주간선도로 필터 (고속도로, 도시고속화, 주간선 국도/대로)
+  // 0) 산악 지형 관통 터널(Tunnel) 필터 및 비(非)터널 지상 도로 필터
+  const tunnelFilter: any[] = [
+    'any',
+    ['==', 'brunnel', 'tunnel'],
+    ['==', 'tunnel', 'yes'],
+    ['==', 'tunnel', 'true'],
+  ];
+
+  const nonTunnelFilter: any[] = [
+    'all',
+    ['!=', 'brunnel', 'tunnel'],
+    ['!=', 'tunnel', 'yes'],
+    ['!=', 'tunnel', 'true'],
+  ];
+
+  // 1) 4차선 이상 주간선도로 필터 (고속도로, 도시고속화, 주간선 국도/대로 - 지상 노면)
   const motorwayFilter: any[] = [
-    'in',
-    'class',
-    'motorway',
-    'trunk',
-    'primary',
+    'all',
+    ['in', 'class', 'motorway', 'trunk', 'primary'],
+    nonTunnelFilter,
   ];
 
-  // 2) 2차선 보조간선/국도 필터 (중로, 보조간선)
+  // 2) 2차선 보조간선/국도 필터 (중로, 보조간선 - 지상 노면)
   const secondaryFilter: any[] = [
-    'in',
-    'class',
-    'secondary',
-    'tertiary',
+    'all',
+    ['in', 'class', 'secondary', 'tertiary'],
+    nonTunnelFilter,
   ];
 
-  // 3) 소로/국지/이면도로 필터 (단독주택, 빌라, 상가 골목, 군부대 진입로)
+  // 3) 소로/국지/이면도로 필터 (단독주택, 빌라, 상가 골목, 군부대 진입로 - 지상 노면)
   const minorFilter: any[] = [
-    'in',
-    'class',
-    'minor',
-    'service',
-    'residential',
-    'track',
-    'unclassified',
+    'all',
+    ['in', 'class', 'minor', 'service', 'residential', 'track', 'unclassified'],
+    nonTunnelFilter,
   ];
 
-  // 4) 고속도로/국도 진출입 램프 필터 (_link)
+  // 4) 고속도로/국도 진출입 램프 필터 (_link - 지상 노면)
   const rampFilter: any[] = [
-    'in',
-    'class',
-    'motorway_link',
-    'trunk_link',
-    'primary_link',
-    'secondary_link',
-    'tertiary_link',
+    'all',
+    ['in', 'class', 'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link'],
+    nonTunnelFilter,
   ];
 
   // 5) 교량 (Bridge) 필터 (도로 및 철교)
@@ -425,7 +481,68 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
-    // (i) 35m 간격 교량 하부 교각(Pier) 위치 심볼 마커
+    // (i-1) 교량 하부 콘크리트 원기둥 교각(Pier) 지면/수면 투영 그림자
+    {
+      id: 'road-bridge-piers-shadow',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: bridgeFilter as any,
+      paint: {
+        'line-color': '#0F172A',
+        'line-width': createMeterScaleWidthExpr(7.2, 13.5, 2.0) as any,
+        'line-dasharray': [1.2, 5.8],
+        'line-opacity': 0.22,
+        'line-blur': 1.2,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (i-2) 25m 간격 교량 하부 콘크리트 원기둥 교각 본체 (Pier Column #475569)
+    {
+      id: 'road-bridge-piers-column',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.8,
+      filter: bridgeFilter as any,
+      paint: {
+        'line-color': '#475569', // 철근 콘크리트 원기둥 교각
+        'line-width': createMeterScaleWidthExpr(4.2, 13.8, 1.6) as any,
+        'line-dasharray': [1.0, 6.0], // 25~30m 등간격 원기둥 교각
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (i-3) 교각 상단 상판 받침대 코핑 (Pier Cap #94a3b8)
+    {
+      id: 'road-bridge-piers-cap',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.5,
+      filter: bridgeFilter as any,
+      paint: {
+        'line-color': '#94A3B8', // 교각 상단 콘크리트 코핑 캡
+        'line-width': createMeterScaleWidthExpr(5.8, 14.5, 1.8) as any,
+        'line-dasharray': [0.5, 6.5],
+        'line-opacity': 0.99,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (i-4) 35m 간격 교량 하부 교각(Pier) 위치 심볼 마커
     {
       id: 'road-bridge-piers-marker',
       type: 'line',
@@ -438,6 +555,155 @@ export function getKoreanRoadLayerDefinitions(
         'line-width': createMeterScaleWidthExpr(5.4, 14, 1.5) as any,
         'line-dasharray': [1, 7],
         'line-opacity': 0.90,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-A. 산악 지형 관통 터널(Tunnel) 및 반원형 콘크리트 터널 갱문(Portal)
+    // -------------------------------------------------------------------------
+    // (a) 지중 터널 주변 음영
+    {
+      id: 'road-tunnel-shadow',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.0,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#0F172A',
+        'line-width': createMeterScaleWidthExpr(18.0, 13, 2.5) as any,
+        'line-opacity': 0.15,
+        'line-blur': 1.5,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (b) 산악 터널 반투명 점선 외곽 케이싱 (#475569)
+    {
+      id: 'road-tunnel-casing',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 12.5,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#475569',
+        'line-width': createMeterScaleWidthExpr(14.5, 12.5, 2.0) as any,
+        'line-dasharray': [2, 3], // 산악 내부 도로는 반투명 점선 전환
+        'line-opacity': 0.55,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (c) 산악 터널 어두운 지중 아스팔트 노면 (#1e293b)
+    {
+      id: 'road-tunnel-asphalt',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 12.5,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#1E293B',
+        'line-width': createMeterScaleWidthExpr(12.0, 12.5, 1.6) as any,
+        'line-dasharray': [2, 3],
+        'line-opacity': 0.50,
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (d) 산악 터널 지중 황색 중앙선 점선 (#eab308)
+    {
+      id: 'road-tunnel-centerline',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13.5,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#EAB308',
+        'line-width': [
+          'interpolate', ['exponential', 2], ['zoom'],
+          13.5, 0.7,
+          15.5, 1.4,
+          17.5, 2.6,
+        ],
+        'line-dasharray': [1, 4],
+        'line-opacity': 0.45,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (e) 터널 입·출구 반원형 콘크리트 갱문 면벽/옹벽 (Tunnel Portal Headwall #334155)
+    {
+      id: 'tunnel-portal-headwall',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.0,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#334155', // 터널 갱문 콘크리트 옹벽 면벽
+        'line-width': createMeterScaleWidthExpr(18.0, 14, 2.8) as any,
+        'line-dasharray': [0.15, 999], // 터널 진입 지점 입구에 원형/아치형 헤드월 마커 표출
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (f) 반원형 아치 갱문 프레임 테두리 (Portal Arch Rim #cbd5e1)
+    {
+      id: 'tunnel-portal-arch',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.2,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#CBD5E1', // 밝은 콘크리트 림
+        'line-width': createMeterScaleWidthExpr(14.0, 14.2, 2.2) as any,
+        'line-dasharray': [0.12, 999],
+        'line-opacity': 0.98,
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+    // (g) 터널 내부 칠흑색 진입구 (Tunnel Dark Mouth #090d16)
+    {
+      id: 'tunnel-portal-dark-mouth',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14.2,
+      filter: tunnelFilter as any,
+      paint: {
+        'line-color': '#090D16', // 칠흑 같은 터널 입구 내부
+        'line-width': createMeterScaleWidthExpr(10.5, 14.2, 1.8) as any,
+        'line-dasharray': [0.10, 999],
+        'line-opacity': 0.99,
       },
       layout: {
         'line-cap': 'round',
@@ -719,7 +985,7 @@ export function getKoreanRoadLayerDefinitions(
     // 2. [1단계: 밝은 화강석 연석 라인 (Granite Curb #cbd5e1)]
     // - 도로 양옆 가장자리에 밝은 화강석 연석 라인을 넣어 인도와 차도를 명확히 구분
     // -------------------------------------------------------------------------
-    // (a) 대로 연석 (실측 27.5m = 24.0m 노면 + 양측 1.75m 화강석 연석/측구)
+    // (a) 대로 연석 (차로 수 lanes 반영 또는 기본 27.5m)
     {
       id: 'road-curb-motorway',
       type: 'line',
@@ -729,7 +995,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: motorwayFilter as any,
       paint: {
         'line-color': '#CBD5E1', // 밝은 화강석 연석
-        'line-width': createMeterScaleWidthExpr(27.5, 12, 2.6) as any,
+        'line-width': createDynamicLanesWidthExpr(27.5, 12, 2.6, 1.15) as any,
         'line-opacity': 0.98,
       },
       layout: {
@@ -738,7 +1004,7 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
-    // (b) 중로 연석 (실측 15.5m = 13.5m 노면 + 양측 1.0m 연석)
+    // (b) 중로 연석 (차로 수 lanes 반영 또는 기본 15.5m)
     {
       id: 'road-curb-secondary',
       type: 'line',
@@ -748,7 +1014,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: secondaryFilter as any,
       paint: {
         'line-color': '#CBD5E1', // 밝은 화강석 연석
-        'line-width': createMeterScaleWidthExpr(15.5, 12, 1.8) as any,
+        'line-width': createDynamicLanesWidthExpr(15.5, 12, 1.8, 1.15) as any,
         'line-opacity': 0.96,
       },
       layout: {
@@ -757,7 +1023,7 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
-    // (c) 소로 연석 (실측 8.4m = 7.0m 노면 + 양측 0.7m 연석)
+    // (c) 소로 연석 (실측 8.4m)
     {
       id: 'road-curb-minor',
       type: 'line',
@@ -767,7 +1033,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: minorFilter as any,
       paint: {
         'line-color': '#CBD5E1', // 밝은 화강석 연석
-        'line-width': createMeterScaleWidthExpr(8.4, 13, 1.3) as any,
+        'line-width': createDynamicLanesWidthExpr(8.4, 13, 1.3, 1.2) as any,
         'line-opacity': 0.92,
       },
       layout: {
@@ -776,7 +1042,7 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
-    // (d) 램프 연석 (실측 7.4m = 6.0m 노면 + 0.7m 연석)
+    // (d) 램프 연석 (실측 7.4m)
     {
       id: 'road-curb-link',
       type: 'line',
@@ -786,7 +1052,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: rampFilter as any,
       paint: {
         'line-color': '#CBD5E1',
-        'line-width': createMeterScaleWidthExpr(7.4, 13, 1.3) as any,
+        'line-width': createDynamicLanesWidthExpr(7.4, 13, 1.3, 1.2) as any,
         'line-opacity': 0.95,
       },
       layout: {
@@ -800,7 +1066,7 @@ export function getKoreanRoadLayerDefinitions(
     // 3. [1단계: 다크 슬레이트 차콜 아스팔트 포장 노면 (#26292e ~ #32363d)]
     // - 위성사진에 찍힌 흐릿한 차량 자국과 지저분한 노면을 깔끔하게 정돈
     // -------------------------------------------------------------------------
-    // (a) 대로 아스팔트 노면 (실측 24.0m)
+    // (a) 대로 아스팔트 노면 (차로 수 lanes 반영 또는 기본 24.0m)
     {
       id: 'road-asphalt-motorway',
       type: 'line',
@@ -810,7 +1076,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: motorwayFilter as any,
       paint: {
         'line-color': '#26292E', // 다크 슬레이트 차콜
-        'line-width': createMeterScaleWidthExpr(24.0, 12, 2.0) as any,
+        'line-width': createDynamicLanesWidthExpr(24.0, 12, 2.0, 1.0) as any,
         'line-opacity': 0.99,
       },
       layout: {
@@ -819,7 +1085,7 @@ export function getKoreanRoadLayerDefinitions(
         visibility: 'visible',
       },
     },
-    // (b) 중로 아스팔트 노면 (실측 13.5m)
+    // (b) 중로 아스팔트 노면 (차로 수 lanes 반영 또는 기본 13.5m)
     {
       id: 'road-asphalt-secondary',
       type: 'line',
@@ -829,7 +1095,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: secondaryFilter as any,
       paint: {
         'line-color': '#2B2E35', // 다크 슬레이트 차콜
-        'line-width': createMeterScaleWidthExpr(13.5, 12, 1.4) as any,
+        'line-width': createDynamicLanesWidthExpr(13.5, 12, 1.4, 1.0) as any,
         'line-opacity': 0.98,
       },
       layout: {
@@ -848,7 +1114,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: minorFilter as any,
       paint: {
         'line-color': '#32363D', // 다크 슬레이트 차콜
-        'line-width': createMeterScaleWidthExpr(7.0, 13, 1.0) as any,
+        'line-width': createDynamicLanesWidthExpr(7.0, 13, 1.0, 1.0) as any,
         'line-opacity': 0.95,
       },
       layout: {
@@ -867,7 +1133,7 @@ export function getKoreanRoadLayerDefinitions(
       filter: rampFilter as any,
       paint: {
         'line-color': '#282B31',
-        'line-width': createMeterScaleWidthExpr(6.0, 13, 1.0) as any,
+        'line-width': createDynamicLanesWidthExpr(6.0, 13, 1.0, 1.0) as any,
         'line-opacity': 0.98,
       },
       layout: {
