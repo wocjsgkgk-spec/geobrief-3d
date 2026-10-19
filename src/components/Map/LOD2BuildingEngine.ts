@@ -486,8 +486,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           precision highp float;
           varying vec4 vColor;
           void main() {
-            // 검은색 사각형 얼룩 및 유령 그림자 방지: 최대 알파 0.12로 clamp
-            float alpha = min(vColor.a, 0.12);
+            // 건물 밑동 접지 AO(0.22) 및 태양광 투영 그림자(0.15) 표출 허용
+            float alpha = min(vColor.a, 0.22);
             gl_FragColor = vec4(vColor.rgb, alpha);
           }
         `,

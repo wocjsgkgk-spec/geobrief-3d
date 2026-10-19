@@ -90,7 +90,7 @@ export const realisticRoofGlslChunk = /* glsl */ `
   }
 
   // ---------------------------------------------------------------------------
-  // [4. 기준층 유리창 가변 스페큘러 하이라이트 (Dynamic Specular Reflection)]
+  // [4. 기준층 창호 차분한 무광 마감 (사용자 지침: 인공적 유리창 반사 제거)]
   // ---------------------------------------------------------------------------
   vec3 getWindowDynamicSpecular(
     vec3 sunColor,
@@ -101,18 +101,8 @@ export const realisticRoofGlslChunk = /* glsl */ `
     float floorIdx,
     float bayIdx
   ) {
-    vec3 H = normalize(L + V);
-    float NdotH = max(0.0, dot(N, H));
-
-    // 세대/층/창문별 고유 난수 시드
-    float winSeed = fract(sin(dot(floor(vec2(worldPos.x * 0.4 + worldPos.z * 0.4, floorIdx)), vec2(12.9898, 78.233)) + bayIdx * 17.13) * 43758.5453);
-
-    // 복층유리 제작 공차 및 커튼 블라인드에 의한 반사율(Roughness) 분산
-    float specPower = mix(28.0, 140.0, winSeed);
-    float specIntensity = mix(0.60, 1.45, fract(winSeed * 9.21));
-
-    // 반짝이는 스페큘러 하이라이트
-    return sunColor * pow(NdotH, specPower) * specIntensity;
+    // 번쩍이는 인공적 유리 반사를 완전히 제거하고 사실적인 매트 톤 유지
+    return vec3(0.0);
   }
 `;
 

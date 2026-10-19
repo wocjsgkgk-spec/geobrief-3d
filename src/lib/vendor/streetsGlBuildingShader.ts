@@ -180,6 +180,18 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
   }
 
   // ---------------------------------------------------------------------------
+  // [대기 원근감 연무 (Aerial Perspective Distance Fog)]
+  // 카메라와의 거리에 따라 원거리 건물과 지형이 은은한 하늘빛으로 물드는 실제 항공뷰 효과
+  // ---------------------------------------------------------------------------
+  vec3 applyAerialPerspectiveFog(vec3 inColor, vec3 worldPos, vec3 skyColor) {
+    float dist = length(cameraPosition - worldPos);
+    // 800m부터 시작하여 6500m에서 은은하게 대기 산란 (최대 42% 블렌딩)
+    float fogFactor = smoothstep(800.0, 6500.0, dist);
+    vec3 aerialHaze = mix(skyColor, vec3(0.85, 0.90, 0.96), 0.35);
+    return mix(inColor, aerialHaze, fogFactor * 0.42);
+  }
+
+  // ---------------------------------------------------------------------------
   // [창호 15cm 깊이감] 창틀 내부 그림자 (Window Recess Inner Shadow)
   // 외벽 콘크리트 면보다 15cm 안쪽으로 들어간 창틀 상단과 측면에 짙은 내부 그림자 드리움
   // ---------------------------------------------------------------------------
@@ -270,7 +282,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         surfaceColor = applyRealisticRoofAging(surfaceColor, vWorldPos.xz, slotId);
       }
 
-      // 유리창 영역 감지 (어두운 복층유리 창문 픽셀) 및 창문별 가변 스페큘러 하이라이트
+      // [창호 영역 감지] 어두운 창문 픽셀 감지 및 창틀 인셋 그림자 적용 (인공적 유리 반사는 제거)
       float lum = dot(surfaceColor, vec3(0.299, 0.587, 0.114));
       float isGlass = step(lum, 0.38) * (1.0 - step(1.5, partType));
 
@@ -280,7 +292,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         effN = getPerturbedNormal(N, vWorldPos.xz, vWorldPos.y, bldType);
       }
 
-      // PBR 조명 합성
+      // PBR 조명 합성: 차분한 디퓨즈 + 반구 앰비언트 (실제 항공사진 매트 톤 일치)
       float NdotL = max(0.0, dot(effN, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, effN.y * 0.4 + 0.6) * uAmbientIntensity;
@@ -291,24 +303,13 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         surfaceColor *= recessShadow;
       }
 
-      vec3 specular;
-      if (isGlass > 0.5) {
-        specular = getWindowDynamicSpecular(uSunColor, effN, L, V, vWorldPos, floor(vUv.y), floor(vUv.x));
-      } else {
-        vec3 H = normalize(L + V);
-        float NdotH = max(0.0, dot(effN, H));
-        specular = uSunColor * pow(NdotH, 16.0) * 0.08;
-      }
-
-      // 프레넬 하늘 반사 (유리창 영역)
-      if (isGlass > 0.5) {
-        vec3 effR = reflect(-V, effN);
-        float fresnel = pow(1.0 - max(0.0, dot(effN, V)), 3.5);
-        vec3 skyReflection = getSkyReflection(effR);
-        surfaceColor = mix(surfaceColor, skyReflection, clamp(fresnel * 0.55, 0.0, 0.85));
-      }
+      // [사용자 지침]: 인공적 유리창 반사/스페큘러 완전 배제 -> 매트한 건축 외벽 미세 반사만 유지
+      vec3 H = normalize(L + V);
+      float NdotH = max(0.0, dot(effN, H));
+      vec3 specular = (isGlass > 0.5) ? vec3(0.0) : (uSunColor * pow(NdotH, 16.0) * 0.02);
 
       vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
+      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
@@ -353,6 +354,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = roofColor * (diffuse + ambient);
+      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -369,6 +371,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = parapetColor * (diffuse + ambient);
+      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -391,7 +394,9 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       float NdotL = max(0.0, dot(N, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
-      gl_FragColor = vec4(acesFilmic(pentColor * (diffuse + ambient) * 1.05), uOpacity);
+      vec3 finalColor = pentColor * (diffuse + ambient);
+      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
 
@@ -421,10 +426,8 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         float inBay = fract(lengthMeters / 4.5);
         float isLobbyDoor = step(0.35, inBay) * (1.0 - step(0.65, inBay)) * step(0.5, heightMeters) * (1.0 - step(3.4, heightMeters));
         if (isLobbyDoor > 0.5) {
-          vec3 doorGlass = vec3(0.08, 0.12, 0.18);
-          doorGlass += vec3(0.60, 0.55, 0.40) * smoothstep(0.65, 0.95, inFloor);
-          float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.0);
-          doorGlass = mix(doorGlass, getSkyReflection(R), fresnel * 0.70);
+          vec3 doorGlass = vec3(0.12, 0.16, 0.22);
+          doorGlass += vec3(0.40, 0.36, 0.28) * smoothstep(0.65, 0.95, inFloor);
           graniteColor = mix(graniteColor, doorGlass, 0.92);
         }
       } else {
@@ -440,10 +443,8 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         } else {
           float isShopWindow = step(0.5, heightMeters) * (1.0 - step(2.7, heightMeters));
           if (isShopWindow > 0.5) {
-            vec3 shopGlass = vec3(0.06, 0.10, 0.16);
-            shopGlass += vec3(0.55, 0.48, 0.35) * smoothstep(0.55, 0.95, inFloor);
-            float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.0);
-            shopGlass = mix(shopGlass, getSkyReflection(R), fresnel * 0.65);
+            vec3 shopGlass = vec3(0.10, 0.14, 0.18);
+            shopGlass += vec3(0.38, 0.32, 0.22) * smoothstep(0.55, 0.95, inFloor);
             graniteColor = mix(graniteColor, shopGlass, 0.90);
           }
         }
@@ -454,6 +455,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = graniteColor * (diffuse + ambient) * groundAO;
+      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -486,6 +488,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.6) * uAmbientIntensity;
       vec3 finalColor = coreWall * (diffuse + ambient);
+      finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
 
       gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
@@ -579,18 +582,14 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       // [창호 15cm 깊이감] 창틀 내부 그림자 (상단 처마 인셋 + 측면 태양광 차폐 음영)
       float recessShadow = getWindowRecessShadow(roomUv, N, L);
 
-      // 하늘빛 프레넬 반사 (Fresnel Reflection)
-      float fresnel = pow(1.0 - max(0.0, dot(N, V)), 3.5);
-      vec3 skyReflection = getSkyReflection(R);
-
       if (bldType > 0.5 && bldType <= 1.5) {
-        // [상업/오피스]: 스카이 블루/슬레이트 유리 커튼월 반사 극대화
-        vec3 curtainGlass = vec3(0.08, 0.22, 0.38);
-        vec3 glassFinal = mix(curtainGlass, skyReflection, clamp(fresnel + 0.45, 0.0, 0.95)) * recessShadow;
+        // [상업/오피스]: 차분한 다크 슬레이트 틴티드 글래스 (사용자 지침: 번쩍이는 유리 반사 배제)
+        vec3 curtainGlass = vec3(0.12, 0.16, 0.22);
+        vec3 glassFinal = mix(curtainGlass, interiorColor * 0.75, 0.35) * recessShadow;
         surfaceColor = mix(surfaceColor, glassFinal, isWindow);
       } else {
-        // [아파트/주택]: 실내 방 조명 + 표면 프레넬 하늘 반사 + 15cm 인셋 그림자
-        vec3 glassFinal = mix(interiorColor, skyReflection, clamp(fresnel + 0.28, 0.0, 0.88)) * recessShadow;
+        // [아파트/주택]: 실내 블라인드 차양 톤 + 15cm 창틀 인셋 그림자 (차분한 매트 마감)
+        vec3 glassFinal = interiorColor * 0.82 * recessShadow;
         surfaceColor = mix(surfaceColor, glassFinal, isWindow);
       }
     } else if (bldType > 1.5 && inFloor < 0.38 && inFloor >= slabBorder) {
@@ -614,16 +613,17 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     // 유리창 및 금속 섀시 스페큘러 하이라이트 (창문별 가변 Roughness / 스페큘러)
     vec3 specular;
     if (isWindow > 0.5) {
-      specular = getWindowDynamicSpecular(uSunColor, effN, L, V, vWorldPos, floorIdx, bayIdx);
+      specular = vec3(0.0);
     } else {
       vec3 H = normalize(L + V);
       float NdotH = max(0.0, dot(N, H));
-      float specPower = (isFrame > 0.5 ? 24.0 : 12.0);
-      float specIntensity = (isFrame > 0.5 ? 0.25 : 0.04);
+      float specPower = (isFrame > 0.5 ? 20.0 : 10.0);
+      float specIntensity = (isFrame > 0.5 ? 0.05 : 0.02);
       specular = uSunColor * pow(NdotH, specPower) * specIntensity;
     }
 
     vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
+    finalColor = applyAerialPerspectiveFog(finalColor, vWorldPos, uAmbientSky);
     gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
   }
 `;

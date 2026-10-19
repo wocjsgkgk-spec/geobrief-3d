@@ -151,6 +151,69 @@ function computePolygonInset(pts: Point2D[], insetDist: number): Point2D[] {
 }
 
 /**
+ * 다각형의 바깥쪽 수직 법선 방향으로 outsetDist(미터)만큼 확장(Outset/Buffer)한 다각형을 계산합니다.
+ * 위성사진 바닥의 2D 평면 지붕 잔상을 완전히 덮는 지면 인페인팅 마스크로 사용됩니다.
+ */
+function computePolygonOutset(pts: Point2D[], outsetDist: number): Point2D[] {
+  const n = pts.length;
+  if (n < 3) return pts;
+  const result: Point2D[] = [];
+
+  let cx = 0, cy = 0;
+  for (const p of pts) { cx += p.x; cy += p.y; }
+  cx /= n; cy /= n;
+
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+
+    const d1x = curr.x - prev.x;
+    const d1y = curr.y - prev.y;
+    const l1 = Math.hypot(d1x, d1y);
+    if (l1 < 1e-4) { result.push({ ...curr }); continue; }
+    // 바깥쪽 법선 (CCW 기준 우측 수직)
+    const outN1x = d1y / l1;
+    const outN1y = -d1x / l1;
+
+    const d2x = next.x - curr.x;
+    const d2y = next.y - curr.y;
+    const l2 = Math.hypot(d2x, d2y);
+    if (l2 < 1e-4) { result.push({ ...curr }); continue; }
+    const outN2x = d2y / l2;
+    const outN2y = -d2x / l2;
+
+    let avgNx = outN1x + outN2x;
+    let avgNy = outN1y + outN2y;
+    const avgLen = Math.hypot(avgNx, avgNy);
+    if (avgLen < 1e-4) {
+      const fromCx = curr.x - cx;
+      const fromCy = curr.y - cy;
+      const fromCLen = Math.hypot(fromCx, fromCy);
+      if (fromCLen > 1e-4) {
+        result.push({ x: curr.x + (fromCx / fromCLen) * outsetDist, y: curr.y + (fromCy / fromCLen) * outsetDist });
+      } else {
+        result.push({ ...curr });
+      }
+      continue;
+    }
+
+    avgNx /= avgLen;
+    avgNy /= avgLen;
+
+    const sinHalfAngle = outN1x * avgNx + outN1y * avgNy;
+    const miterScale = Math.min(2.0, Math.max(0.7, 1.0 / Math.max(0.3, sinHalfAngle)));
+
+    result.push({
+      x: curr.x + avgNx * outsetDist * miterScale,
+      y: curr.y + avgNy * outsetDist * miterScale,
+    });
+  }
+
+  return result;
+}
+
+/**
  * 사각 쿼드(Quad)를 2개의 삼각형(6 버텍스)으로 버퍼에 직렬화
  */
 function addQuadVertices(
@@ -698,38 +761,38 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
           // 외곽 링에 대해 1.5m 접지 음영(Contact AO) 및 태양광 투영 그림자 생성
           if (!isHole) {
-            // [접지 음영(Contact AO): 투명도 0.12 이하로 자연스러운 음영 연출]
-            const aoWidth = 1.5;
+            // [접지 음영(Contact AO): 건물 하단 0.8m 밀착 림으로 지면 안착감 부여]
+            const aoWidth = 0.85;
             addShadowQuad(
               shadowPositions, shadowColors,
-              { x: p1.x, y: 0.02, z: -p1.y, a: 0.12 },
-              { x: p2.x, y: 0.02, z: -p2.y, a: 0.12 },
+              { x: p1.x, y: 0.02, z: -p1.y, a: 0.22 },
+              { x: p2.x, y: 0.02, z: -p2.y, a: 0.22 },
               { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
               { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
-              0.015, 0.025, 0.045
+              0.020, 0.028, 0.038
             );
 
             if (isNearDetail) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.025, z: -p1.y, a: 0.12 },
-                { x: p2.x, y: 0.025, z: -p2.y, a: 0.12 },
-                { x: p2.x + nx * 0.75, y: 0.022, z: -(p2.y - nz * 0.75), a: 0.05 },
-                { x: p1.x + nx * 0.75, y: 0.022, z: -(p1.y - nz * 0.75), a: 0.05 },
-                0.008, 0.015, 0.030
+                { x: p1.x, y: 0.025, z: -p1.y, a: 0.15 },
+                { x: p2.x, y: 0.025, z: -p2.y, a: 0.15 },
+                { x: p2.x + nx * 0.45, y: 0.022, z: -(p2.y - nz * 0.45), a: 0.0 },
+                { x: p1.x + nx * 0.45, y: 0.022, z: -(p1.y - nz * 0.45), a: 0.0 },
+                0.012, 0.018, 0.026
               );
             }
 
-            // [태양광 방향 일치 평면 투영 그림자 (Planar Shadow): 투명도 0.10 이하로 잔상 얼룩 방지]
+            // [태양광 방향 일치 평면 투영 그림자 (Planar Shadow)]
             const nDotL = nx * sX + (-nz) * sZ;
             if (nDotL < 0.20 && totalH >= 3.0) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.02, z: -p1.y, a: 0.10 },
-                { x: p2.x, y: 0.02, z: -p2.y, a: 0.10 },
-                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.10 },
-                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.10 },
-                0.0392, 0.0588, 0.1176
+                { x: p1.x, y: 0.02, z: -p1.y, a: 0.15 },
+                { x: p2.x, y: 0.02, z: -p2.y, a: 0.15 },
+                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.15 },
+                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.15 },
+                0.035, 0.045, 0.065
               );
             }
           }
@@ -1231,6 +1294,107 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
                 { x: v1.pt.x + dropDx, y: 0.012, z: -v1.pt.y + dropDz, a: 0.10 },
                 { x: v2.pt.x + dropDx, y: 0.012, z: -v2.pt.y + dropDz, a: 0.10 },
                 0.0392, 0.0588, 0.1176
+              );
+            }
+          }
+
+          // -------------------------------------------------------------------
+          // [지면 인페인팅 바닥 슬래브 (Ground Footprint Inpainting Buffer)]
+          // 위성사진 바닥에 원래 인쇄된 2D 평면 지붕 잔상을 100% 가리는 지면 차폐 패드
+          // 건물 외곽선보다 0.35m 바깥으로 확장(Outset)한 폴리곤을 지면 고도(y = 0.018m)에 배치
+          // -------------------------------------------------------------------
+          const outsetBasePts = computePolygonOutset(outerPts, 0.35);
+          if (outsetBasePts.length >= 3) {
+            const baseFlatCoords: number[] = [];
+            for (const bp of outsetBasePts) {
+              baseFlatCoords.push(bp.x, bp.y);
+            }
+            const baseTriangles = earcut(baseFlatCoords, null, 2);
+            const baseElevY = 0.018; // 지표면 바로 위 밀착
+
+            for (let bt = 0; bt < baseTriangles.length; bt += 3) {
+              const b0 = outsetBasePts[baseTriangles[bt]];
+              const b1 = outsetBasePts[baseTriangles[bt + 1]];
+              const b2 = outsetBasePts[baseTriangles[bt + 2]];
+
+              masterPositions.push(b0.x, baseElevY, -b0.y);
+              masterPositions.push(b1.x, baseElevY, -b1.y);
+              masterPositions.push(b2.x, baseElevY, -b2.y);
+
+              for (let k = 0; k < 3; k++) {
+                masterNormals.push(0, 1, 0);
+                // 도시 지표면 보도블록/아스팔트 콘크리트 패드 웜 그레이 (#3b4252 ~ #475569)
+                masterColors.push(0.26, 0.29, 0.33);
+                masterBuildingData.push(bldType, floors, 4.0, 21.0); // 4.0: 기단부, 21.0: 콘크리트 기단
+              }
+
+              masterUvs.push(b0.x, b0.y);
+              masterUvs.push(b1.x, b1.y);
+              masterUvs.push(b2.x, b2.y);
+
+              const bRaw0 = rawOuterRing[baseTriangles[bt] % rawOuterRing.length];
+              const bRaw1 = rawOuterRing[baseTriangles[bt + 1] % rawOuterRing.length];
+              const bRaw2 = rawOuterRing[baseTriangles[bt + 2] % rawOuterRing.length];
+
+              masterDemCoords.push((bRaw0[0] - minLng) / rangeLng, (bRaw0[1] - minLat) / rangeLat);
+              masterDemCoords.push((bRaw1[0] - minLng) / rangeLng, (bRaw1[1] - minLat) / rangeLat);
+              masterDemCoords.push((bRaw2[0] - minLng) / rangeLng, (bRaw2[1] - minLat) / rangeLat);
+            }
+
+            // -----------------------------------------------------------------
+            // [실제 도시 화강석 경계석 (Kerb Stone) 3D 입체 림 (높이 0.15m, 폭 0.20m)]
+            // 도로(위성사진)와 부지 대지 사이의 실측 화강석 연석을 입체로 구현
+            // -----------------------------------------------------------------
+            const KERB_H = 0.15;
+            const KERB_WIDTH = 0.20;
+            const kerbOuterPts = computePolygonOutset(outsetBasePts, KERB_WIDTH);
+            const kLen = outsetBasePts.length;
+
+            for (let ki = 0; ki < kLen; ki++) {
+              const nextKi = (ki + 1) % kLen;
+              const kp1 = outsetBasePts[ki];
+              const kp2 = outsetBasePts[nextKi];
+              const kop1 = kerbOuterPts[ki];
+              const kop2 = kerbOuterPts[nextKi];
+
+              const kDx = kp2.x - kp1.x;
+              const kDy = kp2.y - kp1.y;
+              const kSegLen = Math.hypot(kDx, kDy);
+              if (kSegLen < 0.1) continue;
+
+              const kOutNx = kDy / kSegLen;
+              const kOutNz = -kDx / kSegLen;
+
+              // 1) 연석 외측 수직면 (y: 0.018m ~ 0.168m)
+              addQuadVertices(
+                masterPositions, masterNormals, masterUvs, masterColors,
+                masterBuildingData, masterDemCoords,
+                { x: kop1.x, y: baseElevY, z: -kop1.y },
+                { x: kop2.x, y: baseElevY, z: -kop2.y },
+                { x: kop2.x, y: baseElevY + KERB_H, z: -kop2.y },
+                { x: kop1.x, y: baseElevY + KERB_H, z: -kop1.y },
+                kOutNx, 0, -kOutNz,
+                { u: 0, v: 0 }, { u: kSegLen / 1.0, v: 0 },
+                { u: kSegLen / 1.0, v: 1.0 }, { u: 0, v: 1.0 },
+                bldType, floors, 4.0, 21.0,
+                { u: 0, v: 0 }, { u: 1, v: 1 },
+                0.72, 0.76, 0.82 // 화강석 연석 외측면
+              );
+
+              // 2) 연석 상단 수평면 (y: 0.168m)
+              addQuadVertices(
+                masterPositions, masterNormals, masterUvs, masterColors,
+                masterBuildingData, masterDemCoords,
+                { x: kop1.x, y: baseElevY + KERB_H, z: -kop1.y },
+                { x: kop2.x, y: baseElevY + KERB_H, z: -kop2.y },
+                { x: kp2.x, y: baseElevY + KERB_H, z: -kp2.y },
+                { x: kp1.x, y: baseElevY + KERB_H, z: -kp1.y },
+                0, 1, 0,
+                { u: 0, v: 0 }, { u: kSegLen / 1.0, v: 0 },
+                { u: kSegLen / 1.0, v: 0.2 }, { u: 0, v: 0.2 },
+                bldType, floors, 4.0, 21.0,
+                { u: 0, v: 0 }, { u: 1, v: 1 },
+                0.80, 0.84, 0.89 // 화강석 연석 상단면
               );
             }
           }

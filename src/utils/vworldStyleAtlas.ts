@@ -170,9 +170,9 @@ function drawAptWarmCream(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.fillRect(livX - 2, winY - 2, livW + 4, winH + 4);
 
   const glassGrad = ctx.createLinearGradient(livX, winY, livX, winY + winH);
-  glassGrad.addColorStop(0, '#60a5fa');
-  glassGrad.addColorStop(0.3, '#1d4ed8');
-  glassGrad.addColorStop(0.8, '#0f172a');
+  glassGrad.addColorStop(0, '#334155');
+  glassGrad.addColorStop(0.35, '#1e293b');
+  glassGrad.addColorStop(0.85, '#0f172a');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(livX, winY, livW, winH);
 
@@ -241,8 +241,8 @@ function drawAptModernGray(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(winX - 2, winY - 2, winW + 4, winH + 4);
 
   const glassGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
-  glassGrad.addColorStop(0, '#93c5fd');
-  glassGrad.addColorStop(0.35, '#2563eb');
+  glassGrad.addColorStop(0, '#334155');
+  glassGrad.addColorStop(0.35, '#1e293b');
   glassGrad.addColorStop(1, '#020617');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(winX, winY, winW, winH);
@@ -285,8 +285,8 @@ function drawAptIvoryWhite(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(stairWinX - 2, y + 10, stairWinW + 4, h - 20);
 
   const stairGlass = ctx.createLinearGradient(stairWinX, y, stairWinX, y + h);
-  stairGlass.addColorStop(0, '#38bdf8');
-  stairGlass.addColorStop(0.5, '#0284c7');
+  stairGlass.addColorStop(0, '#334155');
+  stairGlass.addColorStop(0.5, '#1e293b');
   stairGlass.addColorStop(1, '#090d16');
   ctx.fillStyle = stairGlass;
   ctx.fillRect(stairWinX, y + 12, stairWinW, h - 24);
@@ -301,16 +301,16 @@ function drawAptIvoryWhite(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(winX - 2, winY - 2, winW + 4, winH + 4);
 
   const gGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
-  gGrad.addColorStop(0, '#7dd3fc');
-  gGrad.addColorStop(0.3, '#0284c7');
+  gGrad.addColorStop(0, '#475569');
+  gGrad.addColorStop(0.35, '#1e293b');
   gGrad.addColorStop(1, '#020617');
   ctx.fillStyle = gGrad;
   ctx.fillRect(winX, winY, winW, winH);
 
-  // 유리 난간 (Cyan Tinted Glass)
+  // 유리 난간 (차분한 그레이 스모크 글래스)
   const balcY = winY + winH + 6;
   const balcH = Math.round(h * 0.26);
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+  ctx.fillStyle = 'rgba(51, 65, 85, 0.45)';
   ctx.fillRect(winX, balcY, winW, balcH);
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(winX, balcY, winW, 3); // 상부 핸드레일
@@ -334,9 +334,9 @@ function drawAptGlassStone(ctx: CanvasRenderingContext2D, x: number, y: number, 
   const winH = h - margin * 2;
 
   const glassGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
-  glassGrad.addColorStop(0, '#93c5fd');
-  glassGrad.addColorStop(0.2, '#38bdf8');
-  glassGrad.addColorStop(0.6, '#0f172a');
+  glassGrad.addColorStop(0, '#475569');
+  glassGrad.addColorStop(0.25, '#1e293b');
+  glassGrad.addColorStop(0.7, '#0f172a');
   glassGrad.addColorStop(1, '#020617');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(winX, winY, winW, winH);
@@ -416,10 +416,10 @@ function drawCommGraniteBeige(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.fillRect(x, winTop - 2, w, winH + 4);
 
   const winGrad = ctx.createLinearGradient(x, winTop, x, winTop + winH);
-  winGrad.addColorStop(0, '#bae6fd');
-  winGrad.addColorStop(0.3, '#38bdf8');
-  winGrad.addColorStop(0.7, '#0284c7');
-  winGrad.addColorStop(1, '#0f172a');
+  winGrad.addColorStop(0, '#475569');
+  winGrad.addColorStop(0.35, '#1e293b');
+  winGrad.addColorStop(0.75, '#0f172a');
+  winGrad.addColorStop(1, '#020617');
   ctx.fillStyle = winGrad;
   ctx.fillRect(x, winTop, w, winH);
 
@@ -447,7 +447,7 @@ function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, 
     ctx.fillRect(px + 18, y, 6, h);
   }
 
-  // 다크 틴티드 브론즈 글래스
+  // 다크 틴티드 브론즈/차콜 글래스
   const winY = y + h * 0.18;
   const winH = h * 0.62;
   const winW = w * 0.84;
@@ -457,8 +457,8 @@ function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(winX - 2, winY - 2, winW + 4, winH + 4);
 
   const glass = ctx.createLinearGradient(winX, winY, winX, winY + winH);
-  glass.addColorStop(0, '#38bdf8');
-  glassGlass: glass.addColorStop(0.4, '#1e293b');
+  glass.addColorStop(0, '#334155');
+  glass.addColorStop(0.35, '#1e293b');
   glass.addColorStop(1, '#020617');
   ctx.fillStyle = glass;
   ctx.fillRect(winX, winY, winW, winH);
@@ -503,8 +503,8 @@ function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w
     ctx.fillRect(wx, winY, winW, winH);
 
     const wg = ctx.createLinearGradient(wx, winY, wx, winY + winH);
-    wg.addColorStop(0, '#7dd3fc');
-    wg.addColorStop(0.5, '#0284c7');
+    wg.addColorStop(0, '#475569');
+    wg.addColorStop(0.35, '#1e293b');
     wg.addColorStop(1, '#020617');
     ctx.fillStyle = wg;
     ctx.fillRect(wx + 2, winY + 2, winW - 4, winH - 4);
@@ -514,19 +514,19 @@ function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * Slot 8: 상가 Type D (통유리 오피스 커튼월, 하늘빛 반사)
+ * Slot 8: 상가 Type D (통유리 오피스 커튼월, 다크 슬레이트 틴티드)
  */
 function drawCommCurtainwall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   const skyGrad = ctx.createLinearGradient(x, y, x, y + h);
-  skyGrad.addColorStop(0, '#bae6fd');
-  skyGrad.addColorStop(0.25, '#38bdf8');
-  skyGrad.addColorStop(0.65, '#0369a1');
-  skyGrad.addColorStop(1, '#082f49');
+  skyGrad.addColorStop(0, '#475569');
+  skyGrad.addColorStop(0.35, '#1e293b');
+  skyGrad.addColorStop(0.75, '#0f172a');
+  skyGrad.addColorStop(1, '#020617');
   ctx.fillStyle = skyGrad;
   ctx.fillRect(x, y, w, h);
 
   // 알루미늄 슬림 그리드 멀리언
-  ctx.fillStyle = '#e2e8f0';
+  ctx.fillStyle = '#94a3b8';
   for (let px = x; px < x + w; px += 40) ctx.fillRect(px, y, 1.5, h);
   for (let py = y; py < y + h; py += 32) ctx.fillRect(x, py, w, 1.5);
 
@@ -564,7 +564,7 @@ function drawCommGroundShop(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.fillRect(x + 8, signY, w - 16, signH);
 
   // 간판 테두리 하이라이트 라인
-  ctx.fillStyle = '#38bdf8';
+  ctx.fillStyle = '#64748b';
   ctx.fillRect(x + 8, signY + signH - 2, w - 16, 2);
 
   // 간판 타이포그래피 (모던 채널 레터링 스타일)
@@ -574,7 +574,7 @@ function drawCommGroundShop(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.textBaseline = 'middle';
   ctx.fillText('STORE • PHARMACY • CAFE', x + w * 0.5, signY + signH * 0.5);
 
-  // 1층 통유리 쇼윈도 (어두운 통유리 + 하늘 반사 + 진열대 포인트 조명)
+  // 1층 통유리 쇼윈도 (어두운 통유리 + 매장 내부 은은한 온백색 조명)
   const shopY = signY + signH + 8;
   const shopH = h - shopY - 12;
 
@@ -582,10 +582,10 @@ function drawCommGroundShop(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.fillRect(x + 8, shopY, w - 16, shopH);
 
   const shopGrad = ctx.createLinearGradient(x, shopY, x, shopY + shopH);
-  shopGrad.addColorStop(0, '#38bdf8');
-  shopGrad.addColorStop(0.25, '#0f172a');
-  shopGrad.addColorStop(0.85, '#020617');
-  shopGrad.addColorStop(1, '#1e1b18'); // 바닥 진열대 온백색 빛
+  shopGrad.addColorStop(0, '#334155');
+  shopGrad.addColorStop(0.35, '#1e293b');
+  shopGrad.addColorStop(0.80, '#0f172a');
+  shopGrad.addColorStop(1, '#292524'); // 바닥 진열대 온백색 은은한 조명
   ctx.fillStyle = shopGrad;
   ctx.fillRect(x + 10, shopY + 2, w - 20, shopH - 4);
 
@@ -671,8 +671,8 @@ function drawVillaGranite(ctx: CanvasRenderingContext2D, x: number, y: number, w
     ctx.fillRect(wx - 3, winY - 3, winW + 6, winH + 6);
 
     const vg = ctx.createLinearGradient(wx, winY, wx, winY + winH);
-    vg.addColorStop(0, '#93c5fd');
-    vg.addColorStop(0.4, '#1e293b');
+    vg.addColorStop(0, '#475569');
+    vg.addColorStop(0.35, '#1e293b');
     vg.addColorStop(1, '#020617');
     ctx.fillStyle = vg;
     ctx.fillRect(wx, winY, winW, winH);
@@ -707,8 +707,8 @@ function drawHouseCream(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(winX, winY, winW, winH);
   const wg = ctx.createLinearGradient(winX, winY, winX, winY + winH);
-  wg.addColorStop(0, '#bae6fd');
-  wg.addColorStop(0.5, '#0284c7');
+  wg.addColorStop(0, '#475569');
+  wg.addColorStop(0.35, '#1e293b');
   wg.addColorStop(1, '#0f172a');
   ctx.fillStyle = wg;
   ctx.fillRect(winX + 2, winY + 2, winW - 4, winH - 4);
@@ -742,8 +742,9 @@ function drawFacilityPanel(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(x + 16, winY, w - 32, winH);
 
   const glass = ctx.createLinearGradient(x, winY, x, winY + winH);
-  glass.addColorStop(0, '#38bdf8');
-  glass.addColorStop(0.6, '#0f172a');
+  glass.addColorStop(0, '#334155');
+  glass.addColorStop(0.35, '#1e293b');
+  glass.addColorStop(1, '#0f172a');
   ctx.fillStyle = glass;
   ctx.fillRect(x + 18, winY + 2, w - 36, winH - 4);
 
@@ -911,8 +912,8 @@ function drawAptPilotisLobby(ctx: CanvasRenderingContext2D, x: number, y: number
 
   // 강화유리 반사 그라데이션
   const glassGrad = ctx.createLinearGradient(doorX, doorY, doorX, doorY + doorH);
-  glassGrad.addColorStop(0, '#38bdf8');
-  glassGrad.addColorStop(0.25, '#0f172a');
+  glassGrad.addColorStop(0, '#334155');
+  glassGrad.addColorStop(0.35, '#0f172a');
   glassGrad.addColorStop(1, '#020617');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(doorX + 3, doorY + 3, doorW - 6, doorH - 6);
@@ -927,7 +928,7 @@ function drawAptPilotisLobby(ctx: CanvasRenderingContext2D, x: number, y: number
   // 로비폰 비밀번호 키패드 (오른쪽 벽면)
   ctx.fillStyle = '#475569';
   ctx.fillRect(x + w - colW - 10, doorY + doorH * 0.42, 6, 12);
-  ctx.fillStyle = '#38bdf8';
+  ctx.fillStyle = '#64748b';
   ctx.fillRect(x + w - colW - 9, doorY + doorH * 0.44, 4, 3);
 
   addWeatheringNoise(ctx, x, y, w, h, 0.05);

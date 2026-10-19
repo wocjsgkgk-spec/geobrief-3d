@@ -237,6 +237,7 @@ const baseStyle: maplibregl.StyleSpecification = {
     'satellite-tiles': {
       type: 'raster',
       tiles: [
+        'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
       ],
@@ -311,6 +312,7 @@ export function safeSetTerrain(
           map.addSource('satellite-tiles', {
             type: 'raster',
             tiles: [
+              'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
               'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
@@ -987,21 +989,23 @@ export const MapViewer: React.FC = () => {
           'satellite-tiles': {
             type: 'raster',
             tiles: [
+              'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
               'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery, Google Satellite',
+            attribution: '국토교통부 브이월드 항공사진, Esri, Google',
             maxzoom: 19,
           },
           'satellite-source': {
             type: 'raster',
             tiles: [
+              'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
               'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
             ],
             tileSize: 256,
-            attribution: 'Esri World Imagery, Google Satellite',
+            attribution: '국토교통부 브이월드 항공사진, Esri, Google',
             maxzoom: 19,
           },
           'clean-tiles': {
