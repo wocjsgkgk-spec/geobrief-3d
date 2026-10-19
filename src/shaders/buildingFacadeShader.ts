@@ -227,8 +227,17 @@ const fragmentShader = /* glsl */ `
 
     // 총 조명 합산 (최소 조명 강도 0.75 이상 보장으로 칠흑 암흑 완전 방지)
     vec3 totalLighting = baseAmbient + hemiLight + sunLight + fillLight;
+    vec3 rawColor = albedo * totalLighting * 1.05;
 
-    gl_FragColor = vec4(albedo * totalLighting, 1.0);
+    // [3단계: 실사 항공사진 톤 매핑 (ACES Filmic Tone Mapping)]
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    vec3 toneMapped = clamp((rawColor * (a * rawColor + b)) / (rawColor * (c * rawColor + d) + e), 0.0, 1.0);
+
+    gl_FragColor = vec4(toneMapped, 1.0);
   }
 `;
 

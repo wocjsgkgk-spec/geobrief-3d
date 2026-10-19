@@ -124,6 +124,18 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
   }
 
   // ---------------------------------------------------------------------------
+  // [3단계: 실사 항공사진 톤 매핑 (ACES Filmic Tone Mapping, exposure: 1.05)]
+  // ---------------------------------------------------------------------------
+  vec3 acesFilmic(vec3 x) {
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+  }
+
+  // ---------------------------------------------------------------------------
   // 의사 인테리어 시차 매핑 (Pseudo-Interior Parallax Room Window)
   // ---------------------------------------------------------------------------
   vec3 getInteriorRoom(vec2 roomUv, vec3 viewDir, float seed) {
@@ -292,7 +304,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       }
 
       vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
-      gl_FragColor = vec4(finalColor, uOpacity);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
 
@@ -343,7 +355,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = roofColor * (diffuse + ambient);
 
-      gl_FragColor = vec4(finalColor, uOpacity);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
 
@@ -359,7 +371,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = parapetColor * (diffuse + ambient);
 
-      gl_FragColor = vec4(finalColor, uOpacity);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
 
@@ -380,7 +392,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       float NdotL = max(0.0, dot(N, L));
       vec3 diffuse = uSunColor * NdotL * uSunIntensity;
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
-      gl_FragColor = vec4(pentColor * (diffuse + ambient), uOpacity);
+      gl_FragColor = vec4(acesFilmic(pentColor * (diffuse + ambient) * 1.05), uOpacity);
       return;
     }
 
@@ -444,7 +456,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.5) * uAmbientIntensity;
       vec3 finalColor = graniteColor * (diffuse + ambient) * groundAO;
 
-      gl_FragColor = vec4(finalColor, uOpacity);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
 
@@ -476,7 +488,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
       vec3 ambient = mix(uAmbientGround, uAmbientSky, 0.6) * uAmbientIntensity;
       vec3 finalColor = coreWall * (diffuse + ambient);
 
-      gl_FragColor = vec4(finalColor, uOpacity);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
       return;
     }
 
@@ -613,7 +625,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     }
 
     vec3 finalColor = surfaceColor * (diffuse + ambient) + specular;
-    gl_FragColor = vec4(finalColor, uOpacity);
+    gl_FragColor = vec4(acesFilmic(finalColor * 1.05), uOpacity);
   }
 `;
 

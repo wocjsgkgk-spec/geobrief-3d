@@ -262,9 +262,9 @@ function addShadowQuad(
   p1: { x: number; y: number; z: number; a: number },
   p2: { x: number; y: number; z: number; a: number },
   p3: { x: number; y: number; z: number; a: number },
-  r = 0.008,
-  g = 0.024,
-  b = 0.09
+  r = 0.0392,
+  g = 0.0588,
+  b = 0.1176
 ): void {
   // Triangle 1: p0 -> p1 -> p2
   positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
@@ -355,6 +355,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   private bridgePierCapMesh: THREE.InstancedMesh | null = null;
   private bridgePierFootingMesh: THREE.InstancedMesh | null = null;
   private bridgeBarrierMesh: THREE.Mesh | null = null;
+  private bridgeShadowMesh: THREE.Mesh | null = null;
   private bridgePierMaterial: THREE.MeshStandardMaterial | null = null;
   private bridgePierCapMaterial: THREE.MeshStandardMaterial | null = null;
   private bridgeBarrierMaterial: THREE.MeshStandardMaterial | null = null;
@@ -699,6 +700,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.bridgeBarrierMesh) {
       this.bridgeBarrierMesh.visible = isStandardOrAbove;
     }
+    if (this.bridgeShadowMesh) {
+      this.bridgeShadowMesh.visible = isStandardOrAbove;
+    }
 
     if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
@@ -780,6 +784,8 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         });
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.05;
         this.renderer.shadowMap.enabled = false;
         const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
         this.renderer.setPixelRatio(pr);
@@ -1124,32 +1130,33 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
           const outNx = dz / segLen;
           const outNz = -dx / segLen;
 
-          // (1) 지면 접지 그림자 (Contact Shadow Skirt: 2.5m~4.0m 외곽 방향 전개)
-          const p0_out_x = p0.x + outNx * shadowRadius;
-          const p0_out_z = p0.y + outNz * shadowRadius;
-          const p1_out_x = p1.x + outNx * shadowRadius;
-          const p1_out_z = p1.y + outNz * shadowRadius;
+          // (1) 1.5m 폭의 짙은 접지 음영 (Contact Ambient Occlusion)
+          const aoWidth = 1.5;
+          const p0_out_x = p0.x + outNx * aoWidth;
+          const p0_out_z = p0.y + outNz * aoWidth;
+          const p1_out_x = p1.x + outNx * aoWidth;
+          const p1_out_z = p1.y + outNz * aoWidth;
 
           addShadowQuad(
             shadowPositions,
             shadowColors,
-            { x: p0.x, y: relElev + 0.04, z: p0.y, a: 0.70 },
-            { x: p1.x, y: relElev + 0.04, z: p1.y, a: 0.70 },
-            { x: p1_out_x, y: relElev + 0.04, z: p1_out_z, a: 0.0 },
-            { x: p0_out_x, y: relElev + 0.04, z: p0_out_z, a: 0.0 },
-            0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42)
+            { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.85 },
+            { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.85 },
+            { x: p1_out_x, y: relElev + 0.015, z: p1_out_z, a: 0.0 },
+            { x: p0_out_x, y: relElev + 0.015, z: p0_out_z, a: 0.0 },
+            0.015, 0.025, 0.045
           );
 
-          // (2) 실시간 태양광 투영 그림자 (Drop Shadow: 건물 높이에 비례하여 광원 반대 방향으로 연장 투영)
-          if (totalH >= 4.0 && (outNx * sX + outNz * sZ) < 0.20) {
+          // (2) 실시간 태양광 투영 그림자 (Planar Shadow: rgba(10, 15, 30, 0.38))
+          if (totalH >= 3.0 && (outNx * sX + outNz * sZ) < 0.20) {
             addShadowQuad(
               shadowPositions,
               shadowColors,
-              { x: p0.x, y: relElev + 0.03, z: p0.y, a: 0.45 },
-              { x: p1.x, y: relElev + 0.03, z: p1.y, a: 0.45 },
-              { x: p1.x + dropDx, y: relElev + 0.03, z: p1.y + dropDz, a: 0.45 },
-              { x: p0.x + dropDx, y: relElev + 0.03, z: p0.y + dropDz, a: 0.45 },
-              0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.45)
+              { x: p0.x, y: relElev + 0.02, z: p0.y, a: 0.38 },
+              { x: p1.x, y: relElev + 0.02, z: p1.y, a: 0.38 },
+              { x: p1.x + dropDx, y: relElev + 0.015, z: p1.y + dropDz, a: 0.38 },
+              { x: p0.x + dropDx, y: relElev + 0.015, z: p0.y + dropDz, a: 0.38 },
+              0.0392, 0.0588, 0.1176
             );
           }
         }
@@ -2160,6 +2167,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     if (this.bridgePierCapMesh) this.bridgePierCapMesh.visible = visible;
     if (this.bridgePierFootingMesh) this.bridgePierFootingMesh.visible = visible;
     if (this.bridgeBarrierMesh) this.bridgeBarrierMesh.visible = visible;
+    if (this.bridgeShadowMesh) this.bridgeShadowMesh.visible = visible;
     if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
     }
@@ -2203,6 +2211,16 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     const barrierPositions: number[] = [];
     const barrierNormals: number[] = [];
     const barrierColors: number[] = [];
+
+    const bridgeShadowPositions: number[] = [];
+    const bridgeShadowColors: number[] = [];
+
+    const sX = this.sunLightDirection.x;
+    const sY = Math.max(0.25, this.sunLightDirection.y);
+    const sZ = this.sunLightDirection.z;
+    const bDropScale = 12.0 / sY; // 교량 상판 고도 12m 기준 투영
+    const bDropDx = -sX * bDropScale;
+    const bDropDz = -sZ * bDropScale;
 
     const PIER_SPACING = 35.0; // 35m 간격 자동 배치
     const seenLine = new Set<string>();
@@ -2317,6 +2335,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             { x: p1R.x, y: 0, z: p1R.z },
             -nx, 0, -nz,
             0.28, 0.33, 0.41
+          );
+
+          // 교량 상판 실시간 태양광 평면 투영 그림자: rgba(10, 15, 30, 0.38)
+          addShadowQuad(
+            bridgeShadowPositions,
+            bridgeShadowColors,
+            { x: p1L.x + bDropDx, y: 0.02, z: p1L.z + bDropDz, a: 0.38 },
+            { x: p2L.x + bDropDx, y: 0.02, z: p2L.z + bDropDz, a: 0.38 },
+            { x: p2R.x + bDropDx, y: 0.02, z: p2R.z + bDropDz, a: 0.38 },
+            { x: p1R.x + bDropDx, y: 0.02, z: p1R.z + bDropDz, a: 0.38 },
+            0.0392, 0.0588, 0.1176
           );
         }
 
@@ -2455,6 +2484,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       newBarrierMesh.frustumCulled = false;
     }
 
+    let newBridgeShadowMesh: THREE.Mesh | null = null;
+    if (bridgeShadowPositions.length > 0 && this.contactShadowMaterial) {
+      const bShadowGeo = new THREE.BufferGeometry();
+      bShadowGeo.setAttribute('position', new THREE.Float32BufferAttribute(bridgeShadowPositions, 3));
+      bShadowGeo.setAttribute('color', new THREE.Float32BufferAttribute(bridgeShadowColors, 4));
+      bShadowGeo.computeBoundingSphere();
+      newBridgeShadowMesh = new THREE.Mesh(bShadowGeo, this.contactShadowMaterial);
+      (newBridgeShadowMesh as any).frustumCulled = false;
+      newBridgeShadowMesh.renderOrder = -1;
+    }
+
     // Double buffering 원자적 교체
     if (this.bridgePierColMesh) {
       this.scene.remove(this.bridgePierColMesh);
@@ -2472,16 +2512,22 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.scene.remove(this.bridgeBarrierMesh);
       if (this.bridgeBarrierMesh.geometry) this.bridgeBarrierMesh.geometry.dispose();
     }
+    if (this.bridgeShadowMesh) {
+      this.scene.remove(this.bridgeShadowMesh);
+      if (this.bridgeShadowMesh.geometry) this.bridgeShadowMesh.geometry.dispose();
+    }
 
     this.bridgePierColMesh = newColMesh;
     this.bridgePierCapMesh = newCapMesh;
     this.bridgePierFootingMesh = newFootingMesh;
     this.bridgeBarrierMesh = newBarrierMesh;
+    this.bridgeShadowMesh = newBridgeShadowMesh;
 
     if (newColMesh) this.scene.add(newColMesh);
     if (newCapMesh) this.scene.add(newCapMesh);
     if (newFootingMesh) this.scene.add(newFootingMesh);
     if (newBarrierMesh) this.scene.add(newBarrierMesh);
+    if (newBridgeShadowMesh) this.scene.add(newBridgeShadowMesh);
 
     if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
@@ -2538,6 +2584,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         this.bridgeBarrierMesh.geometry.dispose();
       }
       this.bridgeBarrierMesh = null;
+    }
+
+    if (this.bridgeShadowMesh) {
+      this.scene.remove(this.bridgeShadowMesh);
+      if (this.bridgeShadowMesh.geometry) {
+        this.bridgeShadowMesh.geometry.dispose();
+      }
+      this.bridgeShadowMesh = null;
     }
 
     if (this.contactShadowMesh) {

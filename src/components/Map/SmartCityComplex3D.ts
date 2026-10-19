@@ -1597,6 +1597,8 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
         });
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.05;
         this.renderer.shadowMap.enabled = false;
         const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
         this.renderer.setPixelRatio(pr);

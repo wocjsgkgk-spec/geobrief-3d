@@ -103,6 +103,18 @@ export const realisticCityFragmentShader = /* glsl */ `
   }
 
   // ---------------------------------------------------------------------------
+  // [3단계: 실사 항공사진 톤 매핑 (ACES Filmic Tone Mapping, exposure: 1.05)]
+  // ---------------------------------------------------------------------------
+  vec3 acesFilmic(vec3 x) {
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+  }
+
+  // ---------------------------------------------------------------------------
   // 의사 인테리어 시차 매핑 (Pseudo-Interior Parallax Room Window)
   // ---------------------------------------------------------------------------
   vec3 getInteriorRoom(vec2 roomUv, vec3 viewDir, float seed) {
@@ -180,7 +192,7 @@ export const realisticCityFragmentShader = /* glsl */ `
       vec3 ambient = uAmbientSky * uAmbientIntensity;
       vec3 finalColor = roofColor * (diffuse + ambient);
 
-      gl_FragColor = vec4(finalColor, 1.0);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), 1.0);
       return;
     }
 
@@ -223,7 +235,7 @@ export const realisticCityFragmentShader = /* glsl */ `
       float groundAO = mix(0.42, 1.0, smoothstep(0.0, 0.85, heightMeters));
       float NdotL = max(0.0, dot(N, L));
       vec3 finalColor = graniteColor * (uSunColor * NdotL * uSunIntensity + uAmbientSky * uAmbientIntensity) * groundAO;
-      gl_FragColor = vec4(finalColor, 1.0);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), 1.0);
       return;
     }
 
@@ -251,7 +263,7 @@ export const realisticCityFragmentShader = /* glsl */ `
 
       float NdotL = max(0.0, dot(N, L));
       vec3 finalColor = coreWall * (uSunColor * NdotL * uSunIntensity + uAmbientSky * uAmbientIntensity);
-      gl_FragColor = vec4(finalColor, 1.0);
+      gl_FragColor = vec4(acesFilmic(finalColor * 1.05), 1.0);
       return;
     }
 
@@ -383,7 +395,7 @@ export const realisticCityFragmentShader = /* glsl */ `
 
     vec3 finalColor = surfaceColor * (directLight + ambientLight) * slabShadow * groundAO;
 
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(acesFilmic(finalColor * 1.05), 1.0);
   }
 `;
 

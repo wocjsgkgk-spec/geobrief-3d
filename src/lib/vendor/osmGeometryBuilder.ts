@@ -245,9 +245,9 @@ function addShadowQuad(
   p1: { x: number; y: number; z: number; a: number },
   p2: { x: number; y: number; z: number; a: number },
   p3: { x: number; y: number; z: number; a: number },
-  r = 0.059,
-  g = 0.090,
-  b = 0.165
+  r = 0.0392,
+  g = 0.0588,
+  b = 0.1176
 ): void {
   positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
   colors.push(r, g, b, p0.a, r, g, b, p1.a, r, g, b, p2.a);
@@ -262,9 +262,9 @@ function addShadowTriangle(
   p0: { x: number; y: number; z: number; a: number },
   p1: { x: number; y: number; z: number; a: number },
   p2: { x: number; y: number; z: number; a: number },
-  r = 0.059,
-  g = 0.090,
-  b = 0.165
+  r = 0.0392,
+  g = 0.0588,
+  b = 0.1176
 ): void {
   positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
   colors.push(r, g, b, p0.a, r, g, b, p1.a, r, g, b, p2.a);
@@ -806,38 +806,40 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             }
           }
 
-          // 외곽 링에 대해 접지 그림자 및 태양광 투영 그림자 생성
+          // 외곽 링에 대해 1.5m 접지 음영(Contact AO) 및 태양광 투영 그림자 생성
           if (!isHole) {
-            const aoWidth = Math.max(2.5, Math.min(4.5, totalH * 0.08 + 2.0));
+            // [3단계: 건물 벽면과 지면이 만나는 경계선에 1.5m 폭의 짙은 접지 음영(Contact AO)]
+            const aoWidth = 1.5;
             addShadowQuad(
               shadowPositions, shadowColors,
-              { x: p1.x, y: 0.02, z: -p1.y, a: 0.78 },
-              { x: p2.x, y: 0.02, z: -p2.y, a: 0.78 },
+              { x: p1.x, y: 0.02, z: -p1.y, a: 0.85 },
+              { x: p2.x, y: 0.02, z: -p2.y, a: 0.85 },
               { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
               { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
-              0.008, 0.024, 0.090
+              0.015, 0.025, 0.045
             );
 
             if (isNearDetail) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.025, z: -p1.y, a: 0.88 },
-                { x: p2.x, y: 0.025, z: -p2.y, a: 0.88 },
-                { x: p2.x + nx * 0.6, y: 0.022, z: -(p2.y - nz * 0.6), a: 0.25 },
-                { x: p1.x + nx * 0.6, y: 0.022, z: -(p1.y - nz * 0.6), a: 0.25 },
-                0.005, 0.012, 0.040
+                { x: p1.x, y: 0.025, z: -p1.y, a: 0.92 },
+                { x: p2.x, y: 0.025, z: -p2.y, a: 0.92 },
+                { x: p2.x + nx * 0.75, y: 0.022, z: -(p2.y - nz * 0.75), a: 0.35 },
+                { x: p1.x + nx * 0.75, y: 0.022, z: -(p1.y - nz * 0.75), a: 0.35 },
+                0.008, 0.015, 0.030
               );
             }
 
+            // [태양광 방향 일치 평면 투영 그림자 (Planar Shadow): rgba(10, 15, 30, 0.38)]
             const nDotL = nx * sX + (-nz) * sZ;
-            if (nDotL < 0.20 && totalH >= 4.0) {
+            if (nDotL < 0.20 && totalH >= 3.0) {
               addShadowQuad(
                 shadowPositions, shadowColors,
-                { x: p1.x, y: 0.02, z: -p1.y, a: 0.45 },
-                { x: p2.x, y: 0.02, z: -p2.y, a: 0.45 },
-                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.45 },
-                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.45 },
-                0.059, 0.090, 0.165
+                { x: p1.x, y: 0.02, z: -p1.y, a: 0.38 },
+                { x: p2.x, y: 0.02, z: -p2.y, a: 0.38 },
+                { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.38 },
+                { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.38 },
+                0.0392, 0.0588, 0.1176
               );
             }
           }
@@ -1327,7 +1329,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             masterDemCoords.push((v2.raw[0] - minLng) / rangeLng, (v2.raw[1] - minLat) / rangeLat);
           }
 
-          if (totalH >= 5.0 && (isNearDetail || totalH >= 20.0)) {
+          if (totalH >= 4.0 && (isNearDetail || totalH >= 15.0)) {
             for (let t = 0; t < triangles.length; t += 3) {
               const v0 = allVertsList[triangles[t]];
               const v1 = allVertsList[triangles[t + 1]];
@@ -1335,10 +1337,10 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
               addShadowTriangle(
                 shadowPositions, shadowColors,
-                { x: v0.pt.x + dropDx, y: 0.012, z: -v0.pt.y + dropDz, a: 0.45 },
-                { x: v1.pt.x + dropDx, y: 0.012, z: -v1.pt.y + dropDz, a: 0.45 },
-                { x: v2.pt.x + dropDx, y: 0.012, z: -v2.pt.y + dropDz, a: 0.45 },
-                0.059, 0.090, 0.165
+                { x: v0.pt.x + dropDx, y: 0.012, z: -v0.pt.y + dropDz, a: 0.38 },
+                { x: v1.pt.x + dropDx, y: 0.012, z: -v1.pt.y + dropDz, a: 0.38 },
+                { x: v2.pt.x + dropDx, y: 0.012, z: -v2.pt.y + dropDz, a: 0.38 },
+                0.0392, 0.0588, 0.1176
               );
             }
           }

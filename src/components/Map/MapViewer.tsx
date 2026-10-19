@@ -83,6 +83,10 @@ import {
   KOREAN_ROAD_LAYER_IDS as STREETS_GL_ROAD_LAYER_IDS,
   getKoreanRoadLayerDefinitions as getStreetsGlRoadLayerDefinitions,
 } from '@/utils/koreanRoadRenderer';
+import {
+  KOREAN_LANDUSE_LAYER_IDS,
+  getKoreanLanduseLayerDefinitions,
+} from '@/utils/koreanLanduseRenderer';
 import { elevationCache, clearElevationCache } from '@/utils/elevationCache';
 import {
   registerNativeBuildingPatterns,
@@ -2659,6 +2663,24 @@ export const MapViewer: React.FC = () => {
           });
         }
 
+        // 1-B) [3단계: 벡터 토지피복(Landuse/Landcover) 디테일 블렌딩 레이어 일괄 등록]
+        // 위성사진 바닥의 픽셀화 뭉개짐을 보완하고 15~25% 투명도로 자연스럽게 합성
+        const landuseLayerDefs = getKoreanLanduseLayerDefinitions('openmaptiles-vector');
+        const initialLanduseVis = baseMap === 'satellite' ? 'visible' : 'none';
+
+        for (const luLayer of landuseLayerDefs) {
+          if (!map.getLayer(luLayer.id)) {
+            const configuredLayer: any = {
+              ...luLayer,
+              layout: {
+                ...(luLayer.layout || {}),
+                visibility: initialLanduseVis,
+              },
+            };
+            map.addLayer(configuredLayer, beforeRoads);
+          }
+        }
+
         // 2) 한국형 실측 폭 아스팔트 노면·차선·중앙선·연석 레이어 일괄 등록
         const roadLayerDefs = getKoreanRoadLayerDefinitions(
           'openmaptiles-vector',
@@ -3913,6 +3935,14 @@ export const MapViewer: React.FC = () => {
         'visibility',
         baseMap === 'clean' ? 'visible' : 'none'
       );
+    }
+
+    // [3단계: 벡터 토지피복(Landuse/Landcover) 디테일 블렌딩 가시성 동기화]
+    const landuseVis = baseMap === 'satellite' ? 'visible' : 'none';
+    for (const lid of KOREAN_LANDUSE_LAYER_IDS) {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(lid, 'visibility', landuseVis);
+      }
     }
   }, [baseMap, isMapLoaded]);
 

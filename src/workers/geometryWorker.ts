@@ -331,9 +331,9 @@ function addShadowQuad(
   p1: { x: number; y: number; z: number; a: number },
   p2: { x: number; y: number; z: number; a: number },
   p3: { x: number; y: number; z: number; a: number },
-  r = 0.059,
-  g = 0.090,
-  b = 0.165
+  r = 0.0392,
+  g = 0.0588,
+  b = 0.1176
 ): void {
   positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
   colors.push(r, g, b, p0.a, r, g, b, p1.a, r, g, b, p2.a);
@@ -597,42 +597,38 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
           r, g, b
         );
 
-        // 1) 짙은 바닥 외곽 접지 그림자 (Ground Ambient Occlusion Skirt: 2.5m~4.5m)
-        // 위성사진 속 기존 납작한 건물 지붕 흔적을 깔끔하게 덮어 시각적 일체화 달성
-        const aoWidth = Math.max(2.5, Math.min(4.5, totalH * 0.08 + 2.0));
+        // 1) 1.5m 폭의 짙은 접지 음영 (Contact Ambient Occlusion)
+        const aoWidth = 1.5;
         addShadowQuad(
           shadowPositions, shadowColors,
-          { x: p1.x, y: 0.02, z: -p1.y, a: 0.78 },
-          { x: p2.x, y: 0.02, z: -p2.y, a: 0.78 },
+          { x: p1.x, y: 0.02, z: -p1.y, a: 0.85 },
+          { x: p2.x, y: 0.02, z: -p2.y, a: 0.85 },
           { x: p2.x + nx * aoWidth, y: 0.015, z: -(p2.y - nz * aoWidth), a: 0.0 },
           { x: p1.x + nx * aoWidth, y: 0.015, z: -(p1.y - nz * aoWidth), a: 0.0 },
-          0.008, 0.024, 0.090 // 다크 네이비 접지 차콜
+          0.015, 0.025, 0.045
         );
 
-        // 1-2) 건물 지면 밀착 코어 섀도우 (Core Contact Shadow: 폭 0.6m 내측 진한 그림자 - 근접 상세 뷰에서 활성화)
         if (isNearDetail) {
           addShadowQuad(
             shadowPositions, shadowColors,
-            { x: p1.x, y: 0.025, z: -p1.y, a: 0.88 },
-            { x: p2.x, y: 0.025, z: -p2.y, a: 0.88 },
-            { x: p2.x + nx * 0.6, y: 0.022, z: -(p2.y - nz * 0.6), a: 0.25 },
-            { x: p1.x + nx * 0.6, y: 0.022, z: -(p1.y - nz * 0.6), a: 0.25 },
-            0.005, 0.012, 0.040 // 초고밀도 접지 림
+            { x: p1.x, y: 0.025, z: -p1.y, a: 0.92 },
+            { x: p2.x, y: 0.025, z: -p2.y, a: 0.92 },
+            { x: p2.x + nx * 0.75, y: 0.022, z: -(p2.y - nz * 0.75), a: 0.35 },
+            { x: p1.x + nx * 0.75, y: 0.022, z: -(p1.y - nz * 0.75), a: 0.35 },
+            0.008, 0.015, 0.030
           );
         }
 
-        // 2) 초경량 평면 투영 그림자 (Planar Drop Shadow: 벽체 투영)
-        // 태양 광원 벡터(-L) 방향으로 건물 외벽 정점을 지면 방향으로 비스듬히 투영
-        // 음영측 외벽 판정 (normal · L < 0.20)
+        // 2) 태양광 방향 일치 평면 투영 그림자 (Planar Shadow: rgba(10, 15, 30, 0.38))
         const nDotL = nx * sX + (-nz) * sZ;
-        if (nDotL < 0.20 && totalH >= 4.0) {
+        if (nDotL < 0.20 && totalH >= 3.0) {
           addShadowQuad(
             shadowPositions, shadowColors,
-            { x: p1.x, y: 0.02, z: -p1.y, a: 0.45 },
-            { x: p2.x, y: 0.02, z: -p2.y, a: 0.45 },
-            { x: p2.x + dropDx, y: 0.015, z: -p2.y + dropDz, a: 0.45 },
-            { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.45 },
-            0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.45)
+            { x: p1.x, y: 0.02, z: -p1.y, a: 0.38 },
+            { x: p2.x, y: 0.02, z: -p2.y, a: 0.38 },
+            { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.38 },
+            { x: p1.x + dropDx, y: 0.015, z: -p1.y + dropDz, a: 0.38 },
+            0.0392, 0.0588, 0.1176
           );
         }
       }
@@ -712,10 +708,10 @@ function buildBuildingGeometry(payload: BuildBuildingsPayload): BuildBuildingsRe
 
             addShadowTriangle(
               shadowPositions, shadowColors,
-              { x: p0.x + dropDx, y: 0.012, z: -p0.y + dropDz, a: 0.45 },
-              { x: p1.x + dropDx, y: 0.012, z: -p1.y + dropDz, a: 0.45 },
-              { x: p2.x + dropDx, y: 0.012, z: -p2.y + dropDz, a: 0.45 },
-              0.059, 0.090, 0.165 // 다크 네이비 rgba(15, 23, 42, 0.45)
+              { x: p0.x + dropDx, y: 0.012, z: -p0.y + dropDz, a: 0.38 },
+              { x: p1.x + dropDx, y: 0.012, z: -p1.y + dropDz, a: 0.38 },
+              { x: p2.x + dropDx, y: 0.012, z: -p2.y + dropDz, a: 0.38 },
+              0.0392, 0.0588, 0.1176
             );
           }
         }
