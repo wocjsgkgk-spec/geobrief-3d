@@ -649,6 +649,7 @@ export const MapViewer: React.FC = () => {
         syncAbortControllerRef.current = controller;
 
         fetchExternalSpatialData(mapInstance, bbox, {
+          regionId: selectedRegionId,
           signal: controller.signal,
           onImmediate: (immediate) => {
             const merged = mergeIntoPersistentBuildingCache(immediate.features.features);
@@ -656,7 +657,7 @@ export const MapViewer: React.FC = () => {
             if (count > 0) {
               setVworldDiagnostic({
                 status: 'connected',
-                message: `오픈 벡터 타일 실시간 건물 렌더링 (${count.toLocaleString()}건 로드)`,
+                message: immediate.message || `오픈 벡터 타일 실시간 건물 렌더링 (${count.toLocaleString()}건 로드)`,
                 lastChecked: Date.now(),
                 featureCount: count,
               });
@@ -678,7 +679,7 @@ export const MapViewer: React.FC = () => {
             if (count > 0) {
               setVworldDiagnostic({
                 status: 'connected',
-                message: `3대 실측 공간정보(V-World · Overpass · OFM) 연동 완료 (${count.toLocaleString()}건 로드)`,
+                message: result.message || `3대 실측 공간정보(V-World · Overpass · OFM) 연동 완료 (${count.toLocaleString()}건 로드)`,
                 lastChecked: Date.now(),
                 featureCount: count,
               });
@@ -701,7 +702,7 @@ export const MapViewer: React.FC = () => {
         // ignore
       }
     },
-    [mergeIntoPersistentBuildingCache, setVworldDiagnostic]
+    [mergeIntoPersistentBuildingCache, setVworldDiagnostic, selectedRegionId]
   );
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태

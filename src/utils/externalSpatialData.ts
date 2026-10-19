@@ -59,6 +59,10 @@ export interface ExternalSpatialResult {
   status: 'connected' | 'unconfigured' | 'error';
   message: string;
   features: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, ExternalSpatialBuildingProperties>;
+  parcels?: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
+  zoning?: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon>;
+  infrastructure?: any;
+  region?: any;
 }
 
 // -----------------------------------------------------------------------------
@@ -746,6 +750,7 @@ export async function fetchExternalSpatialData(
   map: maplibregl.Map,
   bbox: [number, number, number, number],
   options?: {
+    regionId?: string;
     signal?: AbortSignal;
     onImmediate?: (result: ExternalSpatialResult) => void;
   }
@@ -772,7 +777,72 @@ export async function fetchExternalSpatialData(
     options.onImmediate(immediateResult);
   }
 
-  // 2단계: 백그라운드에서 V-World WFS + OSM Overpass 병렬 수집
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+
+  // 2단계: 백그라운드에서 강원권 광역 공공 공간정보 통합 게이트웨이(/api/gangwon-spatial) 1차 연동 (2.5초 타임아웃)
+  try {
+    const gatewayCtrl = new AbortController();
+    const gatewayTimeout = setTimeout(() => gatewayCtrl.abort(), 2500);
+    if (options?.signal) {
+      options.signal.addEventListener('abort', () => gatewayCtrl.abort(), { once: true });
+    }
+
+    const regParam = options?.regionId ? `&regionId=${options.regionId}` : '';
+    const gwUrl = `/api/gangwon-spatial?bbox=${minLng},${minLat},${maxLng},${maxLat}${regParam}`;
+    const gwRes = await fetch(gwUrl, {
+      signal: gatewayCtrl.signal,
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    clearTimeout(gatewayTimeout);
+
+    if (gwRes.ok) {
+      const gwJson = await gwRes.json();
+      const serverBuildings = (gwJson.data?.buildings?.features || []) as ExternalSpatialBuildingFeature[];
+      const styledServerBuildings: ExternalSpatialBuildingFeature[] = serverBuildings.map((f, idx) => {
+        const metrics = calculateGeometryMetrics(f.geometry);
+        const skyline = applyKoreanSkylineRules(f.properties || {}, metrics);
+        return {
+          type: 'Feature',
+          id: f.id || `gw-${idx}`,
+          properties: {
+            ...f.properties,
+            ...skyline,
+            name: f.properties?.name || f.properties?.buildingName || skyline.bld_category_label,
+            sources: { ofm: false, vworld: true, overpass: true },
+          },
+          geometry: f.geometry,
+        };
+      });
+
+      const mergedFeatures = mergeSpatialFeatures(ofmFeatures, styledServerBuildings, []);
+      const totalCount = Math.max(mergedFeatures.length, ofmCount);
+      const regName = gwJson.region?.name ? `${gwJson.region.name} ` : '';
+      const regCode = gwJson.region?.admCode ? `(${gwJson.region.admCode}) ` : '';
+
+      return {
+        success: true,
+        totalCount,
+        openFreeMapCount: ofmCount,
+        overpassCount: gwJson.counts?.buildings || 0,
+        vworldCount: (gwJson.counts?.parcels || 0) + (gwJson.counts?.zoning || 0),
+        status: 'connected',
+        message: `${regName}${regCode}광역 공공 공간정보 통합 게이트웨이 연동 완료 (${totalCount.toLocaleString()}건 로드)`,
+        features: {
+          type: 'FeatureCollection',
+          features: mergedFeatures,
+        },
+        parcels: gwJson.data?.parcels,
+        zoning: gwJson.data?.zoning,
+        infrastructure: gwJson.data?.infrastructure,
+        region: gwJson.region,
+      };
+    }
+  } catch (gwErr) {
+    // 게이트웨이 타임아웃/오류 시 2차 직접 폴백으로 무중단 전환
+  }
+
+  // 3단계: 2차 직접 병렬 수집 (폴백)
   const [vworldRes, overpassRes] = await Promise.allSettled([
     fetchVworldBuildings(bbox, options?.signal),
     fetchOverpassBuildings(bbox, options?.signal),
@@ -781,7 +851,7 @@ export async function fetchExternalSpatialData(
   const vworldFeatures = vworldRes.status === 'fulfilled' ? vworldRes.value : [];
   const overpassFeatures = overpassRes.status === 'fulfilled' ? overpassRes.value : [];
 
-  // 3단계: 3대 소스 공간 융합 및 실측 스카이라인 적용
+  // 4단계: 3대 소스 공간 융합 및 실측 스카이라인 적용
   const mergedFeatures = mergeSpatialFeatures(ofmFeatures, vworldFeatures, overpassFeatures);
   const totalCount = Math.max(mergedFeatures.length, ofmCount);
 

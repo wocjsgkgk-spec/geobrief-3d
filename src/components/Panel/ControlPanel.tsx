@@ -681,7 +681,7 @@ export const ControlPanel: React.FC = () => {
             );
           })()}
 
-      {/* 3. 강원특별자치도 18개 시·군 전역 퀵 셀렉터 (GANGWON_REGIONS) */}
+      {/* 3. 강원특별자치도 18개 시·군 전역 퀵 셀렉터 (GANGWON_18_REGIONS) */}
       {(() => {
         const currentRegion =
           GANGWON_REGIONS.find((r) => r.id === selectedRegionId) || GANGWON_REGIONS[0];
@@ -693,14 +693,14 @@ export const ControlPanel: React.FC = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                 <MapPin className="w-4 h-4" />
-                강원 18개 시·군 지역 탐색
+                강원 18개 시·군 광역 공간정보
               </h2>
               <span className="text-[10px] text-emerald-400 font-mono font-semibold">
                 {currentRegion.subregion}
               </span>
             </div>
 
-            {/* 시·군 드롭다운 (시/군 optgroup 시각적 분리) */}
+            {/* 시·군 드롭다운 (시/군 optgroup 시각적 분리 및 행정코드 표기) */}
             <div>
               <select
                 value={selectedRegionId}
@@ -710,41 +710,97 @@ export const ControlPanel: React.FC = () => {
                 <optgroup label="── 시 (City) ──" className="bg-[#121814] text-emerald-300 font-bold">
                   {cities.map((r) => (
                     <option key={r.id} value={r.id} className="bg-[#18221b] text-slate-100 font-normal">
-                      {r.name} ({r.subregion})
+                      {r.name} ({r.admCode || '51xxx'}) · {r.subregion}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="── 군 (County) ──" className="bg-[#121814] text-amber-300 font-bold">
                   {counties.map((r) => (
                     <option key={r.id} value={r.id} className="bg-[#18221b] text-slate-100 font-normal">
-                      {r.name} ({r.subregion})
+                      {r.name} ({r.admCode || '51xxx'}) · {r.subregion}
                     </option>
                   ))}
                 </optgroup>
               </select>
             </div>
 
-            {/* 선택된 시·군 상세 지형 정보 배지 & 설명 카드 */}
-            <div className="p-2.5 bg-[#18221b] border border-[#2b3a2f] rounded-lg space-y-1.5">
+            {/* 선택된 시·군 상세 공간정보 & 거점 카드 */}
+            <div className="p-2.5 bg-[#18221b] border border-[#2b3a2f] rounded-lg space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-xs font-bold text-slate-100">
-                    {currentRegion.name}
+                    {currentRegion.fullName || currentRegion.name}
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium">
                     ({currentRegion.type === '시' ? '시 지역' : '군 지역'})
                   </span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 font-semibold">
-                  {currentRegion.subregion}
-                </span>
+                <div className="flex items-center gap-1">
+                  {currentRegion.admCode && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700" title={`신: ${currentRegion.admCode} / 구: ${currentRegion.legacyAdmCode}`}>
+                      코드 {currentRegion.admCode}
+                    </span>
+                  )}
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 font-semibold">
+                    {currentRegion.subregion}
+                  </span>
+                </div>
               </div>
+
+              {/* 지형 특성 배지 */}
+              {currentRegion.terrainCharacteristic && (
+                <div className="text-[10px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-900/50 rounded px-2 py-1 flex items-center gap-1.5">
+                  <Mountain className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  <span className="line-clamp-1">{currentRegion.terrainCharacteristic}</span>
+                </div>
+              )}
 
               {/* 지형 및 부지 특성 설명 텍스트 (Description) */}
               <p className="text-[11px] text-slate-300 leading-relaxed bg-[#121914] p-2 rounded border border-[#202c23]">
                 {currentRegion.description}
               </p>
+
+              {/* 대표 군 유휴부지 & 전략 거점 퀵 포커스 */}
+              {currentRegion.militarySites && currentRegion.militarySites.length > 0 && (
+                <div className="space-y-1.5 pt-1 border-t border-[#242f27]">
+                  <div className="text-[10px] font-semibold text-amber-300 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-amber-400" />
+                    <span>대표 군 유휴부지 및 전략 거점 ({currentRegion.militarySites.length}곳)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {currentRegion.militarySites.map((site) => (
+                      <button
+                        key={site.siteId}
+                        onClick={() => {
+                          flyToLocation(
+                            {
+                              longitude: site.coords[0],
+                              latitude: site.coords[1],
+                              zoom: 15.2,
+                              pitch: 55,
+                              bearing: 20,
+                            },
+                            1500
+                          );
+                        }}
+                        className="w-full text-left p-1.5 bg-[#121914] hover:bg-[#1f2d22] border border-[#26372b] hover:border-emerald-500/60 rounded flex items-center justify-between text-[10px] transition-all group cursor-pointer"
+                        title={`${site.description} (${(site.areaSqm / 10000).toFixed(1)}만㎡) - 클릭 시 3D 시점 이동`}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 group-hover:bg-emerald-400" />
+                          <span className="font-medium text-slate-200 group-hover:text-emerald-200 truncate">
+                            {site.name}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono flex-shrink-0 ml-1 group-hover:text-emerald-300">
+                          {(site.areaSqm / 10000).toFixed(1)}만㎡ ➔
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 카메라 파라미터 정보 */}
               <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5">
