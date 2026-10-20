@@ -396,9 +396,9 @@ const baseStyle: maplibregl.StyleSpecification = {
       source: 'satellite-tiles',
       paint: {
         'raster-opacity': 1.0,
-        'raster-saturation': -0.2,
-        'raster-contrast': 0.12,
-        'raster-brightness-max': 0.92,
+        'raster-saturation': -0.15,
+        'raster-contrast': 0.08,
+        'raster-brightness-max': 0.95,
       },
     },
   ],
@@ -419,7 +419,7 @@ const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = baseStyle;
 export function safeSetTerrain(
   map: maplibregl.Map | null,
   enableTerrain: boolean,
-  terrainExaggeration = 1.2
+  terrainExaggeration = 1.15
 ): void {
   if (!map) return;
 
@@ -449,9 +449,9 @@ export function safeSetTerrain(
               source: map.getSource('satellite-tiles') ? 'satellite-tiles' : 'satellite-source',
               paint: {
                 'raster-opacity': 1.0,
-                'raster-saturation': -0.2,
-                'raster-contrast': 0.12,
-                'raster-brightness-max': 0.92,
+                'raster-saturation': -0.15,
+                'raster-contrast': 0.08,
+                'raster-brightness-max': 0.95,
               },
               layout: { visibility: 'visible' },
             },
@@ -470,12 +470,12 @@ export function safeSetTerrain(
             maxzoom: 12,
           });
         }
-        // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.0)
+        // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.15)
         if (map.getSource('terrarium-dem')) {
           try {
             map.setTerrain({
               source: 'terrarium-dem',
-              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.0,
+              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.15,
             });
           } catch (err) {
             console.warn('[MapViewer] setTerrain 호출 중 오류 방어:', err);
@@ -786,6 +786,14 @@ export const MapViewer: React.FC = () => {
               if (deck3DTilesManagerRef.current) {
                 deck3DTilesManagerRef.current.setBuildingFeatures(merged);
               }
+              if (lod2BuildingEngineRef.current && merged.length > 0) {
+                try {
+                  const center = mapInstance.getCenter();
+                  lod2BuildingEngineRef.current.updateBuildings(merged, [center.lng, center.lat]);
+                } catch {
+                  // ignore
+                }
+              }
               updateRealtimeMetrics();
             }
           },
@@ -803,6 +811,14 @@ export const MapViewer: React.FC = () => {
               });
               if (deck3DTilesManagerRef.current) {
                 deck3DTilesManagerRef.current.setBuildingFeatures(merged);
+              }
+              if (lod2BuildingEngineRef.current && merged.length > 0) {
+                try {
+                  const center = mapInstance.getCenter();
+                  lod2BuildingEngineRef.current.updateBuildings(merged, [center.lng, center.lat]);
+                } catch {
+                  // ignore
+                }
               }
               updateRealtimeMetrics();
             }
@@ -1209,9 +1225,9 @@ export const MapViewer: React.FC = () => {
             source: 'satellite-tiles',
             paint: {
               'raster-opacity': 1.0,
-              'raster-saturation': -0.2,
-              'raster-contrast': 0.12,
-              'raster-brightness-max': 0.92,
+              'raster-saturation': -0.15,
+              'raster-contrast': 0.08,
+              'raster-brightness-max': 0.95,
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
@@ -1228,7 +1244,7 @@ export const MapViewer: React.FC = () => {
             type: 'hillshade',
             source: 'terrarium-dem-hillshade',
             paint: {
-              'hillshade-exaggeration': 0.45,
+              'hillshade-exaggeration': 0.3,
               'hillshade-shadow-color': 'rgba(15, 23, 42, 0.35)',
               'hillshade-highlight-color': '#cbd5e1',
               'hillshade-accent-color': 'rgba(0, 0, 0, 0)',
@@ -2170,10 +2186,10 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] background layer cleanup notice:', bgErr);
       }
 
-      // [2. 지형(Terrarium DEM)과 위성 레이어 드레이핑(Draping) 결합]
+      // [2. 지형(Terrarium DEM)과 위성 레이어 드레이핑(Draping) 결합: 기본 고저차 1.15x]
       if (map.getSource('terrarium-dem')) {
         try {
-          map.setTerrain({ source: 'terrarium-dem', exaggeration: 1.0 });
+          map.setTerrain({ source: 'terrarium-dem', exaggeration: 1.15 });
         } catch (err) {
           console.warn('setTerrain 안전 처리:', err);
         }
@@ -3596,9 +3612,9 @@ export const MapViewer: React.FC = () => {
         'visibility',
         baseMap === 'satellite' ? 'visible' : 'none'
       );
-      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.2);
-      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.12);
-      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 0.92);
+      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.15);
+      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.08);
+      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 0.95);
     }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(

@@ -20,6 +20,7 @@
 import type maplibregl from 'maplibre-gl';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
 import { spatialTileCache, bboxToTileKeys, prioritizeTilesByCamera } from '@/utils/spatialTileCache';
+import { loadGangwonRealDataBulk } from '@/utils/gangwonRealDataLoader';
 
 
 export interface ExternalSpatialBuildingProperties {
@@ -224,12 +225,12 @@ export async function fetchOverpassBuildings(
     return cached.data;
   }
 
-  const ql = `[out:json][timeout:10];
+  const ql = `[out:json][timeout:15];
 (
   way["building"](${minLat},${minLng},${maxLat},${maxLng});
   relation["building"](${minLat},${minLng},${maxLat},${maxLng});
 );
-out geom 5000;`;
+out body geom qt;`;
 
   const endpoints = [
     `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,
@@ -243,7 +244,10 @@ out geom 5000;`;
     try {
       const res = await fetch(url, {
         signal,
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'GeoBrief3D/1.0 (Gangwon Overpass Bulk)',
+        },
         cache: 'no-store',
       });
 
@@ -657,7 +661,39 @@ export async function fetchExternalSpatialData(
     // 게이트웨이 타임아웃/오류 시 2차 직접 폴백으로 무중단 전환
   }
 
-  // 3단계: 2차 직접 병렬 수집 (폴백)
+  // 3단계: 강원권 광역 실측 대용량 벌크 연동 엔진(V-World 서브그리드 + Overpass qt 쿼리 + IndexedDB) 가동
+  try {
+    const bulkResult = await loadGangwonRealDataBulk(map, bbox, {
+      signal: options?.signal,
+      regionId: options?.regionId,
+      maxFeatures: 5000,
+      onImmediate: options?.onImmediate,
+    });
+
+    if (bulkResult.totalCount > 0) {
+      const mergedFeatures = mergeSpatialFeatures(ofmFeatures, bulkResult.features.features, []);
+      const totalCount = Math.max(mergedFeatures.length, bulkResult.totalCount);
+
+      for (const tk of prioritizedTileKeys.slice(0, 8)) {
+        spatialTileCache.saveFeatures(tk, mergedFeatures);
+      }
+
+      return {
+        ...bulkResult,
+        totalCount,
+        openFreeMapCount: ofmCount,
+        message: `강원권 실측 정밀 건축물 데이터 연동 완료 (${totalCount.toLocaleString()}건 로드)`,
+        features: {
+          type: 'FeatureCollection',
+          features: mergedFeatures,
+        },
+      };
+    }
+  } catch (bulkErr) {
+    console.warn('[fetchExternalSpatialData] Bulk loader notice:', bulkErr);
+  }
+
+  // 4단계: 3대 소스 공간 융합 및 실측 스카이라인 적용 (최종 안전망)
   const [vworldRes, overpassRes] = await Promise.allSettled([
     fetchVworldBuildings(bbox, options?.signal),
     fetchOverpassBuildings(bbox, options?.signal),
@@ -666,7 +702,6 @@ export async function fetchExternalSpatialData(
   const vworldFeatures = vworldRes.status === 'fulfilled' ? vworldRes.value : [];
   const overpassFeatures = overpassRes.status === 'fulfilled' ? overpassRes.value : [];
 
-  // 4단계: 3대 소스 공간 융합 및 실측 스카이라인 적용
   const mergedFeatures = mergeSpatialFeatures(ofmFeatures, vworldFeatures, overpassFeatures);
   const totalCount = Math.max(mergedFeatures.length, ofmCount);
 

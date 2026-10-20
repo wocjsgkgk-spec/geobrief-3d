@@ -186,18 +186,30 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 뷰포트가 넓을 경우 중심 좌표 기준 0.12도 서브 영역으로 자동 클램핑하여 400 에러 차단
+  // V-World API의 10km² BBOX 제한(INVALID_RANGE 에러)을 우회하기 위해
+  // 요청 면적이 8.5km² 이상일 경우 자동으로 안전한 서브셀로 분할하여 병렬 수집
   const lngSpan = maxLng - minLng;
   const latSpan = maxLat - minLat;
-  const MAX_SPAN = 0.12;
-  if (lngSpan > MAX_SPAN || latSpan > MAX_SPAN) {
-    const centerLng = (minLng + maxLng) / 2;
-    const centerLat = (minLat + maxLat) / 2;
-    const halfSpan = MAX_SPAN / 2;
-    minLng = Math.round((centerLng - halfSpan) * 10000) / 10000;
-    maxLng = Math.round((centerLng + halfSpan) * 10000) / 10000;
-    minLat = Math.round((centerLat - halfSpan) * 10000) / 10000;
-    maxLat = Math.round((centerLat + halfSpan) * 10000) / 10000;
+  const areaKm2 = (lngSpan * 88.5) * (latSpan * 111.0);
+
+  const subCells: [number, number, number, number][] = [];
+  if (areaKm2 > 8.5) {
+    const cols = Math.max(1, Math.min(3, Math.ceil(lngSpan / 0.028)));
+    const rows = Math.max(1, Math.min(3, Math.ceil(latSpan / 0.024)));
+    const stepLng = lngSpan / cols;
+    const stepLat = latSpan / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        subCells.push([
+          Math.round((minLng + c * stepLng) * 10000) / 10000,
+          Math.round((minLat + r * stepLat) * 10000) / 10000,
+          Math.round((c === cols - 1 ? maxLng : minLng + (c + 1) * stepLng) * 10000) / 10000,
+          Math.round((r === rows - 1 ? maxLat : minLat + (r + 1) * stepLat) * 10000) / 10000,
+        ]);
+      }
+    }
+  } else {
+    subCells.push([minLng, minLat, maxLng, maxLat]);
   }
 
   // 서버 사이드 메모리 캐시 검사
@@ -209,105 +221,77 @@ export async function GET(request: NextRequest) {
 
   // 3. V-World Data 2.0 API 호출 (LT_C_SPBD 건축물일반공간정보)
   const preferredDomain = process.env.VWORLD_DOMAIN || 'localhost';
-  const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
-  const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
-    cleanKey
-  )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
-    geomFilter
-  )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+  const maxFeaturesParam = searchParams.get('maxFeatures');
+  const maxFeatures = Math.min(5000, Math.max(100, parseInt(maxFeaturesParam || '5000', 10)));
+  const perCellLimit = Math.max(500, Math.ceil(maxFeatures / subCells.length));
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const rawFeatures: any[] = [];
+  const seenFeatureIds = new Set<string>();
 
   try {
-    const res = await fetch(vworldUrl, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
+    const cellFetches = subCells.map(async (cell) => {
+      const [cMinLng, cMinLat, cMaxLng, cMaxLat] = cell;
+      const geomFilter = `BOX(${cMinLng},${cMinLat},${cMaxLng},${cMaxLat})`;
+      const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+        cleanKey
+      )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
+        geomFilter
+      )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const res = await fetch(vworldUrl, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) return [];
+
+        const data = await res.json();
+        if (data.response?.status !== 'OK') return [];
+
+        const items = data.response?.result?.featureCollection?.features || [];
+        const totalRecords = parseInt(data.response?.page?.record || data.response?.page?.total || '0', 10);
+
+        if (totalRecords > 1000 && items.length < perCellLimit) {
+          const pageUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+            cleanKey
+          )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
+            geomFilter
+          )}&crs=EPSG:4326&size=1000&page=2&geometry=true&attribute=true`;
+          try {
+            const pageRes = await fetch(pageUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+            if (pageRes.ok) {
+              const pData = await pageRes.json();
+              const pItems = pData.response?.result?.featureCollection?.features || [];
+              items.push(...pItems);
+            }
+          } catch {
+            // ignore
+          }
+        }
+        return items;
+      } catch {
+        clearTimeout(timeoutId);
+        return [];
+      }
     });
 
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          status: 'error',
-          httpStatus: res.status,
-          message: `V-World 서버 응답 오류 (HTTP ${res.status})`,
-        },
-        { status: 200 }
-      );
-    }
-
-    const data = await res.json();
-
-    if (data.response?.status !== 'OK') {
-      const errCode = data.response?.error?.code || 'UNKNOWN_ERROR';
-      const errText = data.response?.error?.text || '인증키 또는 파라미터 오류';
-
-      return NextResponse.json(
-        {
-          success: false,
-          status: 'error',
-          errorCode: errCode,
-          errorDetail: `${errCode}: ${errText}`,
-          message: `${errText} (코드: ${errCode})`,
-        },
-        { status: 200 }
-      );
-    }
-
-    const pageObj = data.response?.page;
-    const totalRecords = parseInt(pageObj?.record || pageObj?.total || '0', 10);
-    const rawFeatures: any[] = [...(data.response?.result?.featureCollection?.features || [])];
-
-    // maxFeatures 파라미터 확인 (기본 5,000건으로 대폭 확대)
-    const maxFeaturesParam = searchParams.get('maxFeatures');
-    const maxFeatures = Math.min(5000, Math.max(100, parseInt(maxFeaturesParam || '5000', 10)));
-
-    // 추가 페이지가 존재할 경우 최대 5페이지(총 5,000건)까지 병렬 페칭
-    if (totalRecords > 1000 && rawFeatures.length < maxFeatures) {
-      const neededPages = Math.min(5, Math.ceil(Math.min(totalRecords, maxFeatures) / 1000));
-      const pagePromises: Promise<any[]>[] = [];
-
-      for (let p = 2; p <= neededPages; p++) {
-        const pageUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
-          cleanKey
-        )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
-          geomFilter
-        )}&crs=EPSG:4326&size=1000&page=${p}&geometry=true&attribute=true`;
-
-        pagePromises.push(
-          (async () => {
-            const pageCtrl = new AbortController();
-            const pageTimeout = setTimeout(() => pageCtrl.abort(), 6000);
-            try {
-              const pageRes = await fetch(pageUrl, {
-                signal: pageCtrl.signal,
-                headers: { Accept: 'application/json' },
-                cache: 'no-store',
-              });
-              clearTimeout(pageTimeout);
-              if (!pageRes.ok) return [];
-              const pageData = await pageRes.json();
-              return pageData.response?.result?.featureCollection?.features || [];
-            } catch {
-              clearTimeout(pageTimeout);
-              return [];
-            }
-          })()
-        );
-      }
-
-      const pResults = await Promise.allSettled(pagePromises);
-      for (const pr of pResults) {
-        if (pr.status === 'fulfilled' && Array.isArray(pr.value)) {
-          rawFeatures.push(...pr.value);
+    const settled = await Promise.allSettled(cellFetches);
+    for (const s of settled) {
+      if (s.status === 'fulfilled' && Array.isArray(s.value)) {
+        for (const item of s.value) {
+          const fid = item.id || item.properties?.bd_mgt_sn;
+          if (fid && seenFeatureIds.has(fid)) continue;
+          if (fid) seenFeatureIds.add(fid);
+          rawFeatures.push(item);
+          if (rawFeatures.length >= maxFeatures) break;
         }
       }
+      if (rawFeatures.length >= maxFeatures) break;
     }
 
     const clampedFeatures = rawFeatures.slice(0, maxFeatures);
@@ -397,10 +381,12 @@ export async function GET(request: NextRequest) {
             buildingName: bldName,
             buld_nm: bldName,
             buld_nm_dc: buldNmDc,
+            main_purps_nm: props.main_purps_nm || usageName,
             grnd_flr: levels,
             ugrnd_flr: ugrndFlr,
             levels,
             height,
+            hei: height,
             min_height: 0,
             usageType: bld_category,
             usageName,
@@ -429,7 +415,6 @@ export async function GET(request: NextRequest) {
     serverVworldCache.set(cacheKey, { timestamp: Date.now(), data: result });
     return NextResponse.json(result);
   } catch (err) {
-    clearTimeout(timeoutId);
     return NextResponse.json(
       {
         success: false,
