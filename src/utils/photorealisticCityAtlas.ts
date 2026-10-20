@@ -104,10 +104,10 @@ function applyConcreteGrainNoise(
   y: number,
   w: number,
   h: number,
-  alpha = 0.05
+  alpha = 0.03
 ): void {
   ctx.save();
-  ctx.fillStyle = `rgba(15, 23, 42, ${alpha})`;
+  ctx.fillStyle = `rgba(100, 116, 139, ${alpha * 0.6})`;
   for (let py = y; py < y + h; py += 6) {
     for (let px = x; px < x + w; px += 8) {
       if ((px * 3 + py * 5) % 7 === 0) {
@@ -115,7 +115,7 @@ function applyConcreteGrainNoise(
       }
     }
   }
-  ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+  ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
   for (let py = y + 3; py < y + h; py += 8) {
     for (let px = x + 3; px < x + w; px += 10) {
       if ((px * 7 + py * 3) % 11 === 0) {
@@ -138,13 +138,13 @@ function applyVerticalRainGrime(
   h: number,
   startY: number,
   length: number,
-  alpha = 0.12
+  alpha = 0.05
 ): void {
   ctx.save();
   const grad = ctx.createLinearGradient(x, startY, x, startY + length);
-  grad.addColorStop(0, `rgba(15, 23, 42, ${alpha})`);
-  grad.addColorStop(0.3, `rgba(15, 23, 42, ${alpha * 0.5})`);
-  grad.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+  grad.addColorStop(0, `rgba(100, 116, 139, ${alpha})`);
+  grad.addColorStop(0.3, `rgba(100, 116, 139, ${alpha * 0.5})`);
+  grad.addColorStop(1, 'rgba(100, 116, 139, 0.0)');
   ctx.fillStyle = grad;
   ctx.fillRect(x, startY, w, length);
   ctx.restore();
@@ -590,13 +590,13 @@ function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, 
  * Slot 7: 상가 Type C (적벽돌 상가 건물)
  */
 function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 붉은 치장벽돌 베이스 (#8c3825)
-  ctx.fillStyle = '#8c3825';
+  // 따뜻한 샌드스톤 / 모던 웜그레이 베이스 (#d6d3d1)
+  ctx.fillStyle = '#d6d3d1';
   ctx.fillRect(x, y, w, h);
 
-  // 벽돌 가로 줄눈
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.25)';
-  for (let py = y; py < y + h; py += 10) {
+  // 석재 타일 가로 줄눈
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+  for (let py = y; py < y + h; py += 16) {
     ctx.fillRect(x, py, w, 1);
   }
 
@@ -612,7 +612,7 @@ function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w
 
   drawRealisticWindowGlass(ctx, winX, winY, winW, winH, 2);
 
-  applyConcreteGrainNoise(ctx, x, y, w, h, 0.06);
+  applyConcreteGrainNoise(ctx, x, y, w, h, 0.04);
 }
 
 /**
@@ -731,16 +731,16 @@ function drawPublicMilitary(ctx: CanvasRenderingContext2D, x: number, y: number,
 // =============================================================================
 
 /**
- * Slot 10: 붉은 치장벽돌 빌라 + 필로티 주차장 기둥 음영
+ * Slot 10: 한국형 모던 빌라 (따뜻한 샌드 베이지 & 화강석 필로티 기단)
  */
 function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 치장벽돌 외벽 (#7f382a)
-  ctx.fillStyle = '#7f382a';
+  // 따뜻한 샌드 베이지 외벽 (#e5e0d8)
+  ctx.fillStyle = '#e5e0d8';
   ctx.fillRect(x, y, w, h);
 
-  // 벽돌 줄눈
-  ctx.fillStyle = 'rgba(241, 245, 249, 0.20)';
-  for (let py = y; py < y + h; py += 8) {
+  // 미세 석재 분할선
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+  for (let py = y; py < y + h; py += 18) {
     ctx.fillRect(x, py, w, 1);
   }
 
@@ -754,19 +754,19 @@ function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(winX - 4, winY - 4, winW + 8, winH + 8);
   drawRealisticWindowGlass(ctx, winX, winY, winW, winH, 1);
 
-  // 하단 1층 필로티 주차장 기둥 음영 (Pilotis Shade)
+  // 하단 1층 필로티 주차장 기단부 화강석 그레이 (#64748b)
   const lowerH = Math.round(h * 0.30);
   const lowerY = y + h - lowerH;
-  ctx.fillStyle = '#1e293b';
+  ctx.fillStyle = '#64748b';
   ctx.fillRect(x, lowerY, w, lowerH);
 
-  // 콘크리트 사각 기둥 2개
+  // 콘크리트 사각 기둥 2개 (밝은 그레이 #94a3b8)
   const colW = Math.round(w * 0.18);
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = '#94a3b8';
   ctx.fillRect(x + 16, lowerY, colW, lowerH);
   ctx.fillRect(x + w - colW - 16, lowerY, colW, lowerH);
 
-  applyConcreteGrainNoise(ctx, x, y, w, h, 0.05);
+  applyConcreteGrainNoise(ctx, x, y, w, h, 0.03);
 }
 
 /**

@@ -4819,9 +4819,7 @@ export const MapViewer: React.FC = () => {
       }
       if (renderMode3D === 'facade') {
         if (lod2BuildingEngineRef.current) {
-          lod2BuildingEngineRef.current.setStyleMode('photorealistic');
-          lod2BuildingEngineRef.current.setOpacity(1.0);
-          lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+          lod2BuildingEngineRef.current.setVisible(false);
         }
         if (realisticKoreanCityLayerRef.current) {
           realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
@@ -5314,13 +5312,15 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
         }
         if (map.getLayer('flight-ceiling-slab')) {
-          map.setLayoutProperty('flight-ceiling-slab', 'visibility', 'visible');
-          map.setLayoutProperty('flight-envelope-volume', 'visibility', 'visible');
-          map.setLayoutProperty('flight-ceiling-border', 'visibility', 'visible');
+          const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
+          map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
+          map.setLayoutProperty('flight-envelope-volume', 'visibility', ceilingVis);
+          map.setLayoutProperty('flight-ceiling-border', 'visibility', ceilingVis);
         }
         if (map.getLayer('building-mass-extrusion')) {
-          map.setLayoutProperty('building-mass-extrusion', 'visibility', 'visible');
-          map.setLayoutProperty('building-mass-edges', 'visibility', 'visible');
+          const massVis = showBuildingMass3D ? 'visible' : 'none';
+          map.setLayoutProperty('building-mass-extrusion', 'visibility', massVis);
+          map.setLayoutProperty('building-mass-edges', 'visibility', massVis);
         }
 
         map.flyTo({

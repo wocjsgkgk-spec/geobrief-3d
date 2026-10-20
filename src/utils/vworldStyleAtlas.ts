@@ -467,10 +467,10 @@ function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /**
- * Slot 7: 상가 Type C (적벽돌 상가 #6b2d1f + 화강석 창대/코너석)
+ * Slot 7: 상가 Type C (따뜻한 웜그레이 석재 타일 + 화강석 창대/코너석)
  */
 function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = '#6b2d1f';
+  ctx.fillStyle = '#d6d3d1';
   ctx.fillRect(x, y, w, h);
 
   // 벽돌 조적 텍스처
@@ -605,10 +605,10 @@ function drawCommGroundShop(ctx: CanvasRenderingContext2D, x: number, y: number,
 }
 
 /**
- * Slot 10: 주택 Type A (적벽돌 #6b2d1f 다세대 빌라 + 백색 PVC 이중창)
+ * Slot 10: 주택 Type A (따뜻한 샌드베이지 #e5e0d8 다세대 빌라 + 백색 PVC 이중창)
  */
 function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = '#6b2d1f';
+  ctx.fillStyle = '#e5e0d8';
   ctx.fillRect(x, y, w, h);
 
   // 상단 25% 화강석 투톤 마감

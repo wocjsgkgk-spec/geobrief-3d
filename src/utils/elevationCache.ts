@@ -55,20 +55,24 @@ export class ElevationCache {
     }
 
     let elevation = 0;
+    let hasValidQuery = false;
     if (queryFn) {
       const q = queryFn(coord);
       if (q !== null && q !== undefined && Number.isFinite(q) && !Number.isNaN(q)) {
         elevation = Math.round(q * 10) / 10;
+        hasValidQuery = true;
       }
     }
 
-    // 캐시 크기 관리 (LRU 간이 청소)
-    if (this.cache.size >= this.maxCacheSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey) this.cache.delete(firstKey);
+    // [중요: 지형 타일 미로드 시 0m 영구 캐싱 방지]
+    // DEM 타일이 준비되어 유효한 양수 표고가 조회된 경우에만 캐시에 저장
+    if (hasValidQuery && elevation > 0) {
+      if (this.cache.size >= this.maxCacheSize) {
+        const firstKey = this.cache.keys().next().value;
+        if (firstKey) this.cache.delete(firstKey);
+      }
+      this.cache.set(key, elevation);
     }
-
-    this.cache.set(key, elevation);
     return elevation;
   }
 

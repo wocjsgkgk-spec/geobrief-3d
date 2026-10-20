@@ -26,15 +26,20 @@ export const gpuBuildingTotalHeightExpr: any = [
     ['to-number', ['get', 'height'], 0],
     ['*', ['to-number', ['get', 'levels'], 0], 3.2],
     ['*', ['to-number', ['get', 'building:levels'], 0], 3.2],
+    ['*', ['to-number', ['get', 'grnd_flr'], 0], 3.2],
     0,
   ],
   [
     'case',
-    // 1. 이미 유효한 높이(>= 4m)가 선언되어 있다면 그대로 사용
-    ['>=', ['var', 'declaredHeight'], 4],
+    // 1. 이미 실측 높이(>= 7.5m)가 선언되어 있다면 우선 적용
+    ['>=', ['var', 'declaredHeight'], 7.5],
     ['var', 'declaredHeight'],
 
-    // 2. 아파트 단지 및 고층 주거: 45m ~ 75m (15~25층)
+    // 선언 높이가 4m~7.5m 사이인 경우 최소 7.5m로 보정 (납작함 방지)
+    ['>=', ['var', 'declaredHeight'], 4.0],
+    7.5,
+
+    // 2. 아파트 단지 및 고층 주거 태그: 50m ~ 75m (16~25층)
     [
       'any',
       ['==', ['get', 'class'], 'apartments'],
@@ -43,11 +48,11 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      45,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], 12345], 12345]], 31], // 45..75m
+      50,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], 12345], 12345]], 26], // 50..75m
     ],
 
-    // 3. 상업/업무/공공/의료/대학: 16m ~ 32m (5~10층)
+    // 3. 시내 대로변 상업/업무/공공/의료/대학: 16m ~ 32m (5~10층)
     [
       'any',
       ['==', ['get', 'class'], 'commercial'],
@@ -65,7 +70,7 @@ export const gpuBuildingTotalHeightExpr: any = [
       ['%', ['abs', ['to-number', ['coalesce', ['id'], 23456], 23456]], 17], // 16..32m
     ],
 
-    // 4. 산업/군사/물류: 9m ~ 14m (1~3층)
+    // 4. 산업/군사/물류/창고: 9m ~ 14m (1~3층)
     [
       'any',
       ['==', ['get', 'class'], 'industrial'],
@@ -80,11 +85,20 @@ export const gpuBuildingTotalHeightExpr: any = [
       ['%', ['abs', ['to-number', ['coalesce', ['id'], 34567], 34567]], 6], // 9..14m
     ],
 
-    // 5. 일반 주택가/빌라/다세대/기본 시가지: 7m ~ 11m (2~3층)
+    // 5. 일반 시가지 (태그 부재 80% 건물 대상 지능형 스카이라인 분포 해시)
+    // - 45% 아파트 단지 스카이라인 (50m ~ 75m)
+    // - 25% 대로변 상가·오피스 (16m ~ 32m)
+    // - 12% 창고/군사/공공 (9m ~ 14m)
+    // - 18% 다세대 빌라/단독주택 (7.5m ~ 12m)
     [
-      '+',
-      7,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 5], // 7..11m
+      'case',
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 100], 45],
+      ['+', 50, ['%', ['abs', ['to-number', ['coalesce', ['id'], 56789], 56789]], 26]], // 50..75m 아파트
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 100], 70],
+      ['+', 16, ['%', ['abs', ['to-number', ['coalesce', ['id'], 67890], 67890]], 17]], // 16..32m 상업
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 100], 82],
+      ['+', 9, ['%', ['abs', ['to-number', ['coalesce', ['id'], 78901], 78901]], 6]],   // 9..14m 창고/군사
+      ['+', 7.5, ['%', ['abs', ['to-number', ['coalesce', ['id'], 89012], 89012]], 5]], // 7.5..12m 주택 (0% Flat 보장)
     ],
   ],
 ];
@@ -100,11 +114,12 @@ export const gpuBuildingBaseExpr: any = [
 ];
 
 // -----------------------------------------------------------------------------
-// 3. 중층 외벽 본체(Main Wall) 색상 Expression
+// 3. 중층 외벽 본체(Main Wall) 색상 Expression (검은색/주황색 완전 제거)
+// - 한국 실제 아파트/빌딩 실사 톤: 크림 아이보리(#f4f1ea), 샌드 베이지(#e5e0d8), 라이트 웜그레이(#d6d3d1), 슬레이트 쿨그레이(#cbd5e1)
 // -----------------------------------------------------------------------------
 export const gpuBuildingWallColorExpr: any = [
   'case',
-  // 1) 아파트 단지: 웜 아이보리 / 웜 그레이
+  // 1) 아파트 단지: 따뜻한 크림 아이보리 & 샌드 베이지
   [
     'any',
     ['==', ['get', 'class'], 'apartments'],
@@ -113,12 +128,14 @@ export const gpuBuildingWallColorExpr: any = [
   ],
   [
     'case',
-    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 12345], 12345]], 2], 1],
-    '#ebe6dc', // 웜 아이보리
-    '#d6d3d1', // 웜 그레이
+    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 12345], 12345]], 3], 1],
+    '#f4f1ea', // 크림 아이보리
+    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 12345], 12345]], 3], 2],
+    '#e5e0d8', // 샌드 베이지
+    '#d6d3d1', // 라이트 웜그레이
   ],
 
-  // 2) 상업/오피스: 슬레이트 블루 / 쿨 그레이
+  // 2) 상업/오피스: 슬레이트 쿨그레이 & 라이트 슬레이트
   [
     'any',
     ['==', ['get', 'class'], 'commercial'],
@@ -133,11 +150,11 @@ export const gpuBuildingWallColorExpr: any = [
   [
     'case',
     ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 23456], 23456]], 2], 1],
-    '#94a3b8', // 슬레이트 블루
-    '#64748b', // 쿨 그레이
+    '#cbd5e1', // 슬레이트 쿨그레이
+    '#e2e8f0', // 라이트 슬레이트
   ],
 
-  // 3) 산업/군사/물류: 인더스트리얼 라이트 그레이
+  // 3) 산업/군사/물류: 인더스트리얼 소프트 그레이
   [
     'any',
     ['==', ['get', 'class'], 'industrial'],
@@ -148,17 +165,25 @@ export const gpuBuildingWallColorExpr: any = [
   ],
   '#cbd5e1',
 
-  // 4) 일반 주택/빌라/다세대: 샌드베이지 / 적벽돌
+  // 4) 일반 시가지 / 다세대 빌라 / 주택 (쨍한 주황색 적벽돌 완전 제거 -> 따뜻한 한국형 도심 색감)
   [
     'case',
-    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 34567], 34567]], 2], 1],
-    '#e7e5e4', // 샌드 베이지
-    '#8c3b2b', // 한국형 적벽돌
+    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 34567], 34567]], 4], 1],
+    '#f4f1ea', // 크림 아이보리
+    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 34567], 34567]], 4], 2],
+    '#e5e0d8', // 샌드 베이지
+    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 34567], 34567]], 4], 3],
+    '#d6d3d1', // 라이트 웜그레이
+    '#cbd5e1', // 슬레이트 쿨그레이
   ],
 ];
 
 // -----------------------------------------------------------------------------
 // 4. 옥상 슬래브/파라펫 캡(Roof Cap) 색상 Expression (4단 현실 비율 분기)
+// 1) 콘크리트 웜그레이 (#78716c, 35%)
+// 2) 우레탄 세이지그린 (#3a5a40, 30%)
+// 3) 다크 슬레이트 (#475569, 20%)
+// 4) 적갈색 기와 (#7c2d12, 15%)
 // -----------------------------------------------------------------------------
 export const gpuBuildingRoofColorExpr: any = [
   'let',
@@ -167,12 +192,12 @@ export const gpuBuildingRoofColorExpr: any = [
   [
     'case',
     ['<', ['var', 'hash'], 35],
-    '#64748b', // 노후 콘크리트 그레이 (35%)
+    '#78716c', // 콘크리트 웜그레이 (35%)
     ['<', ['var', 'hash'], 65],
-    '#2e5a44', // 한국 도시 특유 우레탄 방수 초록 (30%)
+    '#3a5a40', // 우레탄 세이지그린 (30%)
     ['<', ['var', 'hash'], 85],
-    '#334155', // 짙은 먹색 차콜 (20%)
-    '#7c2d12', // 적갈색/테라코타 지붕 (15%)
+    '#475569', // 다크 슬레이트 (20%)
+    '#7c2d12', // 적갈색 기와 (15%)
   ],
 ];
 
@@ -193,33 +218,33 @@ export function ensureBuildingPatterns(map: maplibregl.Map): void {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 투명 배경 위에 그리드 창문 패턴 드로잉
+    // 투명 배경 위에 소프트한 한국 도심형 유리 창문 격자 패턴
     ctx.clearRect(0, 0, size, size);
 
-    // 외곽 창틀 프레임
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(0, 0, size, 4);
-    ctx.fillRect(0, size - 4, size, 4);
-    ctx.fillRect(0, 0, 4, size);
-    ctx.fillRect(size - 4, 0, 4, size);
+    // 외곽 창틀 프레임 (밝고 차분한 슬레이트 프레임)
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+    ctx.fillRect(0, 0, size, 3);
+    ctx.fillRect(0, size - 3, size, 3);
+    ctx.fillRect(0, 0, 3, size);
+    ctx.fillRect(size - 3, 0, 3, size);
 
     // 내부 십자 멀리언
-    ctx.fillRect(size / 2 - 2, 0, 4, size);
-    ctx.fillRect(0, size / 2 - 2, size, 4);
+    ctx.fillRect(size / 2 - 1, 0, 2, size);
+    ctx.fillRect(0, size / 2 - 1, size, 2);
 
-    // 창문 반사 유리 (다크 글래스)
-    ctx.fillStyle = 'rgba(30, 41, 59, 0.75)';
-    ctx.fillRect(6, 6, 24, 24);
-    ctx.fillRect(34, 6, 24, 24);
-    ctx.fillRect(6, 34, 24, 24);
-    ctx.fillRect(34, 34, 24, 24);
+    // 창문 유리면 (맑고 투명한 하늘빛 반사 유리)
+    ctx.fillStyle = 'rgba(186, 230, 253, 0.35)';
+    ctx.fillRect(5, 5, 25, 25);
+    ctx.fillRect(34, 5, 25, 25);
+    ctx.fillRect(5, 34, 25, 25);
+    ctx.fillRect(34, 34, 25, 25);
 
-    // 미세한 반사 하이라이트 라인
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
-    ctx.fillRect(8, 8, 20, 3);
-    ctx.fillRect(36, 8, 20, 3);
-    ctx.fillRect(8, 36, 20, 3);
-    ctx.fillRect(36, 36, 20, 3);
+    // 미세한 자연 채광 하이라이트 라인
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillRect(7, 7, 21, 2);
+    ctx.fillRect(36, 7, 21, 2);
+    ctx.fillRect(7, 36, 21, 2);
+    ctx.fillRect(36, 36, 21, 2);
 
     const imgData = ctx.getImageData(0, 0, size, size);
     map.addImage(BUILDING_PATTERN_IMAGE_ID, imgData);
@@ -245,7 +270,7 @@ export function createGpuBuildingStackLayers(
 ): maplibregl.LayerSpecification[] {
   const p = prefix ? `${prefix}-` : '';
 
-  // Tier 1: 1층 기단부 (Podium) - 묵직한 화강석/어두운 차콜 (#334155)
+  // Tier 1: 1층 기단부 (Podium 0m ~ 3.5m) - 차분한 화강석 그레이 (#64748b)
   const tier1Podium: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier1-podium`,
     type: 'fill-extrusion',
@@ -254,9 +279,9 @@ export function createGpuBuildingStackLayers(
     minzoom: 11,
     maxzoom: 24,
     paint: {
-      'fill-extrusion-color': '#334155',
+      'fill-extrusion-color': '#64748b',
       'fill-extrusion-base': gpuBuildingBaseExpr,
-      'fill-extrusion-height': ['min', 3.6, gpuBuildingTotalHeightExpr],
+      'fill-extrusion-height': ['min', 3.5, gpuBuildingTotalHeightExpr],
       'fill-extrusion-opacity': 0.98,
       'fill-extrusion-vertical-gradient': true,
     },
@@ -265,7 +290,7 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 2: 중층 외벽 본체 (Main Wall) - 건물 유형별 사실적 톤 (아이보리/슬레이트/샌드/적벽돌)
+  // Tier 2: 중층 외벽 본체 (Main Wall 3.5m ~ H - 0.6m) - 크림 아이보리/샌드 베이지/라이트 웜그레이
   const tier2MainWall: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier2-mainwall`,
     type: 'fill-extrusion',
@@ -275,9 +300,9 @@ export function createGpuBuildingStackLayers(
     maxzoom: 24,
     paint: {
       'fill-extrusion-color': gpuBuildingWallColorExpr,
-      'fill-extrusion-base': ['min', 3.6, gpuBuildingTotalHeightExpr],
-      'fill-extrusion-height': ['max', 3.6, ['-', gpuBuildingTotalHeightExpr, 0.8]],
-      'fill-extrusion-opacity': 0.96,
+      'fill-extrusion-base': ['min', 3.5, gpuBuildingTotalHeightExpr],
+      'fill-extrusion-height': ['max', 3.5, ['-', gpuBuildingTotalHeightExpr, 0.6]],
+      'fill-extrusion-opacity': 0.98,
       'fill-extrusion-vertical-gradient': true,
     },
     layout: {
@@ -285,7 +310,7 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 3: 실사 창문 패턴 오버레이 (Facade Pattern Overlay)
+  // Tier 3: 실사 창문 패턴 오버레이 (Facade Pattern Overlay 3.5m ~ H - 0.6m)
   const tier3Pattern: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier3-pattern`,
     type: 'fill-extrusion',
@@ -295,16 +320,16 @@ export function createGpuBuildingStackLayers(
     maxzoom: 24,
     paint: {
       'fill-extrusion-pattern': BUILDING_PATTERN_IMAGE_ID,
-      'fill-extrusion-base': ['min', 3.6, gpuBuildingTotalHeightExpr],
-      'fill-extrusion-height': ['max', 3.6, ['-', gpuBuildingTotalHeightExpr, 0.8]],
-      'fill-extrusion-opacity': 0.85,
+      'fill-extrusion-base': ['min', 3.5, gpuBuildingTotalHeightExpr],
+      'fill-extrusion-height': ['max', 3.5, ['-', gpuBuildingTotalHeightExpr, 0.6]],
+      'fill-extrusion-opacity': 0.32,
     },
     layout: {
       visibility: 'visible',
     },
   };
 
-  // Tier 4: 옥상 슬래브 / 파라펫 캡 (Roof Cap) - 4색 현실 비율 해시 분기
+  // Tier 4: 옥상 슬래브 / 파라펫 캡 (Roof Cap H - 0.6m ~ H) - 4색 현실 비율 해시 분기
   const tier4RoofCap: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier4-roofcap`,
     type: 'fill-extrusion',
@@ -314,7 +339,7 @@ export function createGpuBuildingStackLayers(
     maxzoom: 24,
     paint: {
       'fill-extrusion-color': gpuBuildingRoofColorExpr,
-      'fill-extrusion-base': ['max', 3.6, ['-', gpuBuildingTotalHeightExpr, 0.8]],
+      'fill-extrusion-base': ['max', 3.5, ['-', gpuBuildingTotalHeightExpr, 0.6]],
       'fill-extrusion-height': gpuBuildingTotalHeightExpr,
       'fill-extrusion-opacity': 1.0,
       'fill-extrusion-vertical-gradient': false,

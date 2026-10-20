@@ -540,7 +540,7 @@ export function classifyRegionalBuildingStyle(
 
     if (isDepot) {
       const calcFloors = rawLevels > 0 ? rawLevels : 1;
-      const calcHeight = rawHeight > 0 ? rawHeight : (approxArea > 600 ? 7.5 : 5.5);
+      const calcHeight = Math.max(9.0, rawHeight > 0 ? rawHeight : (approxArea > 600 ? 11.0 : 9.0));
 
       return {
         zone,
@@ -551,10 +551,10 @@ export function classifyRegionalBuildingStyle(
         bldType: 3.0, // 군부대
         defaultWallSlotId: 13.0, // facility_panel (샌드위치 패널)
         podiumWallSlotId: 21.0,
-        roofSlotId: 18.0,        // roof_zinc_blue (징크 실버/네이비 강판 지붕)
+        roofSlotId: 14.0,        // roof_concrete_warmgray (콘크리트 웜그레이 지붕)
         parapetSlotId: 21.0,
         wallR: 0.82, wallG: 0.85, wallB: 0.89, // 라이트 실버 패널
-        roofR: 0.16, roofG: 0.28, roofB: 0.44, // 징크 네이비 / 스틸
+        roofR: 0.47, roofG: 0.45, roofB: 0.42, // 콘크리트 웜그레이
         podiumR: 0.38, podiumG: 0.42, podiumB: 0.46,
         skirtDepth: -5.0,
         hasCommercialSetback: false,

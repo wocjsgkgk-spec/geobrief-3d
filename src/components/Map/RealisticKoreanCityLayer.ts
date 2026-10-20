@@ -265,9 +265,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const center = map.getCenter();
       this.originLngLat = [center.lng, center.lat];
 
-      // 중심점 기준 지형 고도 캐싱
-      const queriedAltitude = elevationCache.getFromMap(map, this.originLngLat);
-      if (Number.isFinite(queriedAltitude)) {
+      // 중심점 기준 지형 고도 캐싱 (DEM 타일 로드 상태 반영)
+      const queriedAltitude =
+        elevationCache.getFromMap(map, this.originLngLat) ||
+        (map.queryTerrainElevation ? map.queryTerrainElevation(this.originLngLat) || 0 : 0);
+      if (Number.isFinite(queriedAltitude) && queriedAltitude > 0) {
         this.clampedAltitude = queriedAltitude;
       }
 
@@ -460,7 +462,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             pts2D.reverse();
           }
 
-          // 건물 속성 기반 높이 복원 (납작한 건물 원천 금지)
+          // 가장 긴 변과 짧은 변 계산 (판상형 아파트 vs 단독주택 기하 판별)
+          let maxEdgeLen = 0;
+          let minEdgeLen = Infinity;
+          for (let i = 0; i < ptCount; i++) {
+            const j = (i + 1) % ptCount;
+            const elen = Math.hypot(pts2D[j].x - pts2D[i].x, pts2D[j].z - pts2D[i].z);
+            if (elen > maxEdgeLen) maxEdgeLen = elen;
+            if (elen < minEdgeLen) minEdgeLen = elen;
+          }
+
+          // 건물 속성 기반 높이 복원 (0% Flat 보장, 100% 수직 솟아오름)
           const props = (feat.properties || {}) as Record<string, any>;
           let height = Number(
             props.height || props.hei || props.render_height || props.bld_hgt || 0
@@ -475,6 +487,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           ).toLowerCase();
           const category = String(props.bld_category || props.usageType || '').toLowerCase();
 
+          // [요구사항 2] 아파트 단지 판정 (명칭, 태그, 한 변 30m+ 판상형 군집 또는 면적 200㎡+)
           const isApt =
             name.includes('아파트') ||
             name.includes('apt') ||
@@ -488,8 +501,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             name.includes('아이파크') ||
             name.includes('롯데캐슬') ||
             name.includes('주공') ||
+            props.class === 'apartments' ||
+            props.building === 'apartments' ||
+            props.type === 'apartments' ||
             category === 'apartment' ||
-            areaSqm > 480;
+            areaSqm >= 200 ||
+            maxEdgeLen >= 30.0;
 
           const isComm =
             name.includes('타워') ||
@@ -500,26 +517,39 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             name.includes('오피스') ||
             name.includes('마트') ||
             name.includes('상가') ||
+            props.class === 'commercial' ||
+            props.class === 'retail' ||
+            props.class === 'office' ||
             category === 'commercial' ||
-            (areaSqm > 180 && !isApt);
+            (areaSqm > 150 && !isApt);
 
           const isMilitary =
             name.includes('사령부') ||
             name.includes('군부대') ||
             name.includes('대대') ||
             name.includes('막사') ||
+            props.class === 'military' ||
+            props.building === 'military' ||
             category === 'public_military' ||
             props.isMilitaryOrPublic === true;
 
-          // 요구사항에 따른 높이 보정
-          if (!height || height < 4.0) {
+          // [요구사항 2: 5,787동 전체 실제 높이 100% 수직 복원 (0% Flat 방지)]
+          // 1순위: 실측 층수 및 높이 (7.5m 이상일 때)
+          // 2순위: 지능형 스카이라인 추론 (최저 높이 7.5m 보장)
+          if (!height || height < 7.5) {
             const seed = Math.abs(Math.sin(cLng * 1450 + cLat * 2350));
             if (isApt) {
-              height = 45.0 + Math.floor(seed * 11) * 3.0; // 45m ~ 75m
+              // 아파트 단지 구역 (원주 우산동·학성동·단계동·무실동 등): 16층 ~ 25층 (50m ~ 75m)
+              height = 50.0 + Math.floor(seed * 9) * 3.1;
             } else if (isComm) {
-              height = 14.0 + Math.floor(seed * 6) * 2.8; // 14m ~ 28m
+              // 시내 대로변 상가 및 오피스 빌딩: 5층 ~ 10층 (16m ~ 32m)
+              height = 16.0 + Math.floor(seed * 6) * 3.2;
+            } else if (isMilitary) {
+              // 군 막사/물류/창고 시설: 1층 ~ 3층 (9m ~ 14m)
+              height = 9.0 + Math.floor(seed * 3) * 2.5;
             } else {
-              height = 7.0 + Math.floor(seed * 3) * 2.5; // 7m ~ 13m
+              // 밀집 주택가 다세대 빌라·단독주택: 2층 ~ 4층 (7.5m ~ 12m)
+              height = 7.5 + Math.floor(seed * 3) * 2.2;
             }
           }
 
@@ -531,18 +561,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const topElev = baseElev + height;
 
           // -------------------------------------------------------------------
-          // A. 건물 외벽(Wall) 쿼드 생성 (절대 초록색이 묻지 않는 외벽 UV 매핑)
+          // A. 건물 외벽(Wall) 쿼드 생성 (한국 도심 실사 색감 매핑)
           // -------------------------------------------------------------------
-          // 가장 긴 변과 짧은 변 계산 (아파트 전·후면 vs 측벽 판별)
-          let maxEdgeLen = 0;
-          let minEdgeLen = Infinity;
-          for (let i = 0; i < ptCount; i++) {
-            const j = (i + 1) % ptCount;
-            const elen = Math.hypot(pts2D[j].x - pts2D[i].x, pts2D[j].z - pts2D[i].z);
-            if (elen > maxEdgeLen) maxEdgeLen = elen;
-            if (elen < minEdgeLen) minEdgeLen = elen;
-          }
-
           for (let i = 0; i < ptCount; i++) {
             const j = (i + 1) % ptCount;
             const p1 = pts2D[i];
@@ -557,7 +577,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             const nx = dz / edgeLen;
             const nz = -dx / edgeLen;
 
-            let wallUV: UVRect = uvVillaBrick;
+            let wallUV: UVRect = uvAptCream;
 
             if (isApt) {
               // 긴 변은 발코니 창호, 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
@@ -573,7 +593,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             } else if (isMilitary) {
               wallUV = uvMilitary;
             } else {
-              wallUV = fIdx % 2 === 0 ? uvVillaBrick : uvVillaGranite;
+              // 다세대 빌라 / 주택: 밝은 샌드베이지 / 화강석 / 라이트웜그레이 톤 (쨍한 적벽돌 완전 제거)
+              const slot = (fIdx + i) % 3;
+              wallUV = slot === 0 ? uvVillaGranite : slot === 1 ? uvAptBeige : uvAptGray;
             }
 
             const pBL: [number, number, number] = [p1.x, baseElev, p1.z];
@@ -586,6 +608,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
           // -------------------------------------------------------------------
           // B. 윗면(Roof) earcut 삼각분할 및 항공사진 실사 색감 4종 분포
+          // 1) 콘크리트 웜그레이 35% (#78716c)
+          // 2) 우레탄 세이지그린 30% (#3a5a40)
+          // 3) 다크 슬레이트 20% (#475569)
+          // 4) 적갈색 기와 15% (#7c2d12)
           // -------------------------------------------------------------------
           const flatCoords: number[] = [];
           let minX = Infinity,
@@ -603,13 +629,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
           // 건물 고유 해시 기반 지붕 색상 4종 분포
           const roofHash = Math.abs(Math.sin(cLng * 3780 + cLat * 7890)) % 1.0;
-          let roofUV = uvRoofConcrete; // ① 노후 시멘트 회색 35%
-          if (roofHash >= 0.35 && roofHash < 0.6) {
-            roofUV = uvRoofUrethane; // ② 우레탄 방수 세이지 그린 25%
-          } else if (roofHash >= 0.6 && roofHash < 0.8) {
-            roofUV = uvRoofAsphalt; // ③ 다크 차콜 아스팔트 20%
-          } else if (roofHash >= 0.8) {
-            roofUV = uvRoofTile; // ④ 적갈색 기와/브라운 20%
+          let roofUV = uvRoofConcrete; // ① 노후 콘크리트 웜그레이 35%
+          if (roofHash >= 0.35 && roofHash < 0.65) {
+            roofUV = uvRoofUrethane; // ② 우레탄 방수 세이지 그린 30%
+          } else if (roofHash >= 0.65 && roofHash < 0.85) {
+            roofUV = uvRoofAsphalt; // ③ 다크 슬레이트 아스팔트 20%
+          } else {
+            roofUV = uvRoofTile; // ④ 적갈색 기와/브라운 15%
           }
 
           const spanX = Math.max(1, maxX - minX);
@@ -815,6 +841,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
+      // [지형 표고 레이스 컨디션 해결] DEM 타일 로딩 완료 후 지형 표고가 수신되면 지형 위로 리빌드
+      if (this.clampedAltitude === 0 && this.map) {
+        const queried =
+          elevationCache.getFromMap(this.map, this.originLngLat) ||
+          (this.map.queryTerrainElevation ? this.map.queryTerrainElevation(this.originLngLat) || 0 : 0);
+        if (queried > 5.0) {
+          this.clampedAltitude = queried;
+          this.extractAndBuildFromMap();
+        }
+      }
+
       const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
