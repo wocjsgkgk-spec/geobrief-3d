@@ -152,17 +152,19 @@ export function getGooglePhotorealistic3DTilesConfig(customKey?: string): Extern
     ? `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`
     : 'https://tile.googleapis.com/v1/3dtiles/root.json';
 
+  const headers: Record<string, string> = key ? { 'X-GOOG-API-KEY': key } : {};
+
   return {
     provider: 'google',
     url,
-    headers: {},
+    headers,
     loadOptions: {
       '3d-tiles': {
         isTileset: true,
         loadGLTF: true,
       },
       fetch: {
-        headers: {},
+        headers,
       },
     },
     displayName: 'Google Photorealistic 3D Tiles',
@@ -256,7 +258,16 @@ export function resolve3DTilesUrlAndOptions(
     input.includes('tile.googleapis.com') ||
     input.toLowerCase().startsWith('google:')
   ) {
-    const key = customAuth || (input.startsWith('google:') ? input.slice(7) : undefined);
+    let key = customAuth || (input.startsWith('google:') ? input.slice(7) : undefined);
+    if (!key && input.includes('key=')) {
+      try {
+        const u = new URL(input);
+        key = u.searchParams.get('key') || undefined;
+      } catch {
+        const match = input.match(/[?&]key=([^&]+)/);
+        if (match) key = decodeURIComponent(match[1]);
+      }
+    }
     return getGooglePhotorealistic3DTilesConfig(key);
   }
 

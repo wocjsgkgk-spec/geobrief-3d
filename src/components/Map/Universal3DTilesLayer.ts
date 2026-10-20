@@ -11,7 +11,7 @@ import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { elevationCache } from '@/utils/elevationCache';
 import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { TilesetController } from '@/lib/vendor/tilesetController';
-import { resolve3DTilesUrlAndOptions, getEffectiveCesiumIonToken } from '@/utils/external3DTilesConnector';
+import { resolve3DTilesUrlAndOptions, getEffectiveCesiumIonToken, getEffectiveGoogleMapsKey } from '@/utils/external3DTilesConnector';
 
 export interface Universal3DTilesCallbacks {
   onStatusChange?: (statusText: string, isLoading: boolean, tilesLoadedCount?: number) => void;
@@ -88,6 +88,7 @@ export class Universal3DTilesManager {
    */
   public attachToMap(map: MapLibreMap): void {
     if (typeof window === 'undefined' || !map) return;
+    if (this.overlay && this.map === map) return; // 이미 부착됨 (중복 생성 방지)
     this.map = map;
     this.isDestroyed = false;
 
@@ -122,8 +123,10 @@ export class Universal3DTilesManager {
 
   private handleMapMoveEnd = (): void => {
     if (this.isDestroyed || !this.currentState?.enabled) return;
-    this.reparseBuildings();
-    this.renderUniversalLayers();
+    if (this.currentState.presetId === 'sample_pointcloud') {
+      this.reparseBuildings();
+      this.renderUniversalLayers();
+    }
   };
 
   /**
@@ -144,9 +147,11 @@ export class Universal3DTilesManager {
   ): void {
     if (!features || features.length === 0) return;
     this.features = features;
-    this.reparseBuildings();
-    if (this.currentState?.enabled) {
-      this.renderUniversalLayers();
+    if (this.currentState?.presetId === 'sample_pointcloud') {
+      this.reparseBuildings();
+      if (this.currentState?.enabled) {
+        this.renderUniversalLayers();
+      }
     }
   }
 
@@ -402,8 +407,20 @@ export class Universal3DTilesManager {
     if (isExternalActive) {
       try {
         const isCesium = effectiveUrl.includes('cesium') || state.presetId === 'cesium_osm' || resolvedConfig.provider === 'cesium';
+        const isGoogle = effectiveUrl.includes('tile.googleapis.com') || state.presetId === 'google_3d' || resolvedConfig.provider === 'google';
         const selectedLoader = isCesium ? CesiumIonLoader : Tiles3DLoader;
         const cesiumToken = resolvedConfig.loadOptions?.['cesium-ion']?.accessToken || getEffectiveCesiumIonToken() || '';
+        const googleKey = getEffectiveGoogleMapsKey() || '';
+
+        const fetchHeaders: Record<string, string> = {
+          ...(resolvedConfig.headers || {}),
+        };
+        if (isGoogle && googleKey) {
+          fetchHeaders['X-GOOG-API-KEY'] = googleKey;
+        }
+        if (isCesium && cesiumToken) {
+          fetchHeaders['Authorization'] = `Bearer ${cesiumToken}`;
+        }
 
         const ogc3DLayer = new Tile3DLayer({
           id: 'external-ogc-3d-tiles-layer',
@@ -411,6 +428,7 @@ export class Universal3DTilesManager {
           loader: selectedLoader as any,
           opacity: state.opacity ?? 1.0,
           pointSize: state.pointSize ?? 2.5,
+          operation: 'terrain+draw',
           loadOptions: {
             '3d-tiles': {
               isTileset: true,
@@ -419,13 +437,14 @@ export class Universal3DTilesManager {
               loadGLTF: true,
             },
             ...(isCesium && cesiumToken ? { 'cesium-ion': { accessToken: cesiumToken, assetId: 96188 } } : {}),
-            fetch: {
-              headers: resolvedConfig.headers || {},
-            },
             ...(resolvedConfig.loadOptions || {}),
+            fetch: {
+              headers: fetchHeaders,
+            },
           },
           onTilesetLoad: (tileset) => {
             console.log('[Universal3DTilesManager] External 3D Tileset loaded successfully:', tileset);
+            this.tilesetController.recordTilesetLoad(tileset);
             this.callbacks.onExternalActiveChange?.(true);
             this.callbacks.onStatusChange?.(
               `🟢 ${resolvedConfig.displayName} 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,

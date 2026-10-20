@@ -86,6 +86,17 @@ export class TilesetController {
   // ===========================================================================
 
   /**
+   * tileset.json 또는 root.json 메타데이터 로드 완료 시 워치독 즉시 해제 및 활성화 확정
+   */
+  public recordTilesetLoad(_tileset: any): void {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    this.isExternalAvailable = true;
+  }
+
+  /**
    * 타일 로드 시 메모리 등록 및 LRU 캐시 갱신
    */
   public recordTileLoad(tileHeader: any): void {
@@ -244,6 +255,11 @@ export class TilesetController {
     centerLngLat: [number, number],
     onFallback: () => void
   ): void {
+    if (this.lastCheckedUrl === url && this.externalTilesLoadedCount > 0) {
+      // 이미 성공적으로 타일을 수신하고 있는 경우 워치독 리셋 방지
+      return;
+    }
+
     if (this.watchdogTimer) {
       clearTimeout(this.watchdogTimer);
       this.watchdogTimer = null;

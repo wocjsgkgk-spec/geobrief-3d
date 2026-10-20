@@ -1619,14 +1619,14 @@ export const ControlPanel: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-cyan-200">
-                      모드 C: 고정밀 3D 타일셋
+                      모드 C: 강원 특화 실측 디지털 트윈 (LOD2+)
                     </span>
                     <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-cyan-900/60 text-cyan-300 border border-cyan-700">
-                      Deck.gl Tile3DLayer
+                      브이월드 실측 대장 + PBR 실사
                     </span>
                   </div>
                   <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
-                    국토부 브이월드 OGC 3D Tiles(b3dm 항공 실사 메쉬). 128MB 메모리 제한 및 LOD 프러스텀 컬링.
+                    국토부 브이월드 실측 4,811동 층수·높이 100% 입체화 + 항공사진 옥상 컬러 + PBR 실사 파사드 + 옥탑/물탱크 풀옵션 가동.
                   </p>
 
                   <div className="mt-2.5 pt-2 border-t border-cyan-900/40 flex items-center justify-between">

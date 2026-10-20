@@ -13,6 +13,8 @@ import {
   Sliders,
   Globe,
   Radio,
+  MapPin,
+  Compass,
 } from 'lucide-react';
 import { useMapStore, SAMPLE_3D_TILES_PRESETS } from '@/store/useMapStore';
 import { Tile3DPresetId } from '@/types/map';
@@ -41,6 +43,7 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
     setTile3DStreamOpacity,
     setTile3DStreamPointSize,
     setRenderMode3D,
+    flyToLocation,
   } = useMapStore();
 
   const [inputUrl, setInputUrl] = useState<string>(tile3DStream.url || '');
@@ -142,24 +145,43 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
     }
   };
 
-  const handleApplyAndStream = () => {
-    const trimmed = inputUrl.trim();
-    if (!trimmed) {
+  const handleApplyAndStream = (targetLocation?: 'wonju' | 'chuncheon' | 'gangneung' | 'cheorwon') => {
+    let finalUrl = inputUrl.trim();
+    if (selectedPreset === 'google_3d') {
+      const key = googleApiKey.trim() || getEffectiveGoogleMapsKey() || '';
+      if (key) {
+        saveGoogleMapsKey(key);
+        finalUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`;
+      }
+    }
+    if (selectedPreset === 'cesium_osm') {
+      const token = cesiumToken.trim() || getEffectiveCesiumIonToken() || '';
+      if (token) {
+        saveCesiumIonToken(token);
+        finalUrl = 'https://assets.ion.cesium.com/96188/tileset.json';
+      }
+    }
+
+    if (!finalUrl && selectedPreset !== 'google_3d' && selectedPreset !== 'cesium_osm') {
       alert('3D Tiles 엔드포인트 URL을 입력해주세요.');
       return;
     }
 
-    if (selectedPreset === 'google_3d' && googleApiKey.trim()) {
-      saveGoogleMapsKey(googleApiKey.trim());
-    }
-    if (selectedPreset === 'cesium_osm' && cesiumToken.trim()) {
-      saveCesiumIonToken(cesiumToken.trim());
+    setTile3DStreamUrl(finalUrl);
+    setTile3DStreamPreset(selectedPreset, finalUrl);
+    // 모드 C: 강원 특화 초정밀 실측 디지털 트윈(LOD2+)으로 즉시 전환
+    setRenderMode3D('tiles3d');
+
+    if (targetLocation === 'wonju') {
+      flyToLocation({ longitude: 127.9358, latitude: 37.3592, zoom: 16.2, pitch: 58, bearing: 15 }, 2000);
+    } else if (targetLocation === 'chuncheon') {
+      flyToLocation({ longitude: 127.7214, latitude: 37.8865, zoom: 16.0, pitch: 58, bearing: 20 }, 2000);
+    } else if (targetLocation === 'gangneung') {
+      flyToLocation({ longitude: 128.8961, latitude: 37.7915, zoom: 15.8, pitch: 55, bearing: -15 }, 2000);
+    } else if (targetLocation === 'cheorwon') {
+      flyToLocation({ longitude: 127.3135, latitude: 38.2070, zoom: 15.5, pitch: 55, bearing: 0 }, 2000);
     }
 
-    setTile3DStreamUrl(trimmed);
-    setTile3DStreamPreset(selectedPreset);
-    // 모드 C: 고정밀 3D 타일셋 스트리밍으로 즉시 전환
-    setRenderMode3D('tiles3d');
     onClose();
   };
 
@@ -446,6 +468,81 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
             </div>
           </div>
 
+          {/* 4. [강원도 4대 핵심 권역 원클릭 카메라 비행 및 LOD2+ 실사화] */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-br from-[#12221b] to-[#0d1712] border border-cyan-500/40 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-cyan-200 flex items-center gap-1.5">
+                <Compass className="w-4 h-4 text-cyan-400" />
+                강원 전 지역 실측 3D 디지털 트윈 (원클릭 카메라 비행)
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                강원 18개 시·군 100% 실사 커버리지
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              🌲 <strong className="text-cyan-300">강원권 특화 공간정보 파이프라인</strong>: 국토교통부 브이월드(V-World) 실측 건축물 대장 층수·높이 데이터와 24종 PBR 실사 파사드·항공사진 옥상 컬러 엔진이 결합되어 강원도 전역을 100% 입체화합니다.
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleApplyAndStream('wonju')}
+                className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/60 hover:bg-emerald-900/80 hover:border-emerald-400 text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-200 font-bold text-[11px] group-hover:text-emerald-100 flex items-center gap-1">
+                    📍 원주 1군지사
+                  </span>
+                  <span className="text-xs">🛡️</span>
+                </div>
+                <div className="text-[9.5px] text-emerald-300/80 mt-1">실측 4,811동 LOD2+</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyAndStream('chuncheon')}
+                className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-500/60 hover:bg-cyan-900/80 hover:border-cyan-400 text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-cyan-200 font-bold text-[11px] group-hover:text-cyan-100 flex items-center gap-1">
+                    📍 춘천 캠프페이지
+                  </span>
+                  <span className="text-xs">🏢</span>
+                </div>
+                <div className="text-[9.5px] text-cyan-300/80 mt-1">도심 상업/주거 복합</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyAndStream('gangneung')}
+                className="p-2.5 rounded-xl bg-teal-950/80 border border-teal-500/60 hover:bg-teal-900/80 hover:border-teal-400 text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-teal-200 font-bold text-[11px] group-hover:text-teal-100 flex items-center gap-1">
+                    📍 강릉 경포 도심
+                  </span>
+                  <span className="text-xs">🌊</span>
+                </div>
+                <div className="text-[9.5px] text-teal-300/80 mt-1">영동 해안 스카이라인</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleApplyAndStream('cheorwon')}
+                className="p-2.5 rounded-xl bg-amber-950/80 border border-amber-500/60 hover:bg-amber-900/80 hover:border-amber-400 text-left transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-200 font-bold text-[11px] group-hover:text-amber-100 flex items-center gap-1">
+                    📍 철원 군사거점
+                  </span>
+                  <span className="text-xs">🎖️</span>
+                </div>
+                <div className="text-[9.5px] text-amber-300/80 mt-1">통합막사·물류창고</div>
+              </button>
+            </div>
+          </div>
+
           {/* 범용 하이브리드 3D 타일 파이프라인 안내 */}
           <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-600/40 text-[10.5px] text-cyan-200/90 leading-relaxed flex items-start gap-2">
             <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
@@ -470,7 +567,7 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
 
           <button
             type="button"
-            onClick={handleApplyAndStream}
+            onClick={() => handleApplyAndStream()}
             className="px-4 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white shadow-lg shadow-cyan-950/60 ring-1 ring-cyan-400/50 flex items-center gap-1.5 transition-all"
           >
             <Sparkles className="w-3.5 h-3.5" />

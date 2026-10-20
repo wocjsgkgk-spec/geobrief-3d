@@ -445,7 +445,7 @@ interface MapStoreState {
   toggleTile3DStream: () => void;
   setTile3DStreamEnabled: (enabled: boolean) => void;
   setTile3DStreamUrl: (url: string) => void;
-  setTile3DStreamPreset: (presetId: Tile3DPresetId) => void;
+  setTile3DStreamPreset: (presetId: Tile3DPresetId, customUrl?: string) => void;
   setTile3DStreamOpacity: (opacity: number) => void;
   setTile3DStreamSse: (maximumScreenSpaceError: number) => void;
   setTile3DStreamPointSize: (pointSize: number) => void;
@@ -1409,7 +1409,7 @@ export const useMapStore = create<MapStoreState>()(
           renderMode3D: 'tiles3d',
           detail3DMode: 'lod2',
         })),
-      setTile3DStreamPreset: (presetId) =>
+      setTile3DStreamPreset: (presetId, customUrl) =>
         set((state) => {
           const preset = SAMPLE_3D_TILES_PRESETS[presetId];
           const statusMap: Record<Tile3DPresetId, string> = {
@@ -1420,11 +1420,12 @@ export const useMapStore = create<MapStoreState>()(
             sample_pointcloud: '🟢 고밀도 LiDAR 공간 점군 (pnts) 가동',
             custom: '🟢 사용자 지정 OGC 3D Tiles 스트리밍 가동',
           };
+          const resolvedUrl = customUrl || (presetId === 'custom' ? state.tile3DStream.url : (preset?.url || state.tile3DStream.url));
           return {
             tile3DStream: {
               ...state.tile3DStream,
               presetId,
-              url: preset?.url || state.tile3DStream.url,
+              url: resolvedUrl,
               enabled: true,
               statusText: statusMap[presetId] || '🟢 3D 타일셋 스트리밍 가동',
             },
