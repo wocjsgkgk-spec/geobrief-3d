@@ -366,7 +366,20 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
         .multiply(rotationX);
 
+      // MapLibre 카메라 위치를 Three.js 카메라 위치에 정밀 동기화 (기즈모 스케일 및 피킹 정확도 100% 보장)
+      if (this.map && typeof (this.map as any).getFreeCameraOptions === 'function') {
+        const freeCam = (this.map as any).getFreeCameraOptions();
+        if (freeCam && freeCam.position) {
+          const camX = (freeCam.position.x - mercator.x) / meterScale;
+          const camY = (freeCam.position.z - mercator.z) / meterScale;
+          const camZ = (freeCam.position.y - mercator.y) / meterScale;
+          this.camera.position.set(camX, camY, camZ);
+          this.camera.updateMatrixWorld();
+        }
+      }
+
       this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       // 6. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출
       const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
@@ -967,10 +980,11 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.buildingGroup.visible = visible;
     this.roofsGroup.visible = visible && this.lodMode === 'lod2';
     this.facadesGroup.visible = visible && this.lodMode === 'lod2';
-    this.isVisible = visible && (this.facilityMeshes.size > 0 ||
+    this.isVisible = this.facilityMeshes.size > 0 || (visible && (
       (this.roofsGroup.visible && this.roofsGroup.children.length > 0) ||
       (this.facadesGroup.visible && this.facadesGroup.children.length > 0) ||
-      this.buildingGroup.children.length > 0);
+      this.buildingGroup.children.length > 0
+    ));
     if (this.map && !this.isInteracting) {
       this.map.triggerRepaint();
     }
@@ -1137,11 +1151,13 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       // 거점 부지 변경 감지 (원주/춘천/철원 등 거점 간 이동 시 씬 원점 자동 리센터링)
       if (!this.originLngLat) {
         this.originLngLat = facilities[0].coords;
+        this.terrainDirty = true;
       } else {
         const dLng = Math.abs(facilities[0].coords[0] - this.originLngLat[0]);
         const dLat = Math.abs(facilities[0].coords[1] - this.originLngLat[1]);
-        if (dLng > 0.015 || dLat > 0.015) {
+        if (dLng > 0.05 || dLat > 0.05) {
           this.originLngLat = facilities[0].coords;
+          this.terrainDirty = true;
         }
       }
     } else if (!this.originLngLat) {

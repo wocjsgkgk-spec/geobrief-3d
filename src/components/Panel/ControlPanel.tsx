@@ -1515,8 +1515,16 @@ export const ControlPanel: React.FC = () => {
 
             <div className="space-y-2 pt-1">
               {/* 모드 A: 경량 네이티브 모드 */}
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectRenderMode3D('native')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectRenderMode3D('native');
+                  }
+                }}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
                   localRenderMode3D === 'native'
                     ? 'bg-blue-950/40 border-blue-500/80 shadow-md ring-1 ring-blue-500/30'
@@ -1527,8 +1535,8 @@ export const ControlPanel: React.FC = () => {
                   type="radio"
                   name="renderMode3D"
                   checked={localRenderMode3D === 'native'}
-                  onChange={() => handleSelectRenderMode3D('native')}
-                  className="mt-1 accent-blue-500"
+                  readOnly
+                  className="mt-1 accent-blue-500 pointer-events-none"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -1543,11 +1551,19 @@ export const ControlPanel: React.FC = () => {
                     기본 3D 각기둥 및 지붕 음영. 저사양 브라우저나 광역 탐색 시 가장 가볍고 빠름 (60fps 유지).
                   </p>
                 </div>
-              </label>
+              </div>
 
               {/* 모드 B: 실감 파사드 모드 (LOD2) */}
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectRenderMode3D('facade')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectRenderMode3D('facade');
+                  }
+                }}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
                   localRenderMode3D === 'facade'
                     ? 'bg-amber-950/40 border-amber-500/80 shadow-md ring-1 ring-amber-500/30'
@@ -1558,8 +1574,8 @@ export const ControlPanel: React.FC = () => {
                   type="radio"
                   name="renderMode3D"
                   checked={localRenderMode3D === 'facade'}
-                  onChange={() => handleSelectRenderMode3D('facade')}
-                  className="mt-1 accent-amber-500"
+                  readOnly
+                  className="mt-1 accent-amber-500 pointer-events-none"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -1574,11 +1590,19 @@ export const ControlPanel: React.FC = () => {
                     한국형 판상형 아파트/상가 파사드, 경사 박공지붕, 옥상 헬리패드, DEM 지형 표고 정밀 밀착.
                   </p>
                 </div>
-              </label>
+              </div>
 
               {/* 모드 C: 고정밀 3D 타일셋 스트리밍 */}
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectRenderMode3D('tiles3d')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectRenderMode3D('tiles3d');
+                  }
+                }}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
                   localRenderMode3D === 'tiles3d'
                     ? 'bg-cyan-950/40 border-cyan-500/80 shadow-md ring-1 ring-cyan-500/30'
@@ -1589,8 +1613,8 @@ export const ControlPanel: React.FC = () => {
                   type="radio"
                   name="renderMode3D"
                   checked={localRenderMode3D === 'tiles3d'}
-                  onChange={() => handleSelectRenderMode3D('tiles3d')}
-                  className="mt-1 accent-cyan-500"
+                  readOnly
+                  className="mt-1 accent-cyan-500 pointer-events-none"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -1623,7 +1647,7 @@ export const ControlPanel: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              </label>
+              </div>
             </div>
           </section>
 
@@ -1682,7 +1706,10 @@ export const ControlPanel: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      addPlacedFacility(key);
+                      const vp = useMapStore.getState().viewport;
+                      const polyCenter = useMapStore.getState().polygonCenter;
+                      const coords: [number, number] = polyCenter || [vp.longitude, vp.latitude];
+                      addPlacedFacility(key, coords);
                     }}
                     className="flex-shrink-0 px-2 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[10.5px] flex items-center gap-1 transition-colors shadow-sm"
                     title="현재 부지 또는 화면 중앙에 즉시 배치"

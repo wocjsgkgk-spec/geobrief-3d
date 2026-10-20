@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
-import { useMapStore } from '@/store/useMapStore';
+import { useMapStore, WONJU_DEFAULT_POLYGON } from '@/store/useMapStore';
 import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { BORDER_SECURITY_GEOJSON } from '@/constants/borderSecurityZones';
 import { Compass, updateCompassDOM } from './Compass';
@@ -2699,6 +2699,20 @@ export const MapViewer: React.FC = () => {
     };
     map.on('idle', handleMapIdle);
 
+    const handleViewportMoveEnd = () => {
+      const c = map.getCenter();
+      setViewport({
+        longitude: c.lng,
+        latitude: c.lat,
+        zoom: map.getZoom(),
+        pitch: map.getPitch(),
+        bearing: map.getBearing(),
+      });
+      lod2BuildingEngineRef.current?.updateZoomLOD(map.getZoom());
+      updateRealtimeMetrics();
+    };
+    map.on('moveend', handleViewportMoveEnd);
+
     const handleSourceData = (e: any) => {
       if (
         (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openmaptiles' || e.sourceId === 'openfreemap') &&
@@ -4051,61 +4065,59 @@ export const MapViewer: React.FC = () => {
     const bldgVis = layers.buildings3D ? 'visible' : 'none';
 
     if (renderMode3D === 'native') {
-      // 1. 모드 A: 경량 네이티브 모드 (MapLibre fill-extrusion 3D 건물)
+      // 1. 모드 A: 경량 네이티브 모드 (MapLibre fill-extrusion 단일 레이어 클린 3D 매스 모델)
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
       }
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setLodMode('lod1');
-        threeboxLayerRef.current.setVisible(false);
+        threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.detachFromMap();
       }
-      for (const lyr of nativeBuildingLayers) {
+      // 4단 파사드 레이어 숨김
+      for (const lyr of ['bldg-tier1-podium', 'bldg-tier2-facade', 'bldg-tier3-roof', 'bldg-tier4-penthouse', 'building-body', 'building-roof-cap']) {
         if (map.getLayer(lyr)) {
-          map.setLayoutProperty(lyr, 'visibility', bldgVis);
+          map.setLayoutProperty(lyr, 'visibility', 'none');
         }
+      }
+      // 단일 레이어 클린 3D 매스 모델 (3d-buildings) 표출
+      if (map.getLayer('3d-buildings')) {
+        map.setLayoutProperty('3d-buildings', 'visibility', bldgVis);
       }
       if (bldgVis === 'visible') {
         promoteBuildingLayersToTop(map);
       }
     } else if (renderMode3D === 'facade') {
-      // 2. 모드 B: 실감 파사드 모드 (LOD2 Three.js 절차적 외벽/지붕)
-      // [최적화] 네이티브 단색 박스 및 Deck.gl 완전 언마운트
+      // 2. 모드 B: 실감 파사드 모드 (4단 수직 분리 실사 파사드 & 옥상 컬러 분리 + Three.js LOD2)
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.detachFromMap();
       }
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+        lod2BuildingEngineRef.current.setStyleMode('photorealistic');
         syncExternalSpatialBuildings(map);
       }
       if (threeboxLayerRef.current) {
-        threeboxLayerRef.current.setLodMode('lod1');
-        threeboxLayerRef.current.clearRoofsGroup();
-        threeboxLayerRef.current.clearFacadesGroup();
-        threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
+        threeboxLayerRef.current.setLodMode('lod2');
+        threeboxLayerRef.current.setVisible(true);
       }
-      // [다층 fill-extrusion 실사 파사드 스택 기본 베이스 상시 가동]:
-      // 타일 로드 즉시 MapLibre GPU 엔진이 3D 건물을 무조건 솟아오르게 하고,
-      // 벡터 타일 피처가 querySourceFeatures로 지속 수신되도록 보장
+      // 단일 클린 매스 레이어 숨김
+      if (map.getLayer('3d-buildings')) {
+        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+      }
+      // 4단 수직 분리 실사 파사드 스택 상시 표출
       const primaryNativeLayers = [
         'building-vector-carrier',
         'bldg-tier1-podium',
         'bldg-tier2-facade',
         'bldg-tier3-roof',
         'bldg-tier4-penthouse',
-        'building-body',
-        'building-roof-cap',
       ];
       for (const lyr of primaryNativeLayers) {
         if (map.getLayer(lyr)) {
           map.setLayoutProperty(lyr, 'visibility', bldgVis);
-        }
-      }
-      for (const lyr of nativeBuildingLayers) {
-        if (!primaryNativeLayers.includes(lyr) && map.getLayer(lyr)) {
-          map.setLayoutProperty(lyr, 'visibility', 'none');
         }
       }
       if (bldgVis === 'visible') {
@@ -4286,6 +4298,9 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     if (threeboxLayerRef.current) {
       threeboxLayerRef.current.syncFacilities(placedFacilities, selectedFacilityId);
+      if (placedFacilities.length > 0) {
+        threeboxLayerRef.current.setVisible(true);
+      }
     }
   }, [placedFacilities, selectedFacilityId]);
 
@@ -4623,9 +4638,10 @@ export const MapViewer: React.FC = () => {
 
   // [신규] 17. 토목·지형 3단 경사도 분석 격자 및 고도 단면 데이터 실시간 연산
   const slopeAnalysisResult = React.useMemo(() => {
-    if (!completedPolygon) return null;
+    const poly = completedPolygon || WONJU_DEFAULT_POLYGON;
+    if (!poly) return null;
     try {
-      return analyzeSlopeGrid(completedPolygon, (coord: [number, number]) => {
+      return analyzeSlopeGrid(poly, (coord: [number, number]) => {
         if (!mapRef.current) return 150;
         return elevationCache.getFromMap(mapRef.current, coord) || 150;
       });
@@ -4636,10 +4652,11 @@ export const MapViewer: React.FC = () => {
   }, [completedPolygon, isMapLoaded]);
 
   const elevationProfileResult = React.useMemo(() => {
-    if (!completedPolygon) return null;
+    const poly = completedPolygon || WONJU_DEFAULT_POLYGON;
+    if (!poly) return null;
     try {
       return generateElevationProfile(
-        completedPolygon,
+        poly,
         (coord: [number, number]) => {
           if (!mapRef.current) return 150;
           return elevationCache.getFromMap(mapRef.current, coord) || 150;
