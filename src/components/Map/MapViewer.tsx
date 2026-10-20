@@ -23,6 +23,7 @@ import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
 import { LOD2BuildingEngine } from './LOD2BuildingEngine';
+import { RealisticKoreanCityLayer } from './RealisticKoreanCityLayer';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import {
@@ -262,6 +263,7 @@ function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
     'procedural-trees-3d-layer',
     'lod2-building-engine-layer',
     'threebox-building-layer',
+    'realistic-korean-city-layer',
   ];
   for (const id of bldgLayerIds) {
     if (mapInstance.getLayer(id)) {
@@ -511,6 +513,7 @@ export const MapViewer: React.FC = () => {
   const threeDLayerRef = useRef<ThreeDModelLayer | null>(null);
   const threeboxLayerRef = useRef<ThreeboxBuildingLayer | null>(null);
   const lod2BuildingEngineRef = useRef<LOD2BuildingEngine | null>(null);
+  const realisticKoreanCityLayerRef = useRef<RealisticKoreanCityLayer | null>(null);
   const smartCityComplexLayerRef = useRef<SmartCityComplex3DLayer | null>(null);
   const proceduralTreesLayerRef = useRef<ProceduralTrees3DLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
@@ -794,6 +797,14 @@ export const MapViewer: React.FC = () => {
                   // ignore
                 }
               }
+              if (realisticKoreanCityLayerRef.current && merged.length > 0) {
+                try {
+                  const center = mapInstance.getCenter();
+                  realisticKoreanCityLayerRef.current.updateBuildings(merged, [center.lng, center.lat]);
+                } catch {
+                  // ignore
+                }
+              }
               updateRealtimeMetrics();
             }
           },
@@ -816,6 +827,14 @@ export const MapViewer: React.FC = () => {
                 try {
                   const center = mapInstance.getCenter();
                   lod2BuildingEngineRef.current.updateBuildings(merged, [center.lng, center.lat]);
+                } catch {
+                  // ignore
+                }
+              }
+              if (realisticKoreanCityLayerRef.current && merged.length > 0) {
+                try {
+                  const center = mapInstance.getCenter();
+                  realisticKoreanCityLayerRef.current.updateBuildings(merged, [center.lng, center.lat]);
                 } catch {
                   // ignore
                 }
@@ -1954,6 +1973,7 @@ export const MapViewer: React.FC = () => {
       isInteractingRef.current = true;
       elevationCache.setInteractionLock(true);
       lod2BuildingEngineRef.current?.setInteracting(true);
+      realisticKoreanCityLayerRef.current?.setInteracting(true);
       threeboxLayerRef.current?.setInteracting(true);
       proceduralTreesLayerRef.current?.setInteracting(true);
       deck3DTilesManagerRef.current?.setInteracting(true);
@@ -2050,6 +2070,7 @@ export const MapViewer: React.FC = () => {
         isInteractingRef.current = false;
         elevationCache.setInteractionLock(false);
         lod2BuildingEngineRef.current?.setInteracting(false);
+        realisticKoreanCityLayerRef.current?.setInteracting(false);
         threeboxLayerRef.current?.setInteracting(false);
         proceduralTreesLayerRef.current?.setInteracting(false);
         deck3DTilesManagerRef.current?.setInteracting(false);
@@ -2570,6 +2591,22 @@ export const MapViewer: React.FC = () => {
         console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
       }
 
+      // [2단계 신규: Three.js 단일 버퍼 기반 한국형 실사 포토 파사드 & 입체 지붕 메쉬 엔진 등록]
+      try {
+        const initRenderMode = useMapStore.getState().renderMode3D;
+        const realisticCityLayer = new RealisticKoreanCityLayer({
+          onBuildingCountChange: () => {
+            updateRealtimeMetrics();
+          },
+        });
+        realisticCityLayer.setVisible(initRenderMode === 'facade' && !!layers.buildings3D);
+        map.addLayer(realisticCityLayer);
+        realisticKoreanCityLayerRef.current = realisticCityLayer;
+        (window as any).__realisticCityLayer = realisticCityLayer;
+      } catch (rcErr) {
+        console.warn('[RealisticKoreanCityLayer] Registration warning:', rcErr);
+      }
+
       // [1단계: 비정상적인 거대 가상 박스(더미 메쉬) 전면 삭제 - 임의 3D 박스 생성 중단]
       try {
         const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
@@ -2872,6 +2909,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         lod2BuildingEngineRef.current = null;
+      }
+      if (realisticKoreanCityLayerRef.current && map.getLayer('realistic-korean-city-layer')) {
+        try {
+          map.removeLayer('realistic-korean-city-layer');
+        } catch {
+          // ignore
+        }
+        realisticKoreanCityLayerRef.current = null;
       }
       if (threeDLayerRef.current && map.getLayer('custom-three-model-layer')) {
         try {
@@ -3375,6 +3420,9 @@ export const MapViewer: React.FC = () => {
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
       }
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setVisible(false);
+      }
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setLodMode('lod1');
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
@@ -3385,7 +3433,7 @@ export const MapViewer: React.FC = () => {
         promoteBuildingLayersToTop(map);
       }
     } else if (renderMode3D === 'facade') {
-      // 2. 모드 B: 실감 파사드 모드 (GPU 4단 다층 슬라이스 + Deck.gl interleaved LOD2 옥탑/지붕)
+      // 2. 모드 B: 실감 파사드 모드 (Three.js 단일 버퍼 실사 파사드 + 입체 지붕)
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.attachToMap(map);
         deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
@@ -3393,18 +3441,23 @@ export const MapViewer: React.FC = () => {
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
       }
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setVisible(bldgVis);
+      }
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setLodMode('lod2');
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
-      setGpuBuildingLayersVisibility(map, bldgVis);
-      setGpuBuildingLayersMode(map, 'facade');
+      setGpuBuildingLayersVisibility(map, false);
       if (bldgVis) {
         promoteBuildingLayersToTop(map);
       }
     } else if (renderMode3D === 'tiles3d') {
       // 3. 모드 C: 고정밀 3D 타일셋 스트리밍
       // [치명적 버그 수정] 외부 타일 로드 여부와 무관하게 3D 건물 레이어는 상시 100% 유지 (절대 건물 소실 없음)
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setVisible(bldgVis);
+      }
       setGpuBuildingLayersVisibility(map, bldgVis);
       setGpuBuildingLayersMode(map, 'tiles3d');
       if (threeboxLayerRef.current) {
@@ -4299,6 +4352,13 @@ export const MapViewer: React.FC = () => {
           sunConfig.intensity
         );
       }
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.updateSunLight(
+          sunConfig.directionalVector,
+          sunConfig.color,
+          sunConfig.intensity
+        );
+      }
       if (threeDLayerRef.current) {
         threeDLayerRef.current.updateSunLight(
           sunConfig.directionalVector,
@@ -4740,6 +4800,10 @@ export const MapViewer: React.FC = () => {
         const shouldHideThreejs = isExternalTilesActive && !isWonju;
         lod2BuildingEngineRef.current.setVisible(!shouldHideThreejs && layers.buildings3D && tile3DStream.enabled);
       }
+      if (realisticKoreanCityLayerRef.current) {
+        const shouldHide = isExternalTilesActive && !isWonju;
+        realisticKoreanCityLayerRef.current.setVisible(!shouldHide && layers.buildings3D && tile3DStream.enabled);
+      }
 
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.attachToMap(map);
@@ -4753,10 +4817,15 @@ export const MapViewer: React.FC = () => {
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.detachFromMap();
       }
-      if (renderMode3D === 'facade' && lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setStyleMode('photorealistic');
-        lod2BuildingEngineRef.current.setOpacity(1.0);
-        lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+      if (renderMode3D === 'facade') {
+        if (lod2BuildingEngineRef.current) {
+          lod2BuildingEngineRef.current.setStyleMode('photorealistic');
+          lod2BuildingEngineRef.current.setOpacity(1.0);
+          lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+        }
+        if (realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
+        }
       }
     }
   }, [
