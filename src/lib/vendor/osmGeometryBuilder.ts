@@ -19,6 +19,7 @@ export interface OSMGeometryOptions {
   sunDirection?: [number, number, number];       // [sX, sY, sZ]
   zoom?: number;
   satelliteRoofColors?: Record<string | number, SatelliteRoofColor>;
+  maxLod2Count?: number; // 카메라 중심 우선 2,500동 완전한 LOD2 기하구조 (기본: 2500)
 }
 
 export interface OSMGeometryResult {
@@ -455,11 +456,15 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
   const PARAPET_THICKNESS = 0.35; // 옥상 난간 실측 두께 0.35m
   const PARAPET_HEIGHT = 0.9;    // 옥상 난간 실측 돌출 높이 0.9m
 
+  const maxLod2Count = options.maxLod2Count ?? 2500;
   let buildingCount = 0;
 
-  // 2. 피처별 건물 지오메트리 직렬화
-  for (const feat of features) {
+  // 2. 피처별 건물 지오메트리 직렬화 (카메라 중심 2,500동 완전한 LOD2 / 원거리 경량 LOD1 매스 모델)
+  for (let featIdx = 0; featIdx < features.length; featIdx++) {
+    const feat = features[featIdx];
     if (!feat.geometry) continue;
+
+    const isLOD2 = featIdx < maxLod2Count;
 
     const props = feat.properties || {};
     const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '');
@@ -825,7 +830,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       //   1~3층(0m ~ 11m): 원래 건물 바닥 폴리곤(100% 면적)으로 넓은 상가·로비 포디움(Podium) 기단부 생성 및 옥상 테라스 마감.
       //   4층~최상층(11m ~ H): 폴리곤을 안쪽으로 15~20% 축소(Inset 2.5m)하여 본동 타워가 기단부 위로 솟아오름.
       // -----------------------------------------------------------------------
-      const hasCommercialSetback = regStyle.hasCommercialSetback || (totalH >= 20.0 && approxArea >= 600);
+      const hasCommercialSetback = isLOD2 && (regStyle.hasCommercialSetback || (totalH >= 20.0 && approxArea >= 600));
       const PODIUM_SETBACK_HEIGHT = 11.0;
       const effectivePodiumH = hasCommercialSetback ? PODIUM_SETBACK_HEIGHT : podiumH;
       const insetTowerPts = hasCommercialSetback ? computePolygonInset(outerPts, 2.5) : outerPts;
@@ -1023,8 +1028,8 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             }
           }
 
-          // 외곽 링에 대해 1.5m 접지 음영(Contact AO) 및 태양광 투영 그림자 생성
-          if (!isHole) {
+          // 외곽 링에 대해 1.5m 접지 음영(Contact AO) 및 태양광 투영 그림자 생성 (LOD2 중심 건물 한정)
+          if (!isHole && isLOD2) {
             // [접지 음영(Contact AO): 건물 하단 0.85m 밀착 림으로 지면 안착감 부여]
             const aoWidth = 0.85;
             addShadowQuad(
@@ -1181,7 +1186,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       // [1-C. 한국형 아파트 1층 공동현관 캐노피 포치(돌출 포치)]
       // (높이 30m 이상 아파트 전면 중앙 하단에 폭 3.8m, 돌출 2.0m, 높이 3.2m 포치 결합)
       // -----------------------------------------------------------------------
-      if (isApt && totalH >= 30.0 && maxEdgeLen >= 14.0) {
+      if (isLOD2 && isApt && totalH >= 30.0 && maxEdgeLen >= 14.0) {
         const pA = outerPts[maxEdgeIdx];
         const pB = outerPts[(maxEdgeIdx + 1) % outerPts.length];
         const eDx = pB.x - pA.x;
@@ -1284,8 +1289,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
         const isKoreanAptHighrise = isApt && (totalH >= 24.0 || floors >= 7);
         const oLen = roofTargetPts.length;
 
-        // (a) 가변 옥상 난간 (Parapet) / 한국형 아파트 경사 파라펫 캡 (Mansard Cap)
-        if (isKoreanAptHighrise) {
+        // (a) 가변 옥상 난간 (Parapet) / 한국형 아파트 경사 파라펫 캡 (Mansard Cap) - LOD2 상세 건물 한정
+        if (isLOD2) {
+          if (isKoreanAptHighrise) {
           // 한국 아파트 특유의 경사형 지붕 캡 (장식용 경사 파라펫 구조물):
           // 높이 1.8m, 상단 1.2m 안쪽으로 꺾여 올라가는 다크 슬레이트 파라펫 캡
           const CAP_H = 1.8;
@@ -1495,6 +1501,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
             );
           }
         }
+        }
 
         // (b) 옥상 슬래브 (Roof Slab) earcut 삼각화
         const flatCoords: number[] = [];
@@ -1571,9 +1578,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           // -------------------------------------------------------------------
           // [지면 인페인팅 바닥 슬래브 (Ground Footprint Inpainting Buffer)]
           // 위성사진 바닥에 원래 인쇄된 2D 평면 지붕 잔상을 100% 가리는 지면 차폐 패드
-          // 건물 용도별 지면 에이프런(광장/주차구획선 패드) 확장
-          // 아파트 단지: 2.5m, 상업 빌딩: 2.0m, 일반: 0.5m
-          const groundPadOutset = (isApt || bldType === 2.0) ? 2.5 : (bldType === 1.0 ? 2.0 : 0.5);
+          // 건물 용도별 지면 에이프런(광장/주차구획선 패드) 확장 (LOD2 상세 건물 한정)
+          if (isLOD2) {
+            const groundPadOutset = (isApt || bldType === 2.0) ? 2.5 : (bldType === 1.0 ? 2.0 : 0.5);
           const outsetBasePts = computePolygonOutset(outerPts, groundPadOutset);
           if (outsetBasePts.length >= 3) {
             const baseFlatCoords: number[] = [];
@@ -1675,6 +1682,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
               }
             }
           }
+          }
         }
 
         let cx = 0, cy = 0;
@@ -1687,9 +1695,9 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           cy /= roofTargetPts.length;
         }
 
-        // (c) 엘리베이터 옥탑방 (Penthouse) 및 계단실 코어:
+        // (c) 엘리베이터 옥탑방 (Penthouse) 및 계단실 코어 (LOD2 상세 건물 한정):
         // 한국 아파트(높이 30m 이상): 2.8m 돌출된 동 중앙/양측 계단실 코어 생성
-        if (floors >= 4 || totalH >= 12.0) {
+        if (isLOD2 && (floors >= 4 || totalH >= 12.0)) {
 
           const pHouseH = isKoreanAptHighrise
             ? (2.8 + ((buildingSeed * 73.1) % 0.7))
@@ -1922,7 +1930,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
         }
 
         // (c-1) 혁신도시 공공기관 대형 청사 옥상 태양광 패널 그리드 & 조경 테라스
-        if (regStyle.hasSolarPanels && bW >= 12.0 && bD >= 12.0) {
+        if (isLOD2 && regStyle.hasSolarPanels && bW >= 12.0 && bD >= 12.0) {
           const panelRows = Math.min(3, Math.max(1, Math.floor(bD / 5.0)));
           const panelCols = Math.min(4, Math.max(1, Math.floor(bW / 4.5)));
           const pSpanX = (bW * 0.6) / panelCols;
@@ -1956,7 +1964,7 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
           }
         }
 
-        if (regStyle.hasRoofTerrace && bW >= 14.0 && bD >= 14.0) {
+        if (isLOD2 && regStyle.hasRoofTerrace && bW >= 14.0 && bD >= 14.0) {
           const tw = bW * 0.26;
           const td = bD * 0.26;
           const tx = cx + (bW * 0.26);

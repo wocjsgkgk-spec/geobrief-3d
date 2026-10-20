@@ -260,10 +260,60 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const rawFeatures = data.response?.result?.featureCollection?.features || [];
+    const pageObj = data.response?.page;
+    const totalRecords = parseInt(pageObj?.record || pageObj?.total || '0', 10);
+    const rawFeatures: any[] = [...(data.response?.result?.featureCollection?.features || [])];
+
+    // maxFeatures 파라미터 확인 (기본 5,000건으로 대폭 확대)
+    const maxFeaturesParam = searchParams.get('maxFeatures');
+    const maxFeatures = Math.min(5000, Math.max(100, parseInt(maxFeaturesParam || '5000', 10)));
+
+    // 추가 페이지가 존재할 경우 최대 5페이지(총 5,000건)까지 병렬 페칭
+    if (totalRecords > 1000 && rawFeatures.length < maxFeatures) {
+      const neededPages = Math.min(5, Math.ceil(Math.min(totalRecords, maxFeatures) / 1000));
+      const pagePromises: Promise<any[]>[] = [];
+
+      for (let p = 2; p <= neededPages; p++) {
+        const pageUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+          cleanKey
+        )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
+          geomFilter
+        )}&crs=EPSG:4326&size=1000&page=${p}&geometry=true&attribute=true`;
+
+        pagePromises.push(
+          (async () => {
+            const pageCtrl = new AbortController();
+            const pageTimeout = setTimeout(() => pageCtrl.abort(), 6000);
+            try {
+              const pageRes = await fetch(pageUrl, {
+                signal: pageCtrl.signal,
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+              });
+              clearTimeout(pageTimeout);
+              if (!pageRes.ok) return [];
+              const pageData = await pageRes.json();
+              return pageData.response?.result?.featureCollection?.features || [];
+            } catch {
+              clearTimeout(pageTimeout);
+              return [];
+            }
+          })()
+        );
+      }
+
+      const pResults = await Promise.allSettled(pagePromises);
+      for (const pr of pResults) {
+        if (pr.status === 'fulfilled' && Array.isArray(pr.value)) {
+          rawFeatures.push(...pr.value);
+        }
+      }
+    }
+
+    const clampedFeatures = rawFeatures.slice(0, maxFeatures);
 
     // 피처 정규화 및 한국 건축물대장 속성(지상층수 grnd_flr, 지하층수 ugrnd_flr, 건물명 buld_nm, 세부용도) 정밀 매핑
-    const features = rawFeatures
+    const features = clampedFeatures
       .map((item: any, idx: number) => {
         if (!item.geometry || !item.properties) return null;
 

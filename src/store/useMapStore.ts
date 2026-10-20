@@ -62,6 +62,18 @@ export const SAMPLE_3D_TILES_PRESETS: Record<
     type: 'b3dm',
     description: '국토교통부 브이월드 디지털 트윈 실사 항공사진 텍스처 3D 건물 메쉬 (OGC 3D Tiles 1.0)',
   },
+  google_3d: {
+    name: 'Google Photorealistic 3D Tiles',
+    url: 'https://tile.googleapis.com/v1/3dtiles/root.json',
+    type: 'b3dm',
+    description: '구글 전 세계 및 한국 도심 3D 실사 항공 메쉬 (Google Map Tiles API)',
+  },
+  cesium_osm: {
+    name: 'Cesium Ion OSM Buildings (b3dm)',
+    url: 'https://assets.ion.cesium.com/96188/tileset.json',
+    type: 'b3dm',
+    description: 'Cesium Ion 글로벌 OSM 3D 건축물 메쉬 (Asset ID: 96188)',
+  },
   sample_city: {
     name: 'Cesium 도시 건축물 (b3dm)',
     url: 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/tileset.json',
@@ -1402,6 +1414,8 @@ export const useMapStore = create<MapStoreState>()(
           const preset = SAMPLE_3D_TILES_PRESETS[presetId];
           const statusMap: Record<Tile3DPresetId, string> = {
             vworld_3d_buildings: '🟢 브이월드 실사 3D (OGC 타일셋) 스트리밍 가동',
+            google_3d: '🟢 Google Photorealistic 3D Tiles 스트리밍 가동',
+            cesium_osm: '🟢 Cesium Ion OSM Buildings 3D 메쉬 스트리밍 가동',
             sample_city: '🟢 도시 모델 (b3dm) 클린 화이트 매스 렌더링 가동',
             sample_pointcloud: '🟢 고밀도 LiDAR 공간 점군 (pnts) 가동',
             custom: '🟢 사용자 지정 OGC 3D Tiles 스트리밍 가동',

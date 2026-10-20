@@ -224,12 +224,12 @@ export async function fetchOverpassBuildings(
     return cached.data;
   }
 
-  const ql = `[out:json][timeout:8];
+  const ql = `[out:json][timeout:10];
 (
   way["building"](${minLat},${minLng},${maxLat},${maxLng});
   relation["building"](${minLat},${minLng},${maxLat},${maxLng});
 );
-out geom 800;`;
+out geom 5000;`;
 
   const endpoints = [
     `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,
@@ -316,7 +316,7 @@ export async function fetchVworldBuildings(
   const results: ExternalSpatialBuildingFeature[] = [];
 
   try {
-    const url = `/api/vworld-buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
+    const url = `/api/vworld-buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=5000`;
     const res = await fetch(url, {
       signal,
       headers: { Accept: 'application/json' },

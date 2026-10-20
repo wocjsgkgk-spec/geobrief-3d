@@ -361,7 +361,13 @@ export interface CutFillState {
 }
 
 // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 상태]
-export type Tile3DPresetId = 'vworld_3d_buildings' | 'sample_city' | 'sample_pointcloud' | 'custom';
+export type Tile3DPresetId =
+  | 'vworld_3d_buildings'
+  | 'google_3d'
+  | 'cesium_osm'
+  | 'sample_city'
+  | 'sample_pointcloud'
+  | 'custom';
 
 export interface Tile3DStreamState {
   enabled: boolean;

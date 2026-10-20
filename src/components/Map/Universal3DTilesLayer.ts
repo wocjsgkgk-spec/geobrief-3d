@@ -11,6 +11,7 @@ import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { elevationCache } from '@/utils/elevationCache';
 import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { TilesetController } from '@/lib/vendor/tilesetController';
+import { resolve3DTilesUrlAndOptions } from '@/utils/external3DTilesConnector';
 
 export interface Universal3DTilesCallbacks {
   onStatusChange?: (statusText: string, isLoading: boolean, tilesLoadedCount?: number) => void;
@@ -362,17 +363,21 @@ export class Universal3DTilesManager {
 
     // =========================================================================
     // 1. [1순위: 외부 OGC 3D Tiles 스트리밍 (NASA 3DTilesRendererJS 128MB LRU & 동적 SSE)]
+    //    (Google Photorealistic 3D Tiles / Cesium Ion / V-World 자동 연결)
     // =========================================================================
+    const resolvedConfig = resolve3DTilesUrlAndOptions(state.presetId || state.url);
+    const effectiveUrl = resolvedConfig.url || state.url;
+
     const hasValidExternalUrl =
-      Boolean(state.url) &&
-      state.url.startsWith('http') &&
-      !state.url.includes('undefined') &&
-      !state.url.includes('/api/vworld/3dtiles/unsupported');
+      Boolean(effectiveUrl) &&
+      (effectiveUrl.startsWith('http') || effectiveUrl.startsWith('/')) &&
+      !effectiveUrl.includes('undefined') &&
+      !effectiveUrl.includes('/api/vworld/3dtiles/unsupported');
 
     if (hasValidExternalUrl && this.map) {
       const center = this.map.getCenter();
       this.tilesetController.startWatchdog(
-        state.url,
+        effectiveUrl,
         [center.lng, center.lat],
         () => {
           if (!this.isDestroyed && this.currentState?.enabled) {
@@ -388,7 +393,7 @@ export class Universal3DTilesManager {
       try {
         const ogc3DLayer = new Tile3DLayer({
           id: 'external-ogc-3d-tiles-layer',
-          data: state.url,
+          data: effectiveUrl,
           loader: Tiles3DLoader,
           opacity: state.opacity ?? 1.0,
           pointSize: state.pointSize ?? 2.5,
@@ -398,11 +403,15 @@ export class Universal3DTilesManager {
               maximumScreenSpaceError: this.tilesetController.getCurrentSSE(),
               maximumMemoryUsage: 128, // 128MB LRU
             },
+            fetch: {
+              headers: resolvedConfig.headers || {},
+            },
+            ...(resolvedConfig.loadOptions || {}),
           },
           onTilesetLoad: (tileset) => {
-            console.log('[Universal3DTilesManager] External OGC 3D Tileset loaded successfully:', tileset);
+            console.log('[Universal3DTilesManager] External 3D Tileset loaded successfully:', tileset);
             this.callbacks.onStatusChange?.(
-              `🟢 외부 OGC 3D Tiles 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,
+              `🟢 ${resolvedConfig.displayName} 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,
               false,
               this.tilesetController.getExternalTilesLoadedCount()
             );

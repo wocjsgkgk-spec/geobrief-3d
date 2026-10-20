@@ -237,7 +237,7 @@ export async function fetchVworldBuildings(
   }
 
   const [minLng, minLat, maxLng, maxLat] = bbox;
-  const proxyUrl = `/api/vworld/buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&customKey=${encodeURIComponent(
+  const proxyUrl = `/api/vworld/buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=5000&customKey=${encodeURIComponent(
     activeKey
   )}`;
 

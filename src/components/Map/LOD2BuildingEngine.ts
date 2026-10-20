@@ -931,6 +931,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 ],
                 zoom: this.currentZoomLOD,
                 satelliteRoofColors,
+                maxLod2Count: 2500,
               })
               .then((workerResult) => {
                 if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
@@ -997,6 +998,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
                 ],
                 zoom: this.currentZoomLOD,
                 satelliteRoofColors,
+                maxLod2Count: 2500,
               })
               .then((workerResult) => {
                 if (workerResult && workerResult.positions && workerResult.positions.length > 0) {
@@ -1032,6 +1034,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         ],
         zoom: this.currentZoomLOD,
         satelliteRoofColors,
+        maxLod2Count: 2500,
       });
       if (osmResult && osmResult.positions && osmResult.positions.length > 0) {
         this.applyWorkerResult(osmResult);

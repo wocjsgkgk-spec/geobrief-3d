@@ -158,7 +158,7 @@ async function fetchOverpassInfra(
   way["natural"="water"](${minLat},${minLng},${maxLat},${maxLng});
   way["waterway"](${minLat},${minLng},${maxLat},${maxLng});
 );
-out geom 600;`;
+out geom 5000;`;
 
   const endpoints = [
     `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,

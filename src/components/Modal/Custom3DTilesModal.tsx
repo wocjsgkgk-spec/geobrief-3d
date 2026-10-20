@@ -16,6 +16,13 @@ import {
 } from 'lucide-react';
 import { useMapStore, SAMPLE_3D_TILES_PRESETS } from '@/store/useMapStore';
 import { Tile3DPresetId } from '@/types/map';
+import {
+  getEffectiveGoogleMapsKey,
+  saveGoogleMapsKey,
+  getEffectiveCesiumIonToken,
+  saveCesiumIonToken,
+  resolve3DTilesUrlAndOptions,
+} from '@/utils/external3DTilesConnector';
 
 interface Custom3DTilesModalProps {
   isOpen: boolean;
@@ -38,6 +45,8 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
 
   const [inputUrl, setInputUrl] = useState<string>(tile3DStream.url || '');
   const [selectedPreset, setSelectedPreset] = useState<Tile3DPresetId>(tile3DStream.presetId);
+  const [googleApiKey, setGoogleApiKey] = useState<string>(getEffectiveGoogleMapsKey() || '');
+  const [cesiumToken, setCesiumToken] = useState<string>(getEffectiveCesiumIonToken() || '');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -69,9 +78,14 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
     }, 5000);
 
     try {
+      const headers: Record<string, string> = { Accept: 'application/json, text/plain, */*' };
+      if (selectedPreset === 'cesium_osm' && cesiumToken.trim()) {
+        headers['Authorization'] = `Bearer ${cesiumToken.trim()}`;
+      }
+
       const res = await fetch(targetUrl, {
         signal: controller.signal,
-        headers: { Accept: 'application/json, text/plain, */*' },
+        headers,
         cache: 'no-cache',
       });
       clearTimeout(timeoutId);
@@ -108,10 +122,22 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
 
   const handleSelectPreset = (presetId: Tile3DPresetId) => {
     setSelectedPreset(presetId);
-    const preset = SAMPLE_3D_TILES_PRESETS[presetId];
-    if (preset && preset.url) {
-      setInputUrl(preset.url);
-      setTestResult(null);
+    setTestResult(null);
+
+    if (presetId === 'google_3d') {
+      const key = googleApiKey.trim() || getEffectiveGoogleMapsKey() || '';
+      setInputUrl(
+        key
+          ? `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`
+          : 'https://tile.googleapis.com/v1/3dtiles/root.json'
+      );
+    } else if (presetId === 'cesium_osm') {
+      setInputUrl('https://assets.ion.cesium.com/96188/tileset.json');
+    } else {
+      const preset = SAMPLE_3D_TILES_PRESETS[presetId];
+      if (preset && preset.url) {
+        setInputUrl(preset.url);
+      }
     }
   };
 
@@ -120,6 +146,13 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
     if (!trimmed) {
       alert('3D Tiles 엔드포인트 URL을 입력해주세요.');
       return;
+    }
+
+    if (selectedPreset === 'google_3d' && googleApiKey.trim()) {
+      saveGoogleMapsKey(googleApiKey.trim());
+    }
+    if (selectedPreset === 'cesium_osm' && cesiumToken.trim()) {
+      saveCesiumIonToken(cesiumToken.trim());
     }
 
     setTile3DStreamUrl(trimmed);
@@ -174,16 +207,22 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
               {(
                 [
                   {
+                    id: 'google_3d',
+                    name: 'Google Photorealistic 3D',
+                    desc: '구글 전 세계 및 한국 도심 3D 실사 항공 메쉬',
+                    tag: 'Google 3D',
+                  },
+                  {
                     id: 'vworld_3d_buildings',
-                    name: '브이월드 OGC 실사 3D (서울 도심)',
+                    name: '브이월드 OGC 실사 3D (국토부)',
                     desc: '국토부 공식 항공 텍스처 b3dm 메쉬',
                     tag: '공식 타일셋',
                   },
                   {
-                    id: 'sample_city',
-                    name: 'Cesium Ion 도시 메쉬 (b3dm)',
-                    desc: '정밀 텍스처 오픈 3D 빌딩 모델',
-                    tag: '글로벌 b3dm',
+                    id: 'cesium_osm',
+                    name: 'Cesium Ion OSM Buildings',
+                    desc: 'Cesium Ion 글로벌 3D 건축물 메쉬',
+                    tag: 'Cesium Ion',
                   },
                   {
                     id: 'sample_pointcloud',
@@ -192,9 +231,15 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
                     tag: 'LiDAR 점군',
                   },
                   {
+                    id: 'sample_city',
+                    name: 'Cesium 샘플 도시 (b3dm)',
+                    desc: '정밀 텍스처 오픈 3D 빌딩 모델',
+                    tag: '글로벌 b3dm',
+                  },
+                  {
                     id: 'custom',
                     name: '사용자 지정 커스텀 URL',
-                    desc: '자체 Cesium Ion 토큰 또는 로컬 타일셋',
+                    desc: '자체 3D Tiles 또는 로컬 타일셋 엔드포인트',
                     tag: '사용자 정의',
                   },
                 ] as const
@@ -224,6 +269,56 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
               ))}
             </div>
           </div>
+
+          {/* 1-2. Google Maps API Key 또는 Cesium Token 직접 입력 (프리셋별 연동) */}
+          {selectedPreset === 'google_3d' && (
+            <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-700/50 space-y-1.5 animate-in fade-in duration-150">
+              <label className="text-[11px] font-bold text-cyan-200 flex items-center justify-between">
+                <span>Google Map Tiles API Key</span>
+                <span className="text-[10px] font-mono text-cyan-400">.env.local 또는 UI 즉시 저장</span>
+              </label>
+              <input
+                type="password"
+                placeholder="AIzaSy... (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)"
+                value={googleApiKey}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setGoogleApiKey(val);
+                  saveGoogleMapsKey(val);
+                  if (val.trim()) {
+                    setInputUrl(`https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(val.trim())}`);
+                  }
+                }}
+                className="w-full bg-[#121a15] border border-[#293d2f] focus:border-cyan-400 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none transition-colors"
+              />
+              <p className="text-[10px] text-cyan-400/80">
+                입력 시 Deck.gl Tile3DLayer로 구글 3D 실사 메쉬(Photorealistic 3D Tiles)를 즉시 스트리밍합니다.
+              </p>
+            </div>
+          )}
+
+          {selectedPreset === 'cesium_osm' && (
+            <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-700/50 space-y-1.5 animate-in fade-in duration-150">
+              <label className="text-[11px] font-bold text-cyan-200 flex items-center justify-between">
+                <span>Cesium Ion Access Token</span>
+                <span className="text-[10px] font-mono text-cyan-400">.env.local 또는 UI 즉시 저장</span>
+              </label>
+              <input
+                type="password"
+                placeholder="eyJhbGciOi... (NEXT_PUBLIC_CESIUM_ION_TOKEN)"
+                value={cesiumToken}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCesiumToken(val);
+                  saveCesiumIonToken(val);
+                }}
+                className="w-full bg-[#121a15] border border-[#293d2f] focus:border-cyan-400 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-100 focus:outline-none transition-colors"
+              />
+              <p className="text-[10px] text-cyan-400/80">
+                입력 시 Cesium Ion OSM Buildings (Asset 96188) 메쉬를 Authorization 헤더와 함께 로드합니다.
+              </p>
+            </div>
+          )}
 
           {/* 2. 사용자 지정 URL 입력창 */}
           <div className="space-y-1.5 pt-1">

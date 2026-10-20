@@ -332,7 +332,7 @@ export async function fetchOverpassEnrichment(
   way["building"](${minLat},${minLng},${maxLat},${maxLng});
   way["highway"](${minLat},${minLng},${maxLat},${maxLng});
 );
-out geom 350;`;
+out geom 5000;`;
 
   const endpoints = [
     `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,
