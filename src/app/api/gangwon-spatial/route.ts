@@ -406,7 +406,9 @@ export async function GET(req: NextRequest) {
         const list: any[] = [];
         settled.forEach((s) => {
           if (s.status === 'fulfilled' && Array.isArray(s.value)) {
-            list.push(...s.value);
+            for (let i = 0; i < s.value.length; i++) {
+              list.push(s.value[i]);
+            }
           }
         });
         return list;

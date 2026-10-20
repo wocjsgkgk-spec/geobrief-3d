@@ -770,12 +770,16 @@ export interface ComputeCutFillResult {
 
 function computeCutFill(payload: ComputeCutFillPayload): ComputeCutFillResult {
   const { cells, targetElevation, cellAreaM2 } = payload;
-  const elevations = cells.map((c) => c.elevation);
-
-  const minElevation = Math.min(...elevations);
-  const maxElevation = Math.max(...elevations);
-  const sumElevation = elevations.reduce((acc, v) => acc + v, 0);
-  const avgElevation = Math.round((sumElevation / (elevations.length || 1)) * 10) / 10;
+  let minElevation = Infinity;
+  let maxElevation = -Infinity;
+  let sumElevation = 0;
+  for (let i = 0; i < cells.length; i++) {
+    const e = cells[i].elevation;
+    if (e < minElevation) minElevation = e;
+    if (e > maxElevation) maxElevation = e;
+    sumElevation += e;
+  }
+  const avgElevation = cells.length > 0 ? Math.round((sumElevation / cells.length) * 10) / 10 : 0;
   const zeroBalanceElevation = avgElevation;
 
   let totalCutVolumeM3 = 0;

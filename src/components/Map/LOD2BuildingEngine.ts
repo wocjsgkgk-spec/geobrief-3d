@@ -2378,7 +2378,9 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       if (geomType === 'LineString') {
         lines.push(feat.geometry.coordinates);
       } else if (geomType === 'MultiLineString') {
-        lines.push(...feat.geometry.coordinates);
+        for (let i = 0; i < feat.geometry.coordinates.length; i++) {
+          lines.push(feat.geometry.coordinates[i]);
+        }
       }
 
       const roadClass = String(feat.properties?.class || 'primary');

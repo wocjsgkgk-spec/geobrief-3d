@@ -75,11 +75,17 @@ export function calculateCutFill(
 
   if (sampledCells.length === 0) return null;
 
-  // 3. 지형 표고 기초 통계
-  const minElevation = Math.min(...elevations);
-  const maxElevation = Math.max(...elevations);
-  const sumElevation = elevations.reduce((acc, v) => acc + v, 0);
-  const avgElevation = Math.round((sumElevation / elevations.length) * 10) / 10;
+  // 3. 지형 표고 기초 통계 (대용량 배열 콜 스택 초과 방지 루프)
+  let minElevation = Infinity;
+  let maxElevation = -Infinity;
+  let sumElevation = 0;
+  for (let i = 0; i < elevations.length; i++) {
+    const v = elevations[i];
+    if (v < minElevation) minElevation = v;
+    if (v > maxElevation) maxElevation = v;
+    sumElevation += v;
+  }
+  const avgElevation = elevations.length > 0 ? Math.round((sumElevation / elevations.length) * 10) / 10 : 0;
 
   // 4. 절성토 토량 평형고(Zero Balance Elevation) 계산
   // Cut(E) = Sum(elev - E for elev > E), Fill(E) = Sum(E - elev for elev < E)

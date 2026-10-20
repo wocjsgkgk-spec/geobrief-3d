@@ -64,6 +64,8 @@ export class Universal3DTilesManager {
   private callbacks: Universal3DTilesCallbacks = {};
   private currentState: Tile3DStreamState | null = null;
   private isDestroyed: boolean = false;
+  private isFallbackActive: boolean = false;
+  private isRenderingLayers: boolean = false;
   private tilesetController: TilesetController;
 
   // 캐시된 건물 피처 및 RBush 공간 색인 트리
@@ -84,10 +86,10 @@ export class Universal3DTilesManager {
         this.callbacks.onStatusChange?.(statusText, isLoading, count);
       },
       onFallbackActivated: () => {
+        // [1단계: 무한 재귀 차단] 가드 플래그 확인 및 renderUniversalLayers 재귀 호출 일체 금지
+        if (this.isFallbackActive) return;
+        this.isFallbackActive = true;
         this.callbacks.onExternalActiveChange?.(false);
-        if (!this.isDestroyed && this.currentState?.enabled) {
-          this.renderUniversalLayers();
-        }
       },
     });
   }
@@ -384,115 +386,115 @@ export class Universal3DTilesManager {
    */
   private renderUniversalLayers(): void {
     if (!this.overlay || this.isDestroyed || !this.currentState?.enabled) return;
+    // [1단계: 무한 재귀 및 동시 렌더링 차단 가드]
+    if (this.isRenderingLayers) return;
+    this.isRenderingLayers = true;
 
-    if (this.parsedBuildings.length === 0) {
-      this.reparseBuildings();
-    }
-
-    const state = this.currentState;
-    const isPointCloudMode = state.presetId === 'sample_pointcloud';
-    const layers: any[] = [];
-
-    // =========================================================================
-    // 1. [1순위: 외부 OGC 3D Tiles 스트리밍 (Google / Cesium / V-World)]
-    // =========================================================================
-    const resolvedConfig = resolve3DTilesUrlAndOptions(state.presetId || state.url);
-    const effectiveUrl = resolvedConfig.url || state.url;
-
-    const hasValidExternalUrl =
-      Boolean(effectiveUrl) &&
-      (effectiveUrl.startsWith('http') || effectiveUrl.startsWith('/')) &&
-      !effectiveUrl.includes('undefined') &&
-      !effectiveUrl.includes('/api/vworld/3dtiles/unsupported');
-
-    if (hasValidExternalUrl && this.map) {
-      const center = this.map.getCenter();
-      this.tilesetController.startWatchdog(
-        effectiveUrl,
-        [center.lng, center.lat],
-        () => {
-          if (!this.isDestroyed && this.currentState?.enabled) {
-            this.renderUniversalLayers();
-          }
-        }
-      );
-    }
-
-    const isExternalActive = hasValidExternalUrl && this.tilesetController.getIsExternalAvailable();
-
-    if (isExternalActive) {
-      try {
-        const isCesium =
-          effectiveUrl.includes('cesium') ||
-          state.presetId === 'cesium_osm' ||
-          resolvedConfig.provider === 'cesium';
-        const isGoogle =
-          effectiveUrl.includes('tile.googleapis.com') ||
-          state.presetId === 'google_3d' ||
-          resolvedConfig.provider === 'google';
-        const selectedLoader = isCesium ? CesiumIonLoader : Tiles3DLoader;
-        const cesiumToken =
-          resolvedConfig.loadOptions?.['cesium-ion']?.accessToken ||
-          getEffectiveCesiumIonToken() ||
-          '';
-        const googleKey = getEffectiveGoogleMapsKey() || '';
-
-        const fetchHeaders: Record<string, string> = {
-          ...(resolvedConfig.headers || {}),
-        };
-        if (isGoogle && googleKey) {
-          fetchHeaders['X-GOOG-API-KEY'] = googleKey;
-        }
-        if (isCesium && cesiumToken) {
-          fetchHeaders['Authorization'] = `Bearer ${cesiumToken}`;
-        }
-
-        const ogc3DLayer = new Tile3DLayer({
-          id: 'external-ogc-3d-tiles-layer',
-          data: effectiveUrl,
-          loader: selectedLoader as any,
-          opacity: state.opacity ?? 1.0,
-          pointSize: state.pointSize ?? 2.5,
-          operation: 'terrain+draw',
-          loadOptions: {
-            '3d-tiles': {
-              isTileset: true,
-              maximumScreenSpaceError: this.tilesetController.getCurrentSSE(),
-              maximumMemoryUsage: 128,
-              loadGLTF: true,
-            },
-            ...(isCesium && cesiumToken ? { 'cesium-ion': { accessToken: cesiumToken, assetId: 96188 } } : {}),
-            ...(resolvedConfig.loadOptions || {}),
-            fetch: {
-              headers: fetchHeaders,
-            },
-          },
-          onTilesetLoad: (tileset) => {
-            this.tilesetController.recordTilesetLoad(tileset);
-            this.callbacks.onExternalActiveChange?.(true);
-            this.callbacks.onStatusChange?.(
-              `🟢 ${resolvedConfig.displayName} 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,
-              false,
-              this.tilesetController.getExternalTilesLoadedCount()
-            );
-          },
-          onTileLoad: (tileHeader) => {
-            this.tilesetController.recordTileLoad(tileHeader);
-            this.callbacks.onExternalActiveChange?.(true);
-            this.callbacks.onTileCountUpdate?.(this.tilesetController.getExternalTilesLoadedCount());
-          },
-          onTileUnload: (tileHeader) => {
-            this.tilesetController.recordTileUnload(tileHeader);
-          },
-          onTileError: (tileHeader, message) => {
-            this.tilesetController.recordTileError(tileHeader, message);
-          },
-        });
-        layers.push(ogc3DLayer);
-      } catch (ogcErr) {
-        console.warn('[Universal3DTilesManager] Tile3DLayer init notice:', ogcErr);
+    try {
+      if (this.parsedBuildings.length === 0) {
+        this.reparseBuildings();
       }
-    }
+
+      const state = this.currentState;
+      const isPointCloudMode = state.presetId === 'sample_pointcloud';
+      const layers: any[] = [];
+
+      // =========================================================================
+      // 1. [1순위: 외부 OGC 3D Tiles 스트리밍 (Google / Cesium / V-World)]
+      // =========================================================================
+      const resolvedConfig = resolve3DTilesUrlAndOptions(state.presetId || state.url);
+      const effectiveUrl = resolvedConfig.url || state.url;
+
+      const hasValidExternalUrl =
+        Boolean(effectiveUrl) &&
+        (effectiveUrl.startsWith('http') || effectiveUrl.startsWith('/')) &&
+        !effectiveUrl.includes('undefined') &&
+        !effectiveUrl.includes('/api/vworld/3dtiles/unsupported') &&
+        !effectiveUrl.includes('unsupported');
+
+      const isVworld3D = Boolean(effectiveUrl) && (effectiveUrl.includes('vworld.kr') || effectiveUrl.includes('/api/vworld/3dtiles'));
+      const center = this.map?.getCenter();
+      const isGangwonCenter = Boolean(center && center.lng >= 127.0 && center.lng <= 129.5 && center.lat >= 37.0 && center.lat <= 38.6);
+
+      // V-World 3D 타일셋은 강원권 b3dm 파일이 없으므로, 강원권에서는 외부 타일셋 대신 즉시 로컬 LOD2 실사 메쉬 레이어로 직접 직결
+      // 재귀적인 watchdog 호출을 일체 배제하고 단순 조건문으로 처리
+      const shouldStreamExternal = hasValidExternalUrl && !(isVworld3D && isGangwonCenter) && !this.isFallbackActive;
+
+      if (shouldStreamExternal) {
+        try {
+          const isCesium =
+            effectiveUrl.includes('cesium') ||
+            state.presetId === 'cesium_osm' ||
+            resolvedConfig.provider === 'cesium';
+          const isGoogle =
+            effectiveUrl.includes('tile.googleapis.com') ||
+            state.presetId === 'google_3d' ||
+            resolvedConfig.provider === 'google';
+          const selectedLoader = isCesium ? CesiumIonLoader : Tiles3DLoader;
+          const cesiumToken =
+            resolvedConfig.loadOptions?.['cesium-ion']?.accessToken ||
+            getEffectiveCesiumIonToken() ||
+            '';
+          const googleKey = getEffectiveGoogleMapsKey() || '';
+
+          const fetchHeaders: Record<string, string> = {
+            ...(resolvedConfig.headers || {}),
+          };
+          if (isGoogle && googleKey) {
+            fetchHeaders['X-GOOG-API-KEY'] = googleKey;
+          }
+          if (isCesium && cesiumToken) {
+            fetchHeaders['Authorization'] = `Bearer ${cesiumToken}`;
+          }
+
+          const ogc3DLayer = new Tile3DLayer({
+            id: 'external-ogc-3d-tiles-layer',
+            data: effectiveUrl,
+            loader: selectedLoader as any,
+            opacity: state.opacity ?? 1.0,
+            pointSize: state.pointSize ?? 2.5,
+            operation: 'terrain+draw',
+            loadOptions: {
+              '3d-tiles': {
+                isTileset: true,
+                maximumScreenSpaceError: this.tilesetController.getCurrentSSE(),
+                maximumMemoryUsage: 128,
+                loadGLTF: true,
+              },
+              ...(isCesium && cesiumToken ? { 'cesium-ion': { accessToken: cesiumToken, assetId: 96188 } } : {}),
+              ...(resolvedConfig.loadOptions || {}),
+              fetch: {
+                headers: fetchHeaders,
+              },
+            },
+            onTilesetLoad: (tileset) => {
+              this.isFallbackActive = false;
+              this.tilesetController.recordTilesetLoad(tileset);
+              this.callbacks.onExternalActiveChange?.(true);
+              this.callbacks.onStatusChange?.(
+                `🟢 ${resolvedConfig.displayName} 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,
+                false,
+                this.tilesetController.getExternalTilesLoadedCount()
+              );
+            },
+            onTileLoad: (tileHeader) => {
+              this.tilesetController.recordTileLoad(tileHeader);
+              this.callbacks.onExternalActiveChange?.(true);
+              this.callbacks.onTileCountUpdate?.(this.tilesetController.getExternalTilesLoadedCount());
+            },
+            onTileUnload: (tileHeader) => {
+              this.tilesetController.recordTileUnload(tileHeader);
+            },
+            onTileError: (tileHeader, message) => {
+              this.tilesetController.recordTileError(tileHeader, message);
+              this.isFallbackActive = true;
+            },
+          });
+          layers.push(ogc3DLayer);
+        } catch (ogcErr) {
+          console.warn('[Universal3DTilesManager] Tile3DLayer init notice:', ogcErr);
+        }
+      }
 
     // =========================================================================
     // 2. [라이다 점군(LiDAR Point Cloud) 모드]
@@ -885,7 +887,10 @@ export class Universal3DTilesManager {
       }
     }
 
-    this.overlay.setProps({ layers });
+      this.overlay.setProps({ layers });
+    } finally {
+      this.isRenderingLayers = false;
+    }
   }
 
   /**

@@ -287,13 +287,17 @@ export function generateCrosswalksGeoJSON(
         item.coordinates[1],
         item.roundaboutRadius || 18.0
       );
-      allFeatures.push(...rFeatures);
+      for (let i = 0; i < rFeatures.length; i++) {
+        allFeatures.push(rFeatures[i]);
+      }
     }
 
     const arms = item.arms && item.arms.length > 0 ? item.arms : [0, 90, 180, 270];
     for (const arm of arms) {
       const armFeatures = buildCrosswalkForArm(item.coordinates[0], item.coordinates[1], arm);
-      allFeatures.push(...armFeatures);
+      for (let i = 0; i < armFeatures.length; i++) {
+        allFeatures.push(armFeatures[i]);
+      }
     }
   }
 

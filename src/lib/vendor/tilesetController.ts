@@ -248,15 +248,14 @@ export class TilesetController {
   }
 
   /**
-   * 신규 3D 타일셋 스트리밍 요청 시 1.5초 타임아웃 워치독 시작
+   * [안전화] 외부 3D 타일셋 스트리밍 상태 모니터링 (동기 재귀 호출 완전 제거)
    */
   public startWatchdog(
     url: string,
     centerLngLat: [number, number],
-    onFallback: () => void
+    _onFallback?: () => void
   ): void {
     if (this.lastCheckedUrl === url && this.externalTilesLoadedCount > 0) {
-      // 이미 성공적으로 타일을 수신하고 있는 경우 워치독 리셋 방지
       return;
     }
 
@@ -268,8 +267,6 @@ export class TilesetController {
     this.lastCheckedUrl = url;
     this.externalTilesLoadedCount = 0;
 
-    // V-World 공식 b3dm 타일셋의 경우에만 강원권(원주/춘천 등) 미제공 감지 적용
-    // (Google 3D Tiles, Cesium Ion, 사용자 지정 3D Tiles는 전 세계 및 강원권 100% 지원)
     const isVworld3D = url.includes('vworld.kr') || url.includes('/api/vworld/3dtiles');
     const isGangwonVworld = isVworld3D && this.isGangwonRegion(centerLngLat[0], centerLngLat[1]);
     const isExplicitUnsupported =
@@ -287,8 +284,7 @@ export class TilesetController {
         false,
         0
       );
-      this.callbacks.onFallbackActivated?.(reason);
-      onFallback();
+      // 순환 재귀 방지를 위해 동기적인 onFallback() 및 onFallbackActivated() 호출을 완전히 제거
       return;
     }
 
@@ -298,7 +294,6 @@ export class TilesetController {
     this.watchdogTimer = setTimeout(() => {
       this.watchdogTimer = null;
       if (this.externalTilesLoadedCount === 0) {
-        // 타임아웃 내에 타일이 전혀 로드되지 않음 (미제공 구역 또는 키/인증 실패)
         this.isExternalAvailable = false;
         const reason = '외부 3D 타일 서버 응답 타임아웃 (키/토큰 확인 필요)';
         this.callbacks.onStatusChange?.(
@@ -306,8 +301,6 @@ export class TilesetController {
           false,
           0
         );
-        this.callbacks.onFallbackActivated?.(reason);
-        onFallback();
       }
     }, timeoutMs);
   }

@@ -156,11 +156,22 @@ export function analyzeSlopeGrid(
     slopes.length > 0
       ? Math.round((slopes.reduce((acc, v) => acc + v, 0) / slopes.length) * 10) / 10
       : 0;
-  const maxSlope = slopes.length > 0 ? Math.max(...slopes) : 0;
+  let maxSlope = 0;
+  for (let i = 0; i < slopes.length; i++) {
+    if (slopes[i] > maxSlope) maxSlope = slopes[i];
+  }
 
-  const validElevs = elevations.filter((e) => typeof e === 'number' && !isNaN(e));
-  const minElev = validElevs.length > 0 ? Math.round(Math.min(...validElevs)) : 0;
-  const maxElev = validElevs.length > 0 ? Math.round(Math.max(...validElevs)) : 0;
+  let minElev = 99999;
+  let maxElev = -99999;
+  for (let i = 0; i < elevations.length; i++) {
+    const e = elevations[i];
+    if (typeof e === 'number' && !isNaN(e)) {
+      if (e < minElev) minElev = e;
+      if (e > maxElev) maxElev = e;
+    }
+  }
+  minElev = minElev === 99999 ? 0 : Math.round(minElev);
+  maxElev = maxElev === -99999 ? 0 : Math.round(maxElev);
 
   return {
     geoJson: {
@@ -216,9 +227,15 @@ export function generateElevationProfile(
     });
   }
 
-  const elevs = points.map((p) => p.elevation);
-  const minElev = Math.min(...elevs);
-  const maxElev = Math.max(...elevs);
+  let minElev = Infinity;
+  let maxElev = -Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const e = points[i].elevation;
+    if (e < minElev) minElev = e;
+    if (e > maxElev) maxElev = e;
+  }
+  if (minElev === Infinity) minElev = 0;
+  if (maxElev === -Infinity) maxElev = 0;
   const deltaElev = maxElev - minElev;
 
   // 시작점과 끝점 간 경사도

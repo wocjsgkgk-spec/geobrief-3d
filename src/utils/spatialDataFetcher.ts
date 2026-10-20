@@ -67,7 +67,11 @@ export function extractRenderedVectorBuildings(
     if (targetLayers.length > 0) {
       try {
         const rendered = map.queryRenderedFeatures(undefined, { layers: targetLayers });
-        if (rendered && rendered.length > 0) candidateFeatures.push(...rendered);
+        if (rendered && rendered.length > 0) {
+          for (let i = 0; i < rendered.length; i++) {
+            candidateFeatures.push(rendered[i]);
+          }
+        }
       } catch {
         // ignore
       }
@@ -80,7 +84,11 @@ export function extractRenderedVectorBuildings(
         const srcFeats = map.querySourceFeatures(srcId, {
           sourceLayer: 'building',
         });
-        if (srcFeats && srcFeats.length > 0) candidateFeatures.push(...srcFeats);
+        if (srcFeats && srcFeats.length > 0) {
+          for (let i = 0; i < srcFeats.length; i++) {
+            candidateFeatures.push(srcFeats[i]);
+          }
+        }
       } catch {
         // ignore
       }
@@ -90,7 +98,11 @@ export function extractRenderedVectorBuildings(
     if (map.getSource('fusion-buildings-source')) {
       try {
         const fusionFeats = map.querySourceFeatures('fusion-buildings-source');
-        if (fusionFeats && fusionFeats.length > 0) candidateFeatures.push(...fusionFeats);
+        if (fusionFeats && fusionFeats.length > 0) {
+          for (let i = 0; i < fusionFeats.length; i++) {
+            candidateFeatures.push(fusionFeats[i]);
+          }
+        }
       } catch {
         // ignore
       }

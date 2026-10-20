@@ -269,7 +269,9 @@ export async function GET(request: NextRequest) {
             if (pageRes.ok) {
               const pData = await pageRes.json();
               const pItems = pData.response?.result?.featureCollection?.features || [];
-              items.push(...pItems);
+              for (let i = 0; i < pItems.length; i++) {
+                items.push(pItems[i]);
+              }
             }
           } catch {
             // ignore
