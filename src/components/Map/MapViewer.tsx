@@ -2137,18 +2137,19 @@ export const MapViewer: React.FC = () => {
     };
     map.on('moveend', handleViewportMoveEnd);
 
+    let sourceDataDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleSourceData = (e: any) => {
       if (
         (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openmaptiles' || e.sourceId === 'openfreemap') &&
         e.isSourceLoaded &&
         e.sourceDataType !== 'metadata'
       ) {
-        if (persistentBuildingCacheRef.current.size > 0 && lod2BuildingEngineRef.current) {
-        const cachedFeats = Array.from(persistentBuildingCacheRef.current.values());
-        lod2BuildingEngineRef.current.updateBuildings(cachedFeats);
-      }
-      syncExternalSpatialBuildings(map);
-        updateRealtimeMetrics();
+        if (sourceDataDebounceTimer) clearTimeout(sourceDataDebounceTimer);
+        sourceDataDebounceTimer = setTimeout(() => {
+          if (isInteractingRef.current) return;
+          syncExternalSpatialBuildings(map);
+          updateRealtimeMetrics();
+        }, 400);
       }
     };
     map.on('sourcedata', handleSourceData);
@@ -3366,8 +3367,12 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.setLodMode('lod2');
         threeboxLayerRef.current.setVisible(true);
       }
+      const lod2Count = lod2BuildingEngineRef.current?.getBuildingCount() || 0;
       if (map.getLayer('3d-buildings')) {
-        map.setLayoutProperty('3d-buildings', 'visibility', bldgVis);
+        // [Z-Fighting & 이중 렌더링 부하 원천 차단]
+        // Three.js 실감 LOD2 메쉬가 표출 중일 때는 평면 fill-extrusion 박스를 숨겨 PBR 실사 텍스처와 박공/옥탑이 100% 돋보이게 함
+        const nativeVis = lod2Count > 0 ? 'none' : bldgVis;
+        map.setLayoutProperty('3d-buildings', 'visibility', nativeVis);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-pattern', tier2FacadePatternExpr);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-color', buildingColorExpr);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', 0.95);
@@ -3377,9 +3382,12 @@ export const MapViewer: React.FC = () => {
       }
     } else if (renderMode3D === 'tiles3d') {
       // 3. 모드 C: 고정밀 3D 타일셋 스트리밍
-      // [핵심 1: 건물 소실 원천 차단] 외부 타일 로드 여부와 무관하게 기본 3D 건물 메쉬(3d-buildings)는 절대로 숨기지 않음
+      const hasDeckTiles = (deck3DTilesManagerRef.current?.getBuildingCount?.() || 0) > 0;
+      const lod2Count = lod2BuildingEngineRef.current?.getBuildingCount() || 0;
       if (map.getLayer('3d-buildings')) {
-        map.setLayoutProperty('3d-buildings', 'visibility', bldgVis);
+        // 외부 b3dm 또는 하이브리드 메쉬가 표출 중일 때는 이중 렌더링 방지
+        const nativeVis = (hasDeckTiles || lod2Count > 0) ? 'none' : bldgVis;
+        map.setLayoutProperty('3d-buildings', 'visibility', nativeVis);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-pattern', tier2FacadePatternExpr);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-color', buildingColorExpr);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', 0.95);

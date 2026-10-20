@@ -322,6 +322,10 @@ export class Universal3DTilesManager {
   private lastReportedStatus: string = '';
   private lastReportedCount: number = -1;
 
+  public getBuildingCount(): number {
+    return this.parsedBuildings.length;
+  }
+
   /**
    * 3D Tiles 스트리밍 상태 업데이트 및 모드 C 활성화/비활성화
    */

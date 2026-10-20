@@ -38,6 +38,7 @@ import {
 import { updateFacadeShaderLights } from '@/shaders/buildingFacadeShader';
 import { elevationCache } from '@/utils/elevationCache';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
+import { useMapStore } from '@/store/useMapStore';
 import {
   getKoreanCityAtlasMaterial,
   disposeKoreanCityAtlas,
@@ -2162,6 +2163,17 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.setStyleMode(this.styleMode);
     this.updateZoomLOD(this.currentZoomLOD);
     this.updateBridges();
+
+    // [LOD2 실사 파사드 활성화]: Three.js 실사 메쉬가 표출되면 MapLibre fill-extrusion과의 Z-Fighting 및 중복 렌더링을 차단
+    if (this.map && this.buildingCount > 0) {
+      try {
+        const currentMode = useMapStore.getState().renderMode3D;
+        if ((currentMode === 'facade' || currentMode === 'tiles3d') && this.map.getLayer('3d-buildings')) {
+          this.map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+        }
+      } catch {}
+    }
+
     if (this.map && this.isVisible && !this.isInteracting) {
       this.map.triggerRepaint();
     }
@@ -2258,12 +2270,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         (this.renderer.state as any).buffers?.depth?.setTest(true);
       } catch {}
 
-      // [1) Three.js 절두체 컬링 재확인 - 카메라 피치/방위각 조작 시 소실 방지]
-      this.scene.traverse((obj) => {
-        (obj as any).frustumCulled = false;
-      });
+      // [1) GPU 파이프라인 스톨(gl.getParameter) 방지 및 FBO 상태 보존]
+      const prevFbo = options?.defaultFramebuffer !== undefined
+        ? options.defaultFramebuffer
+        : (gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null);
 
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();

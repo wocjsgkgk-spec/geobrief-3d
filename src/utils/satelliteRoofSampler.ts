@@ -288,8 +288,9 @@ export async function sampleBuildingRoofColors(
     })
   );
 
-  // 2. 각 건물별 위성 지붕 색상 샘플링
-  for (let i = 0; i < features.length; i++) {
+  // 2. 각 건물별 위성 지붕 색상 샘플링 (카메라 근접 1,500동 우선 집중 처리로 60fps 보장)
+  const sampleLimit = Math.min(features.length, 1500);
+  for (let i = 0; i < sampleLimit; i++) {
     const feat = features[i];
     if (!feat.geometry) continue;
 
