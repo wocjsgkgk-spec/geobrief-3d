@@ -252,20 +252,22 @@ export class TilesetController {
     this.lastCheckedUrl = url;
     this.externalTilesLoadedCount = 0;
 
-    // 강원권(원주/춘천 등)이거나 unsupported URL인 경우 즉시 감지
-    const isGangwon = this.isGangwonRegion(centerLngLat[0], centerLngLat[1]);
+    // V-World 공식 b3dm 타일셋의 경우에만 강원권(원주/춘천 등) 미제공 감지 적용
+    // (Google 3D Tiles, Cesium Ion, 사용자 지정 3D Tiles는 전 세계 및 강원권 100% 지원)
+    const isVworld3D = url.includes('vworld.kr') || url.includes('/api/vworld/3dtiles');
+    const isGangwonVworld = isVworld3D && this.isGangwonRegion(centerLngLat[0], centerLngLat[1]);
     const isExplicitUnsupported =
       url.includes('unsupported') ||
       url.includes('undefined') ||
-      !url.startsWith('http');
+      (!url.startsWith('http') && !url.startsWith('/'));
 
-    if (isGangwon || isExplicitUnsupported) {
+    if (isGangwonVworld || isExplicitUnsupported) {
       this.isExternalAvailable = false;
-      const reason = isGangwon
-        ? '원주·춘천 등 강원권 외부 b3dm 미제공 구역'
+      const reason = isGangwonVworld
+        ? '브이월드(V-World) b3dm 강원권 미제공 구역'
         : '외부 타일셋 미지원 URL';
       this.callbacks.onStatusChange?.(
-        `🟡 ${reason} 감지 -> 고밀도 3D 파사드 & 하이브리드 엔진 자동 합성 가동 (100% 커버리지)`,
+        `🟡 ${reason} -> 고밀도 3D 파사드 & 국토부 공간정보 엔진 자동 가동 (100% 커버리지)`,
         false,
         0
       );
@@ -274,23 +276,24 @@ export class TilesetController {
       return;
     }
 
-    // 일반 지역: 1.5초 내에 외부 타일이 1개라도 로드되는지 감시
+    // Google, Cesium, 일반 3D Tiles 스트리밍 허용
     this.isExternalAvailable = true;
+    const timeoutMs = (url.includes('googleapis.com') || url.includes('cesium.com')) ? 4000 : this.fallbackTimeoutMs;
     this.watchdogTimer = setTimeout(() => {
       this.watchdogTimer = null;
       if (this.externalTilesLoadedCount === 0) {
-        // 1.5초 내에 타일이 전혀 로드되지 않음 (미제공 구역 또는 타임아웃)
+        // 타임아웃 내에 타일이 전혀 로드되지 않음 (미제공 구역 또는 키/인증 실패)
         this.isExternalAvailable = false;
-        const reason = '외부 3D 타일 서버 1.5초 타임아웃 (미제공 지역)';
+        const reason = '외부 3D 타일 서버 응답 타임아웃 (키/토큰 확인 필요)';
         this.callbacks.onStatusChange?.(
-          `🟡 ${reason} -> 고밀도 3D 파사드 & 하이브리드 엔진 자동 전환 완료 (100% 커버리지)`,
+          `🟡 ${reason} -> 고밀도 3D 파사드 & 공간정보 엔진 자동 전환 (100% 커버리지)`,
           false,
           0
         );
         this.callbacks.onFallbackActivated?.(reason);
         onFallback();
       }
-    }, this.fallbackTimeoutMs);
+    }, timeoutMs);
   }
 
   public getIsExternalAvailable(): boolean {

@@ -197,6 +197,11 @@ export function getCesiumIon3DTilesConfig(
     loadOptions: {
       '3d-tiles': {
         isTileset: true,
+        loadGLTF: true,
+      },
+      'cesium-ion': {
+        accessToken: token,
+        assetId: Number(assetId) || 96188,
       },
       fetch: {
         headers,

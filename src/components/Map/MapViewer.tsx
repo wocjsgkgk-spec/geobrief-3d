@@ -2625,19 +2625,30 @@ export const MapViewer: React.FC = () => {
 
       // [2단계: Deck.gl 기반 범용 하이브리드 3D 타일셋 스트리밍 컨트롤 부착]
       try {
-        const deckManager = new Deck3DTilesManager({
-          onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
-            useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
-          },
-          onTileCountUpdate: (count) => {
-            console.log('[Universal3DTilesManager] Real-time 3D hybrid building count:', count);
-          },
-        });
+        if (!deck3DTilesManagerRef.current) {
+          const deckManager = new Deck3DTilesManager({
+            onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
+              useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
+            },
+            onTileCountUpdate: (count) => {
+              console.log('[Universal3DTilesManager] Real-time 3D hybrid building count:', count);
+            },
+            onExternalActiveChange: (isActive) => {
+              // 외부 실사 3D 타일(Google 3D Tiles, Cesium Ion)이 로드되면
+              // Three.js 자체 LOD2 건물 엔진을 숨겨 Z-fighting 및 렉을 원천 방지
+              if (lod2BuildingEngineRef.current && useMapStore.getState().renderMode3D === 'tiles3d') {
+                lod2BuildingEngineRef.current.setVisible(!isActive && useMapStore.getState().layers.buildings3D);
+              }
+            },
+          });
+          deck3DTilesManagerRef.current = deckManager;
+        }
+
         const initRenderMode = useMapStore.getState().renderMode3D;
         const initTileState = useMapStore.getState().tile3DStream;
-        if (initRenderMode === 'tiles3d' && initTileState.enabled) {
-          deckManager.attachToMap(map);
-          deckManager.update(initTileState);
+        if (initRenderMode === 'tiles3d' && initTileState.enabled && deck3DTilesManagerRef.current) {
+          deck3DTilesManagerRef.current.attachToMap(map);
+          deck3DTilesManagerRef.current.update(initTileState);
         }
       } catch (deckErr) {
         console.warn('[MapViewer] Universal3DTilesManager initialization warning:', deckErr);
@@ -3394,8 +3405,9 @@ export const MapViewer: React.FC = () => {
       }
 
       // [핵심 2: 외부 b3dm 서버 응답 부재 시 즉시 강제 렌더링] Three.js 포토리얼리스틱 3D 도시 메쉬 엔진 상시 표출
+      const isExternalTilesActive = deck3DTilesManagerRef.current?.isExternalTilesActive?.() || false;
       if (lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setVisible(layers.buildings3D);
+        lod2BuildingEngineRef.current.setVisible(!isExternalTilesActive && layers.buildings3D);
         lod2BuildingEngineRef.current.setStyleMode(
           tile3DStream.presetId === 'sample_city' ? 'clean_mass' : 'photorealistic'
         );
@@ -4759,19 +4771,18 @@ export const MapViewer: React.FC = () => {
         }
         if (deck3DTilesManagerRef.current) {
           deck3DTilesManagerRef.current.attachToMap(map);
-          const cachedFeats = Array.from(persistentBuildingCacheRef.current.values());
-          if (cachedFeats.length > 0) {
-            deck3DTilesManagerRef.current.setBuildingFeatures(cachedFeats);
-          }
           deck3DTilesManagerRef.current.update({
             ...tile3DStream,
             enabled: tile3DStream.enabled,
           });
         }
       } else {
-        // 'custom'
+        // 'google_3d', 'cesium_osm', 'custom'
+        const isExternalTilesActive = deck3DTilesManagerRef.current?.isExternalTilesActive?.() || false;
         if (lod2BuildingEngineRef.current) {
-          lod2BuildingEngineRef.current.setVisible(false);
+          lod2BuildingEngineRef.current.setStyleMode('photorealistic');
+          lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
+          lod2BuildingEngineRef.current.setVisible(!isExternalTilesActive && layers.buildings3D && tile3DStream.enabled);
         }
         if (deck3DTilesManagerRef.current) {
           deck3DTilesManagerRef.current.attachToMap(map);

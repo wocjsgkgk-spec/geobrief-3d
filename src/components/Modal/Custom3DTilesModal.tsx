@@ -57,10 +57,10 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 5초 연결 타임아웃 AbortController 기반 사전 연결 테스트
+  // 서버사이드 프록시 기반 정밀 연결 테스트 (Google, Cesium, Custom 지원)
   const handleTestConnection = async () => {
     const targetUrl = inputUrl.trim();
-    if (!targetUrl) {
+    if (!targetUrl && selectedPreset !== 'google_3d' && selectedPreset !== 'cesium_osm') {
       setTestResult({
         success: false,
         message: '3D Tiles 엔드포인트 URL을 입력해주세요.',
@@ -71,49 +71,50 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
     setIsTesting(true);
     setTestResult(null);
 
-    const controller = new AbortController();
-    const startTime = performance.now();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 5000);
-
     try {
-      const headers: Record<string, string> = { Accept: 'application/json, text/plain, */*' };
-      if (selectedPreset === 'cesium_osm' && cesiumToken.trim()) {
-        headers['Authorization'] = `Bearer ${cesiumToken.trim()}`;
-      }
-
-      const res = await fetch(targetUrl, {
-        signal: controller.signal,
-        headers,
-        cache: 'no-cache',
-      });
-      clearTimeout(timeoutId);
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      if (res.ok) {
-        setTestResult({
-          success: true,
-          message: `정상 연결 확인 (HTTP ${res.status} OK · 응답속도: ${latencyMs}ms)`,
-          status: res.status,
-          latencyMs,
-        });
+      let verifyUrl = `/api/external-3d/verify?`;
+      if (selectedPreset === 'google_3d') {
+        const key = googleApiKey.trim() || getEffectiveGoogleMapsKey() || '';
+        if (!key) {
+          setTestResult({
+            success: false,
+            message: '⚠️ Google Map Tiles API Key를 먼저 입력해주세요.',
+          });
+          setIsTesting(false);
+          return;
+        }
+        verifyUrl += `provider=google&key=${encodeURIComponent(key)}`;
+      } else if (selectedPreset === 'cesium_osm') {
+        const token = cesiumToken.trim() || getEffectiveCesiumIonToken() || '';
+        if (!token) {
+          setTestResult({
+            success: false,
+            message: '⚠️ Cesium Ion Access Token을 먼저 입력해주세요.',
+          });
+          setIsTesting(false);
+          return;
+        }
+        verifyUrl += `provider=cesium&token=${encodeURIComponent(token)}`;
       } else {
-        setTestResult({
-          success: false,
-          message: `HTTP ${res.status} ${res.statusText} - 타일셋 파일이 존재하지 않거나 접근이 제한되었습니다.`,
-          status: res.status,
-          latencyMs,
-        });
+        verifyUrl += `provider=custom&url=${encodeURIComponent(targetUrl)}`;
+        if (cesiumToken.trim()) {
+          verifyUrl += `&token=${encodeURIComponent(cesiumToken.trim())}`;
+        }
       }
+
+      const res = await fetch(verifyUrl, { cache: 'no-cache' });
+      const data = await res.json();
+
+      setTestResult({
+        success: Boolean(data.success),
+        message: `${data.message}${data.detail ? ` (${data.detail})` : ''}`,
+        status: data.status,
+        latencyMs: data.latencyMs,
+      });
     } catch (err: any) {
-      clearTimeout(timeoutId);
-      const isTimeout = err?.name === 'AbortError' || controller.signal.aborted;
       setTestResult({
         success: false,
-        message: isTimeout
-          ? '⚠️ 5초 연결 타임아웃: 서버 응답이 없거나 네트워크가 지연되었습니다.'
-          : `⚠️ 연결 실패: ${err?.message || 'CORS 또는 네트워크 오류'}`,
+        message: `⚠️ 진단 요청 실패: ${err?.message || '네트워크 오류'}`,
       });
     } finally {
       setIsTesting(false);
@@ -341,11 +342,11 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
               <button
                 type="button"
                 onClick={handleTestConnection}
-                disabled={isTesting || !inputUrl.trim()}
+                disabled={isTesting || (!inputUrl.trim() && !googleApiKey.trim() && !cesiumToken.trim())}
                 className="px-3.5 py-2 rounded-xl bg-[#18261e] border border-cyan-600/50 hover:bg-cyan-950/80 text-cyan-300 font-semibold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 whitespace-nowrap"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
-                <span>{isTesting ? '진단 중' : '5초 연결 테스트'}</span>
+                <span>{isTesting ? '진단 중' : '연결 진단 & 테스트'}</span>
               </button>
             </div>
 
