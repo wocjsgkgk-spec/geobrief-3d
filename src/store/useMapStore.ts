@@ -561,7 +561,7 @@ export const useMapStore = create<MapStoreState>()(
         cadastral: false, // 브이월드 연속지적도(필지선)
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
         firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
-        proceduralTrees: true, // [4단계: 3D 식생·가로수 표시 (1,000+ 그루 InstancedMesh) 기본 활성화]
+        proceduralTrees: false, // [4단계: 3D 식생·가로수 표시 기본 OFF]
       },
       toggleLayer: (key) =>
         set((state) => ({
@@ -1035,10 +1035,8 @@ export const useMapStore = create<MapStoreState>()(
             ...state.layers,
             firstLogisticsSmartCity: false,
           },
-          placedFacilities:
-            strategicFacilities.length > 0 ? strategicFacilities : state.placedFacilities,
-          selectedFacilityId:
-            strategicFacilities.length > 0 ? strategicFacilities[0].id : null,
+          placedFacilities: state.placedFacilities,
+          selectedFacilityId: state.selectedFacilityId,
           metadata: {
             ...state.metadata,
             title: `${found.name} 공간 분석 보고서`,
@@ -1464,8 +1462,8 @@ export const useMapStore = create<MapStoreState>()(
           };
         }),
 
-      // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls 관리]
-      placedFacilities: generateStrategicFacilities('camp-long-wonju', 100),
+      // [2단계: 3D 인터랙티브 배치 시설물 & TransformControls 관리 - 초기 0개, [+ 배치] 시에만 생성]
+      placedFacilities: [],
       selectedFacilityId: null,
       transformGizmoMode: 'translate',
 

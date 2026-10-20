@@ -292,7 +292,10 @@ export function generateStreetFurnitureData(): {
     trafficLights.push({ x: item.x, z: item.z, y: 0, rotationY: item.rot, type: 'trafficlight' });
   }
 
-  return { streetLights, trafficLights };
+  return {
+    streetLights: streetLights.filter((s) => Math.hypot(s.x, s.z) <= 500).slice(0, 60),
+    trafficLights: trafficLights.filter((t) => Math.hypot(t.x, t.z) <= 500).slice(0, 20),
+  };
 }
 
 // =============================================================================
@@ -514,7 +517,12 @@ export function generateTreeDistribution(
     }
   });
 
-  return trees;
+  // [1단계: 성능 최적화] 화면 중앙 반경 500m 이내 필터링 및 최대 150그루 엄격 제한
+  const filteredTrees = trees
+    .filter((t) => Math.hypot(t.x, t.z) <= 500)
+    .slice(0, 150);
+
+  return filteredTrees;
 }
 
 // =============================================================================
