@@ -3369,9 +3369,10 @@ export const MapViewer: React.FC = () => {
         promoteBuildingLayersToTop(map);
       }
     } else if (renderMode3D === 'facade') {
-      // 2. 모드 B: 실감 파사드 모드 (GPU 4단 다층 슬라이스 실사 외벽/지붕)
+      // 2. 모드 B: 실감 파사드 모드 (GPU 4단 다층 슬라이스 + Deck.gl interleaved LOD2 옥탑/지붕)
       if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.detachFromMap();
+        deck3DTilesManagerRef.current.attachToMap(map);
+        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
       }
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
