@@ -93,6 +93,10 @@ import {
   registerNativeBuildingPatterns,
   NATIVE_BUILDING_PATTERNS,
 } from '@/utils/nativeBuildingPatterns';
+import {
+  registerRealisticBuildingPatterns,
+  REALISTIC_BUILDING_PATTERNS,
+} from '@/utils/realisticBuildingPatterns';
 
 export interface SelectedBuildingInfo {
   name: string;
@@ -107,6 +111,11 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] 3D 타일셋 및 베이스맵/도로 위로 항상 최상단 노출
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
+    'building-vector-carrier',
+    'bldg-tier1-podium',
+    'bldg-tier2-facade',
+    'bldg-tier3-roof',
+    'bldg-tier4-penthouse',
     'building-ground-ao',
     'building-podium',
     'building-body',
@@ -729,6 +738,10 @@ export const MapViewer: React.FC = () => {
       // 1) 화면 내 실제로 렌더링 중인 3D 건물 수 집계
       let count = 0;
       const buildingLayers = [
+        'bldg-tier2-facade',
+        'bldg-tier1-podium',
+        'bldg-tier3-roof',
+        'bldg-tier4-penthouse',
         'building-body',
         'building-roof-cap',
         '3d-buildings',
@@ -901,18 +914,31 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // [2단계: 건물 실제 층수(Floor Count) 및 높이 속성 바인딩 - 1개 층 3.0m 정밀 비례 반영]
+    // [3단계: 원주 도심 및 강원권 실제 건물 층수(스카이라인) 강제 복원]
+    // 1) 명시적 실측 높이(adaptive_height, height, bld_hgt, render_height 등)가 4.0m 초과 시 우선 반영
+    // 2) 층수 태그(levels, building:levels, flr_cnt 등) 존재 시 1개 층 3.0m 정밀 비례 반영
+    // 3) 층수/높이 누락 건물은 용도 및 고유 ID 해시를 기반으로 한국 실제 스카이라인 강제 복원:
+    //    * apartments, residential: 48m ~ 72m (16~24층 아파트 단지로 우뚝 솟아오르게 처리)
+    //    * commercial, retail, office: 15m ~ 30m (5~10층 시내 상가 빌딩)
+    //    * 일반 주택 및 1군지사 영내 막사: 6m ~ 11m (2~3층)
     const buildingHeightExpr: any = [
       'coalesce',
       ['get', 'adaptive_height'],
-      ['get', 'hei'],
-      ['get', 'HEI'],
-      ['get', 'render_height'],
-      ['get', 'height'],
-      ['get', 'bld_hgt'],
-      ['get', 'BD_HGT'],
       [
         'case',
+        ['>', ['coalesce', ['to-number', ['get', 'render_height']], 0], 4.0],
+        ['to-number', ['get', 'render_height']],
+        ['>', ['coalesce', ['to-number', ['get', 'height']], 0], 4.0],
+        ['to-number', ['get', 'height']],
+        ['>', ['coalesce', ['to-number', ['get', 'bld_hgt']], 0], 4.0],
+        ['to-number', ['get', 'bld_hgt']],
+        ['>', ['coalesce', ['to-number', ['get', 'BD_HGT']], 0], 4.0],
+        ['to-number', ['get', 'BD_HGT']],
+        ['>', ['coalesce', ['to-number', ['get', 'hei']], 0], 4.0],
+        ['to-number', ['get', 'hei']],
+        ['>', ['coalesce', ['to-number', ['get', 'HEI']], 0], 4.0],
+        ['to-number', ['get', 'HEI']],
+        // 층수 속성 기반 계산 (1개 층 = 3.0m)
         ['has', 'grnd_flr'],
         ['*', ['to-number', ['get', 'grnd_flr'], 1], 3.0],
         ['has', 'GRND_FLR'],
@@ -937,53 +963,30 @@ export const MapViewer: React.FC = () => {
         ['*', ['to-number', ['get', 'floor'], 1], 3.0],
         ['has', 'floors'],
         ['*', ['to-number', ['get', 'floors'], 1], 3.0],
+        // [용도별 실측 도심 스카이라인 강제 부여]
         [
           'match',
-          ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
+          ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], ['get', 'building'], 'general'],
+          // 1. 아파트 단지: 48m ~ 72m (16~24층, ID 해시로 동별 다양한 스카이라인)
           ['apartment', 'apartments'],
-          55.0, // 아파트 단지: 55m (약 18층)
+          ['+', 48.0, ['*', ['%', ['to-number', ['id'], 0], 7], 4.0]],
+          // 2. 상가/오피스/리테일: 15m ~ 30m (5~10층)
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          15.0, // 일반 상가/오피스: 15m (5층)
-          ['residential', 'house', 'detached', 'villa'],
-          7.0,  // 단독/연립 주택: 7m (2층)
-          ['military', 'public', 'government', 'public_military', 'barracks'],
-          4.5,  // 단층/2층 군사 막사 및 공공시설 (4.5m)
-          12.0, // 기본
+          ['+', 15.0, ['*', ['%', ['to-number', ['id'], 0], 6], 3.0]],
+          // 3. 군부대 막사/국방시설: 6m ~ 11m (2~3층)
+          ['military', 'barracks', 'depot', 'public_military'],
+          ['+', 6.0, ['*', ['%', ['to-number', ['id'], 0], 3], 2.5]],
+          // 4. 일반 주택 및 빌라: 6m ~ 10m (2~3층)
+          ['house', 'detached', 'villa'],
+          ['+', 6.0, ['*', ['%', ['to-number', ['id'], 0], 3], 2.0]],
+          // 5. 일반 주거지역(residential): 48m ~ 72m (16~24층 아파트 단지)
+          ['residential'],
+          ['+', 48.0, ['*', ['%', ['to-number', ['id'], 0], 7], 4.0]],
+          // 6. 기본(general/미분류): 15m ~ 30m (5~10층)
+          ['+', 15.0, ['*', ['%', ['to-number', ['id'], 0], 6], 3.0]],
         ],
       ],
-      12.0,
-    ];
-
-    // [Layer 4 - 옥상 마감 바닥 높이 표현식: 건물 외벽 상단 H]
-    const buildingRoofBaseExpr: any = buildingHeightExpr;
-
-    // [Layer 4 - 옥상 마감 상단 높이 표현식: 최상단 H ~ H + 0.4m]
-    const buildingRoofHeightExpr: any = [
-      '+',
-      buildingHeightExpr,
-      0.4,
-    ];
-
-    // [Layer 4 - 한국형 실사 옥상 마감 색상 (단색 녹색 제거 및 웜 그레이/차콜 적용)]
-    // * 높이 25m 미만 중·저층 건물 옥상: 노후 콘크리트 슬래브 웜 그레이(#52504c)
-    // * 높이 25m 이상 고층 아파트/빌딩 옥상: 콘크리트 다크 그레이(#334155)
-    // * 저층 단독주택/군 막사: 테라코타 브라운(#7c2d12)
-    const buildingRoofColorExpr: any = [
-      'coalesce',
-      ['get', 'roofColour'],
-      ['get', 'roof_color'],
-      [
-        'case',
-        ['>=', buildingHeightExpr, 25.0],
-        '#334155', // 고층 아파트/빌딩 (25m 이상): 콘크리트 다크 그레이 (#334155)
-        [
-          'match',
-          ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
-          ['residential', 'house', 'detached', 'villa', 'military', 'barracks', 'depot'],
-          '#7c2d12', // 저층 단독주택/군 막사: 테라코타 브라운 (#7c2d12)
-          '#52504c', // 25m 미만 중·저층 상가/일반 건물: 노후 콘크리트 슬래브 웜그레이 (#52504c)
-        ],
-      ],
+      15.0,
     ];
 
     // [건물 기초 지반 밀착 표현식 (Foundation Clamping)]
@@ -994,53 +997,153 @@ export const MapViewer: React.FC = () => {
       -1.5,
     ];
 
-    // [Layer 3 - 건물 본동 외벽 실사 컬러: 아파트 크림 아이보리 #f4f1ea, 상업 스톤 #cbd5e1, 주택 적벽돌 #b45309]
+    // -------------------------------------------------------------------------
+    // [2단계: 4단 분할 GPU 실사 파사드 & 옥상 컬러 분리 엔진 표현식 정의]
+    // -------------------------------------------------------------------------
+
+    // [1단 - 1층 상가 쇼윈도 & 화강석 기단부 (bldg-tier1-podium, 0m ~ 3.8m)]
+    const tier1PodiumBaseExpr: any = buildingBaseExpr;
+    const tier1PodiumHeightExpr: any = ['min', buildingHeightExpr, 3.8];
+    const tier1PodiumColorExpr: any = [
+      'case',
+      ['>=', buildingHeightExpr, 25.0],
+      '#1e293b', // 고층 아파트: 다크 슬레이트 화강석 기단부
+      [
+        'match',
+        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], ['get', 'building'], 'general'],
+        ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
+        '#0f172a', // 상업 빌딩 1층 쇼윈도 차콜 블랙
+        ['military', 'barracks', 'depot', 'public_military'],
+        '#475569', // 군 막사 기단부 슬레이트
+        '#334155', // 기본 1층 화강석 기단부 (#334155)
+      ],
+    ];
+
+    // [2단 - 실사 창문 패턴 본동 외벽 (bldg-tier2-facade, 3.8m ~ H-0.6m)]
+    const tier2FacadeBaseExpr: any = 3.8;
+    const tier2FacadeHeightExpr: any = ['max', 3.8, ['-', buildingHeightExpr, 0.6]];
+    const tier2FacadePatternExpr: any = [
+      'case',
+      // 25m 이상 고층 아파트 단지: 크림 아이보리(짝수 ID) vs 모던 웜 그레이(홀수 ID)
+      ['>=', buildingHeightExpr, 25.0],
+      [
+        'case',
+        ['==', ['%', ['to-number', ['id'], 0], 2], 0],
+        REALISTIC_BUILDING_PATTERNS.APT_IVORY,
+        REALISTIC_BUILDING_PATTERNS.APT_GRAY,
+      ],
+      [
+        'match',
+        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], ['get', 'building'], 'general'],
+        ['apartment', 'apartments'],
+        [
+          'case',
+          ['==', ['%', ['to-number', ['id'], 0], 2], 0],
+          REALISTIC_BUILDING_PATTERNS.APT_IVORY,
+          REALISTIC_BUILDING_PATTERNS.APT_GRAY,
+        ],
+        ['office', 'commercial_tower'],
+        REALISTIC_BUILDING_PATTERNS.OFFICE_GLASS,
+        ['commercial', 'retail', 'hotel', 'bank', 'mall'],
+        REALISTIC_BUILDING_PATTERNS.COMMERCIAL_STONE,
+        ['residential', 'house', 'detached', 'villa'],
+        REALISTIC_BUILDING_PATTERNS.VILLA_BRICK,
+        ['military', 'barracks', 'depot', 'public_military'],
+        REALISTIC_BUILDING_PATTERNS.MILITARY_BARRACKS,
+        // 기본 건물: 4대 패턴 해시 분할
+        [
+          'match',
+          ['%', ['to-number', ['id'], 0], 4],
+          0, REALISTIC_BUILDING_PATTERNS.APT_IVORY,
+          1, REALISTIC_BUILDING_PATTERNS.COMMERCIAL_STONE,
+          2, REALISTIC_BUILDING_PATTERNS.VILLA_BRICK,
+          REALISTIC_BUILDING_PATTERNS.APT_GRAY,
+        ],
+      ],
+    ];
+
+    // 외벽 베이스 색상 (패턴 미지원 환경 또는 폴백 틴트)
     const buildingColorExpr: any = [
       'coalesce',
       ['get', 'color'],
       [
         'case',
         ['>=', buildingHeightExpr, 25.0],
-        '#f4f1ea', // 25m 이상 고층 아파트: 따뜻한 크림 아이보리
+        '#ebe6dc', // 25m 이상 아파트: 웜 크림 아이보리
         [
           'match',
           ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
           ['apartment', 'apartments'],
-          '#f4f1ea', // 아파트: 따뜻한 크림 아이보리
+          '#ebe6dc',
           ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-          '#cbd5e1', // 상업 빌딩: 쿨 그레이 스톤
+          '#e2d9cc', // 상업 빌딩: 화강석 베이지
           ['residential', 'house', 'detached', 'villa'],
-          '#b45309', // 일반 주택: 적벽돌 및 회벽
+          '#7c2d12', // 주택: 적벽돌 브라운
           ['military', 'barracks', 'depot'],
-          '#e2e8f0', // 군사/국방: 모던 콘크리트 웜그레이
+          '#dfd7c5', // 군사/막사: 샌드 베이지
           ['public', 'government', 'public_military', 'civic'],
-          '#d6d3d1', // 공공청사: 화강석 웜그레이
-          '#f4f1ea', // 기본 건축물: 크림 아이보리
+          '#d6d3d1', // 공공청사: 웜 그레이
+          '#ebe6dc', // 기본
         ],
       ],
     ];
 
-    // [Layer 3 - 고해상도 한국형 창문·베란다 심리스 패턴 매핑]
-    // 1) pattern-apt: 아파트 단지 및 25m 이상 고층 빌딩
-    // 2) pattern-office: 상업/오피스 빌딩 반사 유리 & 알루미늄 커튼월
-    // 3) pattern-brick: 적벽돌 및 밝은 베이지 주택/다세대
-    const buildingPatternExpr: any = [
-      'case',
-      ['>=', buildingHeightExpr, 25.0],
-      NATIVE_BUILDING_PATTERNS.APT,
+    // [3단 - 실제 한국 도심 옥상 슬래브 마감 (bldg-tier3-roof, H-0.6m ~ H)]
+    // - 최상단 0.6m 슬래브에 건물 ID 해시(10진)를 이용해 실제 항공사진과 100% 동일한 옥상 분리 색상 부여
+    //   * 중·저층 상가/주택(40%): 차분한 실사 우레탄 방수 세이지 그린 (#2d5a43)
+    //   * 아파트/대형 빌딩(35%): 웨더링된 콘크리트 웜 그레이 (#64748b)
+    //   * 일반 주택/막사(15%): 테라코타 적갈색 지붕 (#7c2d12)
+    //   * 공장/창고/기타(10%): 징크 네이비 블루 (#1e3a5f)
+    const tier3RoofBaseExpr: any = ['max', 0.0, ['-', buildingHeightExpr, 0.6]];
+    const tier3RoofHeightExpr: any = buildingHeightExpr;
+    const tier3RoofColorExpr: any = [
+      'coalesce',
+      ['get', 'roofColour'],
+      ['get', 'roof_color'],
       [
-        'match',
-        ['coalesce', ['get', 'usageType'], ['get', 'bld_category'], ['get', 'type'], ['get', 'class'], 'general'],
-        ['apartment', 'apartments'],
-        NATIVE_BUILDING_PATTERNS.APT,
-        ['commercial', 'commercial_tower', 'office', 'retail', 'hotel', 'bank', 'mall'],
-        NATIVE_BUILDING_PATTERNS.OFFICE,
-        ['residential', 'house', 'detached', 'villa'],
-        NATIVE_BUILDING_PATTERNS.BRICK,
-        NATIVE_BUILDING_PATTERNS.APT,
+        'case',
+        // 25m 이상 고층 아파트/빌딩: 웨더링된 콘크리트 웜 그레이 (#64748b, 80%) / 우레탄 녹색 (#2d5a43, 20%)
+        ['>=', buildingHeightExpr, 25.0],
+        [
+          'match',
+          ['%', ['to-number', ['id'], 0], 10],
+          [0, 1], '#2d5a43', // 20%: 우레탄 방수 세이지 그린
+          '#64748b',        // 80%: 웨더링 콘크리트 웜 그레이
+        ],
+        // 중·저층 건물: 항공사진 4대 실사 지붕 색상 10진 분할
+        [
+          'match',
+          ['%', ['to-number', ['id'], 0], 10],
+          [0, 1, 2, 3], '#2d5a43', // 40%: 차분한 실사 우레탄 방수 세이지 그린 (#2d5a43)
+          [4, 5, 6],    '#64748b', // 30%: 웨더링된 콘크리트 웜 그레이 (#64748b)
+          [7, 8],       '#7c2d12', // 20%: 테라코타 적갈색 지붕 (#7c2d12)
+          '#1e3a5f',               // 10%: 징크 네이비 블루 (#1e3a5f)
+        ],
       ],
     ];
-    const facadePatternExpr: any = buildingPatternExpr;
+
+    // [4단 - 옥상 테두리 난간 & 엘리베이터 옥탑 코어 (bldg-tier4-penthouse, H ~ H+3.0m)]
+    // - 높이 18m 이상 중·고층 건물 상단에 옥탑 권상기실 및 돌출 난간을 배치해 평평한 박스감 제거
+    const tier4PenthouseBaseExpr: any = buildingHeightExpr;
+    const tier4PenthouseHeightExpr: any = [
+      'case',
+      ['>=', buildingHeightExpr, 18.0],
+      ['+', buildingHeightExpr, 3.0],
+      buildingHeightExpr,
+    ];
+    const tier4PenthouseColorExpr: any = [
+      'case',
+      ['>=', buildingHeightExpr, 25.0],
+      '#e2e8f0', // 고층 아파트 옥탑 코어 (라이트 콘크리트)
+      '#475569', // 중층 상가 난간 차콜
+    ];
+
+    // 하위 호환 별칭 매핑
+    const buildingRoofBaseExpr: any = tier3RoofBaseExpr;
+    const buildingRoofHeightExpr: any = tier3RoofHeightExpr;
+    const buildingRoofColorExpr: any = tier3RoofColorExpr;
+    const buildingPatternExpr: any = tier2FacadePatternExpr;
+    const facadePatternExpr: any = tier2FacadePatternExpr;
 
     const fullMapStyle: any = {
       version: 8,
@@ -2616,6 +2719,7 @@ export const MapViewer: React.FC = () => {
     let hasInitializedMapLayers = false;
     const handleMapReady = () => {
       registerNativeBuildingPatterns(map);
+      registerRealisticBuildingPatterns(map);
       if (hasInitializedMapLayers) return;
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
@@ -2702,6 +2806,7 @@ export const MapViewer: React.FC = () => {
       // [고해상도 한국형 창문·베란다 심리스 패턴 및 외벽 텍스처 등록]
       try {
         registerNativeBuildingPatterns(map);
+        registerRealisticBuildingPatterns(map);
         registerFacadeTexturesToMap(map, 512);
         registerBuildingTextures(map, 256);
         registerProceduralFacadeTextures(map, 256);
@@ -2872,10 +2977,12 @@ export const MapViewer: React.FC = () => {
         }
 
         // ---------------------------------------------------------------------
-        // [3단계: 하이브리드 3D 렌더링 & 이중 안전망(Fail-safe Fallback)]
-        // - Three.js LOD2 메쉬 생성이 지연되거나 오버줌 시에도 MapLibre 네이티브 GPU fill-extrusion
-        //   본체(building-body, building-roof-cap)가 든든하게 백업되어 건물이 항상 우뚝 서도록 보장합니다.
-        // - 모든 건물 레이어에 minzoom: 12, maxzoom: 24를 명시하여 줌 16~20에서도 타일을 100% 오버줌 유지합니다.
+        // [2단계: 4단 분할 GPU 실사 파사드 & 옥상 컬러 분리 엔진]
+        // - 1단: 1층 상가 쇼윈도 & 화강석 기단부 (bldg-tier1-podium, 0m ~ 3.8m)
+        // - 2단: 실사 창문 패턴 본동 외벽 (bldg-tier2-facade, 3.8m ~ H-0.6m)
+        // - 3단: 실제 한국 도심 옥상 슬래브 마감 (bldg-tier3-roof, H-0.6m ~ H)
+        // - 4단: 옥상 테두리 난간 & 엘리베이터 옥탑 코어 (bldg-tier4-penthouse, H ~ H+3.0m)
+        // - 모든 건물 레이어에 minzoom: 12, maxzoom: 24를 명시하여 줌 12~24 전 구간 실사 3D 렌더링 유지
         // ---------------------------------------------------------------------
         if (!map.getLayer('building-vector-carrier')) {
           map.addLayer({
@@ -2892,7 +2999,88 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        // [Layer 3 - 본동 외벽 및 창문 (building-body, minzoom 12, maxzoom 24)]
+        // [1단 - 1층 상가 쇼윈도 & 화강석 기단부 (bldg-tier1-podium, 0m ~ 3.8m)]
+        if (!map.getLayer('bldg-tier1-podium')) {
+          map.addLayer({
+            id: 'bldg-tier1-podium',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-color': tier1PodiumColorExpr,
+              'fill-extrusion-height': tier1PodiumHeightExpr,
+              'fill-extrusion-base': tier1PodiumBaseExpr,
+              'fill-extrusion-opacity': 0.96,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // [2단 - 실사 창문 패턴 본동 외벽 (bldg-tier2-facade, 3.8m ~ H-0.6m)]
+        if (!map.getLayer('bldg-tier2-facade')) {
+          map.addLayer({
+            id: 'bldg-tier2-facade',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-pattern': tier2FacadePatternExpr,
+              'fill-extrusion-color': buildingColorExpr,
+              'fill-extrusion-height': tier2FacadeHeightExpr,
+              'fill-extrusion-base': tier2FacadeBaseExpr,
+              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // [3단 - 실제 한국 도심 옥상 슬래브 마감 (bldg-tier3-roof, H-0.6m ~ H)]
+        if (!map.getLayer('bldg-tier3-roof')) {
+          map.addLayer({
+            id: 'bldg-tier3-roof',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-color': tier3RoofColorExpr,
+              'fill-extrusion-height': tier3RoofHeightExpr,
+              'fill-extrusion-base': tier3RoofBaseExpr,
+              'fill-extrusion-opacity': 0.98,
+              'fill-extrusion-vertical-gradient': false,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // [4단 - 옥상 테두리 난간 & 엘리베이터 옥탑 코어 (bldg-tier4-penthouse, H ~ H+3.0m)]
+        if (!map.getLayer('bldg-tier4-penthouse')) {
+          map.addLayer({
+            id: 'bldg-tier4-penthouse',
+            type: 'fill-extrusion',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 12.0,
+            maxzoom: 24,
+            paint: {
+              'fill-extrusion-color': tier4PenthouseColorExpr,
+              'fill-extrusion-height': tier4PenthouseHeightExpr,
+              'fill-extrusion-base': tier4PenthouseBaseExpr,
+              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-vertical-gradient': true,
+            },
+            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+          });
+        }
+
+        // 하위 호환 레이어 보존 (building-body, building-roof-cap, 3d-buildings)
         if (!map.getLayer('building-body')) {
           map.addLayer({
             id: 'building-body',
@@ -2902,18 +3090,17 @@ export const MapViewer: React.FC = () => {
             minzoom: 12.0,
             maxzoom: 24,
             paint: {
-              'fill-extrusion-pattern': buildingPatternExpr,
+              'fill-extrusion-pattern': tier2FacadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
-              'fill-extrusion-height': buildingHeightExpr,
-              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-height': tier2FacadeHeightExpr,
+              'fill-extrusion-base': tier2FacadeBaseExpr,
               'fill-extrusion-opacity': 0.95,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            layout: { visibility: 'none' },
           });
         }
 
-        // [Layer 4 - 옥상 마감 슬래브 (building-roof-cap, H ~ H + 0.4m, maxzoom 24)]
         if (!map.getLayer('building-roof-cap')) {
           map.addLayer({
             id: 'building-roof-cap',
@@ -2923,17 +3110,16 @@ export const MapViewer: React.FC = () => {
             minzoom: 12.0,
             maxzoom: 24,
             paint: {
-              'fill-extrusion-color': buildingRoofColorExpr,
-              'fill-extrusion-height': buildingRoofHeightExpr,
-              'fill-extrusion-base': buildingRoofBaseExpr,
+              'fill-extrusion-color': tier3RoofColorExpr,
+              'fill-extrusion-height': tier3RoofHeightExpr,
+              'fill-extrusion-base': tier3RoofBaseExpr,
               'fill-extrusion-opacity': 0.98,
               'fill-extrusion-vertical-gradient': true,
             },
-            layout: { visibility: layers.buildings3D ? 'visible' : 'none' },
+            layout: { visibility: 'none' },
           });
         }
 
-        // 하위 호환 3D 본동 레이어 (3d-buildings, maxzoom 24)
         if (!map.getLayer('3d-buildings')) {
           map.addLayer({
             id: '3d-buildings',
@@ -2943,7 +3129,7 @@ export const MapViewer: React.FC = () => {
             minzoom: 12.0,
             maxzoom: 24,
             paint: {
-              'fill-extrusion-pattern': buildingPatternExpr,
+              'fill-extrusion-pattern': tier2FacadePatternExpr,
               'fill-extrusion-color': buildingColorExpr,
               'fill-extrusion-height': buildingHeightExpr,
               'fill-extrusion-base': buildingBaseExpr,
@@ -3828,6 +4014,10 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const nativeBuildingLayers = [
+      'bldg-tier1-podium',
+      'bldg-tier2-facade',
+      'bldg-tier3-roof',
+      'bldg-tier4-penthouse',
       'building-ground-ao',
       'building-podium',
       'building-body',
@@ -3899,7 +4089,15 @@ export const MapViewer: React.FC = () => {
       // [다층 fill-extrusion 실사 파사드 스택 기본 베이스 상시 가동]:
       // 타일 로드 즉시 MapLibre GPU 엔진이 3D 건물을 무조건 솟아오르게 하고,
       // 벡터 타일 피처가 querySourceFeatures로 지속 수신되도록 보장
-      const primaryNativeLayers = ['building-vector-carrier', 'building-body', 'building-roof-cap'];
+      const primaryNativeLayers = [
+        'building-vector-carrier',
+        'bldg-tier1-podium',
+        'bldg-tier2-facade',
+        'bldg-tier3-roof',
+        'bldg-tier4-penthouse',
+        'building-body',
+        'building-roof-cap',
+      ];
       for (const lyr of primaryNativeLayers) {
         if (map.getLayer(lyr)) {
           map.setLayoutProperty(lyr, 'visibility', bldgVis);
@@ -4572,6 +4770,10 @@ export const MapViewer: React.FC = () => {
       'sample-buildings-overview',
       'sample-buildings-foundation',
       'sample-buildings-3d',
+      'bldg-tier1-podium',
+      'bldg-tier2-facade',
+      'bldg-tier3-roof',
+      'bldg-tier4-penthouse',
       'building-podium',
       'building-body',
       'building-roof-cap',
@@ -5839,6 +6041,10 @@ export const MapViewer: React.FC = () => {
         }
         // 3D 건축물 및 비행안전 천장 표시
         for (const bLyr of [
+          'bldg-tier1-podium',
+          'bldg-tier2-facade',
+          'bldg-tier3-roof',
+          'bldg-tier4-penthouse',
           'building-ground-ao',
           'building-podium',
           'building-body',
@@ -5985,6 +6191,10 @@ export const MapViewer: React.FC = () => {
         }
         // [요구사항 반영] '건축물 3D 돌출' 레이어가 항상 표출 및 최상단 렌더링
         for (const lyr of [
+          'bldg-tier1-podium',
+          'bldg-tier2-facade',
+          'bldg-tier3-roof',
+          'bldg-tier4-penthouse',
           'building-ground-ao',
           'building-podium',
           'building-body',

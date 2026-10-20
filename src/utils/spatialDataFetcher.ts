@@ -49,6 +49,10 @@ export function extractRenderedVectorBuildings(
   try {
     const targetLayers = [
       'building-vector-carrier',
+      'bldg-tier2-facade',
+      'bldg-tier1-podium',
+      'bldg-tier3-roof',
+      'bldg-tier4-penthouse',
       'building-body',
       'building-roof-cap',
       '3d-buildings',
