@@ -21,6 +21,7 @@ import type maplibregl from 'maplibre-gl';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
 import { spatialTileCache, bboxToTileKeys, prioritizeTilesByCamera } from '@/utils/spatialTileCache';
 import { loadGangwonRealDataBulk } from '@/utils/gangwonRealDataLoader';
+import { resolveFullUrl } from '@/utils/urlHelper';
 
 
 export interface ExternalSpatialBuildingProperties {
@@ -320,7 +321,7 @@ export async function fetchVworldBuildings(
   const results: ExternalSpatialBuildingFeature[] = [];
 
   try {
-    const url = `/api/vworld-buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=5000`;
+    const url = resolveFullUrl(`/api/vworld-buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=5000`);
     const res = await fetch(url, {
       signal,
       headers: { Accept: 'application/json' },
@@ -603,7 +604,7 @@ export async function fetchExternalSpatialData(
     }
 
     const regParam = options?.regionId ? `&regionId=${options.regionId}` : '';
-    const gwUrl = `/api/gangwon-spatial?bbox=${minLng},${minLat},${maxLng},${maxLat}${regParam}`;
+    const gwUrl = resolveFullUrl(`/api/gangwon-spatial?bbox=${minLng},${minLat},${maxLng},${maxLat}${regParam}`);
     const gwRes = await fetch(gwUrl, {
       signal: gatewayCtrl.signal,
       headers: { Accept: 'application/json' },

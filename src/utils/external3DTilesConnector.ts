@@ -22,6 +22,8 @@
  */
 
 export type External3DProvider = 'google' | 'cesium' | 'vworld' | 'custom';
+export { resolveFullUrl } from './urlHelper';
+import { resolveFullUrl } from './urlHelper';
 
 export const GOOGLE_MAPS_KEY_STORAGE = 'google_maps_api_key';
 export const CESIUM_ION_TOKEN_STORAGE = 'cesium_ion_token';
@@ -261,7 +263,7 @@ export function resolve3DTilesUrlAndOptions(
     let key = customAuth || (input.startsWith('google:') ? input.slice(7) : undefined);
     if (!key && input.includes('key=')) {
       try {
-        const u = new URL(input);
+        const u = new URL(resolveFullUrl(input));
         key = u.searchParams.get('key') || undefined;
       } catch {
         const match = input.match(/[?&]key=([^&]+)/);
@@ -338,7 +340,7 @@ export function resolve3DTilesUrlAndOptions(
     },
     displayName: '사용자 지정 3D 타일셋',
     description: input ? `사용자 엔드포인트: ${input}` : '직접 입력한 URL',
-    isAvailable: Boolean(input && input.startsWith('http')),
+    isAvailable: Boolean(input && (input.startsWith('http') || input.startsWith('/'))),
     requiresKeyOrToken: false,
   };
 }

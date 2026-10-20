@@ -5,6 +5,7 @@
  */
 
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
+import { resolveFullUrl } from '@/utils/urlHelper';
 
 export interface FusionBuildingProperties {
   height: number;
@@ -64,7 +65,7 @@ export async function fetchFusionBuildings(
     };
   }
 
-  const url = `/api/buildings/fusion?bbox=${minLng},${minLat},${maxLng},${maxLat}`;
+  const url = resolveFullUrl(`/api/buildings/fusion?bbox=${minLng},${minLat},${maxLng},${maxLat}`);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GET as getTileset } from '../route';
 
 /**
  * GET /api/vworld/3dtiles/[...path]
@@ -16,10 +17,9 @@ export async function GET(
   // 경로 순회(Path Traversal) 공격 방어: 알파벳, 숫자, 점, 대시, 언더스코어 외 문자 제거
   const fileName = rawFileName.replace(/[^a-zA-Z0-9._-]/g, '');
 
-  // 1. OGC tileset.json 하위 요청인 경우
+  // 1. OGC tileset.json 하위 요청인 경우 리디렉션 없이 즉시 타일셋 JSON 응답 반환
   if (fileName === 'tileset.json') {
-    const rootUrl = new URL('/api/vworld/3dtiles', request.url);
-    return NextResponse.redirect(rootUrl.toString());
+    return getTileset(request);
   }
 
   // 2. 바이너리 타일 소스 확인 (Cesium 검증 오픈 b3dm 타일셋 풀 매핑)

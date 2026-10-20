@@ -13,6 +13,7 @@
 import type maplibregl from 'maplibre-gl';
 import { GANGWON_18_REGIONS, getGangwonRegionByIdOrName, findGangwonRegionByCoords, GangwonRegionPreset } from '@/constants/gangwon18Regions';
 import { extractOpenFreeMapBuildings, ExternalSpatialBuildingFeature } from '@/utils/externalSpatialData';
+import { resolveFullUrl } from '@/utils/urlHelper';
 
 export interface GangwonSpatialResult {
   success: boolean;
@@ -143,7 +144,7 @@ export async function fetchGangwonSpatialData(
       options.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
 
-    const url = `/api/gangwon-spatial?bbox=${minLng},${minLat},${maxLng},${maxLat}&regionId=${region.id}`;
+    const url = resolveFullUrl(`/api/gangwon-spatial?bbox=${minLng},${minLat},${maxLng},${maxLat}&regionId=${region.id}`);
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },

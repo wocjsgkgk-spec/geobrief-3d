@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveFullUrl } from '@/utils/urlHelper';
 
 interface VerificationResult {
   success: boolean;
@@ -167,15 +168,50 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 3. 사용자 지정 URL 진단
-  if (provider === 'custom' && customUrl) {
+  // 3. 국토교통부 브이월드 (V-World) 3D 타일셋 진단
+  if (provider === 'all' || provider === 'vworld') {
     const startTime = performance.now();
+    const vworldUrl = resolveFullUrl(customUrl || '/api/vworld/3dtiles/tileset.json', request.url);
+    try {
+      const res = await fetch(vworldUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json, */*' },
+        cache: 'no-cache',
+        signal: AbortSignal.timeout(6000),
+      });
+      const latencyMs = Math.round(performance.now() - startTime);
+
+      results.vworld = {
+        success: res.ok,
+        provider: 'vworld',
+        status: res.status,
+        latencyMs,
+        message: res.ok
+          ? `🟢 브이월드 3D 타일셋 정상 연결 (${latencyMs}ms)`
+          : `🔴 HTTP ${res.status} ${res.statusText}`,
+        detail: res.ok ? 'OGC 3D Tiles 스트리밍 가능' : '엔드포인트 URL 및 CORS 설정을 확인해주세요.',
+        endpointUrl: vworldUrl,
+      };
+    } catch (err: any) {
+      results.vworld = {
+        success: false,
+        provider: 'vworld',
+        status: 0,
+        message: `⚠️ 브이월드 연결 실패: ${err.message || '네트워크 오류'}`,
+      };
+    }
+  }
+
+  // 4. 사용자 지정 URL 진단
+  if ((provider === 'custom' || provider === 'all') && customUrl) {
+    const startTime = performance.now();
+    const resolvedUrl = resolveFullUrl(customUrl, request.url);
     try {
       const headers: Record<string, string> = { Accept: 'application/json, */*' };
       if (customToken) {
         headers['Authorization'] = `Bearer ${customToken}`;
       }
-      const res = await fetch(customUrl, {
+      const res = await fetch(resolvedUrl, {
         method: 'GET',
         headers,
         cache: 'no-cache',
@@ -192,7 +228,7 @@ export async function GET(request: NextRequest) {
           ? `🟢 커스텀 3D 타일셋 정상 연결 (${latencyMs}ms)`
           : `🔴 HTTP ${res.status} ${res.statusText}`,
         detail: res.ok ? 'OGC 3D Tiles 스트리밍 가능' : '엔드포인트 URL 및 CORS 설정을 확인해주세요.',
-        endpointUrl: customUrl,
+        endpointUrl: resolvedUrl,
       };
     } catch (err: any) {
       results.custom = {

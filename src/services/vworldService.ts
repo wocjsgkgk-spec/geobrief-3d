@@ -7,6 +7,7 @@
  */
 
 import { VworldStatus } from '@/types/map';
+import { resolveFullUrl } from '@/utils/urlHelper';
 
 export const VWORLD_CUSTOM_KEY_STORAGE = 'vworld_custom_key';
 
@@ -237,9 +238,11 @@ export async function fetchVworldBuildings(
   }
 
   const [minLng, minLat, maxLng, maxLat] = bbox;
-  const proxyUrl = `/api/vworld/buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=5000&customKey=${encodeURIComponent(
-    activeKey
-  )}`;
+  const proxyUrl = resolveFullUrl(
+    `/api/vworld/buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=5000&customKey=${encodeURIComponent(
+      activeKey
+    )}`
+  );
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000); // 8초 타임아웃

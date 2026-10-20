@@ -15,6 +15,7 @@ import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { TilesetController } from '@/lib/vendor/tilesetController';
 import {
   resolve3DTilesUrlAndOptions,
+  resolveFullUrl,
   getEffectiveCesiumIonToken,
   getEffectiveGoogleMapsKey,
 } from '@/utils/external3DTilesConnector';
@@ -447,9 +448,10 @@ export class Universal3DTilesManager {
             fetchHeaders['Authorization'] = `Bearer ${cesiumToken}`;
           }
 
+          const fullEffectiveUrl = resolveFullUrl(effectiveUrl);
           const ogc3DLayer = new Tile3DLayer({
             id: 'external-ogc-3d-tiles-layer',
-            data: effectiveUrl,
+            data: fullEffectiveUrl,
             loader: selectedLoader as any,
             opacity: state.opacity ?? 1.0,
             pointSize: state.pointSize ?? 2.5,

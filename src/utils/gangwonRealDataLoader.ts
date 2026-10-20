@@ -20,6 +20,7 @@
 import type maplibregl from 'maplibre-gl';
 import { spatialTileCache, bboxToTileKeys } from '@/utils/spatialTileCache';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
+import { resolveFullUrl } from '@/utils/urlHelper';
 import type {
   ExternalSpatialBuildingFeature,
   ExternalSpatialBuildingProperties,
@@ -276,7 +277,7 @@ export async function fetchVworldBulkBuildings(
 
   const promises = cells.map(async (cell) => {
     const [minLng, minLat, maxLng, maxLat] = cell;
-    const url = `/api/vworld-buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=${perCellLimit}`;
+    const url = resolveFullUrl(`/api/vworld-buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=${perCellLimit}`);
 
     try {
       const res = await fetch(url, {

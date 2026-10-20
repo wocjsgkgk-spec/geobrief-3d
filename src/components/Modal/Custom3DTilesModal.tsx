@@ -24,6 +24,7 @@ import {
   getEffectiveCesiumIonToken,
   saveCesiumIonToken,
   resolve3DTilesUrlAndOptions,
+  resolveFullUrl,
 } from '@/utils/external3DTilesConnector';
 
 interface Custom3DTilesModalProps {
@@ -99,7 +100,8 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
         }
         verifyUrl += `provider=cesium&token=${encodeURIComponent(token)}`;
       } else {
-        verifyUrl += `provider=custom&url=${encodeURIComponent(targetUrl)}`;
+        const fullTargetUrl = resolveFullUrl(targetUrl);
+        verifyUrl += `provider=custom&url=${encodeURIComponent(fullTargetUrl)}`;
         if (cesiumToken.trim()) {
           verifyUrl += `&token=${encodeURIComponent(cesiumToken.trim())}`;
         }
