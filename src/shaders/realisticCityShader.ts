@@ -158,25 +158,25 @@ export const realisticCityFragmentShader = /* glsl */ `
     // -------------------------------------------------------------------------
     // 1. [실제 한국 도심 옥상 슬래브 마감: 원색 제거, 채도 정돈된 실사 색감]
     // -------------------------------------------------------------------------
-    if (partType > 0.5 || abs(N.y) > 0.85 || abs(N.z) > 0.85) {
-      vec3 roofColor = vec3(0.180, 0.353, 0.267); // 기본: 차분한 세이지 그린 (#2e5a44)
+    if (partType == 1.0 || abs(N.y) > 0.85) {
+      vec3 roofColor = vec3(0.176, 0.353, 0.263); // 기본: 초록 우레탄 (#2d5a43)
 
       if (bldType > 1.5 || floors >= 10.0) {
-        // [대단지 아파트 및 대형 오피스 옥상]: 웨더링된 콘크리트 웜 그레이 (#64748b) ~ 다크 차콜 (#475569)
+        // [대단지 아파트 및 대형 오피스 옥상]: 노후 시멘트 그레이 (#57534e) ~ 웨더링 콘크리트 (#78716c) ~ 다크 방수재 (#334155)
         float weathering = fract(sin(dot(vUv.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        vec3 warmGray = vec3(0.392, 0.455, 0.545); // #64748b
-        vec3 darkCharcoal = vec3(0.278, 0.333, 0.412); // #475569
-        roofColor = mix(warmGray, darkCharcoal, weathering * 0.35);
+        vec3 cementGray = vec3(0.341, 0.325, 0.306); // #57534e
+        vec3 darkWaterproofing = vec3(0.200, 0.255, 0.333); // #334155
+        roofColor = mix(cementGray, darkWaterproofing, weathering * 0.45);
       } else if (bldType > 0.5) {
-        // [중·저층 상가/빌라 옥상]: 실제 우레탄 방수 톤인 세이지 그린 (#2e5a44) 및 다크 올리브 그린 (#365314)
-        vec3 sageGreen = vec3(0.180, 0.353, 0.267);  // #2e5a44
-        vec3 darkOlive = vec3(0.212, 0.325, 0.078);  // #365314
+        // [중·저층 상가/빌라 옥상]: 실제 초록 우레탄 방수 (#2d5a43)
+        vec3 greenUrethane = vec3(0.176, 0.353, 0.263);  // #2d5a43
+        vec3 darkUrethane = vec3(0.110, 0.220, 0.165);   // 짙은 우레탄 그늘
         float urethaneTone = fract(vUv.x * 0.08 + vUv.y * 0.08);
-        roofColor = mix(sageGreen, darkOlive, smoothstep(0.3, 0.7, urethaneTone));
+        roofColor = mix(greenUrethane, darkUrethane, smoothstep(0.3, 0.7, urethaneTone));
       } else {
-        // [저층 주택 및 군 막사 지붕]: 차분한 테라코타 브라운 (#7c2d12) 및 다크 네이비 슬레이트 (#1e3a8a)
+        // [저층 주택 및 군 막사 지붕]: 적벽돌/적갈색 기와 (#6b2d1f) 및 청색 강판 (#1e3a8a)
         float isNavy = step(0.5, fract(wallLength * 0.37));
-        vec3 terracotta = vec3(0.486, 0.176, 0.071); // #7c2d12
+        vec3 terracotta = vec3(0.420, 0.176, 0.122); // #6b2d1f
         vec3 navySlate = vec3(0.118, 0.227, 0.541);  // #1e3a8a
         roofColor = mix(terracotta, navySlate, isNavy);
       }

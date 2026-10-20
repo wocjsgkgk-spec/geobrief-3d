@@ -1173,22 +1173,21 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
             const defaultAptStories = Math.round(15 + seed * 10); // 15~25층
             totalH = defaultAptStories * 3.0; // 정확히 3.0m/층 (45m~75m)
           } else if (isComm) {
-            // 일반 시내 상가: 층수 부재 시 4~10층 (13m~32m)
+            // 대로변 및 상업구역 중형 건물(상가/오피스): 14m ~ 28m (4층 ~ 8층)
             const seed = Math.abs(Math.sin(obb.centroid.x * 37.11 + obb.centroid.y * 53.77)) % 1;
-            const stories = approxArea >= 700 ? Math.round(5 + seed * 4) : (seed > 0.5 ? 4 : 3);
-            totalH = stories * 3.2;
+            const stories = Math.round(4 + seed * 4); // 4~8층
+            totalH = stories * 3.5; // 14.0m ~ 28.0m
           } else {
-            // 단독주택 / 빌라: 층수 부재 시 2~4층 (6m~12m)
-            if (approxArea < 130 || usageType.includes('house')) {
-              totalH = 6.0; // 2층 단독주택 (6.0m)
-            } else if (approxArea < 350) {
-              totalH = 9.0; // 3층 빌라/다세대 (9.0m)
+            // 일반 주택가 밀집 건물(다세대/빌라/주택): 7m ~ 13m (2층 ~ 4층)
+            const seed = Math.abs(Math.sin(obb.centroid.x * 43.19 + obb.centroid.y * 67.89)) % 1;
+            if (approxArea <= 110 || usageType.includes('house')) {
+              totalH = 7.0 + seed * 2.5; // 2~3층 단독주택 (7.0m ~ 9.5m)
             } else {
-              totalH = 12.0; // 4층 저층 상가주택 (12.0m)
+              totalH = 9.5 + seed * 3.5; // 3~4층 빌라/다세대 (9.5m ~ 13.0m)
             }
           }
         }
-        totalH = Math.max(3.5, totalH);
+        totalH = Math.max(7.0, totalH);
 
         // 지형 표고 정합 (중심점 1회 해시 캐시 조회 후 clampedAltitude 기준 상대고도 산출)
         const elev = elevationCache.getElevationForPolygonFromMap(this.map, ring);

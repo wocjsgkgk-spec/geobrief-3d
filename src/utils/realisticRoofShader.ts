@@ -125,24 +125,24 @@ export function drawRealisticRoofCanvasTile(
   let isUrethane = false;
 
   if (type === 'concrete') {
-    // ① 웨더링된 콘크리트 웜 그레이 (#64748b, 35%)
-    baseColor1 = '#64748b';
-    baseColor2 = '#475569';
+    // ① 노후 시멘트 그레이 / 웨더링 콘크리트 (#78716c ~ #57534e)
+    baseColor1 = '#78716c';
+    baseColor2 = '#57534e';
   } else if (type === 'asphalt') {
-    // ② 다크 차콜 슬레이트 (#334155, 25%)
+    // ② 짙은 방수재 / 다크 차콜 슬레이트 (#334155 ~ #1e293b)
     baseColor1 = '#334155';
     baseColor2 = '#1e293b';
   } else if (type === 'urethane') {
-    // ③ 차분한 우레탄 세이지 그린 (#2e5a44, 20%)
-    baseColor1 = '#2e5a44';
+    // ③ 초록 우레탄 옥상 (#2d5a43 ~ #1c382a)
+    baseColor1 = '#2d5a43';
     baseColor2 = '#1c382a';
     isUrethane = true;
   } else if (type === 'terracotta') {
-    // ④ 테라코타 브라운 기와 (#7c2d12, 12%)
-    baseColor1 = '#7c2d12';
-    baseColor2 = '#581c0c';
+    // ④ 적벽돌 / 적갈색 기와 (#6b2d1f ~ #451a03)
+    baseColor1 = '#6b2d1f';
+    baseColor2 = '#451a03';
   } else if (type === 'zinc') {
-    // ⑤ 징크 네이비 (#1e3a8a, 8%)
+    // ⑤ 청색 기와 / 청회색 징크 네이비 (#1e3a8a ~ #172554)
     baseColor1 = '#1e3a8a';
     baseColor2 = '#172554';
   }

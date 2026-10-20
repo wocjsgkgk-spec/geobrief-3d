@@ -397,14 +397,14 @@ function drawAptSide(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 /**
- * Slot 5: 상가 Type A (화강석 베이지 석재 타일 + 리본 윈도우 + 줄눈)
+ * Slot 5: 상가 Type A (베이지 화강석 석재 타일 #a8a29e + 리본 윈도우 + 줄눈)
  */
 function drawCommGraniteBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = '#d6d3d1';
+  ctx.fillStyle = '#a8a29e';
   ctx.fillRect(x, y, w, h);
 
-  // 석재 조적 줄눈
-  ctx.fillStyle = '#a8a29e';
+  // 석재 조적 줄눈 (#78716c)
+  ctx.fillStyle = '#78716c';
   for (let px = x; px < x + w; px += 48) ctx.fillRect(px, y, 1.5, h);
   for (let py = y; py < y + h; py += 36) ctx.fillRect(x, py, w, 1.5);
 
@@ -467,10 +467,10 @@ function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /**
- * Slot 7: 상가 Type C (붉은 치장벽돌 상가 #9a3412 + 화강석 창대/코너석)
+ * Slot 7: 상가 Type C (적벽돌 상가 #6b2d1f + 화강석 창대/코너석)
  */
 function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = '#9a3412';
+  ctx.fillStyle = '#6b2d1f';
   ctx.fillRect(x, y, w, h);
 
   // 벽돌 조적 텍스처
@@ -605,10 +605,10 @@ function drawCommGroundShop(ctx: CanvasRenderingContext2D, x: number, y: number,
 }
 
 /**
- * Slot 10: 주택 Type A (적벽돌 #8b3a2b 다세대 빌라 + 백색 PVC 이중창)
+ * Slot 10: 주택 Type A (적벽돌 #6b2d1f 다세대 빌라 + 백색 PVC 이중창)
  */
 function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = '#8b3a2b';
+  ctx.fillStyle = '#6b2d1f';
   ctx.fillRect(x, y, w, h);
 
   // 상단 25% 화강석 투톤 마감
@@ -650,14 +650,14 @@ function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /**
- * Slot 11: 주택 Type B (밝은 사비석 화강석 빌라 + 석재 창대)
+ * Slot 11: 주택 Type B (베이지 화강석 #a8a29e 빌라 + 석재 창대)
  */
 function drawVillaGranite(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = '#e8dfcf'; // 사비석 옐로우 베이지
+  ctx.fillStyle = '#a8a29e'; // 베이지 화강석
   ctx.fillRect(x, y, w, h);
 
   // 석재 타일 조적선
-  ctx.fillStyle = '#c5ba9d';
+  ctx.fillStyle = '#78716c';
   for (let px = x; px < x + w; px += 44) ctx.fillRect(px, y, 1.5, h);
   for (let py = y; py < y + h; py += 32) ctx.fillRect(x, py, w, 1.5);
 

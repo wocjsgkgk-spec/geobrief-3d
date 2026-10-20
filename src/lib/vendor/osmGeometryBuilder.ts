@@ -474,10 +474,10 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       props.height || props.render_height || props.hei || props.HEI || props.bld_hgt || 0
     );
 
-    const explicitH = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * STORY_HEIGHT : 0);
+    const explicitH = rawHei > 4.0 ? rawHei : (rawFlr >= 2 ? rawFlr * STORY_HEIGHT : 0);
 
-    // 건물 폴리곤 좌표 파싱 및 기하학적 치수(폭, 길이, 면적, 종횡비, 중심좌표) 계산
-    let dimMin = 10, dimMax = 15, approxArea = 150, cLng = originLngLat[0], cLat = originLngLat[1];
+    // 건물 폴리곤 좌표 파싱 및 기하학적 치수(폭, 길이, 정밀 Shoelace 면적, 둘레, 종횡비, 중심좌표) 계산
+    let dimMin = 10, dimMax = 15, approxArea = 150, trueArea = 150, truePerimeter = 50, cLng = originLngLat[0], cLat = originLngLat[1];
     const firstPoly = feat.geometry.type === 'Polygon'
       ? (feat.geometry.coordinates[0] as [number, number][])
       : feat.geometry.type === 'MultiPolygon'
@@ -498,13 +498,35 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       cLng = sumLng / firstPoly.length;
       cLat = sumLat / firstPoly.length;
       const cosLat = Math.cos((cLat * Math.PI) / 180);
-      const wMeters = (maxX - minX) * 111320 * cosLat;
-      const hMeters = (maxY - minY) * 111320;
+      const mPerLng = 111320 * cosLat;
+      const mPerLat = 111320;
+      const wMeters = (maxX - minX) * mPerLng;
+      const hMeters = (maxY - minY) * mPerLat;
       dimMin = Math.max(1, Math.min(wMeters, hMeters));
       dimMax = Math.max(wMeters, hMeters);
       approxArea = Math.max(10, wMeters * hMeters * 0.85);
+
+      // [핵심] 신발끈 공식(Shoelace formula) 기반 100% 회전 불변 정밀 바닥 면적(m²) 및 둘레(m) 산출
+      let areaSum = 0;
+      let pSum = 0;
+      const nPts = firstPoly.length;
+      for (let i = 0; i < nPts; i++) {
+        const j = (i + 1) % nPts;
+        const x1 = (firstPoly[i][0] - cLng) * mPerLng;
+        const y1 = (firstPoly[i][1] - cLat) * mPerLat;
+        const x2 = (firstPoly[j][0] - cLng) * mPerLng;
+        const y2 = (firstPoly[j][1] - cLat) * mPerLat;
+        areaSum += x1 * y2 - x2 * y1;
+        pSum += Math.hypot(x2 - x1, y2 - y1);
+      }
+      trueArea = Math.max(10, Math.abs(areaSum) * 0.5);
+      truePerimeter = Math.max(10, pSum);
     }
     const aspectRatio = dimMax / Math.max(1, dimMin);
+    const pToAreaRatio = truePerimeter / Math.sqrt(trueArea);
+
+    const metricsInput = { cLng, cLat, dimMin, dimMax, approxArea: trueArea, aspectRatio };
+    const regStyle = classifyRegionalBuildingStyle(props, metricsInput);
 
     // (a) 군부대 주둔지 판정 (1군지사 우산동, 캠프 롱 태장동, 접경 군부대)
     const isWonjuMilitarySite =
@@ -518,7 +540,19 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
 
     const isMilitary = isMilitaryName || (isWonjuMilitarySite && dimMin <= 22 && dimMax >= 18) || (isBorderMilitaryZone && isMilitaryName) || props.isMilitaryOrPublic === true;
 
-    // (b) 아파트 명칭 및 기하 형태 매칭
+    // (b) 대형 경기장/체육시설/종합운동장 판정 (커튼월 유리 반사감 및 트러스 지붕 메쉬)
+    const isStadiumOrArena =
+      name.includes('경기장') || name.includes('체육관') || name.includes('종합운동장') ||
+      name.includes('스타디움') || name.includes('아레나') || name.includes('stadium') ||
+      name.includes('arena') || usageType.includes('stadium') ||
+      (trueArea >= 1200 && !name.includes('아파트') && !name.includes('apt') && aspectRatio <= 2.2);
+
+    // (c) 고층 랜드마크 타워
+    const isHighriseLandmark =
+      !isStadiumOrArena &&
+      (name.includes('타워') || name.includes('tower') || (trueArea >= 800 && explicitH >= 35.0));
+
+    // (d) 아파트 명칭 및 기하 형태(면적/둘레비) 매칭
     const isAptByName =
       name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
       name.includes('푸르지오') || name.includes('자이') || name.includes('힐스테이트') ||
@@ -530,71 +564,206 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       name.includes('호반') || name.includes('중흥') || name.includes('센트럴') ||
       usageType.includes('apartment') || props.bld_category === 'apartment';
 
-    // 한국형 판상형: 폭 10~18m, 길이 32~95m, 면적 >= 320m² 또는 대형 타워형
+    // 한국형 판상형/타워형 아파트 단지: 바닥 면적 260m² 이상 직사각형 또는 350m² 이상 대형 매스
     const isAptByGeometry =
-      !isMilitary &&
-      ((dimMin >= 9.0 && dimMin <= 20.0 && dimMax >= 32.0 && approxArea >= 320 && aspectRatio >= 1.8) ||
-       (dimMin >= 12.0 && dimMax >= 30.0 && approxArea >= 380));
+      !isMilitary && !isStadiumOrArena &&
+      ((trueArea >= 260 && (aspectRatio >= 1.4 || pToAreaRatio >= 4.2)) ||
+       (trueArea >= 350));
 
     const isApt = isAptByName || isAptByGeometry;
 
+    // (e) 대로변 및 상업구역 중형 건물(상가/오피스) 매칭
+    const isCommByName =
+      name.includes('빌딩') || name.includes('상가') || name.includes('프라자') ||
+      name.includes('마트') || name.includes('병원') || name.includes('은행') ||
+      name.includes('센터') || name.includes('오피스') || usageType.includes('commercial') ||
+      usageType.includes('retail') || usageType.includes('office') || props.bld_category === 'commercial';
+
+    const isCommByGeometry =
+      !isMilitary && !isApt && !isStadiumOrArena &&
+      ((trueArea >= 140 && trueArea < 650 && aspectRatio < 2.4) || (trueArea >= 180));
+
+    const isComm = isCommByName || isCommByGeometry;
+
+    const buildingSeed = Math.abs(Math.sin(cLng * 127.13 + cLat * 311.71 + trueArea * 0.057)) % 1.0;
+    const seedRoof = Math.abs(Math.sin(cLng * 997.13 + cLat * 533.77 + trueArea * 0.19)) % 1.0;
+    const seedGeom = Math.abs(Math.sin(cLng * 43.19 + seedRoof * 11.7 + trueArea * 0.031)) % 1.0;
+
     // -------------------------------------------------------------------------
-    // [강원권 4대 권역별 맞춤형 실사 건축·지붕·특수시설 렌더링 엔진 연동]
-    // 1) 원주·춘천 도시/혁신도시권: 공공기관 대형 청사 / 대단지 브랜드 아파트 / 구도심 상가
-    // 2) 접경 및 군사 거점권: 신형 통합막사 / 군수 물류창고 / 영농 비닐하우스 / 농촌 단독주택
-    // 3) 동해안권: 오션뷰 리조트·호텔 / 항만 물류 사일로 및 공장
-    // 4) 산악 고원권: 급경사 기초 옹벽(-8m) / 30도 급경사 다설형 박공지붕
+    // [1단계: 납작한 회색 판(1~2m) 완전 제거 -> 실측 층수·높이 100% 입체화]
+    // height/render_height/building:levels 부재 또는 4m 미만 시 바닥 면적(Area)과 둘레비로 자동 산출
     // -------------------------------------------------------------------------
-    const metricsInput = { cLng, cLat, dimMin, dimMax, approxArea, aspectRatio };
-    const regStyle = classifyRegionalBuildingStyle(props, metricsInput);
+    let totalH = explicitH;
+    let floors = rawFlr;
+    let bldType = 0.0; // 0=주택/빌라, 1=상업/오피스, 2=아파트, 4=특수(경기장/랜드마크)
 
-    const buildingSeed = Math.abs(Math.sin(cLng * 127.13 + cLat * 311.71 + approxArea * 0.057)) % 1.0;
-    const seedRoof = Math.abs(Math.sin(cLng * 997.13 + cLat * 533.77 + approxArea * 0.19)) % 1.0;
-    const seedGeom = Math.abs(Math.sin(cLng * 43.19 + seedRoof * 11.7 + approxArea * 0.031)) % 1.0;
+    if (!totalH || totalH <= 4.0) {
+      if (isStadiumOrArena) {
+        // 대형 경기장/체육시설: 24m ~ 34m
+        totalH = 26.0 + buildingSeed * 8.0;
+        floors = 4;
+        bldType = 4.0;
+      } else if (isHighriseLandmark) {
+        // 고층 랜드마크 타워: 65m ~ 110m (20~35층)
+        totalH = 65.0 + buildingSeed * 45.0;
+        floors = Math.round(totalH / 3.5);
+        bldType = 1.0;
+      } else if (isMilitary) {
+        // 군부대 막사/창고: 7m ~ 10.5m
+        const milStories = trueArea < 200 ? 2 : Math.round(2 + buildingSeed * 1.5);
+        totalH = milStories * 3.5;
+        floors = milStories;
+        bldType = 3.0;
+      } else if (isApt) {
+        // 단지형 중대형 직사각형 건물(아파트 단지): 45m ~ 75m (15층 ~ 25층)
+        const aptStories = Math.round(15 + buildingSeed * 10); // 15~25층
+        totalH = aptStories * 3.0; // 45.0m ~ 75.0m
+        floors = aptStories;
+        bldType = 2.0;
+      } else if (isComm) {
+        // 대로변 및 상업구역 중형 건물(상가/오피스): 14m ~ 28m (4층 ~ 8층)
+        const commStories = Math.round(4 + buildingSeed * 4); // 4~8층
+        totalH = commStories * 3.5; // 14.0m ~ 28.0m
+        floors = commStories;
+        bldType = 1.0;
+      } else {
+        // 일반 주택가 밀집 건물(다세대/빌라/주택): 7m ~ 13m (2층 ~ 4층, 빽빽한 2~4층 입체 시가지)
+        if (trueArea <= 110) {
+          const houseStories = buildingSeed > 0.45 ? 3 : 2; // 2~3층
+          totalH = 7.0 + buildingSeed * 2.5; // 7.0m ~ 9.5m
+          floors = houseStories;
+        } else {
+          const villaStories = buildingSeed > 0.5 ? 4 : 3; // 3~4층
+          totalH = 9.5 + buildingSeed * 3.5; // 9.5m ~ 13.0m
+          floors = villaStories;
+        }
+        bldType = 0.0;
+      }
+    } else {
+      // 명시적 높이가 4m 초과인 경우
+      if (isApt || totalH >= 40.0) bldType = 2.0;
+      else if (isComm || totalH >= 14.0) bldType = 1.0;
+      else bldType = 0.0;
+      floors = rawFlr > 0 ? rawFlr : Math.max(2, Math.round(totalH / 3.2));
+    }
 
-    let totalH = explicitH > 4.0 ? explicitH : regStyle.height;
-    totalH = Math.max(3.5, Math.min(250.0, totalH));
-    const floors = rawFlr > 0 ? rawFlr : regStyle.levels;
-    const bldType = regStyle.bldType;
+    // 절대 7.0m 미만으로 납작해지지 않도록 하한 클램프
+    totalH = Math.max(7.0, Math.min(250.0, totalH));
 
-    // 외벽/지붕 슬롯 및 정점 컬러 (regionalStyle 직결 및 실사 옥상 5대 비율 배분)
-    const defaultWallSlotId = regStyle.defaultWallSlotId;
-    const wallR = regStyle.wallR, wallG = regStyle.wallG, wallB = regStyle.wallB;
-    let roofSlotId = regStyle.roofSlotId;
-    let roofR = regStyle.roofR, roofG = regStyle.roofG, roofB = regStyle.roofB;
-    const parapetSlotId = regStyle.parapetSlotId;
+    // -------------------------------------------------------------------------
+    // [2단계: 저층·중층 시가지 포토 파사드 & 복합 옥상 텍스처/지오메트리 분기]
+    // - 노후 콘크리트(#78716c), 적벽돌(#6b2d1f), 베이지 화강석(#a8a29e)
+    // - 옥상 안쪽: 초록 우레탄(#2d5a43), 노후 시멘트 그레이(#57534e), 짙은 방수재(#334155)
+    // - 저층 건물 중 약 30%는 백색 처마 + 적갈색(#6b2d1f)/청색(#1e3a8a) 기와 경사 박공지붕(ㅅ자)
+    // -------------------------------------------------------------------------
+    let defaultWallSlotId = 10.0; // villa_red_brick 기본
+    let wallR = 0.420, wallG = 0.176, wallB = 0.122; // 적벽돌 #6b2d1f
 
-    // 지붕 형태 분기
-    const hasPitchedRoof = regStyle.isPitchedRoof;
-    const hasGabledRoof = regStyle.roofShape === 'gabled' || regStyle.roofShape === 'greenhouse';
-    const hasHippedRoof = regStyle.roofShape === 'hipped';
+    if (bldType === 2.0 || isApt) {
+      // 아파트: 크림 아이보리(#ebe6dc) / 모던 그레이 / 아이보리 화이트
+      const aptVariant = Math.floor(buildingSeed * 3.0);
+      defaultWallSlotId = aptVariant === 0 ? 0.0 : aptVariant === 1 ? 1.0 : 2.0;
+      wallR = 0.957; wallG = 0.945; wallB = 0.918;
+    } else if (bldType === 1.0 || isComm) {
+      // 상가/오피스: 베이지 화강석(#a8a29e) / 적벽돌(#6b2d1f) / 커튼월(#0369a1)
+      if (buildingSeed < 0.40) {
+        defaultWallSlotId = 5.0; // comm_granite_beige (#a8a29e)
+        wallR = 0.659; wallG = 0.635; wallB = 0.620;
+      } else if (buildingSeed < 0.65) {
+        defaultWallSlotId = 7.0; // comm_red_brick (#6b2d1f)
+        wallR = 0.420; wallG = 0.176; wallB = 0.122;
+      } else if (buildingSeed < 0.85) {
+        defaultWallSlotId = 8.0; // comm_curtainwall (유리 커튼월)
+        wallR = 0.72; wallG = 0.85; wallB = 0.98;
+      } else {
+        defaultWallSlotId = 6.0; // comm_dark_metal
+        wallR = 0.35; wallG = 0.38; wallB = 0.42;
+      }
+    } else if (isStadiumOrArena || isHighriseLandmark) {
+      defaultWallSlotId = 8.0; // 커튼월 유리
+      wallR = 0.72; wallG = 0.85; wallB = 0.98;
+    } else {
+      // 일반 주택가 밀집 건물: 적벽돌(#6b2d1f), 화강석 빌라(#a8a29e), 크림 단독주택
+      if (buildingSeed < 0.45) {
+        defaultWallSlotId = 10.0; // villa_red_brick (#6b2d1f)
+        wallR = 0.420; wallG = 0.176; wallB = 0.122;
+      } else if (buildingSeed < 0.75) {
+        defaultWallSlotId = 11.0; // villa_granite (#a8a29e)
+        wallR = 0.659; wallG = 0.635; wallB = 0.620;
+      } else {
+        defaultWallSlotId = 12.0; // house_cream
+        wallR = 0.94; wallG = 0.92; wallB = 0.86;
+      }
+    }
 
-    // [1단계: 위성 픽셀 실시간 샘플링 지붕 색상 우선 적용, CORS/로드 실패 시 5대 실사 지붕 팔레트 안전 폴백]
+    // [지붕 형태 분기]: 저층 건물(<=13m) 중 약 30%는 백색 처마 + 적갈색/청색 기와 경사 박공지붕(ㅅ자)
+    const isLowRise = totalH <= 13.5 && !isApt && !isComm && !isStadiumOrArena;
+    const isLowRiseGable = isLowRise && (seedRoof < 0.30); // 30% 비율 엄격 반영
+
+    let hasPitchedRoof = isLowRiseGable || isStadiumOrArena;
+    let hasGabledRoof = isLowRiseGable;
+    let hasHippedRoof = isStadiumOrArena;
+    let roofSlotId = 17.0; // 기본: 초록 우레탄 (#2d5a43)
+    let roofR = 0.176, roofG = 0.353, roofB = 0.263; // 초록 우레탄 #2d5a43
+    const parapetSlotId = 21.0; // parapet_concrete (0.9m 난간)
+
+    // 지붕 색상 및 재질 설정
+    if (isLowRiseGable) {
+      // 30% 저층 박공지붕: 적갈색(#6b2d1f) 또는 청색(#1e3a8a) 기와/강판
+      roofSlotId = seedRoof < 0.18 ? 16.0 : 18.0;
+      if (roofSlotId === 16.0) {
+        roofR = 0.420; roofG = 0.176; roofB = 0.122; // 적갈색 기와 #6b2d1f
+      } else {
+        roofR = 0.118; roofG = 0.227; roofB = 0.541; // 청색 강판 #1e3a8a
+      }
+    } else if (isStadiumOrArena) {
+      // 대형 경기장: 메탈 트러스 돔 지붕
+      roofSlotId = 18.0;
+      roofR = 0.28; roofG = 0.33; roofB = 0.41;
+    } else {
+      // 70% 저층 평지붕 및 중·고층 평지붕: 초록 우레탄(#2d5a43), 노후 시멘트 그레이(#57534e), 짙은 방수재(#334155)
+      if (isApt) {
+        // 아파트 옥상: 노후 시멘트 그레이(#57534e) 및 다크 방수재(#334155)
+        if (seedRoof < 0.55) {
+          roofSlotId = 14.0; roofR = 0.341; roofG = 0.325; roofB = 0.306; // 노후 시멘트 그레이 #57534e
+        } else if (seedRoof < 0.85) {
+          roofSlotId = 15.0; roofR = 0.200; roofG = 0.255; roofB = 0.333; // 짙은 방수재 #334155
+        } else {
+          roofSlotId = 17.0; roofR = 0.176; roofG = 0.353; roofB = 0.263; // 초록 우레탄 #2d5a43
+        }
+      } else if (isComm) {
+        // 상가/오피스: 70% 초록 우레탄(#2d5a43), 30% 노후 시멘트 그레이(#57534e)
+        if (seedRoof < 0.70) {
+          roofSlotId = 17.0; roofR = 0.176; roofG = 0.353; roofB = 0.263; // 초록 우레탄 #2d5a43
+        } else {
+          roofSlotId = 14.0; roofR = 0.341; roofG = 0.325; roofB = 0.306; // 노후 시멘트 그레이 #57534e
+        }
+      } else {
+        // 일반 주택가 평지붕: 65% 초록 우레탄(#2d5a43), 23% 노후 시멘트 그레이(#57534e), 12% 짙은 방수재(#334155)
+        if (seedRoof < 0.65) {
+          roofSlotId = 17.0; roofR = 0.176; roofG = 0.353; roofB = 0.263; // 초록 우레탄 #2d5a43
+        } else if (seedRoof < 0.88) {
+          roofSlotId = 14.0; roofR = 0.341; roofG = 0.325; roofB = 0.306; // 노후 시멘트 그레이 #57534e
+        } else {
+          roofSlotId = 15.0; roofR = 0.200; roofG = 0.255; roofB = 0.333; // 짙은 방수재 #334155
+        }
+      }
+    }
+
+    // [위성 픽셀 실시간 샘플링 지붕 색상 오버라이드]
     const featId = feat.id ?? props.id ?? props.buld_id ?? buildingCount;
     const sampledRoof = options.satelliteRoofColors?.[featId];
-
-    if (sampledRoof && sampledRoof.isSampled) {
+    if (sampledRoof && sampledRoof.isSampled && !hasPitchedRoof) {
       roofR = sampledRoof.r;
       roofG = sampledRoof.g;
       roofB = sampledRoof.b;
       roofSlotId = sampledRoof.matchedSlotId;
-    } else if (!hasPitchedRoof) {
-      if (seedRoof < 0.35) {
-        roofSlotId = 14.0; roofR = 0.43; roofG = 0.41; roofB = 0.39; // 35%: 노후 콘크리트 슬래브 웜 그레이 (#6e6a64)
-      } else if (seedRoof < 0.60) {
-        roofSlotId = 17.0; roofR = 0.21; roofG = 0.37; roofB = 0.29; // 25%: 실사 딥세이지 우레탄 그린 (#355e4b)
-      } else if (seedRoof < 0.80) {
-        roofSlotId = 15.0; roofR = 0.22; roofG = 0.24; roofB = 0.26; // 20%: 다크 아스팔트 슁글 (#383e42)
-      } else if (seedRoof < 0.92) {
-        roofSlotId = 16.0; roofR = 0.41; roofG = 0.21; roofB = 0.16; // 12%: 적갈색 기와/슁글 (#693628)
-      } else {
-        roofSlotId = 18.0; roofR = 0.17; roofG = 0.26; roofB = 0.34; // 8%: 청회색 징크 금속 지붕 (#2c4257)
-      }
     }
 
-    // 기단부(Podium) 색상 및 높이
-    const podiumR = regStyle.podiumR, podiumG = regStyle.podiumG, podiumB = regStyle.podiumB;
+    // 기단부(Podium) 색상 및 높이 (1층 기단부: 짙은 화강석/필로티 석재 마감)
+    const podiumR = 0.28, podiumG = 0.32, podiumB = 0.38;
     const podiumH = Math.min(PODIUM_MAX_HEIGHT, totalH);
+    const isKoreanAptHighrise = isApt && (totalH >= 24.0 || floors >= 7);
 
     // 태양광 그림자 오프셋
     const dropScale = Math.min(2.5, 1.0 / sY);

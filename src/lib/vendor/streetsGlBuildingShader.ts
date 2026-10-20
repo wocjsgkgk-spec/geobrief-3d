@@ -350,15 +350,25 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
         surfaceColor *= recessShadow;
       }
 
-      // [2단계: 커튼월 빌딩 창문별 법선 미세 교란 (Per-Window Normal Jitter) & 하늘/구름 반사]
-      if (slotId == 8.0 && partType == 0.0) {
+      // [2단계: 커튼월 빌딩 창문별 법선 미세 교란 (Per-Window Normal Jitter) & 골드/실버/블루그레이 반사]
+      if (slotId == 8.0 && (partType == 0.0 || partType == 4.0)) {
         vec2 windowPane = floor(innerUv * vec2(4.0, 3.0));
         float paneSeed = fract(sin(dot(windowPane + floor(vWorldPos.xz * 0.25), vec2(12.9898, 78.233))) * 43758.5453);
         vec3 jitterTangent = normalize(cross(vec3(0.0, 1.0, 0.0), N));
         vec3 jitterN = normalize(N + jitterTangent * (fract(paneSeed * 17.1) - 0.5) * 0.06 + vec3(0.0, (fract(paneSeed * 31.7) - 0.5) * 0.05, 0.0));
         vec3 jitterR = reflect(-V, jitterN);
         vec3 skyRefl = getSkyReflection(jitterR);
-        float fresnel = pow(1.0 - max(0.0, dot(V, jitterN)), 3.0) * 0.40 + 0.15;
+
+        // 골드 / 실버 / 블루그레이 틴트 분기 (경기장/랜드마크 타워 실사 반사감)
+        vec3 tintColor = vec3(0.65, 0.82, 0.98); // 블루그레이
+        if (paneSeed > 0.70) {
+          tintColor = vec3(0.96, 0.86, 0.68); // 골드 틴트
+        } else if (paneSeed > 0.40) {
+          tintColor = vec3(0.88, 0.92, 0.96); // 실버 틴트
+        }
+        skyRefl *= tintColor;
+
+        float fresnel = pow(1.0 - max(0.0, dot(V, jitterN)), 3.0) * 0.45 + 0.20;
         surfaceColor = mix(surfaceColor, skyRefl, fresnel);
       }
 
@@ -376,7 +386,7 @@ export const streetsGlBuildingFragmentShader = /* glsl */ `
     // -------------------------------------------------------------------------
     // [Three.js 법선 기반 물리적 분리: 윗면(옥상) vs 난간(Parapet) vs 옆면(외벽)]
     // -------------------------------------------------------------------------
-    bool isRoof = (partType == 1.0) || (vLocalNormal.y >= 0.5) || (vLocalNormal.z >= 0.5);
+    bool isRoof = (partType == 1.0) || (vLocalNormal.y >= 0.5);
     bool isParapet = (partType == 2.0);
 
     if (isRoof) {

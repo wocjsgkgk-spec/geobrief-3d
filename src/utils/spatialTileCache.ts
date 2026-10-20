@@ -189,8 +189,8 @@ export function prioritizeTilesByCamera(
 // 3. IndexedDB 영구 공간 타일 캐시 엔진 (SpatialTileCache)
 // =============================================================================
 
-const DB_NAME = 'geobrief3d_spatial_tile_cache';
-const DB_VERSION = 1;
+const DB_NAME = 'geobrief3d_spatial_tile_cache_v2';
+const DB_VERSION = 2;
 const STORE_GEOMETRIES = 'tile_geometries';
 const STORE_FEATURES = 'tile_features';
 
