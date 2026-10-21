@@ -2917,7 +2917,7 @@ export const ControlPanel: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                 <span>위성 영상 모드</span>
               </div>
-              <span className="text-[9.5px] opacity-75 font-normal">Esri 실사 고해상도</span>
+              <span className="text-[9.5px] opacity-75 font-normal">국토부 V-World 항공실사</span>
             </button>
             <button
               onClick={() => {

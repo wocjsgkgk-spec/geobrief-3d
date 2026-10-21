@@ -361,12 +361,11 @@ const baseStyle: maplibregl.StyleSpecification = {
     'satellite-tiles': {
       type: 'raster',
       tiles: [
-        'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg',
       ],
       tileSize: 256,
       maxzoom: 19,
+      attribution: '국토교통부 브이월드(V-World) 항공영상',
     },
     'openmaptiles-vector': {
       type: 'vector',
@@ -400,9 +399,11 @@ const baseStyle: maplibregl.StyleSpecification = {
       source: 'satellite-tiles',
       paint: {
         'raster-opacity': 1.0,
-        'raster-saturation': -0.15,
-        'raster-contrast': 0.08,
-        'raster-brightness-max': 0.95,
+        'raster-saturation': -0.25,
+        'raster-contrast': 0.05,
+        'raster-brightness-min': 0.08,
+        'raster-brightness-max': 0.92,
+        'raster-fade-duration': 300,
       },
     },
   ],
@@ -436,12 +437,11 @@ export function safeSetTerrain(
           map.addSource('satellite-tiles', {
             type: 'raster',
             tiles: [
-              'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+              'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg',
             ],
             tileSize: 256,
             maxzoom: 19,
+            attribution: '국토교통부 브이월드(V-World) 항공영상',
           });
         }
         if (!map.getLayer('satellite-base-layer') && !map.getLayer('satellite-layer')) {
@@ -453,9 +453,11 @@ export function safeSetTerrain(
               source: map.getSource('satellite-tiles') ? 'satellite-tiles' : 'satellite-source',
               paint: {
                 'raster-opacity': 1.0,
-                'raster-saturation': -0.15,
-                'raster-contrast': 0.08,
-                'raster-brightness-max': 0.95,
+                'raster-saturation': -0.25,
+                'raster-contrast': 0.05,
+                'raster-brightness-min': 0.08,
+                'raster-brightness-max': 0.92,
+                'raster-fade-duration': 300,
               },
               layout: { visibility: 'visible' },
             },
@@ -1067,23 +1069,19 @@ export const MapViewer: React.FC = () => {
           'satellite-tiles': {
             type: 'raster',
             tiles: [
-              'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+              'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg',
             ],
             tileSize: 256,
-            attribution: '국토교통부 브이월드 항공사진, Esri, Google',
+            attribution: '국토교통부 브이월드(V-World) 항공영상',
             maxzoom: 19,
           },
           'satellite-source': {
             type: 'raster',
             tiles: [
-              'https://api.vworld.kr/req/wmts/1.0.0/98979EFF-96BA-3F53-865D-50AC0BC0CBF2/Satellite/{z}/{y}/{x}.jpeg',
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-              'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+              'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg',
             ],
             tileSize: 256,
-            attribution: '국토교통부 브이월드 항공사진, Esri, Google',
+            attribution: '국토교통부 브이월드(V-World) 항공영상',
             maxzoom: 19,
           },
           'clean-tiles': {
@@ -1258,9 +1256,11 @@ export const MapViewer: React.FC = () => {
             source: 'satellite-tiles',
             paint: {
               'raster-opacity': 1.0,
-              'raster-saturation': -0.15,
-              'raster-contrast': 0.08,
-              'raster-brightness-max': 0.95,
+              'raster-saturation': -0.25,
+              'raster-contrast': 0.05,
+              'raster-brightness-min': 0.08,
+              'raster-brightness-max': 0.92,
+              'raster-fade-duration': 300,
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
@@ -3682,9 +3682,11 @@ export const MapViewer: React.FC = () => {
         'visibility',
         baseMap === 'satellite' ? 'visible' : 'none'
       );
-      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.15);
-      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.08);
-      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 0.95);
+      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.25);
+      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.05);
+      map.setPaintProperty('satellite-base-layer', 'raster-brightness-min', 0.08);
+      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 0.92);
+      map.setPaintProperty('satellite-base-layer', 'raster-fade-duration', 300);
     }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(

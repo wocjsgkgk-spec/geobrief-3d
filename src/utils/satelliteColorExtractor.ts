@@ -109,11 +109,13 @@ export async function fetchSatelliteTileData(
     process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62';
 
   const tileUrls = [
-    // 1순위: Esri World Imagery (공식 Access-Control-Allow-Origin: * 지원)
+    // 1순위: 국토부 브이월드(V-World) 공식 균일 항공위성 (CORS 지원)
+    `https://xdworld.vworld.kr/2d/Satellite/service/${zoom}/${tileX}/${tileY}.jpeg`,
+    // 2순위: Esri World Imagery (보조 폴백)
     `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`,
-    // 2순위: V-World WMTS 고해상도 항공위성
+    // 3순위: V-World WMTS 고해상도 항공위성
     `https://api.vworld.kr/req/wmts/1.0.0/${vworldKey}/Satellite/${zoom}/${tileY}/${tileX}.jpeg`,
-    // 3순위: Google Satellite 래스터 타일
+    // 4순위: Google Satellite 래스터 타일
     `https://mt1.google.com/vt/lyrs=s&x=${tileX}&y=${tileY}&z=${zoom}`,
   ];
 
