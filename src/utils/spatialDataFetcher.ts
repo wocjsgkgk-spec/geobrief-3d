@@ -210,10 +210,10 @@ export function extractRenderedVectorBuildings(
         props.hei || props.HEI || props.render_height || props.height || props.bld_hgt || 0
       );
 
-      let renderHeight = rawHei > 0 ? rawHei : (rawFlr > 0 ? rawFlr * 3.0 : 0);
+      let renderHeight = rawHei >= 2.5 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : 0);
 
       // 누락된 층고 지능형 정밀 복원
-      if (!renderHeight || renderHeight <= 4.0) {
+      if (!renderHeight || renderHeight < 2.5) {
         if (isMilitary) {
           // 군 표준 병영막사 및 군수창고: 2층~3층 (7.5m~10m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
@@ -237,7 +237,7 @@ export function extractRenderedVectorBuildings(
         }
       }
 
-      const levels = Math.max(1, Math.round(renderHeight / 3.0));
+      const levels = rawFlr >= 1 ? rawFlr : Math.max(1, Math.round(renderHeight / 3.2));
 
       uniqueFeatures.push({
         type: 'Feature',
@@ -248,6 +248,7 @@ export function extractRenderedVectorBuildings(
           buildingName: props.name || props.name_ko || '',
           height: renderHeight,
           levels,
+          grnd_flr: rawFlr || levels,
           roofShape: isMilitary ? 'gabled' : (props['roof:shape'] || props.roof_shape || 'flat'),
           roofColour: isMilitary ? '#1e3a8a' : (props['roof:colour'] || '#334155'),
           usageType: isApartment ? 'apartment' : isMilitary ? 'military' : isCommercial ? 'commercial' : 'residential',

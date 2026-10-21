@@ -380,6 +380,7 @@ export interface Tile3DStreamState {
   isLoading: boolean;
   statusText?: string;
   tilesLoadedCount?: number;
+  verticesLoadedCount?: number;
 }
 
 // [.geobrief 브리핑 프로젝트 파일 규격]

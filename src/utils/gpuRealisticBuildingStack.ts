@@ -25,20 +25,23 @@ export const gpuBuildingTotalHeightExpr: any = [
     'coalesce',
     ['to-number', ['get', 'render_height'], 0],
     ['to-number', ['get', 'height'], 0],
+    ['to-number', ['get', 'hei'], 0],
+    ['to-number', ['get', 'HEI'], 0],
+    ['to-number', ['get', 'bld_hgt'], 0],
+    ['*', ['to-number', ['get', 'grnd_flr'], 0], 3.2],
+    ['*', ['to-number', ['get', 'GRND_FLR'], 0], 3.2],
+    ['*', ['to-number', ['get', 'gro_flo_co'], 0], 3.2],
+    ['*', ['to-number', ['get', 'GRO_FLO_CO'], 0], 3.2],
+    ['*', ['to-number', ['get', 'flr_cnt'], 0], 3.2],
     ['*', ['to-number', ['get', 'levels'], 0], 3.2],
     ['*', ['to-number', ['get', 'building:levels'], 0], 3.2],
-    ['*', ['to-number', ['get', 'grnd_flr'], 0], 3.2],
     0,
   ],
   [
     'case',
-    // 1. 이미 실측 높이(>= 7.5m)가 선언되어 있다면 우선 적용
-    ['>=', ['var', 'declaredHeight'], 7.5],
+    // 1. 이미 실측 높이(>= 2.5m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결)
+    ['>=', ['var', 'declaredHeight'], 2.5],
     ['var', 'declaredHeight'],
-
-    // 선언 높이가 4m~7.5m 사이인 경우 최소 7.5m로 보정 (납작함 방지)
-    ['>=', ['var', 'declaredHeight'], 4.0],
-    7.5,
 
     // 2. 아파트 단지 및 고층 주거 태그: 50m ~ 75m (16~25층)
     [
@@ -200,6 +203,16 @@ export const gpuBuildingRoofColorExpr: any = [
   ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 100],
   [
     'case',
+    // 0) 실측 위성 픽셀 샘플링 색상 또는 GeoJSON에 명시된 지붕 색상 우선 적용
+    ['!=', ['coalesce', ['get', 'roofColour'], ''], ''],
+    ['get', 'roofColour'],
+    ['!=', ['coalesce', ['get', 'roofColor'], ''], ''],
+    ['get', 'roofColor'],
+    ['!=', ['coalesce', ['get', 'roof:colour'], ''], ''],
+    ['get', 'roof:colour'],
+    ['!=', ['coalesce', ['get', 'roof_color'], ''], ''],
+    ['get', 'roof_color'],
+
     // 1) 고층 아파트 (높이 24m 이상 또는 아파트 태그): 밝은 콘크리트 그레이(#8c8881)
     [
       'any',
@@ -590,6 +603,9 @@ export function setGpuBuildingLayersVisibility(
   if (map.getLayer('fusion-bldg-ground-ao')) {
     map.setLayoutProperty('fusion-bldg-ground-ao', 'visibility', aoVis);
   }
+  if (map.getLayer('real-bldg-ground-ao')) {
+    map.setLayoutProperty('real-bldg-ground-ao', 'visibility', aoVis);
+  }
 
   // 3D 입체 익스트루전 슬라이스 레이어들 가시성 제어
   const extrusionLayers = [
@@ -607,6 +623,10 @@ export function setGpuBuildingLayersVisibility(
     const geojsonId = `fusion-${id}`;
     if (map.getLayer(geojsonId)) {
       map.setLayoutProperty(geojsonId, 'visibility', vis);
+    }
+    const realId = `real-${id}`;
+    if (map.getLayer(realId)) {
+      map.setLayoutProperty(realId, 'visibility', vis);
     }
   });
 }

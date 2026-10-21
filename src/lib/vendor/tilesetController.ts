@@ -22,6 +22,7 @@ import * as THREE from 'three';
 export interface TileNodeCacheEntry {
   id: string;
   byteSize: number;
+  vertexCount?: number;
   lastUsedTimestamp: number;
   tileRef?: any;
   geometries?: THREE.BufferGeometry[];
@@ -53,6 +54,7 @@ export class TilesetController {
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private isExternalAvailable: boolean = true;
   private externalTilesLoadedCount: number = 0;
+  private externalVerticesLoadedCount: number = 0;
   private lastCheckedUrl: string = '';
 
   constructor(options: TilesetControllerOptions = {}) {
@@ -113,15 +115,23 @@ export class TilesetController {
 
     // 타일 대략적 바이트 계산 (정점, 인덱스, 텍스처)
     let approxBytes = 256 * 1024; // 기본 256KB
+    let approxVertices = 0;
     if (tileHeader.content?.byteLength) {
       approxBytes = tileHeader.content.byteLength;
     } else if (tileHeader.content?.gltf) {
       approxBytes = 512 * 1024;
     }
 
+    if (tileHeader.content?.attributes?.POSITION?.value) {
+      approxVertices = Math.floor(tileHeader.content.attributes.POSITION.value.length / 3);
+    } else if (tileHeader.content?.pointCloud?.points) {
+      approxVertices = tileHeader.content.pointCloud.points.length;
+    }
+
     const entry: TileNodeCacheEntry = {
       id: tileId,
       byteSize: approxBytes,
+      vertexCount: approxVertices,
       lastUsedTimestamp: Date.now(),
       tileRef: tileHeader,
     };
@@ -136,6 +146,9 @@ export class TilesetController {
       scene.traverse((obj: any) => {
         if (obj.geometry && obj.geometry instanceof THREE.BufferGeometry) {
           geos.push(obj.geometry);
+          if (!approxVertices) {
+            approxVertices += obj.geometry.attributes?.position?.count || 0;
+          }
         }
         if (obj.material) {
           if (Array.isArray(obj.material)) {
@@ -149,7 +162,15 @@ export class TilesetController {
       entry.geometries = geos;
       entry.materials = mats;
       entry.textures = texs;
+      if (approxVertices > 0) {
+        entry.vertexCount = approxVertices;
+      }
     }
+
+    if (!entry.vertexCount || entry.vertexCount <= 0) {
+      entry.vertexCount = Math.max(1200, Math.round(approxBytes / 48));
+    }
+    this.externalVerticesLoadedCount += entry.vertexCount;
 
     this.lruCache.set(tileId, entry);
     this.currentBytesUsed += approxBytes;
@@ -183,6 +204,9 @@ export class TilesetController {
     const entry = this.lruCache.get(tileId);
     if (entry) {
       this.currentBytesUsed = Math.max(0, this.currentBytesUsed - entry.byteSize);
+      if (entry.vertexCount) {
+        this.externalVerticesLoadedCount = Math.max(0, this.externalVerticesLoadedCount - entry.vertexCount);
+      }
 
       if (entry.geometries) {
         for (const g of entry.geometries) {
@@ -311,6 +335,10 @@ export class TilesetController {
 
   public getExternalTilesLoadedCount(): number {
     return this.externalTilesLoadedCount;
+  }
+
+  public getExternalVerticesLoadedCount(): number {
+    return this.externalVerticesLoadedCount;
   }
 
   public getMemoryUsageText(): string {

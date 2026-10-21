@@ -177,12 +177,12 @@ export function applyKoreanSkylineRules(
     rawProps.height || rawProps.render_height || rawProps.hei || rawProps.HEI || rawProps.bld_hgt || 0
   );
 
-  let finalHeight = rawHeight > 4.0 ? rawHeight : (rawLevels >= 2 ? rawLevels * 3.2 : 0);
-  if (!finalHeight || finalHeight <= 4.0) {
+  let finalHeight = rawHeight >= 2.5 ? rawHeight : (rawLevels >= 1 ? rawLevels * 3.2 : 0);
+  if (!finalHeight || finalHeight < 2.5) {
     finalHeight = regStyle.height;
   }
-  finalHeight = Math.max(7.0, finalHeight);
-  const finalLevels = rawLevels > 0 ? rawLevels : Math.max(2, Math.round(finalHeight / 3.2));
+  finalHeight = Math.max(3.2, finalHeight);
+  const finalLevels = rawLevels >= 1 ? rawLevels : Math.max(1, Math.round(finalHeight / 3.2));
 
   let color = regStyle.wallR > 0.9 && regStyle.wallB > 0.9 ? '#F8FAFC' : (regStyle.bldType === 1.0 ? '#BAE6FD' : (regStyle.bldType === 3.0 ? '#CBD5E1' : '#FDE68A'));
   if (rawProps['building:colour'] || rawProps.building_colour) {
@@ -624,6 +624,9 @@ export async function fetchExternalSpatialData(
           properties: {
             ...f.properties,
             ...skyline,
+            height: skyline.height,
+            grnd_flr: f.properties?.grnd_flr || skyline.levels,
+            levels: skyline.levels,
             name: f.properties?.name || f.properties?.buildingName || skyline.bld_category_label,
             sources: { ofm: false, vworld: true, overpass: true },
           },

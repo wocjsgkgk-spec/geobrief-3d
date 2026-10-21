@@ -18,6 +18,7 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'streetsgl-road',
   'realistic-korean',
   'bldg-',
+  'real-',
   '3d-buildings',
   'fusion-buildings',
   'custom-water-level',

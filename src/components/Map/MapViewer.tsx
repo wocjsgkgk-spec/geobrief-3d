@@ -256,6 +256,10 @@ function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
     'bldg-tier2-mainwall',
     'bldg-tier3-pattern',
     'bldg-tier4-roofcap',
+    'real-bldg-tier1-podium',
+    'real-bldg-tier2-mainwall',
+    'real-bldg-tier3-pattern',
+    'real-bldg-tier4-roofcap',
     'fusion-bldg-tier1-podium',
     'fusion-bldg-tier2-mainwall',
     'fusion-bldg-tier3-pattern',
@@ -784,6 +788,17 @@ export const MapViewer: React.FC = () => {
             const merged = mergeIntoPersistentBuildingCache(immediate.features.features);
             const count = Math.max(merged.length, immediate.totalCount);
             if (count > 0) {
+              const mergedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
+                type: 'FeatureCollection',
+                features: merged,
+              };
+
+              // [1단계 직결] 지도의 메인 건물 소스에 실측 GeoJSON 즉시 주입
+              const realSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
+              if (realSrc) realSrc.setData(mergedGeoJSON);
+              const fusionSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
+              if (fusionSrc) fusionSrc.setData(mergedGeoJSON);
+
               setVworldDiagnostic({
                 status: 'connected',
                 message: immediate.message || `오픈 벡터 타일 실시간 건물 렌더링 (${count.toLocaleString()}건 로드)`,
@@ -809,9 +824,37 @@ export const MapViewer: React.FC = () => {
                   // ignore
                 }
               }
-              // 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
-              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true }).catch(() => {});
+              // [2단계 직결] 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
+              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true })
+                .then((metas) => {
+                  let changed = false;
+                  for (const meta of metas) {
+                    const match = merged.find((f) => f.id === meta.id);
+                    if (match && meta.roofColor) {
+                      match.properties = {
+                        ...match.properties,
+                        roofColour: meta.roofColor.hex,
+                        roofColor: meta.roofColor.hex,
+                        roofType: meta.roofColor.roofType,
+                      };
+                      changed = true;
+                    }
+                  }
+                  if (changed) {
+                    const updatedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
+                      type: 'FeatureCollection',
+                      features: merged,
+                    };
+                    const rSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
+                    if (rSrc) rSrc.setData(updatedGeoJSON);
+                    const fSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
+                    if (fSrc) fSrc.setData(updatedGeoJSON);
+                    mapInstance.triggerRepaint();
+                  }
+                })
+                .catch(() => {});
               updateRealtimeMetrics();
+              mapInstance.triggerRepaint();
             }
           },
         })
@@ -820,6 +863,17 @@ export const MapViewer: React.FC = () => {
             const merged = mergeIntoPersistentBuildingCache(result.features.features);
             const count = Math.max(merged.length, result.totalCount);
             if (count > 0) {
+              const mergedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
+                type: 'FeatureCollection',
+                features: merged,
+              };
+
+              // [1단계 직결] 지도의 메인 건물 소스에 실측 GeoJSON 즉시 주입 (실제 지상층수 grnd_flr * 3.2m 즉시 솟아오름)
+              const realSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
+              if (realSrc) realSrc.setData(mergedGeoJSON);
+              const fusionSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
+              if (fusionSrc) fusionSrc.setData(mergedGeoJSON);
+
               setVworldDiagnostic({
                 status: 'connected',
                 message: result.message || `3대 실측 공간정보(V-World · Overpass · OFM) 연동 완료 (${count.toLocaleString()}건 로드)`,
@@ -845,9 +899,37 @@ export const MapViewer: React.FC = () => {
                   // ignore
                 }
               }
-              // 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
-              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true }).catch(() => {});
+              // [2단계 직결] 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
+              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true })
+                .then((metas) => {
+                  let changed = false;
+                  for (const meta of metas) {
+                    const match = merged.find((f) => f.id === meta.id);
+                    if (match && meta.roofColor) {
+                      match.properties = {
+                        ...match.properties,
+                        roofColour: meta.roofColor.hex,
+                        roofColor: meta.roofColor.hex,
+                        roofType: meta.roofColor.roofType,
+                      };
+                      changed = true;
+                    }
+                  }
+                  if (changed) {
+                    const updatedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
+                      type: 'FeatureCollection',
+                      features: merged,
+                    };
+                    const rSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
+                    if (rSrc) rSrc.setData(updatedGeoJSON);
+                    const fSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
+                    if (fSrc) fSrc.setData(updatedGeoJSON);
+                    mapInstance.triggerRepaint();
+                  }
+                })
+                .catch(() => {});
               updateRealtimeMetrics();
+              mapInstance.triggerRepaint();
             }
           })
           .catch((err) => {
@@ -1922,6 +2004,7 @@ export const MapViewer: React.FC = () => {
 
     (window as any).__map = map;
     (window as any).__setRenderMode3D = setRenderMode3D;
+    (window as any).__useMapStore = useMapStore;
 
     // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
     setTimeout(() => {
@@ -2173,6 +2256,7 @@ export const MapViewer: React.FC = () => {
         pitch: map.getPitch(),
         bearing: map.getBearing(),
       });
+      syncExternalSpatialBuildings(map);
       updateRealtimeMetrics();
     };
     map.on('moveend', handleViewportMoveEnd);
@@ -2187,6 +2271,7 @@ export const MapViewer: React.FC = () => {
         if (sourceDataDebounceTimer) clearTimeout(sourceDataDebounceTimer);
         sourceDataDebounceTimer = setTimeout(() => {
           if (isInteractingRef.current) return;
+          syncExternalSpatialBuildings(map);
           updateRealtimeMetrics();
         }, 500);
       }
@@ -2206,6 +2291,9 @@ export const MapViewer: React.FC = () => {
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
       updateRealtimeMetrics();
+      setTimeout(() => {
+        syncExternalSpatialBuildings(map);
+      }, 600);
 
       // [1. 검은색 background 레이어 존재 시 제거하여 위성 타일 가림 방지]
       try {
@@ -2481,6 +2569,33 @@ export const MapViewer: React.FC = () => {
           }
         });
 
+        // ---------------------------------------------------------------------
+        // [3단계 직결] 메인 실측 건물 소스 및 융합 소스 등록: real-buildings-source & fusion-buildings-source
+        // ---------------------------------------------------------------------
+        for (const sId of ['real-buildings-source', 'fusion-buildings-source']) {
+          if (!map.getSource(sId)) {
+            map.addSource(sId, {
+              type: 'geojson',
+              data: { type: 'FeatureCollection', features: [] },
+            });
+          }
+        }
+
+        // real-buildings-source GPU 다층 레이어 등록
+        const realLayers = createGpuBuildingStackLayers('real-buildings-source', undefined, 'real');
+        realLayers.forEach((layerDef) => {
+          if (!map.getLayer(layerDef.id)) {
+            const configured: any = {
+              ...layerDef,
+              layout: {
+                ...(layerDef.layout || {}),
+                visibility: layers.buildings3D ? 'visible' : 'none',
+              },
+            };
+            map.addLayer(configured);
+          }
+        });
+
         // GeoJSON 소스 융합용 다층 레이어
         if (map.getSource('fusion-buildings-source')) {
           const fusionLayers = createGpuBuildingStackLayers('fusion-buildings-source', undefined, 'fusion');
@@ -2708,21 +2823,24 @@ export const MapViewer: React.FC = () => {
       try {
         if (!deck3DTilesManagerRef.current) {
           const deckManager = new Deck3DTilesManager({
-            onStatusChange: (statusText, isLoading, tilesLoadedCount) => {
-              useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount);
+            onStatusChange: (statusText, isLoading, tilesLoadedCount, verticesCount) => {
+              useMapStore.getState().setTile3DStreamStatus(statusText, isLoading, tilesLoadedCount, verticesCount);
             },
             onTileCountUpdate: (count) => {
               console.log('[Universal3DTilesManager] Real-time 3D hybrid building count:', count);
             },
             onExternalActiveChange: (isActive) => {
-              // 원주(구 1군지사) 대상지에서는 구글/세슘 등 상용 데이터셋에 건물 메쉬가 존재하지 않으므로,
-              // 국토부 건축물대장 4,811동 기반 Three.js LOD2 실사 건물을 상시 유지합니다.
-              // 서울 강남/여의도 등 외부 3D 실사 메쉬가 완벽 구축된 거점으로 이동했을 때만 외부 타일이 화면을 전담하도록 스마트 전환합니다.
-              const center = map.getCenter();
-              const isWonju = center.lng >= 127.5 && center.lng <= 128.5 && center.lat >= 37.0 && center.lat <= 37.8;
-              if (lod2BuildingEngineRef.current && useMapStore.getState().renderMode3D === 'tiles3d') {
-                const shouldHideThreejs = isActive && !isWonju;
-                lod2BuildingEngineRef.current.setVisible(!shouldHideThreejs && useMapStore.getState().layers.buildings3D);
+              if (useMapStore.getState().renderMode3D === 'tiles3d') {
+                if (isActive) {
+                  // [요구사항 2] 외부 3D Tiles 로드 시 기존 절차적 건물 자동 대체
+                  if (lod2BuildingEngineRef.current) lod2BuildingEngineRef.current.setVisible(false);
+                  if (realisticKoreanCityLayerRef.current) realisticKoreanCityLayerRef.current.setVisible(false);
+                  setGpuBuildingLayersVisibility(map, false, true);
+                } else {
+                  if (realisticKoreanCityLayerRef.current) realisticKoreanCityLayerRef.current.setVisible(useMapStore.getState().layers.buildings3D);
+                  setGpuBuildingLayersVisibility(map, useMapStore.getState().layers.buildings3D);
+                }
+                map.triggerRepaint();
               }
             },
           });
@@ -4816,11 +4934,11 @@ export const MapViewer: React.FC = () => {
         );
         lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
         lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
-        const shouldHideThreejs = isExternalTilesActive && !isWonju;
+        const shouldHideThreejs = isExternalTilesActive;
         lod2BuildingEngineRef.current.setVisible(!shouldHideThreejs && layers.buildings3D && tile3DStream.enabled);
       }
       if (realisticKoreanCityLayerRef.current) {
-        const shouldHide = isExternalTilesActive && !isWonju;
+        const shouldHide = isExternalTilesActive;
         realisticKoreanCityLayerRef.current.setVisible(!shouldHide && layers.buildings3D && tile3DStream.enabled);
       }
 

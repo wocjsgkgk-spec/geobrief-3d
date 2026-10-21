@@ -93,6 +93,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private isVisible: boolean = true;
   private isMoving: boolean = false;
   private isBuildingGeometry: boolean = false;
+  private pendingFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] | null = null;
   private moveEndTimer: NodeJS.Timeout | null = null;
   private cachedFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
   private options: RealisticKoreanCityLayerOptions;
@@ -289,13 +290,30 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.originLngLat = [c.lng, c.lat];
     }
 
+    if (this.isBuildingGeometry) {
+      this.pendingFeatures = features;
+      return;
+    }
+
     if (!this.isMoving) {
       this.buildRealisticCityMesh(features);
       // 백그라운드 위성 타일 옥상 색상 일괄 샘플링 및 강원권 건물 메모이제이션 (무블로킹)
       aggregateBuildingFeatures(features, { zoom: 16, sampleSatelliteColors: true })
-        .then(() => {
+        .then((metas) => {
+          for (const meta of metas) {
+            const match = features.find((f) => f.id === meta.id);
+            if (match && meta.roofColor) {
+              match.properties = {
+                ...match.properties,
+                roofColour: meta.roofColor.hex,
+                roofColor: meta.roofColor.hex,
+                roofType: meta.roofColor.roofType,
+              };
+            }
+          }
           if (!this.isMoving && this.map) {
             this.buildRealisticCityMesh(features);
+            this.map.triggerRepaint();
           }
         })
         .catch(() => {});
@@ -741,8 +759,41 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (pts2D[i].z > maxZ) maxZ = pts2D[i].z;
           }
 
-          // [분류기 기반 한국 실제 지붕 재질 UV 즉시 할당]
-          const roofUV = getPhotorealisticSlotUV(classified.atlasRoofSlot);
+          // [분류기 기반 한국 실제 지붕 재질 UV 즉시 할당 & 위성 실시간 색상 연동]
+          let roofUV = getPhotorealisticSlotUV(classified.atlasRoofSlot);
+
+          const bldId = String(feat.id || (feat.properties as any)?.buld_id || `${cLng.toFixed(5)}_${cLat.toFixed(5)}`);
+          const memo = getMemoizedBuilding(bldId);
+          const directRoofType = (feat.properties as any)?.roofType || memo?.roofColor?.roofType;
+          const directRoofCol = (feat.properties as any)?.roofColour || (feat.properties as any)?.roofColor || memo?.roofColor?.hex;
+
+          if (memo?.roofColor?.slotId !== undefined) {
+            roofUV = getPhotorealisticSlotUV(memo.roofColor.slotId);
+          } else if (directRoofType) {
+            const slotMap: Record<string, string> = {
+              urethane: 'roof_urethane_sage',
+              concrete: 'roof_concrete_warmgray',
+              zinc_blue: 'roof_zinc_blue',
+              terracotta: 'roof_terracotta_tile',
+              asphalt: 'roof_asphalt_charcoal',
+            };
+            if (slotMap[directRoofType]) {
+              roofUV = getPhotorealisticSlotUV(slotMap[directRoofType]);
+            }
+          } else if (directRoofCol) {
+            const low = String(directRoofCol).toLowerCase();
+            if (low.includes('green') || low === '#15803d' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
+              roofUV = getPhotorealisticSlotUV('roof_urethane_sage');
+            } else if (low.includes('blue') || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68') {
+              roofUV = getPhotorealisticSlotUV('roof_zinc_blue');
+            } else if (low.includes('red') || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
+              roofUV = getPhotorealisticSlotUV('roof_terracotta_tile');
+            } else if (low === '#64748b' || low === '#334155' || low === '#1e293b') {
+              roofUV = getPhotorealisticSlotUV('roof_asphalt_charcoal');
+            } else {
+              roofUV = getPhotorealisticSlotUV('roof_concrete_warmgray');
+            }
+          }
 
           const spanX = Math.max(1, maxX - minX);
           const spanZ = Math.max(1, maxZ - minZ);
@@ -956,6 +1007,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       console.warn('[RealisticKoreanCityLayer] buildRealisticCityMesh exception:', buildErr);
     } finally {
       this.isBuildingGeometry = false;
+      if (this.pendingFeatures) {
+        const next = this.pendingFeatures;
+        this.pendingFeatures = null;
+        this.buildRealisticCityMesh(next);
+      }
+      if (this.map) {
+        this.map.triggerRepaint();
+      }
     }
   }
 

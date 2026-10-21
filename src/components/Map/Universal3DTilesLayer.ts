@@ -28,7 +28,7 @@ import {
 const RBush = (rbush as any).default || rbush;
 
 export interface Universal3DTilesCallbacks {
-  onStatusChange?: (statusText: string, isLoading: boolean, tilesLoadedCount?: number) => void;
+  onStatusChange?: (statusText: string, isLoading: boolean, tilesLoadedCount?: number, verticesCount?: number) => void;
   onTileCountUpdate?: (count: number) => void;
   onExternalActiveChange?: (isActive: boolean) => void;
 }
@@ -418,13 +418,7 @@ export class Universal3DTilesManager {
         !effectiveUrl.includes('/api/vworld/3dtiles/unsupported') &&
         !effectiveUrl.includes('unsupported');
 
-      const isVworld3D = Boolean(effectiveUrl) && (effectiveUrl.includes('vworld.kr') || effectiveUrl.includes('/api/vworld/3dtiles'));
-      const center = this.map?.getCenter();
-      const isGangwonCenter = Boolean(center && center.lng >= 127.0 && center.lng <= 129.5 && center.lat >= 37.0 && center.lat <= 38.6);
-
-      // V-World 3D 타일셋은 강원권 b3dm 파일이 없으므로, 강원권에서는 외부 타일셋 대신 즉시 로컬 LOD2 실사 메쉬 레이어로 직접 직결
-      // 재귀적인 watchdog 호출을 일체 배제하고 단순 조건문으로 처리
-      const shouldStreamExternal = hasValidExternalUrl && !(isVworld3D && isGangwonCenter) && !this.isFallbackActive;
+      const shouldStreamExternal = hasValidExternalUrl && !this.isFallbackActive;
 
       if (shouldStreamExternal) {
         try {
@@ -478,19 +472,33 @@ export class Universal3DTilesManager {
               this.isFallbackActive = false;
               this.tilesetController.recordTilesetLoad(tileset);
               this.callbacks.onExternalActiveChange?.(true);
+              const tileCount = this.tilesetController.getExternalTilesLoadedCount();
+              const vertCount = this.tilesetController.getExternalVerticesLoadedCount();
               this.callbacks.onStatusChange?.(
-                `🟢 ${resolvedConfig.displayName} 가동 중 (SSE ${this.tilesetController.getCurrentSSE()} · 128MB LRU)`,
+                `🟢 ${resolvedConfig.displayName} 가동 중 (${tileCount}개 타일 · ${vertCount.toLocaleString()} 버텍스)`,
                 false,
-                this.tilesetController.getExternalTilesLoadedCount()
+                tileCount,
+                vertCount
               );
             },
             onTileLoad: (tileHeader) => {
               this.tilesetController.recordTileLoad(tileHeader);
               this.callbacks.onExternalActiveChange?.(true);
-              this.callbacks.onTileCountUpdate?.(this.tilesetController.getExternalTilesLoadedCount());
+              const tileCount = this.tilesetController.getExternalTilesLoadedCount();
+              const vertCount = this.tilesetController.getExternalVerticesLoadedCount();
+              this.callbacks.onTileCountUpdate?.(tileCount);
+              this.callbacks.onStatusChange?.(
+                `🟢 ${resolvedConfig.displayName} 가동 중 (${tileCount}개 타일 · ${vertCount.toLocaleString()} 버텍스)`,
+                false,
+                tileCount,
+                vertCount
+              );
             },
             onTileUnload: (tileHeader) => {
               this.tilesetController.recordTileUnload(tileHeader);
+              const tileCount = this.tilesetController.getExternalTilesLoadedCount();
+              const vertCount = this.tilesetController.getExternalVerticesLoadedCount();
+              this.callbacks.onTileCountUpdate?.(tileCount);
             },
             onTileError: (tileHeader, message) => {
               this.tilesetController.recordTileError(tileHeader, message);

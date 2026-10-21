@@ -449,7 +449,7 @@ interface MapStoreState {
   setTile3DStreamOpacity: (opacity: number) => void;
   setTile3DStreamSse: (maximumScreenSpaceError: number) => void;
   setTile3DStreamPointSize: (pointSize: number) => void;
-  setTile3DStreamStatus: (statusText?: string, isLoading?: boolean, tilesLoadedCount?: number) => void;
+  setTile3DStreamStatus: (statusText?: string, isLoading?: boolean, tilesLoadedCount?: number, verticesLoadedCount?: number) => void;
 
   // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls 관리]
   placedFacilities: PlacedFacility3D[];
@@ -1454,16 +1454,18 @@ export const useMapStore = create<MapStoreState>()(
             pointSize: Math.max(1.0, Math.min(10.0, pointSize)),
           },
         })),
-      setTile3DStreamStatus: (statusText, isLoading, tilesLoadedCount) =>
+      setTile3DStreamStatus: (statusText, isLoading, tilesLoadedCount, verticesLoadedCount) =>
         set((state) => {
           const prev = state.tile3DStream;
           const nextStatus = statusText !== undefined ? statusText : prev.statusText;
           const nextLoading = isLoading !== undefined ? isLoading : prev.isLoading;
           const nextCount = tilesLoadedCount !== undefined ? tilesLoadedCount : prev.tilesLoadedCount;
+          const nextVerts = verticesLoadedCount !== undefined ? verticesLoadedCount : prev.verticesLoadedCount;
           if (
             nextStatus === prev.statusText &&
             nextLoading === prev.isLoading &&
-            nextCount === prev.tilesLoadedCount
+            nextCount === prev.tilesLoadedCount &&
+            nextVerts === prev.verticesLoadedCount
           ) {
             return state;
           }
@@ -1473,6 +1475,7 @@ export const useMapStore = create<MapStoreState>()(
               statusText: nextStatus,
               isLoading: nextLoading,
               tilesLoadedCount: nextCount,
+              verticesLoadedCount: nextVerts,
             },
           };
         }),

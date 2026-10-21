@@ -3498,8 +3498,8 @@ export const ControlPanel: React.FC = () => {
                     </span>
                   </div>
                   {tile3DStream.tilesLoadedCount ? (
-                    <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60">
-                      {tile3DStream.tilesLoadedCount}개 타일
+                    <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60 whitespace-nowrap">
+                      {tile3DStream.tilesLoadedCount}개 타일 · {(tile3DStream.verticesLoadedCount || 0).toLocaleString()} 버텍스
                     </span>
                   ) : null}
                 </div>

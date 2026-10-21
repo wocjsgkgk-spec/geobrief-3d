@@ -437,13 +437,51 @@ export function classifyBuildingWithVendor(
     }
   }
 
-  // 사용자 선언 높이가 실측값(>= 4m)으로 이미 있는 경우 존중하되 스케일만 맞춤
-  const declaredHeight = Number(
-    properties.height || properties.render_height || properties.bld_hgt || properties.HEI || 0
+  // [3단계 고도화: 외부 실측 대장(V-World WFS LT_C_SPBD & Overpass) 지상층수 및 높이 직결]
+  const declaredFloors = Number(
+    properties.grnd_flr ||
+    properties.GRND_FLR ||
+    properties.gro_flo_co ||
+    properties.GRO_FLO_CO ||
+    properties.levels ||
+    properties['building:levels'] ||
+    properties.flr_cnt ||
+    0
   );
-  if (declaredHeight >= 6.0) {
-    height = declaredHeight;
-    floors = Math.max(1, Math.round(declaredHeight / 3.0));
+  const declaredHeight = Number(
+    properties.height ||
+    properties.render_height ||
+    properties.bld_hgt ||
+    properties.HEI ||
+    properties.hei ||
+    0
+  );
+
+  const explicitHeight = declaredHeight >= 2.5
+    ? declaredHeight
+    : (declaredFloors >= 1 ? declaredFloors * 3.2 : 0);
+
+  if (explicitHeight >= 2.5) {
+    height = explicitHeight;
+    floors = declaredFloors >= 1 ? declaredFloors : Math.max(1, Math.round(explicitHeight / 3.2));
+  }
+
+  // 지붕 색상 선언 또는 위성 샘플링 색상 우선 반영
+  const directRoofColor = properties.roofColour || properties.roofColor || properties['roof:colour'] || properties.roof_color;
+  if (directRoofColor && typeof directRoofColor === 'string') {
+    roofColor = directRoofColor;
+    const low = directRoofColor.toLowerCase();
+    if (low.includes('green') || low === '#15803d' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
+      atlasRoofSlot = 'roof_urethane_sage';
+    } else if (low.includes('blue') || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68') {
+      atlasRoofSlot = 'roof_zinc_blue';
+    } else if (low.includes('red') || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
+      atlasRoofSlot = 'roof_terracotta_tile';
+    } else if (low === '#64748b' || low === '#334155' || low === '#1e293b') {
+      atlasRoofSlot = 'roof_asphalt_charcoal';
+    } else {
+      atlasRoofSlot = 'roof_concrete_warmgray';
+    }
   }
 
   return {
