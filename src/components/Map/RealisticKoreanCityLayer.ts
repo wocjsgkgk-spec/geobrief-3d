@@ -137,9 +137,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
       this.renderer.setPixelRatio(pr);
 
-      // 4. 카메라 이동/회전 시 60fps 보호 이벤트 리스너 등록
-      map.on('movestart', this.handleMoveStart);
-      map.on('moveend', this.handleMoveEnd);
+      // 4. 카메라 이동/회전 시 60fps 보호 이벤트 리스너 등록 (회전, 틸트, 줌 전체 감지)
+      const moveStartEvents = ['movestart', 'rotatestart', 'pitchstart', 'zoomstart', 'dragstart'];
+      const moveEndEvents = ['moveend', 'rotateend', 'pitchend', 'zoomend', 'dragend'];
+
+      moveStartEvents.forEach((evt) => map.on(evt, this.handleMoveStart));
+      moveEndEvents.forEach((evt) => map.on(evt, this.handleMoveEnd));
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
       const center = map.getCenter();
@@ -159,16 +162,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   };
 
   private handleMoveEnd = (): void => {
-    this.isMoving = false;
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
     }
-    // 300ms 디바운스 후 정지된 뷰포트에서 건물 메쉬 재갱신
+    // 350ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (60fps 보장)
     this.moveEndTimer = setTimeout(() => {
       this.moveEndTimer = null;
-      if (!this.map || this.isMoving) return;
+      if (!this.map) return;
+      if (this.map.isMoving() || this.map.isRotating()) {
+        return;
+      }
+      this.isMoving = false;
       this.extractAndBuildFromMap();
-    }, 300);
+    }, 350);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -526,30 +532,66 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             let wallUV: UVRect = uvAptCream;
 
             if (isApt) {
-              // 긴 변은 발코니 창호, 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
+              // 긴 변은 발코니 창호 격자(웜 아이보리 #ebe6dc/웜그레이), 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
               if (edgeLen > minEdgeLen * 1.3 || edgeLen > 18.0) {
                 const aptSlot = (fIdx + i) % 3;
                 wallUV = aptSlot === 0 ? uvAptCream : aptSlot === 1 ? uvAptBeige : uvAptGray;
               } else {
                 wallUV = uvAptSide;
               }
+              const pBL: [number, number, number] = [p1.x, baseElev, p1.z];
+              const pBR: [number, number, number] = [p2.x, baseElev, p2.z];
+              const pTR: [number, number, number] = [p2.x, topElev, p2.z];
+              const pTL: [number, number, number] = [p1.x, topElev, p1.z];
+              addQuad(pBL, pBR, pTR, pTL, [nx, 0, nz], wallUV);
             } else if (isComm) {
-              // 상가 1층은 쇼윈도, 2층 이상은 커튼월/석재
-              wallUV = (fIdx + i) % 2 === 0 ? uvCommCurtain : uvCommGranite;
+              // 시내 상가 및 혁신도시 공공청사 (1층 0~3.8m 어두운 화강석 쇼윈도 기단부, 상층부 석재타일/스카이블루 커튼월)
+              const podiumH = 3.8;
+              if (height > podiumH + 2.0) {
+                const podiumTop = baseElev + podiumH;
+                const pBL: [number, number, number] = [p1.x, baseElev, p1.z];
+                const pBR: [number, number, number] = [p2.x, baseElev, p2.z];
+                const pPodTR: [number, number, number] = [p2.x, podiumTop, p2.z];
+                const pPodTL: [number, number, number] = [p1.x, podiumTop, p1.z];
+                addQuad(pBL, pBR, pPodTR, pPodTL, [nx, 0, nz], uvCommShop);
+
+                const upperUV = (fIdx + i) % 2 === 0 ? uvCommCurtain : uvCommGranite;
+                const pTopTR: [number, number, number] = [p2.x, topElev, p2.z];
+                const pTopTL: [number, number, number] = [p1.x, topElev, p1.z];
+                addQuad(pPodTL, pPodTR, pTopTR, pTopTL, [nx, 0, nz], upperUV);
+              } else {
+                addQuad(
+                  [p1.x, baseElev, p1.z],
+                  [p2.x, baseElev, p2.z],
+                  [p2.x, topElev, p2.z],
+                  [p1.x, topElev, p1.z],
+                  [nx, 0, nz],
+                  uvCommShop
+                );
+              }
             } else if (isMilitary) {
               wallUV = uvMilitary;
+              addQuad(
+                [p1.x, baseElev, p1.z],
+                [p2.x, baseElev, p2.z],
+                [p2.x, topElev, p2.z],
+                [p1.x, topElev, p1.z],
+                [nx, 0, nz],
+                wallUV
+              );
             } else {
-              // 다세대 빌라 / 주택: 밝은 샌드베이지 / 화강석 / 라이트웜그레이 톤 (쨍한 적벽돌 완전 제거)
+              // 다세대 빌라 / 주택
               const slot = (fIdx + i) % 3;
               wallUV = slot === 0 ? uvVillaGranite : slot === 1 ? uvAptBeige : uvAptGray;
+              addQuad(
+                [p1.x, baseElev, p1.z],
+                [p2.x, baseElev, p2.z],
+                [p2.x, topElev, p2.z],
+                [p1.x, topElev, p1.z],
+                [nx, 0, nz],
+                wallUV
+              );
             }
-
-            const pBL: [number, number, number] = [p1.x, baseElev, p1.z];
-            const pBR: [number, number, number] = [p2.x, baseElev, p2.z];
-            const pTR: [number, number, number] = [p2.x, topElev, p2.z];
-            const pTL: [number, number, number] = [p1.x, topElev, p1.z];
-
-            addQuad(pBL, pBR, pTR, pTL, [nx, 0, nz], wallUV);
           }
 
           // -------------------------------------------------------------------
@@ -649,28 +691,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 : uvRoofTile;
 
             // OSMBuildings 알고리즘: OBB 장축 방향으로 용마루가 솟아오른 순수 삼각형 정점 생성 (저층 주택/군 막사)
-            const roofMesh = generateGabledRoofMesh(poly2D, topElev, 2.8, 'gabled');
-            const p = roofMesh.positions;
-            const n = roofMesh.normals;
-            const uv0: [number, number] = [gabledUV.u0, gabledUV.v0];
-            const uv1: [number, number] = [gabledUV.u1, gabledUV.v0];
-            const uv2: [number, number] = [(gabledUV.u0 + gabledUV.u1) / 2, gabledUV.v1];
-
-            for (let v = 0; v < roofMesh.vertexCount; v += 3) {
-              const iA = v * 3;
-              const iB = (v + 1) * 3;
-              const iC = (v + 2) * 3;
-
-              addTriangle(
-                [p[iA], p[iA + 1], p[iA + 2]],
-                [p[iB], p[iB + 1], p[iB + 2]],
-                [p[iC], p[iC + 1], p[iC + 2]],
-                [n[iA], n[iA + 1], n[iA + 2]],
-                uv0,
-                uv1,
-                uv2
-              );
-            }
+            // Pre-allocated Float32Array.set()을 사용하여 루프 오버헤드 없이 단일 버퍼로 즉시 병합
+            const roofMesh = generateGabledRoofMesh(
+              poly2D,
+              topElev,
+              2.8,
+              'gabled',
+              [gabledUV.u0, gabledUV.v0, gabledUV.u1 - gabledUV.u0, gabledUV.v1 - gabledUV.v0]
+            );
+            ensureCapacity(roofMesh.vertexCount);
+            posBuf.set(roofMesh.positions, posIdx);
+            normBuf.set(roofMesh.normals, posIdx);
+            uvBuf.set(roofMesh.uvs, uvIdx);
+            posIdx += roofMesh.positions.length;
+            uvIdx += roofMesh.uvs.length;
           } else {
             // 평슬래브 옥상 테두리 0.9m 난간(Parapet) 돌출
             const parapetH = 0.9;
@@ -865,8 +899,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   public onRemove(map: maplibregl.Map): void {
-    map.off('movestart', this.handleMoveStart);
-    map.off('moveend', this.handleMoveEnd);
+    const moveStartEvents = ['movestart', 'rotatestart', 'pitchstart', 'zoomstart', 'dragstart'];
+    const moveEndEvents = ['moveend', 'rotateend', 'pitchend', 'zoomend', 'dragend'];
+
+    moveStartEvents.forEach((evt) => map.off(evt, this.handleMoveStart));
+    moveEndEvents.forEach((evt) => map.off(evt, this.handleMoveEnd));
+
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;

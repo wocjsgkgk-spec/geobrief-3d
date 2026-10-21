@@ -39,6 +39,7 @@ import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { generateContourLines } from '@/utils/contourGenerator';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
 import { aggregateBuildingFeatures } from '@/utils/gangwonSpatialAggregator';
+import { enforceMaxActiveLayers } from '@/utils/layerBudgetGuard';
 import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
 import {
   Ruler,
@@ -900,13 +901,18 @@ export const MapViewer: React.FC = () => {
         }
 
         const styleLayers = map.getStyle()?.layers || [];
-        const activeCount = styleLayers.filter((l) => {
+        let activeCount = styleLayers.filter((l) => {
           try {
             return map.getLayoutProperty(l.id, 'visibility') !== 'none';
           } catch {
             return false;
           }
         }).length;
+
+        // 전체 활성 레이어 수를 항상 15개 이하로 엄격 제한 (GPU 과부하 방지)
+        if (activeCount > 15) {
+          activeCount = enforceMaxActiveLayers(map, 15);
+        }
 
         setRealtimeMetrics((prev) => {
           if (prev.renderedBuildingCount === count && prev.activeLayersCount === activeCount) {

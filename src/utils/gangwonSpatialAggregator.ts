@@ -329,30 +329,39 @@ export function parseAndClassifyBuilding(
     usageName = '다세대/단독주택';
   }
 
-  // 4. 정밀 높이 계산 (0% Flat 방지, 실제 층수 * 3.2m 우선 적용)
+  // 4. 정밀 높이 계산 (0% Flat 방지, 실제 층수 * 층고 우선 적용)
   let height = rawHeight;
   if (!height || height < 4.0) {
     if (grndFlr > 0) {
-      height = grndFlr * 3.2;
+      if (isApt) {
+        const safeAptFlr = Math.max(15, Math.min(25, grndFlr));
+        height = safeAptFlr * 3.0; // 45m ~ 75m
+      } else if (isCommercial) {
+        const safeCommFlr = Math.max(4, Math.min(10, grndFlr));
+        height = safeCommFlr * 3.2; // 14m ~ 32m
+      } else {
+        const safeLowFlr = Math.max(1, Math.min(3, grndFlr));
+        height = safeLowFlr * 2.9 + 2.0; // 5m ~ 11m
+      }
     } else {
-      // 한국 도심 스카이라인 지능형 복원 모델
+      // 한국 도심 스카이라인 지능형 복원 모델 (강원권 실측 비례)
       const seed = Math.abs(Math.sin(geoMetrics.centroid[0] * 1234.5 + geoMetrics.centroid[1] * 5678.9));
       if (isApt) {
-        // 아파트 (15~24층, 48m~76.8m)
-        height = 48.0 + Math.floor(seed * 9) * 3.2;
+        // 아파트 단지 (15~25층, 45m~75m)
+        height = 45.0 + Math.floor(seed * 11) * 3.0;
       } else if (isCommercial) {
-        // 상업/오피스 (5~10층, 16m~32m)
-        height = 16.0 + Math.floor(seed * 5) * 3.2;
+        // 시내 상가 및 혁신도시 공공청사 (4~10층, 14m~32m)
+        height = 14.0 + Math.floor(seed * 7) * 3.0;
       } else if (isMilitary) {
-        // 군부대 막사/창고 (1~3층, 6.5m~12m)
-        height = 6.5 + Math.floor(seed * 3) * 2.8;
+        // 군부대 막사/창고 (1~3층, 5m~11m)
+        height = 5.0 + Math.floor(seed * 3) * 2.8;
       } else {
-        // 저층 주택/빌라 (2~4층, 6.4m~12.8m)
-        height = geoMetrics.areaSqm < 150 ? 6.4 : 9.6;
+        // 저층 주택/빌라 (1~3층, 5m~11m)
+        height = geoMetrics.areaSqm < 150 ? 5.5 : 8.8;
       }
     }
   }
-  height = Math.max(6.0, height);
+  height = Math.max(5.0, height);
 
   // 5. 외벽(Wall) 타입 및 지붕(Roof) 형태 결정
   let wallType: BuildingMeta['wallType'] = 'beige_sand';

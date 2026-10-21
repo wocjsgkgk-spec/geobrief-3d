@@ -768,9 +768,10 @@ export class Universal3DTilesManager {
             ];
           } else {
             const roofColors: [number, number, number, number][] = [
-              [107, 45, 31, 255], // 적갈색 기와
-              [30, 58, 138, 255], // 청색 강판
-              [51, 65, 85, 255],  // 차콜 슁글
+              [45, 90, 67, 255],   // 차분한 세이지 그린 우레탄 #2d5a43
+              [100, 116, 139, 255], // 노후 시멘트 회색 #64748b
+              [107, 45, 31, 255],  // 적갈색 기와 #6b2d1f
+              [44, 66, 87, 255],   // 징크 블루 #2c4257
             ];
             roofColor = roofColors[Math.floor(b.seed * roofColors.length) % roofColors.length];
           }
