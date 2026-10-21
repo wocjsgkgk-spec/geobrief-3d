@@ -43,6 +43,10 @@ import {
   getMemoizedBuilding,
   parseAndClassifyBuilding,
 } from '@/utils/gangwonSpatialAggregator';
+import {
+  calculateSafeRooftopCore,
+  generateGabledRoofMesh,
+} from '@/lib/vendor/safeGeoAlgorithms';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -631,8 +635,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           // C. 입체 옥상 구조물 (0.9m 난간 + 3.0m 옥탑방 코어 or ㅅ자 박공지붕)
           // -------------------------------------------------------------------
           const isGabled = meta.roofShape === 'gabled';
+          const poly2D: [number, number][] = [];
+          for (let i = 0; i < ptCount; i++) {
+            poly2D.push([pts2D[i].x, pts2D[i].z]);
+          }
 
-          if (isGabled) {
+          if (isGabled && height <= 12.0) {
             const gabledUV =
               meta.roofColor.roofType === 'zinc_blue'
                 ? uvRoofZinc
@@ -640,33 +648,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 ? uvRoofAsphalt
                 : uvRoofTile;
 
-            // 저층 주택 및 군 막사 ㅅ자형 경사 박공지붕
-            const cx = (minX + maxX) / 2;
-            const cz = (minZ + maxZ) / 2;
-            const apexY = topElev + 2.5;
+            // OSMBuildings 알고리즘: OBB 장축 방향으로 용마루가 솟아오른 순수 삼각형 정점 생성 (저층 주택/군 막사)
+            const roofMesh = generateGabledRoofMesh(poly2D, topElev, 2.8, 'gabled');
+            const p = roofMesh.positions;
+            const n = roofMesh.normals;
+            const uv0: [number, number] = [gabledUV.u0, gabledUV.v0];
+            const uv1: [number, number] = [gabledUV.u1, gabledUV.v0];
+            const uv2: [number, number] = [(gabledUV.u0 + gabledUV.u1) / 2, gabledUV.v1];
 
-            // 남북 방향 능선 생성
-            const r0: [number, number, number] = [cx, apexY, minZ];
-            const r1: [number, number, number] = [cx, apexY, maxZ];
+            for (let v = 0; v < roofMesh.vertexCount; v += 3) {
+              const iA = v * 3;
+              const iB = (v + 1) * 3;
+              const iC = (v + 2) * 3;
 
-            // 동쪽 경사면
-            addQuad(
-              [maxX, topElev, minZ],
-              [maxX, topElev, maxZ],
-              r1,
-              r0,
-              [0.707, 0.707, 0],
-              gabledUV
-            );
-            // 서쪽 경사면
-            addQuad(
-              r0,
-              r1,
-              [minX, topElev, maxZ],
-              [minX, topElev, minZ],
-              [-0.707, 0.707, 0],
-              gabledUV
-            );
+              addTriangle(
+                [p[iA], p[iA + 1], p[iA + 2]],
+                [p[iB], p[iB + 1], p[iB + 2]],
+                [p[iC], p[iC + 1], p[iC + 2]],
+                [n[iA], n[iA + 1], n[iA + 2]],
+                uv0,
+                uv1,
+                uv2
+              );
+            }
           } else {
             // 평슬래브 옥상 테두리 0.9m 난간(Parapet) 돌출
             const parapetH = 0.9;
@@ -693,19 +697,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               );
             }
 
-            // 중·고층 옥상 엘리베이터 권상기실 / 옥탑방 박스 (높이 3.0m)
-            if (height >= 14.0 && spanX > 8.0 && spanZ > 8.0) {
-              const coreW = Math.min(6.0, spanX * 0.35);
-              const coreD = Math.min(6.0, spanZ * 0.35);
-              const cx = (minX + maxX) / 2;
-              const cz = (minZ + maxZ) / 2;
-              const coreBaseY = topElev;
-              const coreTopY = topElev + 3.0;
-
-              const cX0 = cx - coreW / 2;
-              const cX1 = cx + coreW / 2;
-              const cZ0 = cz - coreD / 2;
-              const cZ1 = cz + coreD / 2;
+            // mapbox/polylabel 기반 옥탑방 권상기실 코어 (내접원 반지름 r > 4.0m, 높이 >= 15m)
+            // 건물 다각형 내부 최적 중심점(Pole of Inaccessibility)에만 2.8m 코어 배치
+            const safeCore = calculateSafeRooftopCore(poly2D, height, topElev, 4.0);
+            if (safeCore) {
+              const [cX0, cZ0] = safeCore.box2D[0];
+              const [cX1, cZ1] = safeCore.box2D[2];
+              const coreBaseY = safeCore.baseElevation;
+              const coreTopY = safeCore.topElevation; // topElev + 2.8m
 
               // 옥탑 외벽 4면
               addQuad(
@@ -741,7 +740,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 uvPenthouse
               );
 
-              // 옥탑 윗면
+              // 옥탑 윗면 (상부 슬래브)
               addQuad(
                 [cX0, coreTopY, cZ0],
                 [cX1, coreTopY, cZ0],

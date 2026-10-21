@@ -1,4 +1,4 @@
-import * as SunCalc from 'suncalc';
+import { calculateSunPosition } from '../lib/vendor/safeGeoAlgorithms';
 
 export interface SunLightConfig {
   hour: number; // 9 ~ 18
@@ -51,7 +51,7 @@ export function calculateSunLight(
   let rawAltitude = 0.52; // 기본값 약 30도 (라디안)
 
   try {
-    const sunPos = SunCalc.getPosition(date, safeLat, safeLng);
+    const sunPos = calculateSunPosition(date, safeLat, safeLng);
     if (sunPos && typeof sunPos.altitude === 'number' && Number.isFinite(sunPos.altitude)) {
       rawAltitude = sunPos.altitude;
     }
@@ -59,7 +59,7 @@ export function calculateSunLight(
       rawAzimuth = sunPos.azimuth;
     }
   } catch (err) {
-    console.warn('[sunLightCalculator] SunCalc getPosition fallback:', err);
+    console.warn('[sunLightCalculator] calculateSunPosition fallback:', err);
   }
 
   // 3. 고도각(altitude) 연산 및 라디안/도 변환 교정:

@@ -20,6 +20,10 @@ import {
   getEffectiveGoogleMapsKey,
 } from '@/utils/external3DTilesConnector';
 import { getMemoizedBuilding } from '@/utils/gangwonSpatialAggregator';
+import {
+  calculateSafeRooftopCore,
+  calculateOBB,
+} from '@/lib/vendor/safeGeoAlgorithms';
 
 const RBush = (rbush as any).default || rbush;
 
@@ -654,20 +658,30 @@ export class Universal3DTilesManager {
           });
 
           // (3) 엘리베이터 권상기실 / 옥탑방 코어 박스 (SolidPolygonLayer)
+          // mapbox/polylabel 기반 최적 안전 중심점 (내접원 r > 4.0m, 높이 >= 15m)
           const [cx, cy] = b.centroid;
-          const coreSize = isApt ? 0.00012 : 0.00016; // 경위도 스케일 (~12m x 10m)
-          const coreBox = [
-            [cx - coreSize, cy - coreSize * 0.8, roofZ],
-            [cx + coreSize, cy - coreSize * 0.8, roofZ],
-            [cx + coreSize, cy + coreSize * 0.8, roofZ],
-            [cx - coreSize, cy + coreSize * 0.8, roofZ],
-            [cx - coreSize, cy - coreSize * 0.8, roofZ],
-          ];
-          penthouseData.push({
-            polygon: coreBox,
-            height: 3.8, // 3.8m 옥탑 돌출
-            color: [148, 163, 184, 255],
-          });
+          const kLng = 88500;
+          const kLat = 110950;
+          const polyLocalMeters: [number, number][] = coords.map((pt) => [
+            (pt[0] - cx) * kLng,
+            (pt[1] - cy) * kLat,
+          ]);
+
+          const safeCore = calculateSafeRooftopCore(polyLocalMeters, b.height, roofZ, 4.0);
+          if (safeCore) {
+            const coreBox = safeCore.box2D.map(([mx, mz]) => [
+              cx + mx / kLng,
+              cy + mz / kLat,
+              roofZ,
+            ]);
+            coreBox.push(coreBox[0]); // 루프 닫기
+
+            penthouseData.push({
+              polygon: coreBox,
+              height: safeCore.height, // 2.8m 옥탑 돌출
+              color: [148, 163, 184, 255],
+            });
+          }
 
           // -------------------------------------------------------------------
           // 2) 한국형 아파트 입면 (베란다 창호 + 측벽 동 번호 라인)
@@ -761,59 +775,44 @@ export class Universal3DTilesManager {
             roofColor = roofColors[Math.floor(b.seed * roofColors.length) % roofColors.length];
           }
 
-          if (isEastWest) {
-            // 동서 방향 능선 (남·북 2면 경사)
-            const ridge0: [number, number, number] = [minX, cy, apexZ];
-            const ridge1: [number, number, number] = [maxX, cy, apexZ];
-            // 북쪽 경사면
-            gabledRoofData.push({
-              polygon: [
-                ridge0,
-                ridge1,
-                [maxX, maxY, roofZ],
-                [minX, maxY, roofZ],
-                ridge0,
-              ],
-              color: roofColor,
-            });
-            // 남쪽 경사면
-            gabledRoofData.push({
-              polygon: [
-                ridge0,
-                [minX, minY, roofZ],
-                [maxX, minY, roofZ],
-                ridge1,
-                ridge0,
-              ],
-              color: roofColor,
-            });
-          } else {
-            // 남북 방향 능선 (동·서 2면 경사)
-            const ridge0: [number, number, number] = [cx, minY, apexZ];
-            const ridge1: [number, number, number] = [cx, maxY, apexZ];
-            // 동쪽 경사면
-            gabledRoofData.push({
-              polygon: [
-                ridge0,
-                ridge1,
-                [maxX, maxY, roofZ],
-                [maxX, minY, roofZ],
-                ridge0,
-              ],
-              color: roofColor,
-            });
-            // 서쪽 경사면
-            gabledRoofData.push({
-              polygon: [
-                ridge0,
-                [minX, minY, roofZ],
-                [minX, maxY, roofZ],
-                ridge1,
-                ridge0,
-              ],
-              color: roofColor,
-            });
-          }
+          // OSMBuildings 알고리즘: OBB 분산-공분산 장축을 따라 정확한 각도로 용마루 능선 정렬
+          const kLng = 88500;
+          const kLat = 110950;
+          const polyLocalMeters: [number, number][] = coords.map((pt) => [
+            (pt[0] - cx) * kLng,
+            (pt[1] - cy) * kLat,
+          ]);
+          const obb = calculateOBB(polyLocalMeters);
+          const halfLen = obb.length / 2;
+          const halfWid = obb.width / 2;
+          const [ox, oz] = obb.origin;
+          const [ux, uz] = obb.majorAxis;
+          const [vx, vz] = obb.minorAxis;
+
+          const toLngLatZ = (mx: number, mz: number, z: number): [number, number, number] => [
+            cx + mx / kLng,
+            cy + mz / kLat,
+            z,
+          ];
+
+          const e00 = toLngLatZ(ox - halfLen * ux - halfWid * vx, oz - halfLen * uz - halfWid * vz, roofZ);
+          const e10 = toLngLatZ(ox + halfLen * ux - halfWid * vx, oz + halfLen * uz - halfWid * vz, roofZ);
+          const e11 = toLngLatZ(ox + halfLen * ux + halfWid * vx, oz + halfLen * uz + halfWid * vz, roofZ);
+          const e01 = toLngLatZ(ox - halfLen * ux + halfWid * vx, oz - halfLen * uz + halfWid * vz, roofZ);
+
+          const r0 = toLngLatZ(ox - halfLen * ux, oz - halfLen * uz, apexZ);
+          const r1 = toLngLatZ(ox + halfLen * ux, oz + halfLen * uz, apexZ);
+
+          // 경사면 1 (장축 기준 Negative Minor Axis 측면)
+          gabledRoofData.push({
+            polygon: [e00, e10, r1, r0, e00],
+            color: roofColor,
+          });
+          // 경사면 2 (장축 기준 Positive Minor Axis 측면)
+          gabledRoofData.push({
+            polygon: [r0, r1, e11, e01, r0],
+            color: roofColor,
+          });
         }
       }
 
