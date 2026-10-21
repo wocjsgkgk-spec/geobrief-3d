@@ -70,6 +70,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private masterGeometry: THREE.BufferGeometry | null = null;
   private masterMaterial: THREE.MeshStandardMaterial | null = null;
 
+  // 줌 14.5 ~ 15.5 정밀 페이드인을 위한 옥상 난간 및 옥탑 코어 메쉬/재질
+  private rooftopMesh: THREE.Mesh | null = null;
+  private rooftopGeometry: THREE.BufferGeometry | null = null;
+  private rooftopMaterial: THREE.MeshStandardMaterial | null = null;
+
   // 조명 시스템
   private sunLight: THREE.DirectionalLight | null = null;
   private fillLight: THREE.DirectionalLight | null = null;
@@ -96,6 +101,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.masterMesh) {
       this.masterMesh.visible = visible;
     }
+    if (this.rooftopMesh) {
+      const z = this.map ? this.map.getZoom() : 15.0;
+      const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
+      this.rooftopMesh.visible = visible && t > 0.01;
+    }
   }
 
   public onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
@@ -121,6 +131,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         map: atlasTex || undefined,
         roughness: 0.65,
         metalness: 0.12,
+        side: THREE.DoubleSide,
+      });
+
+      this.rooftopMaterial = new THREE.MeshStandardMaterial({
+        map: atlasTex || undefined,
+        roughness: 0.65,
+        metalness: 0.12,
+        transparent: true,
+        opacity: 0.0,
         side: THREE.DoubleSide,
       });
 
@@ -333,6 +352,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       let posIdx = 0;
       let uvIdx = 0;
 
+      // 1-B. [3단계 신규] 줌 14.5 ~ 15.5 페이드인을 위한 옥상 난간 및 옥탑 코어 분리 버퍼
+      const estRooftopFloats = Math.min(features.length * 120, 600000);
+      let rooftopPosBuf = new Float32Array(estRooftopFloats);
+      let rooftopNormBuf = new Float32Array(estRooftopFloats);
+      let rooftopUvBuf = new Float32Array(Math.floor((estRooftopFloats / 3) * 2));
+      let rooftopPosIdx = 0;
+      let rooftopUvIdx = 0;
+
       const ensureCapacity = (additionalVertices: number) => {
         const neededFloats = posIdx + additionalVertices * 3;
         if (neededFloats > posBuf.length) {
@@ -346,6 +373,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           posBuf = newPos;
           normBuf = newNorm;
           uvBuf = newUv;
+        }
+      };
+
+      const ensureRooftopCapacity = (additionalVertices: number) => {
+        const neededFloats = rooftopPosIdx + additionalVertices * 3;
+        if (neededFloats > rooftopPosBuf.length) {
+          const newSize = Math.max(rooftopPosBuf.length * 2, neededFloats + 30000);
+          const newPos = new Float32Array(newSize);
+          const newNorm = new Float32Array(newSize);
+          const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
+          newPos.set(rooftopPosBuf);
+          newNorm.set(rooftopNormBuf);
+          newUv.set(rooftopUvBuf);
+          rooftopPosBuf = newPos;
+          rooftopNormBuf = newNorm;
+          rooftopUvBuf = newUv;
         }
       };
 
@@ -414,6 +457,76 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
         // T2: BL -> TR -> TL
         addTriangle(
+          pBL,
+          pTR,
+          pTL,
+          norm,
+          [uvRect.u0, uvRect.v0],
+          [uvRect.u1, uvRect.v1],
+          [uvRect.u0, uvRect.v1]
+        );
+      };
+
+      const addRooftopTriangle = (
+        p0: [number, number, number],
+        p1: [number, number, number],
+        p2: [number, number, number],
+        norm: [number, number, number],
+        uv0: [number, number],
+        uv1: [number, number],
+        uv2: [number, number]
+      ) => {
+        ensureRooftopCapacity(3);
+
+        rooftopPosBuf[rooftopPosIdx] = p0[0];
+        rooftopPosBuf[rooftopPosIdx + 1] = p0[1];
+        rooftopPosBuf[rooftopPosIdx + 2] = p0[2];
+        rooftopNormBuf[rooftopPosIdx] = norm[0];
+        rooftopNormBuf[rooftopPosIdx + 1] = norm[1];
+        rooftopNormBuf[rooftopPosIdx + 2] = norm[2];
+        rooftopUvBuf[rooftopUvIdx] = uv0[0];
+        rooftopUvBuf[rooftopUvIdx + 1] = uv0[1];
+
+        rooftopPosBuf[rooftopPosIdx + 3] = p1[0];
+        rooftopPosBuf[rooftopPosIdx + 4] = p1[1];
+        rooftopPosBuf[rooftopPosIdx + 5] = p1[2];
+        rooftopNormBuf[rooftopPosIdx + 3] = norm[0];
+        rooftopNormBuf[rooftopPosIdx + 4] = norm[1];
+        rooftopNormBuf[rooftopPosIdx + 5] = norm[2];
+        rooftopUvBuf[rooftopUvIdx + 2] = uv1[0];
+        rooftopUvBuf[rooftopUvIdx + 3] = uv1[1];
+
+        rooftopPosBuf[rooftopPosIdx + 6] = p2[0];
+        rooftopPosBuf[rooftopPosIdx + 7] = p2[1];
+        rooftopPosBuf[rooftopPosIdx + 8] = p2[2];
+        rooftopNormBuf[rooftopPosIdx + 6] = norm[0];
+        rooftopNormBuf[rooftopPosIdx + 7] = norm[1];
+        rooftopNormBuf[rooftopPosIdx + 8] = norm[2];
+        rooftopUvBuf[rooftopUvIdx + 4] = uv2[0];
+        rooftopUvBuf[rooftopUvIdx + 5] = uv2[1];
+
+        rooftopPosIdx += 9;
+        rooftopUvIdx += 6;
+      };
+
+      const addRooftopQuad = (
+        pBL: [number, number, number],
+        pBR: [number, number, number],
+        pTR: [number, number, number],
+        pTL: [number, number, number],
+        norm: [number, number, number],
+        uvRect: UVRect
+      ) => {
+        addRooftopTriangle(
+          pBL,
+          pBR,
+          pTR,
+          norm,
+          [uvRect.u0, uvRect.v0],
+          [uvRect.u1, uvRect.v0],
+          [uvRect.u1, uvRect.v1]
+        );
+        addRooftopTriangle(
           pBL,
           pTR,
           pTL,
@@ -720,7 +833,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               const nx = dz / edgeLen;
               const nz = -dx / edgeLen;
 
-              addQuad(
+              addRooftopQuad(
                 [p1.x, topElev, p1.z],
                 [p2.x, topElev, p2.z],
                 [p2.x, topElev + parapetH, p2.z],
@@ -740,7 +853,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               const coreTopY = safeCore.topElevation; // topElev + 2.8m
 
               // 옥탑 외벽 4면
-              addQuad(
+              addRooftopQuad(
                 [cX0, coreBaseY, cZ0],
                 [cX1, coreBaseY, cZ0],
                 [cX1, coreTopY, cZ0],
@@ -748,7 +861,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 [0, 0, -1],
                 uvPenthouse
               );
-              addQuad(
+              addRooftopQuad(
                 [cX1, coreBaseY, cZ0],
                 [cX1, coreBaseY, cZ1],
                 [cX1, coreTopY, cZ1],
@@ -756,7 +869,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 [1, 0, 0],
                 uvPenthouse
               );
-              addQuad(
+              addRooftopQuad(
                 [cX1, coreBaseY, cZ1],
                 [cX0, coreBaseY, cZ1],
                 [cX0, coreTopY, cZ1],
@@ -764,7 +877,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 [0, 0, 1],
                 uvPenthouse
               );
-              addQuad(
+              addRooftopQuad(
                 [cX0, coreBaseY, cZ1],
                 [cX0, coreBaseY, cZ0],
                 [cX0, coreTopY, cZ0],
@@ -774,7 +887,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               );
 
               // 옥탑 윗면 (상부 슬래브)
-              addQuad(
+              addRooftopQuad(
                 [cX0, coreTopY, cZ0],
                 [cX1, coreTopY, cZ0],
                 [cX1, coreTopY, cZ1],
@@ -819,6 +932,35 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         this.options.onBuildingCountChange?.(builtBuildingCount);
       }
+
+      // 2-B. [3단계 신규] 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (줌 14.5~15.5 페이드인)
+      if (rooftopPosIdx > 0 && this.rooftopMaterial) {
+        const finalRooftopPositions = rooftopPosBuf.subarray(0, rooftopPosIdx);
+        const finalRooftopNormals = rooftopNormBuf.subarray(0, rooftopPosIdx);
+        const finalRooftopUvs = rooftopUvBuf.subarray(0, rooftopUvIdx);
+
+        const newRooftopGeometry = new THREE.BufferGeometry();
+        newRooftopGeometry.setAttribute('position', new THREE.BufferAttribute(finalRooftopPositions, 3));
+        newRooftopGeometry.setAttribute('normal', new THREE.BufferAttribute(finalRooftopNormals, 3));
+        newRooftopGeometry.setAttribute('uv', new THREE.BufferAttribute(finalRooftopUvs, 2));
+        newRooftopGeometry.computeBoundingSphere();
+
+        const newRooftopMesh = new THREE.Mesh(newRooftopGeometry, this.rooftopMaterial);
+        newRooftopMesh.frustumCulled = false;
+        const curZ = this.map ? this.map.getZoom() : 15.0;
+        const initT = Math.max(0, Math.min(1, (curZ - 14.5) / 1.0));
+        newRooftopMesh.visible = this.isVisible && initT > 0.01;
+        this.rooftopMaterial.opacity = initT;
+
+        if (this.rooftopMesh) {
+          this.scene.remove(this.rooftopMesh);
+          this.rooftopGeometry?.dispose();
+        }
+
+        this.rooftopMesh = newRooftopMesh;
+        this.rooftopGeometry = newRooftopGeometry;
+        this.scene.add(this.rooftopMesh);
+      }
     } catch (buildErr) {
       console.warn('[RealisticKoreanCityLayer] buildRealisticCityMesh exception:', buildErr);
     } finally {
@@ -832,6 +974,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
+      // [3단계 신규] 줌 14.5 ~ 15.5 사이에서 옥상 난간 및 옥탑 코어 부드러운 페이드인
+      if (this.rooftopMesh && this.map) {
+        const z = this.map.getZoom();
+        const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
+        this.rooftopMesh.visible = t > 0.01 && this.isVisible;
+        if (this.rooftopMaterial) {
+          this.rooftopMaterial.opacity = t;
+        }
+      }
+
       // [지형 표고 레이스 컨디션 해결] DEM 타일 로딩 완료 후 지형 표고가 수신되면 지형 위로 리빌드
       if (this.clampedAltitude === 0 && this.map) {
         const queried =
@@ -912,6 +1064,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.scene.remove(this.masterMesh);
       this.masterGeometry?.dispose();
       this.masterMesh = null;
+    }
+    if (this.rooftopMesh) {
+      this.scene.remove(this.rooftopMesh);
+      this.rooftopGeometry?.dispose();
+      this.rooftopMaterial?.dispose();
+      this.rooftopMesh = null;
     }
     this.cachedFeatures = [];
   }

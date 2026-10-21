@@ -3465,7 +3465,7 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.setLodMode('lod2');
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
-      setGpuBuildingLayersVisibility(map, false);
+      setGpuBuildingLayersVisibility(map, false, bldgVis);
       if (bldgVis) {
         promoteBuildingLayersToTop(map);
       }

@@ -239,94 +239,164 @@ export const gpuBuildingRoofColorExpr: any = [
 ];
 
 // -----------------------------------------------------------------------------
-// 5. 실사 창문 패턴 텍스처 등록 함수 (한국형 아파트 베란다 및 상가 샷시 고해상도 질감)
+// 5. 실사 창문 패턴 & 옥상 난간/코어 텍스처 등록 함수 (한국형 아파트 베란다 및 옥상 디테일)
 // -----------------------------------------------------------------------------
 export const BUILDING_PATTERN_IMAGE_ID = 'facade-window-grid';
+export const ROOF_PARAPET_PATTERN_IMAGE_ID = 'roof-parapet-core-grid';
 
 export function ensureBuildingPatterns(map: maplibregl.Map): void {
   if (!map || typeof document === 'undefined') return;
-  if (map.hasImage(BUILDING_PATTERN_IMAGE_ID)) return;
 
-  try {
-    const size = 128;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  // 1) 외벽 실사 베란다 창호 격자 패턴 등록
+  if (!map.hasImage(BUILDING_PATTERN_IMAGE_ID)) {
+    try {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, size, size);
 
-    ctx.clearRect(0, 0, size, size);
+        // (1) 층간 슬래브 분리선 (Floor Slab Dividing Line)
+        ctx.fillStyle = 'rgba(71, 85, 105, 0.55)'; // 다크 슬레이트 층간 라인
+        ctx.fillRect(0, 0, size, 4);
+        ctx.fillRect(0, size - 4, size, 4);
+        ctx.fillRect(0, size / 2 - 2, size, 4); // 2개 층 표현
 
-    // 1. 층간 슬래브 분리선 (Floor Slab Dividing Line)
-    ctx.fillStyle = 'rgba(71, 85, 105, 0.55)'; // 다크 슬레이트 층간 라인
-    ctx.fillRect(0, 0, size, 4);
-    ctx.fillRect(0, size - 4, size, 4);
-    ctx.fillRect(0, size / 2 - 2, size, 4); // 2개 층 표현
+        // (2) 창호 외곽 알루미늄/하이샤시 프레임 (세로 기둥)
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.40)';
+        ctx.fillRect(0, 0, 4, size);
+        ctx.fillRect(size - 4, 0, 4, size);
+        ctx.fillRect(size / 2 - 2, 0, 4, size);
 
-    // 2. 창호 외곽 알루미늄/하이샤시 프레임 (세로 기둥)
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.40)';
-    ctx.fillRect(0, 0, 4, size);
-    ctx.fillRect(size - 4, 0, 4, size);
-    ctx.fillRect(size / 2 - 2, 0, 4, size);
+        // (3) 베란다 창문 4구획 (2개 층 x 2개 세대/창호)
+        const windowSlots = [
+          { x: 6, y: 6, w: size / 2 - 10, h: size / 2 - 10 },
+          { x: size / 2 + 4, y: 6, w: size / 2 - 10, h: size / 2 - 10 },
+          { x: 6, y: size / 2 + 6, w: size / 2 - 10, h: size / 2 - 10 },
+          { x: size / 2 + 4, y: size / 2 + 6, w: size / 2 - 10, h: size / 2 - 10 },
+        ];
 
-    // 3. 베란다 창문 4구획 (2개 층 x 2개 세대/창호)
-    const windowSlots = [
-      { x: 6, y: 6, w: size / 2 - 10, h: size / 2 - 10 },
-      { x: size / 2 + 4, y: 6, w: size / 2 - 10, h: size / 2 - 10 },
-      { x: 6, y: size / 2 + 6, w: size / 2 - 10, h: size / 2 - 10 },
-      { x: size / 2 + 4, y: size / 2 + 6, w: size / 2 - 10, h: size / 2 - 10 },
-    ];
+        for (const win of windowSlots) {
+          // 어두운 베란다 내부 음영 (Dark Slate 줄눈)
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+          ctx.fillRect(win.x, win.y, win.w, win.h);
 
-    for (const win of windowSlots) {
-      // (1) 어두운 베란다 내부 음영 (Dark Slate 줄눈)
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
-      ctx.fillRect(win.x, win.y, win.w, win.h);
+          // 블루그레이 반사 유리 코팅 (Sky Blue Reflective Tint)
+          const glassGrad = ctx.createLinearGradient(win.x, win.y, win.x, win.y + win.h);
+          glassGrad.addColorStop(0, 'rgba(186, 230, 253, 0.42)'); // 상단 자연 채광 반사
+          glassGrad.addColorStop(0.5, 'rgba(148, 163, 184, 0.20)');
+          glassGrad.addColorStop(1, 'rgba(30, 41, 59, 0.50)');    // 하단 발코니 턱 음영
+          ctx.fillStyle = glassGrad;
+          ctx.fillRect(win.x + 1, win.y + 1, win.w - 2, win.h - 2);
 
-      // (2) 블루그레이 반사 유리 코팅 (Sky Blue Reflective Tint)
-      const glassGrad = ctx.createLinearGradient(win.x, win.y, win.x, win.y + win.h);
-      glassGrad.addColorStop(0, 'rgba(186, 230, 253, 0.42)'); // 상단 자연 채광 반사
-      glassGrad.addColorStop(0.5, 'rgba(148, 163, 184, 0.20)');
-      glassGrad.addColorStop(1, 'rgba(30, 41, 59, 0.50)');    // 하단 발코니 턱 음영
-      ctx.fillStyle = glassGrad;
-      ctx.fillRect(win.x + 1, win.y + 1, win.w - 2, win.h - 2);
+          // 하단 베란다 세로 철제 난간 살 (Vertical Balcony Railings)
+          const railTop = win.y + Math.round(win.h * 0.55);
+          const railH = win.h - Math.round(win.h * 0.55);
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.45)'; // 난간 상단 핸드레일
+          ctx.fillRect(win.x + 2, railTop, win.w - 4, 1.5);
 
-      // (3) 하단 베란다 세로 철제 난간 살 (Vertical Balcony Railings)
-      const railTop = win.y + Math.round(win.h * 0.55);
-      const railH = win.h - Math.round(win.h * 0.55);
-      ctx.fillStyle = 'rgba(203, 213, 225, 0.45)'; // 난간 상단 핸드레일
-      ctx.fillRect(win.x + 2, railTop, win.w - 4, 1.5);
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.35)'; // 세로 살
+          const numPickets = 5;
+          const picketStep = (win.w - 6) / (numPickets + 1);
+          for (let p = 1; p <= numPickets; p++) {
+            ctx.fillRect(Math.round(win.x + 3 + p * picketStep), railTop, 1.2, railH - 2);
+          }
 
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.35)'; // 세로 살
-      const numPickets = 5;
-      const picketStep = (win.w - 6) / (numPickets + 1);
-      for (let p = 1; p <= numPickets; p++) {
-        ctx.fillRect(Math.round(win.x + 3 + p * picketStep), railTop, 1.2, railH - 2);
+          // 상단 유리창 중앙 세로 샷시 프레임 (Mullion)
+          ctx.fillStyle = 'rgba(226, 232, 240, 0.55)';
+          ctx.fillRect(Math.round(win.x + win.w / 2 - 0.75), win.y + 1, 1.5, Math.round(win.h * 0.55));
+
+          // 대각선 자연 채광 하이라이트 글레어
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+          ctx.fillRect(win.x + 3, win.y + 3, Math.round(win.w * 0.35), 1.5);
+        }
+
+        const imgData = ctx.getImageData(0, 0, size, size);
+        map.addImage(BUILDING_PATTERN_IMAGE_ID, imgData);
       }
-
-      // (4) 상단 유리창 중앙 세로 샷시 프레임 (Mullion)
-      ctx.fillStyle = 'rgba(226, 232, 240, 0.55)';
-      ctx.fillRect(Math.round(win.x + win.w / 2 - 0.75), win.y + 1, 1.5, Math.round(win.h * 0.55));
-
-      // (5) 대각선 자연 채광 하이라이트 글레어
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.fillRect(win.x + 3, win.y + 3, Math.round(win.w * 0.35), 1.5);
+    } catch (err) {
+      console.warn('[gpuRealisticBuildingStack] Failed to register window pattern image:', err);
     }
+  }
 
-    const imgData = ctx.getImageData(0, 0, size, size);
-    map.addImage(BUILDING_PATTERN_IMAGE_ID, imgData);
-  } catch (err) {
-    console.warn('[gpuRealisticBuildingStack] Failed to register window pattern image:', err);
+  // 2) [3단계 신규] 옥상 난간 테두리 라인 & 옥탑 기계실 코어 패턴 등록
+  if (!map.hasImage(ROOF_PARAPET_PATTERN_IMAGE_ID)) {
+    try {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, size, size);
+
+        // (1) 옥상 외곽 파라펫 난간 테두리 코핑 라인 (다크 슬레이트 & 차콜 림)
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.95)';
+        ctx.fillRect(0, 0, size, 5);
+        ctx.fillRect(0, size - 5, size, 5);
+        ctx.fillRect(0, 0, 5, size);
+        ctx.fillRect(size - 5, 0, 5, size);
+
+        // (2) 알루미늄/석재 코핑 상단 엣지 하이라이트
+        ctx.fillStyle = 'rgba(203, 213, 225, 0.75)';
+        ctx.fillRect(1, 1, size - 2, 1.5);
+        ctx.fillRect(1, size - 2.5, size - 2, 1.5);
+        ctx.fillRect(1, 1, 1.5, size - 2);
+        ctx.fillRect(size - 2.5, 1, 1.5, size - 2);
+
+        // (3) 난간 안쪽 드리운 음영 (Inner Parapet Shadow)
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+        ctx.fillRect(5, 5, size - 10, 4);
+        ctx.fillRect(5, size - 9, size - 10, 4);
+        ctx.fillRect(5, 5, 4, size - 10);
+        ctx.fillRect(size - 9, 5, 4, size - 10);
+
+        // (4) 중앙 엘리베이터 권상기실 / 옥탑방 코어 박스 (42x42 구획)
+        const coreX = 43;
+        const coreY = 43;
+        const coreW = 42;
+        const coreH = 42;
+
+        // 코어 기저 음영 줄눈
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.70)';
+        ctx.fillRect(coreX - 2, coreY - 2, coreW + 4, coreH + 4);
+
+        // 코어 상부 슬래브 (밝은 회백색 콘크리트 #e2e8f0)
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+        ctx.fillRect(coreX, coreY, coreW, coreH);
+
+        // 코어 외곽 샷시 프레임
+        ctx.strokeStyle = 'rgba(51, 65, 85, 0.90)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(coreX + 1, coreY + 1, coreW - 2, coreH - 2);
+
+        // 옥탑 기계실 차콜 통풍 루버 그릴 살 4열
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
+        for (let r = 0; r < 4; r++) {
+          ctx.fillRect(coreX + 7, coreY + 10 + r * 6, coreW - 14, 2.2);
+        }
+
+        const imgData = ctx.getImageData(0, 0, size, size);
+        map.addImage(ROOF_PARAPET_PATTERN_IMAGE_ID, imgData);
+      }
+    } catch (err) {
+      console.warn('[gpuRealisticBuildingStack] Failed to register roof parapet pattern image:', err);
+    }
   }
 }
 
 // -----------------------------------------------------------------------------
-// 6. 4단 GPU 다층 슬라이스 레이어 정의 생성기
+// 6. 5단 GPU 다층 슬라이스 및 접지 음영(AO) 레이어 정의 생성기
 // -----------------------------------------------------------------------------
 export const GPU_BUILDING_LAYER_IDS = [
+  'bldg-ground-ao',
   'bldg-tier1-podium',
   'bldg-tier2-mainwall',
   'bldg-tier3-pattern',
   'bldg-tier4-roofcap',
+  'bldg-tier5-roofdetail',
 ] as const;
 
 export function createGpuBuildingStackLayers(
@@ -335,6 +405,52 @@ export function createGpuBuildingStackLayers(
   prefix: string = ''
 ): maplibregl.LayerSpecification[] {
   const p = prefix ? `${prefix}-` : '';
+
+  // Tier 0: 건물 바닥 접지 음영 (Ambient Occlusion Contact Shadow)
+  // - 위성사진과 건물 바닥 경계선에 얇고 선명한 음영을 주어 건물이 바닥에 정확히 뿌리박혀 보이도록 정합
+  const tier0GroundAO: maplibregl.LayerSpecification = {
+    id: `${p}bldg-ground-ao`,
+    type: 'line',
+    source: sourceId,
+    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    minzoom: 12,
+    maxzoom: 24,
+    paint: {
+      'line-color': '#020617', // 심층 차콜 블랙 접지 음영
+      'line-opacity': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        13.0, 0.0,
+        14.5, 0.55,
+        16.0, 0.82,
+        18.0, 0.95,
+      ],
+      'line-width': [
+        'interpolate',
+        ['exponential', 1.5],
+        ['zoom'],
+        13.0, 0.8,
+        14.5, 2.2,
+        16.0, 4.5,
+        18.0, 8.5,
+      ],
+      'line-blur': [
+        'interpolate',
+        ['exponential', 1.5],
+        ['zoom'],
+        13.0, 0.6,
+        14.5, 1.4,
+        16.0, 2.6,
+        18.0, 5.0,
+      ],
+    },
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      visibility: 'visible',
+    },
+  };
 
   // Tier 1: 1층 기단부 (Podium 0m ~ min(3.8m, H)) - 짙은 화강석 쇼윈도 기단부 (#334155)
   const tier1Podium: maplibregl.LayerSpecification = {
@@ -396,7 +512,6 @@ export function createGpuBuildingStackLayers(
   };
 
   // Tier 4: 옥상 슬래브 / 파라펫 캡 (Roof Cap H ~ H + 0.25m) - 0.25m 초박형 날렵한 캡
-  // 기존 0.8~0.9m 두꺼운 모자 형태를 0.25m로 축소하여 실제 한국 항공사진 뷰 일치
   const tier4RoofCap: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier4-roofcap`,
     type: 'fill-extrusion',
@@ -416,20 +531,69 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  return [tier1Podium, tier2MainWall, tier3Pattern, tier4RoofCap];
+  // Tier 5: [3단계 신규] 옥상 난간 테두리 라인 & 상단 코어 (줌 14.5 ~ 15.5 정밀 페이드인)
+  // - 줌 15 이상에서 상단이 평평해 보이지 않도록 난간 테두리 코핑과 옥탑 코어 구조물이 부드럽게 융합
+  const tier5RoofDetail: maplibregl.LayerSpecification = {
+    id: `${p}bldg-tier5-roofdetail`,
+    type: 'fill-extrusion',
+    source: sourceId,
+    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    minzoom: 14.5,
+    maxzoom: 24,
+    paint: {
+      'fill-extrusion-pattern': ROOF_PARAPET_PATTERN_IMAGE_ID,
+      'fill-extrusion-base': ['+', BUILDING_HEIGHT_EXPR, 0.25],
+      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 0.55], // 0.3m 상단 립
+      'fill-extrusion-opacity': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        14.5, 0.0,
+        15.5, 1.0,
+      ],
+      'fill-extrusion-vertical-gradient': false,
+    },
+    layout: {
+      visibility: 'visible',
+    },
+  };
+
+  return [tier0GroundAO, tier1Podium, tier2MainWall, tier3Pattern, tier4RoofCap, tier5RoofDetail];
 }
 
 // -----------------------------------------------------------------------------
 // 7. 가시성 및 모드 제어 헬퍼
 // -----------------------------------------------------------------------------
-export function setGpuBuildingLayersVisibility(map: maplibregl.Map, visible: boolean): void {
+export function setGpuBuildingLayersVisibility(
+  map: maplibregl.Map,
+  visible: boolean,
+  keepGroundAO: boolean = false
+): void {
   if (!map) return;
   const vis = visible ? 'visible' : 'none';
-  GPU_BUILDING_LAYER_IDS.forEach((id) => {
+  const aoVis = (visible || keepGroundAO) ? 'visible' : 'none';
+
+  // 접지 음영(bldg-ground-ao)은 건물 표시가 켜져 있으면 상시 유지 (Three.js 및 3D 타일셋 하단 접지력 강화)
+  if (map.getLayer('bldg-ground-ao')) {
+    map.setLayoutProperty('bldg-ground-ao', 'visibility', aoVis);
+  }
+  if (map.getLayer('fusion-bldg-ground-ao')) {
+    map.setLayoutProperty('fusion-bldg-ground-ao', 'visibility', aoVis);
+  }
+
+  // 3D 입체 익스트루전 슬라이스 레이어들 가시성 제어
+  const extrusionLayers = [
+    'bldg-tier1-podium',
+    'bldg-tier2-mainwall',
+    'bldg-tier3-pattern',
+    'bldg-tier4-roofcap',
+    'bldg-tier5-roofdetail',
+  ];
+
+  extrusionLayers.forEach((id) => {
     if (map.getLayer(id)) {
       map.setLayoutProperty(id, 'visibility', vis);
     }
-    // GeoJSON 소스 바인딩 버전도 함께 제어
     const geojsonId = `fusion-${id}`;
     if (map.getLayer(geojsonId)) {
       map.setLayoutProperty(geojsonId, 'visibility', vis);
@@ -449,12 +613,18 @@ export function setGpuBuildingLayersMode(
     if (map.getLayer('bldg-tier3-pattern')) {
       map.setLayoutProperty('bldg-tier3-pattern', 'visibility', 'none');
     }
+    if (map.getLayer('bldg-tier5-roofdetail')) {
+      map.setLayoutProperty('bldg-tier5-roofdetail', 'visibility', 'visible');
+    }
     if (map.getLayer('bldg-tier2-mainwall')) {
       map.setPaintProperty('bldg-tier2-mainwall', 'fill-extrusion-color', gpuBuildingWallColorExpr);
     }
   } else {
     if (map.getLayer('bldg-tier3-pattern')) {
       map.setLayoutProperty('bldg-tier3-pattern', 'visibility', 'visible');
+    }
+    if (map.getLayer('bldg-tier5-roofdetail')) {
+      map.setLayoutProperty('bldg-tier5-roofdetail', 'visibility', 'visible');
     }
     if (map.getLayer('bldg-tier2-mainwall')) {
       map.setPaintProperty('bldg-tier2-mainwall', 'fill-extrusion-color', gpuBuildingWallColorExpr);
