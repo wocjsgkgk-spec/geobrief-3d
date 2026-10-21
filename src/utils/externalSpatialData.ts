@@ -22,6 +22,7 @@ import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/re
 import { spatialTileCache, bboxToTileKeys, prioritizeTilesByCamera } from '@/utils/spatialTileCache';
 import { loadGangwonRealDataBulk } from '@/utils/gangwonRealDataLoader';
 import { resolveFullUrl } from '@/utils/urlHelper';
+import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
 
 
 export interface ExternalSpatialBuildingProperties {
@@ -570,6 +571,27 @@ export async function fetchExternalSpatialData(
   if (options?.onImmediate && ofmCount > 0) {
     options.onImmediate(immediateResult);
   }
+
+  // 1단계: 브이월드 로컬 다운로드 정밀 데이터(GIS건물통합정보) 1순위 최우선 선조회
+  fetchLocalVworldBuildings({ bbox, regionId: options?.regionId, useCoreOnly: true })
+    .then((localRes) => {
+      if (localRes.hasLocalData && localRes.features.length > 0 && options?.onImmediate) {
+        options.onImmediate({
+          success: true,
+          totalCount: localRes.features.length,
+          openFreeMapCount: ofmCount,
+          overpassCount: 0,
+          vworldCount: localRes.features.length,
+          status: 'connected',
+          message: `브이월드 로컬 다운로드 실측 건물 연동 (${localRes.features.length.toLocaleString()}동 / 1순위 최우선)`,
+          features: {
+            type: 'FeatureCollection',
+            features: localRes.features as any,
+          },
+        });
+      }
+    })
+    .catch(() => {});
 
   // 1-2단계: IndexedDB 영구 캐시에서 정면 우선 타일 피처 선조회 (0.02초 이내 초고속 직결 반환)
   if (prioritizedTileKeys[0]) {

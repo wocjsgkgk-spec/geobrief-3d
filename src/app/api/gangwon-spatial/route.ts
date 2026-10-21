@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { findGangwonRegionByCoords, getGangwonRegionByIdOrName, GangwonRegionPreset } from '@/constants/gangwon18Regions';
+import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -376,10 +377,17 @@ export async function GET(req: NextRequest) {
   // ---------------------------------------------------------------------------
   const promises: Promise<any>[] = [];
 
-  // (1) 브이월드 건물통합정보
+  // (1) 브이월드 건물통합정보 (1순위: 로컬 다운로드 정밀 데이터 -> 2순위: 실시간 WFS API 폴백)
   if (requestedLayers.includes('buildings')) {
     promises.push(
-      fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 3500).catch(() => [])
+      fetchLocalVworldBuildings({ bbox, regionId: currentRegion.id, useCoreOnly: false })
+        .then((localRes) => {
+          if (localRes.hasLocalData && localRes.features.length > 0) {
+            return localRes.features;
+          }
+          return fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 3500).catch(() => []);
+        })
+        .catch(() => fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 3500).catch(() => []))
     );
   } else {
     promises.push(Promise.resolve([]));
@@ -443,30 +451,38 @@ export async function GET(req: NextRequest) {
   // (A) 건물 데이터 가공 (브이월드 + Overpass 결합)
   const buildingsMap = new Map<string, any>();
 
-  // 1) 브이월드 건물 등록
+  // 1) 브이월드 건물 등록 (로컬 1순위 또는 실시간 WFS)
   for (const b of rawBuildings) {
     if (!b.geometry) continue;
     const p = b.properties || {};
-    const grndFlr = Number(p.gro_flo_co || p.grnd_flr || 0);
-    const ugrndFlr = Number(p.und_flo_co || p.ugrnd_flr || 0);
-    const height = Number(p.bd_hgt || p.hei || (grndFlr > 0 ? grndFlr * 3.1 : 8.0));
-    const levels = grndFlr > 0 ? grndFlr : Math.max(1, Math.round(height / 3.0));
+    const grndFlr = Number(p.levels || p.gro_flo_co || p.grnd_flr || 0);
+    const ugrndFlr = Number(p.ugrnd_flr || p.und_flo_co || 0);
+    const height = Number(p.height || p.bd_hgt || p.hei || (grndFlr > 0 ? grndFlr * 3.3 : 8.0));
+    const levels = grndFlr > 0 ? grndFlr : Math.max(1, Math.round(height / 3.3));
 
     const id = b.id || `vw-bld-${p.bd_mgt_sn || buildingsMap.size}`;
     buildingsMap.set(String(id), {
       type: 'Feature',
       id,
       properties: {
+        ...p,
         id,
-        name: p.buld_nm || p.name || '건축물',
-        buildingName: p.buld_nm || '',
-        grnd_flr: grndFlr,
+        name: p.name || p.buld_nm || '건축물',
+        buildingName: p.buildingName || p.buld_nm || '',
+        dongName: p.dongName || '',
+        address: p.address || '',
+        grnd_flr: levels,
         ugrnd_flr: ugrndFlr,
         levels,
         height,
-        structure: p.strct_cd_nm || '철근콘크리트구조',
-        usageType: p.main_purps_cd_nm || p.bdtyp_cd_nm || '일반건축물',
-        source: 'vworld_wfs',
+        structure: p.structure || p.strct_cd_nm || '철근콘크리트구조',
+        usageType: p.usageType || p.main_purps_cd_nm || p.bdtyp_cd_nm || '일반건축물',
+        bld_category: p.bld_category || p.usageType || 'general',
+        color: p.color || '#e5e0d8',
+        roofColour: p.roofColour || p.roofColor || '#356854',
+        roofColor: p.roofColor || p.roofColour || '#356854',
+        roofType: p.roofType || 'urethane_green',
+        source: p.source || 'vworld_wfs',
       },
       geometry: b.geometry,
     });
