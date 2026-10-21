@@ -210,30 +210,27 @@ export function extractRenderedVectorBuildings(
         props.hei || props.HEI || props.render_height || props.height || props.bld_hgt || 0
       );
 
-      let renderHeight = rawHei >= 2.5 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : 0);
+      let renderHeight = rawHei >= 8.0 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : 0);
 
-      // 누락된 층고 지능형 정밀 복원
-      if (!renderHeight || renderHeight < 2.5) {
+      // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (최소 8.0m 이상 볼륨 강제)
+      if (!renderHeight || renderHeight < 8.0) {
         if (isMilitary) {
-          // 군 표준 병영막사 및 군수창고: 2층~3층 (7.5m~10m)
+          // 군 표준 병영막사 및 군수창고: 2층~3층 (8m~12m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
-          const milStories = (approxArea < 200) ? 2 : Math.round(2 + seed);
-          renderHeight = milStories * 3.5; // 7.0m ~ 10.5m
+          renderHeight = 8.0 + seed * 4.0; // 8.0m ~ 12.0m
         } else if (isApartment) {
           // 한국형 아파트 단지(원주·춘천 등): 15층~25층 (45m~75m)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
           const aptStories = Math.round(15 + seed * 10);
           renderHeight = aptStories * 3.0; // 45m ~ 75m
         } else if (isCommercial) {
-          // 간선도로변 중대형 상업 빌딩: 4층~10층 (14m~32m)
+          // 시내 상가·원룸·근린생활 블록: 4층~6층 (12m~22m 규모의 탄탄한 도시 블록)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
-          const commStories = Math.round(4 + seed * 6);
-          renderHeight = commStories * 3.2; // 13m ~ 32m
+          renderHeight = 12.0 + seed * 10.0; // 12m ~ 22m
         } else {
-          // 주택가 다세대 빌라/단독주택: 2층~4층 (6m~12m)
+          // 단독주택 및 다세대 빌라: 2.5층~4층 (8m~14m)
           const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-          const villaStories = approxArea < 110 ? 2 : Math.round(2 + seed * 2);
-          renderHeight = villaStories * 3.0; // 6m ~ 12m
+          renderHeight = 8.0 + seed * 6.0; // 8m ~ 14m
         }
       }
 

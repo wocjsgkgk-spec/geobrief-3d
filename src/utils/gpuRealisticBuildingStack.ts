@@ -39,11 +39,11 @@ export const gpuBuildingTotalHeightExpr: any = [
   ],
   [
     'case',
-    // 1. 이미 실측 높이(>= 2.5m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결)
-    ['>=', ['var', 'declaredHeight'], 2.5],
+    // 1. 이미 실측 높이(>= 8.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결, 0~2m 납작 건물 완전 금지)
+    ['>=', ['var', 'declaredHeight'], 8.0],
     ['var', 'declaredHeight'],
 
-    // 2. 아파트 단지 및 고층 주거 태그: 50m ~ 75m (16~25층)
+    // 2. 아파트 단지 및 고층 주거 태그: 45m ~ 75m (15~25층)
     [
       'any',
       ['==', ['get', 'class'], 'apartments'],
@@ -52,11 +52,11 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      50,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], 12345], 12345]], 26], // 50..75m
+      45,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 31], // 45..75m
     ],
 
-    // 3. 시내 대로변 상업/업무/공공/의료/대학: 16m ~ 32m (5~10층)
+    // 3. 시내 대로변 상업/업무/공공/의료/대학/격자형 시가지: 12m ~ 22m (4~6층 탄탄한 도시 블록 형성)
     [
       'any',
       ['==', ['get', 'class'], 'commercial'],
@@ -70,11 +70,11 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      16,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], 23456], 23456]], 17], // 16..32m
+      12,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 11], // 12..22m
     ],
 
-    // 4. 산업/군사/물류/창고: 9m ~ 14m (1~3층)
+    // 4. 산업/군사/물류/창고: 8m ~ 14m
     [
       'any',
       ['==', ['get', 'class'], 'industrial'],
@@ -85,24 +85,21 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      9,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], 34567], 34567]], 6], // 9..14m
+      8,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 7], // 8..14m
     ],
 
-    // 5. 일반 시가지 (태그 부재 80% 건물 대상 지능형 스카이라인 분포 해시)
-    // - 45% 아파트 단지 스카이라인 (50m ~ 75m)
-    // - 25% 대로변 상가·오피스 (16m ~ 32m)
-    // - 12% 창고/군사/공공 (9m ~ 14m)
-    // - 18% 다세대 빌라/단독주택 (7.5m ~ 12m)
+    // 5. 일반 시가지 (태그 부재 건물 대상 100% 입체 볼륨 보장 스카이라인 분포 해시)
+    // - 30% 아파트 단지 스카이라인 (45m ~ 75m)
+    // - 40% 격자형 상가·오피스·근린생활 블록 (12m ~ 22m, 4~6층)
+    // - 30% 다세대 빌라/단독주택 (8m ~ 14m, 2.5~4층, 절대 0~2m 금지)
     [
       'case',
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 100], 45],
-      ['+', 50, ['%', ['abs', ['to-number', ['coalesce', ['id'], 56789], 56789]], 26]], // 50..75m 아파트
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 100], 70],
-      ['+', 16, ['%', ['abs', ['to-number', ['coalesce', ['id'], 67890], 67890]], 17]], // 16..32m 상업
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], 45678], 45678]], 100], 82],
-      ['+', 9, ['%', ['abs', ['to-number', ['coalesce', ['id'], 78901], 78901]], 6]],   // 9..14m 창고/군사
-      ['+', 7.5, ['%', ['abs', ['to-number', ['coalesce', ['id'], 89012], 89012]], 5]], // 7.5..12m 주택 (0% Flat 보장)
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 30],
+      ['+', 45, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 31]], // 45..75m 아파트
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 70],
+      ['+', 12, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 11]], // 12..22m 탄탄한 상업/원룸 블록
+      ['+', 8, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 7]],  // 8..14m 주택 (100% 입체화)
     ],
   ],
 ];
@@ -240,23 +237,17 @@ export const gpuBuildingRoofColorExpr: any = [
       '#3b6e5c', // 세이지 그린
     ],
 
-    // 3) 중층 시내 상가 및 근린생활시설 (14m ~ 24m)
-    ['>=', ['var', 'bH'], 14.0],
+    // 3) 중·저층 시가지 상가 및 다세대 빌라/단독주택 (한국 실제 위성사진 3색 엄격 분포)
+    // ① 에메랄드/세이지 우레탄 방수 옥상 (#3b7a57, 40%)
+    // ② 적갈색 기와/브라운 지붕 (#7c3f2c, 30%)
+    // ③ 밝은 회백색/회색 콘크리트 옥상 (#94a3b8, 30%)
     [
       'case',
-      ['<', ['var', 'hash'], 50],
-      '#356854', // 한국 특유 우레탄 방수 그린 (50%)
-      '#94a3b8', // 밝은 시멘트 옥상 (50%)
-    ],
-
-    // 4) 저층 단독주택·빌라 (14m 미만)
-    [
-      'case',
-      ['<', ['var', 'hash'], 35],
-      '#8c3b2b', // 적갈색 기와 (35%)
-      ['<', ['var', 'hash'], 65],
-      '#3d6b58', // 우레탄 녹색 (30%)
-      '#64748b', // 슬레이트 그레이 (35%)
+      ['<', ['var', 'hash'], 40],
+      '#3b7a57', // 에메랄드/세이지 우레탄 방수 (40%)
+      ['<', ['var', 'hash'], 70],
+      '#7c3f2c', // 적갈색 기와/브라운 지붕 (30%)
+      '#94a3b8', // 밝은 회백색 콘크리트 옥상 (30%)
     ],
   ],
 ];
@@ -531,7 +522,7 @@ export function createGpuBuildingStackLayers(
       'fill-extrusion-pattern': BUILDING_PATTERN_IMAGE_ID,
       'fill-extrusion-base': ['min', 3.8, BUILDING_HEIGHT_EXPR],
       'fill-extrusion-height': BUILDING_HEIGHT_EXPR,
-      'fill-extrusion-opacity': 0.38,
+      'fill-extrusion-opacity': 0.85,
     },
     layout: {
       visibility: 'visible',

@@ -17,6 +17,7 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'clean-layer',
   'streetsgl-road',
   'realistic-korean',
+  'vworld-poi',
   'bldg-',
   'real-',
   '3d-buildings',

@@ -891,12 +891,12 @@ function drawRoofBaseGutterAndAO(
 }
 
 /**
- * Slot 14: 밝은 콘크리트 그레이 옥상 (#8c8881 ~ #94a3b8)
+ * Slot 14: 밝은 콘크리트 그레이 옥상 (#94a3b8 ~ #cbd5e1)
  */
 function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#a39e97');
-  grad.addColorStop(1, '#8c8881');
+  grad.addColorStop(0, '#cbd5e1');
+  grad.addColorStop(1, '#94a3b8');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -928,12 +928,12 @@ function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: n
 }
 
 /**
- * Slot 17: 한국 특유의 우레탄 방수 그린 (#356854)
+ * Slot 17: 한국 특유의 에메랄드/세이지 그린 우레탄 방수 (#3b7a57)
  */
 function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#437c66');
-  grad.addColorStop(1, '#356854');
+  grad.addColorStop(0, '#4d946c');
+  grad.addColorStop(1, '#3b7a57');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -985,12 +985,12 @@ function drawRoofAsphaltCharcoal(ctx: CanvasRenderingContext2D, x: number, y: nu
 }
 
 /**
- * Slot 16: 적갈색 기와 및 테라코타 (#8c3b2b)
+ * Slot 16: 적갈색 기와 및 테라코타 (#7c3f2c)
  */
 function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#a24835');
-  grad.addColorStop(1, '#8c3b2b');
+  grad.addColorStop(0, '#944d37');
+  grad.addColorStop(1, '#7c3f2c');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 

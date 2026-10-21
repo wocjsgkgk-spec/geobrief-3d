@@ -313,13 +313,13 @@ export function classifyBuildingWithVendor(
 
     // -------------------------------------------------------------------------
     // 유형 3 [시내 중층 상업/오피스 빌딩]
-    // 높이: 4층~10층(14m~32m)
+    // 높이: 4층~6층(12m~22m 규모의 탄탄한 도시 블록 형성)
     // 외벽: 화강석 화이트/베이지(#e5e0d8), 스카이 블루 유리 커튼월(#93c5fd), 모던 그레이(#cbd5e1)
-    // 옥상: 우레탄 방수 그린(#356854, 50%), 밝은 시멘트 옥상(#94a3b8, 50%)
+    // 옥상: 우레탄 방수 그린(#3b7a57, 40%), 적갈색 기와/브라운(#7c3f2c, 30%), 밝은 시멘트(#94a3b8, 30%)
     // -------------------------------------------------------------------------
     case 'commercial': {
-      floors = 4 + (seed % 7);   // 4층 ~ 10층
-      height = 14.0 + (seed % 7) * 3.0; // 14m ~ 32m
+      floors = 4 + (seed % 3);   // 4층 ~ 6층
+      height = 12.0 + (seed % 6) * 2.0; // 12m ~ 22m 탄탄한 도시 블록
       const wallPick = seed % 3;
       if (wallPick === 0) {
         wallColor = '#e5e0d8'; // 화강석 화이트/베이지
@@ -332,29 +332,32 @@ export function classifyBuildingWithVendor(
         atlasWallSlot = 'comm_dark_metal';
       }
 
-      // 옥상: 우레탄 방수 그린 50%, 밝은 시멘트 옥상 50%
-      if (seed < 50) {
-        roofColor = '#356854'; // 한국 특유 우레탄 방수 그린
+      // 옥상: 에메랄드/세이지 우레탄 40%, 적갈색 기와/브라운 30%, 밝은 시멘트 30%
+      if (seed < 40) {
+        roofColor = '#3b7a57'; // 한국 특유 에메랄드/세이지 그린 우레탄
         atlasRoofSlot = 'roof_urethane_sage';
+      } else if (seed < 70) {
+        roofColor = '#7c3f2c'; // 적갈색 기와/브라운
+        atlasRoofSlot = 'roof_terracotta_tile';
       } else {
-        roofColor = '#94a3b8'; // 밝은 시멘트 옥상
+        roofColor = '#94a3b8'; // 밝은 시멘트/콘크리트 옥상
         atlasRoofSlot = 'roof_concrete_warmgray';
       }
       hasParapet = true;
-      hasPenthouseCore = height >= 18.0;
+      hasPenthouseCore = height >= 16.0;
       isGabledRoof = false;
       break;
     }
 
     // -------------------------------------------------------------------------
     // 유형 4 [다세대 빌라 & 단독주택가]
-    // 높이: 2층~4층(6.5m~12m)
+    // 높이: 2.5층~4층(8m~14m 100% 입체 돌출)
     // 외벽: 따뜻한 적벽돌(#a84a32), 살구색/크림색 회벽(#f5ebe0), 밝은 화강석(#e7e5e4)
-    // 지붕: 적갈색 기와(#8c3b2b, 35%), 우레탄 녹색(#3d6b58, 30%), 슬레이트 그레이(#64748b, 35%)
+    // 지붕: 에메랄드/세이지 우레탄(#3b7a57, 40%), 적갈색 기와(#7c3f2c, 30%), 밝은 콘크리트(#94a3b8, 30%)
     // -------------------------------------------------------------------------
     case 'residential': {
-      floors = 2 + (seed % 3);   // 2층 ~ 4층
-      height = 6.5 + (seed % 6) * 1.0; // 6.5m ~ 12.0m
+      floors = 2 + (seed % 3);   // 2.5층 ~ 4층
+      height = 8.0 + (seed % 7) * 1.0; // 8.0m ~ 14.0m (0m~2m 납작 건물 원천 금지)
       const wallPick = seed % 3;
       if (wallPick === 0) {
         wallColor = '#a84a32'; // 따뜻한 적벽돌
@@ -367,19 +370,19 @@ export function classifyBuildingWithVendor(
         atlasWallSlot = 'villa_granite';
       }
 
-      // 지붕 3종 분포 (적갈색 기와 35%, 우레탄 녹색 30%, 슬레이트 그레이 35%)
-      if (seed < 35) {
-        roofColor = '#8c3b2b'; // 적갈색 기와
-        atlasRoofSlot = 'roof_terracotta_tile';
-        isGabledRoof = true;
-      } else if (seed < 65) {
-        roofColor = '#3d6b58'; // 우레탄 녹색
+      // 지붕 3종 정밀 분포: ① 에메랄드/세이지 우레탄 40%, ② 적갈색 기와 30%, ③ 밝은 콘크리트 30%
+      if (seed < 40) {
+        roofColor = '#3b7a57'; // 에메랄드/세이지 그린 우레탄
         atlasRoofSlot = 'roof_urethane_sage';
         isGabledRoof = false;
+      } else if (seed < 70) {
+        roofColor = '#7c3f2c'; // 적갈색 기와/브라운
+        atlasRoofSlot = 'roof_terracotta_tile';
+        isGabledRoof = true;
       } else {
-        roofColor = '#64748b'; // 슬레이트 그레이
-        atlasRoofSlot = 'roof_asphalt_charcoal';
-        isGabledRoof = seed % 2 === 0;
+        roofColor = '#94a3b8'; // 밝은 회백색/회색 콘크리트 옥상
+        atlasRoofSlot = 'roof_concrete_warmgray';
+        isGabledRoof = false;
       }
       hasParapet = !isGabledRoof;
       hasPenthouseCore = false;
@@ -457,13 +460,19 @@ export function classifyBuildingWithVendor(
     0
   );
 
-  const explicitHeight = declaredHeight >= 2.5
+  const explicitHeight = declaredHeight >= 8.0
     ? declaredHeight
     : (declaredFloors >= 1 ? declaredFloors * 3.2 : 0);
 
-  if (explicitHeight >= 2.5) {
-    height = explicitHeight;
-    floors = declaredFloors >= 1 ? declaredFloors : Math.max(1, Math.round(explicitHeight / 3.2));
+  if (explicitHeight >= 8.0) {
+    height = Math.max(height, explicitHeight);
+    floors = declaredFloors >= 1 ? declaredFloors : Math.max(floors, Math.round(height / 3.2));
+  }
+
+  // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (최소 8.0m, 2.5층 이상 볼륨 강제)
+  if (height < 8.0) {
+    height = 8.0 + (seed % 6) * 1.0; // 8.0m ~ 13.0m
+    floors = Math.max(2, Math.round(height / 3.2));
   }
 
   // 지붕 색상 선언 또는 위성 샘플링 색상 우선 반영

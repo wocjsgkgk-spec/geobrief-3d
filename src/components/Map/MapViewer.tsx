@@ -24,6 +24,7 @@ import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
 import { LOD2BuildingEngine } from './LOD2BuildingEngine';
 import { RealisticKoreanCityLayer } from './RealisticKoreanCityLayer';
+import { setupVworldPoiLayer, updateVworldPoisWithBuildings, VWORLD_POI_LAYER_ID } from '@/utils/koreanPoiLayer';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import {
@@ -820,6 +821,7 @@ export const MapViewer: React.FC = () => {
                 try {
                   const center = mapInstance.getCenter();
                   realisticKoreanCityLayerRef.current.updateBuildings(merged, [center.lng, center.lat]);
+                  updateVworldPoisWithBuildings(mapInstance, merged);
                 } catch {
                   // ignore
                 }
@@ -895,6 +897,7 @@ export const MapViewer: React.FC = () => {
                 try {
                   const center = mapInstance.getCenter();
                   realisticKoreanCityLayerRef.current.updateBuildings(merged, [center.lng, center.lat]);
+                  updateVworldPoisWithBuildings(mapInstance, merged);
                 } catch {
                   // ignore
                 }
@@ -2736,6 +2739,9 @@ export const MapViewer: React.FC = () => {
         map.addLayer(realisticCityLayer);
         realisticKoreanCityLayerRef.current = realisticCityLayer;
         (window as any).__realisticCityLayer = realisticCityLayer;
+
+        // [3단계 신규]: 브이월드 스타일 노란 핀 + 한글 건물/지역 명칭(POI) 심볼 레이어 등록
+        setupVworldPoiLayer(map);
       } catch (rcErr) {
         console.warn('[RealisticKoreanCityLayer] Registration warning:', rcErr);
       }
@@ -3606,6 +3612,10 @@ export const MapViewer: React.FC = () => {
       if (bldgVis) {
         promoteBuildingLayersToTop(map);
       }
+    }
+
+    if (map.getLayer(VWORLD_POI_LAYER_ID)) {
+      map.setLayoutProperty(VWORLD_POI_LAYER_ID, 'visibility', bldgVis ? 'visible' : 'none');
     }
 
     updateRealtimeMetrics();
