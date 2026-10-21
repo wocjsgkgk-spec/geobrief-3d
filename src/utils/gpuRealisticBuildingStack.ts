@@ -16,6 +16,7 @@ import maplibregl from 'maplibre-gl';
 
 // -----------------------------------------------------------------------------
 // 1. GPU 총 높이(Total Height) 계산 Expression (0% Flat 방지, 100% 입체화)
+// 단 하나의 표준 높이 식 BUILDING_HEIGHT_EXPR로 통일하여 0mm 오차 없는 완벽 밀착 결합 보장
 // -----------------------------------------------------------------------------
 export const gpuBuildingTotalHeightExpr: any = [
   'let',
@@ -102,6 +103,9 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
   ],
 ];
+
+/** 표준 단일 높이 Expression (기단부/본동/옥상 슬래브 0mm 오차 통일) */
+export const BUILDING_HEIGHT_EXPR: any = gpuBuildingTotalHeightExpr;
 
 // -----------------------------------------------------------------------------
 // 2. 바닥 기본 고도(Base Height) Expression
@@ -270,7 +274,7 @@ export function createGpuBuildingStackLayers(
 ): maplibregl.LayerSpecification[] {
   const p = prefix ? `${prefix}-` : '';
 
-  // Tier 1: 1층 기단부 (Podium 0m ~ 3.5m) - 차분한 화강석 그레이 (#64748b)
+  // Tier 1: 1층 기단부 (Podium 0m ~ min(3.5m, H)) - 차분한 화강석 그레이 (#64748b)
   const tier1Podium: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier1-podium`,
     type: 'fill-extrusion',
@@ -281,7 +285,7 @@ export function createGpuBuildingStackLayers(
     paint: {
       'fill-extrusion-color': '#64748b',
       'fill-extrusion-base': gpuBuildingBaseExpr,
-      'fill-extrusion-height': ['min', 3.5, gpuBuildingTotalHeightExpr],
+      'fill-extrusion-height': ['min', 3.5, BUILDING_HEIGHT_EXPR],
       'fill-extrusion-opacity': 0.98,
       'fill-extrusion-vertical-gradient': true,
     },
@@ -290,7 +294,7 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 2: 중층 외벽 본체 (Main Wall 3.5m ~ H - 0.6m) - 크림 아이보리/샌드 베이지/라이트 웜그레이
+  // Tier 2: 중층 외벽 본체 (Main Wall min(3.5m, H) ~ H) - 크림 아이보리/샌드 베이지/라이트 웜그레이
   const tier2MainWall: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier2-mainwall`,
     type: 'fill-extrusion',
@@ -300,8 +304,8 @@ export function createGpuBuildingStackLayers(
     maxzoom: 24,
     paint: {
       'fill-extrusion-color': gpuBuildingWallColorExpr,
-      'fill-extrusion-base': ['min', 3.5, gpuBuildingTotalHeightExpr],
-      'fill-extrusion-height': ['max', 3.5, ['-', gpuBuildingTotalHeightExpr, 0.6]],
+      'fill-extrusion-base': ['min', 3.5, BUILDING_HEIGHT_EXPR],
+      'fill-extrusion-height': BUILDING_HEIGHT_EXPR,
       'fill-extrusion-opacity': 0.98,
       'fill-extrusion-vertical-gradient': true,
     },
@@ -310,18 +314,18 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 3: 실사 창문 패턴 오버레이 (Facade Pattern Overlay 3.5m ~ H - 0.6m)
+  // Tier 3: 실사 창문 패턴 오버레이 (Facade Pattern Overlay min(3.5m, H) ~ H)
   const tier3Pattern: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier3-pattern`,
     type: 'fill-extrusion',
     source: sourceId,
     ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
-    minzoom: 12.5,
+    minzoom: 11,
     maxzoom: 24,
     paint: {
       'fill-extrusion-pattern': BUILDING_PATTERN_IMAGE_ID,
-      'fill-extrusion-base': ['min', 3.5, gpuBuildingTotalHeightExpr],
-      'fill-extrusion-height': ['max', 3.5, ['-', gpuBuildingTotalHeightExpr, 0.6]],
+      'fill-extrusion-base': ['min', 3.5, BUILDING_HEIGHT_EXPR],
+      'fill-extrusion-height': BUILDING_HEIGHT_EXPR,
       'fill-extrusion-opacity': 0.32,
     },
     layout: {
@@ -329,7 +333,8 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 4: 옥상 슬래브 / 파라펫 캡 (Roof Cap H - 0.6m ~ H) - 4색 현실 비율 해시 분기
+  // Tier 4: 옥상 슬래브 / 파라펫 캡 (Roof Cap H ~ H + 0.9m) - 4색 현실 비율 해시 분기
+  // 파라펫 0.9m 돌출로 Z-fighting 원천 차단 및 본동과 0mm 밀착 결합
   const tier4RoofCap: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier4-roofcap`,
     type: 'fill-extrusion',
@@ -339,8 +344,8 @@ export function createGpuBuildingStackLayers(
     maxzoom: 24,
     paint: {
       'fill-extrusion-color': gpuBuildingRoofColorExpr,
-      'fill-extrusion-base': ['max', 3.5, ['-', gpuBuildingTotalHeightExpr, 0.6]],
-      'fill-extrusion-height': gpuBuildingTotalHeightExpr,
+      'fill-extrusion-base': BUILDING_HEIGHT_EXPR,
+      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 0.9],
       'fill-extrusion-opacity': 1.0,
       'fill-extrusion-vertical-gradient': false,
     },

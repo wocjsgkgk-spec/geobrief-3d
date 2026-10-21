@@ -474,12 +474,12 @@ export function safeSetTerrain(
             maxzoom: 12,
           });
         }
-        // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.15)
+        // 소스 존재 재확인 후 안전하게 setTerrain 적용 (기본 exaggeration: 1.0 - 급경사면 버텍스 왜곡 및 지오메트리 뚫림 방지)
         if (map.getSource('terrarium-dem')) {
           try {
             map.setTerrain({
               source: 'terrarium-dem',
-              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.15,
+              exaggeration: Number.isFinite(terrainExaggeration) ? terrainExaggeration : 1.0,
             });
           } catch (err) {
             console.warn('[MapViewer] setTerrain 호출 중 오류 방어:', err);
@@ -883,9 +883,12 @@ export const MapViewer: React.FC = () => {
 
       try {
         let count = 0;
+        const currentMode = useMapStore.getState().renderMode3D;
         const isBldgVisible =
           (map.getLayer('bldg-tier1-podium') && map.getLayoutProperty('bldg-tier1-podium', 'visibility') !== 'none') ||
-          (map.getLayer('3d-buildings') && map.getLayoutProperty('3d-buildings', 'visibility') !== 'none');
+          (map.getLayer('3d-buildings') && map.getLayoutProperty('3d-buildings', 'visibility') !== 'none') ||
+          (currentMode === 'facade' && !!layers.buildings3D) ||
+          (currentMode === 'tiles3d' && !!layers.buildings3D);
 
         if (isBldgVisible) {
           const zoom = map.getZoom();
@@ -2218,10 +2221,14 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] background layer cleanup notice:', bgErr);
       }
 
-      // [2. 지형(Terrarium DEM)과 위성 레이어 드레이핑(Draping) 결합: 기본 고저차 1.15x]
+      // [2. 지형(Terrarium DEM)과 위성 레이어 드레이핑(Draping) 결합: 기본 고저차 1.0x 안정화]
       if (map.getSource('terrarium-dem')) {
         try {
-          map.setTerrain({ source: 'terrarium-dem', exaggeration: 1.15 });
+          const initExaggeration = useMapStore.getState().terrainExaggeration;
+          map.setTerrain({
+            source: 'terrarium-dem',
+            exaggeration: Number.isFinite(initExaggeration) ? initExaggeration : 1.0,
+          });
         } catch (err) {
           console.warn('setTerrain 안전 처리:', err);
         }
@@ -3446,8 +3453,7 @@ export const MapViewer: React.FC = () => {
     } else if (renderMode3D === 'facade') {
       // 2. 모드 B: 실감 파사드 모드 (Three.js 단일 버퍼 실사 파사드 + 입체 지붕)
       if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.attachToMap(map);
-        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
+        deck3DTilesManagerRef.current.detachFromMap();
       }
       if (lod2BuildingEngineRef.current) {
         lod2BuildingEngineRef.current.setVisible(false);
