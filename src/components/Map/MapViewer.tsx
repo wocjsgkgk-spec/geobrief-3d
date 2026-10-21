@@ -38,6 +38,7 @@ import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { generateContourLines } from '@/utils/contourGenerator';
 import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnalysis';
+import { aggregateBuildingFeatures } from '@/utils/gangwonSpatialAggregator';
 import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
 import {
   Ruler,
@@ -805,6 +806,8 @@ export const MapViewer: React.FC = () => {
                   // ignore
                 }
               }
+              // 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
+              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true }).catch(() => {});
               updateRealtimeMetrics();
             }
           },
@@ -839,6 +842,8 @@ export const MapViewer: React.FC = () => {
                   // ignore
                 }
               }
+              // 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
+              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true }).catch(() => {});
               updateRealtimeMetrics();
             }
           })

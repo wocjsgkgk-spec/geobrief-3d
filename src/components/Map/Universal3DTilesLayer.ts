@@ -19,6 +19,7 @@ import {
   getEffectiveCesiumIonToken,
   getEffectiveGoogleMapsKey,
 } from '@/utils/external3DTilesConnector';
+import { getMemoizedBuilding } from '@/utils/gangwonSpatialAggregator';
 
 const RBush = (rbush as any).default || rbush;
 
@@ -624,11 +625,20 @@ export class Universal3DTilesManager {
         // 1) 고층 아파트 & 상업 빌딩 옥상: 우레탄/콘크리트 슬래브 + 난간 + 옥탑방
         // ---------------------------------------------------------------------
         if (isApt || isComm) {
-          // (1) 옥상 슬래브 (우레탄 방수 초록 65% / 노후 콘크리트 회색 35%)
-          const isUrethane = b.seed < 0.65;
-          const slabColor: [number, number, number, number] = isUrethane
-            ? [46, 90, 68, 255]
-            : [100, 116, 139, 255];
+          // (1) 옥상 슬래브: 위성 샘플링 색상 1:1 바인딩 (초록 우레탄 / 회색 콘크리트 / 차콜 등)
+          const meta = getMemoizedBuilding(b.id);
+          let slabColor: [number, number, number, number] = [46, 90, 68, 255];
+          if (meta?.roofColor) {
+            slabColor = [
+              Math.round(meta.roofColor.r * 255),
+              Math.round(meta.roofColor.g * 255),
+              Math.round(meta.roofColor.b * 255),
+              255,
+            ];
+          } else {
+            const isUrethane = b.seed < 0.65;
+            slabColor = isUrethane ? [46, 90, 68, 255] : [100, 116, 139, 255];
+          }
 
           const slabPolygon = coords.map((pt) => [pt[0], pt[1], roofZ]);
           roofSlabData.push({
@@ -732,13 +742,24 @@ export class Universal3DTilesManager {
           const isEastWest = dx >= dy;
           const apexZ = roofZ + 2.8; // 지붕마루 높이 +2.8m
 
-          // 지붕 색상 분기: 적갈색 기와(#6b2d1f), 청색 강판(#1e3a8a), 차콜 슁글(#334155)
-          const roofColors: [number, number, number, number][] = [
-            [107, 45, 31, 255], // 적갈색 기와
-            [30, 58, 138, 255], // 청색 강판
-            [51, 65, 85, 255],  // 차콜 슁글
-          ];
-          const roofColor = roofColors[Math.floor(b.seed * roofColors.length) % roofColors.length];
+          // 지붕 색상 분기: 위성 샘플링 색상 우선 반영
+          const gabledMeta = getMemoizedBuilding(b.id);
+          let roofColor: [number, number, number, number] = [107, 45, 31, 255];
+          if (gabledMeta?.roofColor) {
+            roofColor = [
+              Math.round(gabledMeta.roofColor.r * 255),
+              Math.round(gabledMeta.roofColor.g * 255),
+              Math.round(gabledMeta.roofColor.b * 255),
+              255,
+            ];
+          } else {
+            const roofColors: [number, number, number, number][] = [
+              [107, 45, 31, 255], // 적갈색 기와
+              [30, 58, 138, 255], // 청색 강판
+              [51, 65, 85, 255],  // 차콜 슁글
+            ];
+            roofColor = roofColors[Math.floor(b.seed * roofColors.length) % roofColors.length];
+          }
 
           if (isEastWest) {
             // 동서 방향 능선 (남·북 2면 경사)

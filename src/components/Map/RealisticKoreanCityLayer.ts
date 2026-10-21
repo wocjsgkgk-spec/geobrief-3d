@@ -37,6 +37,12 @@ import {
   getPhotorealisticSlotUV,
   UVRect,
 } from '@/utils/photorealisticCityAtlas';
+import {
+  aggregateBuildingFeatures,
+  generateBuildingId,
+  getMemoizedBuilding,
+  parseAndClassifyBuilding,
+} from '@/utils/gangwonSpatialAggregator';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -248,6 +254,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     if (!this.isMoving) {
       this.buildRealisticCityMesh(features);
+      // 백그라운드 위성 타일 옥상 색상 일괄 샘플링 및 강원권 건물 메모이제이션 (무블로킹)
+      aggregateBuildingFeatures(features, { zoom: 16, sampleSatelliteColors: true })
+        .then(() => {
+          if (!this.isMoving && this.map) {
+            this.buildRealisticCityMesh(features);
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -296,6 +310,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const uvRoofUrethane = getPhotorealisticSlotUV('roof_urethane_sage');
       const uvRoofAsphalt = getPhotorealisticSlotUV('roof_asphalt_charcoal');
       const uvRoofTile = getPhotorealisticSlotUV('roof_terracotta_tile');
+      const uvRoofZinc = getPhotorealisticSlotUV('roof_zinc_blue');
       const uvParapet = getPhotorealisticSlotUV('parapet_concrete');
       const uvPenthouse = getPhotorealisticSlotUV('penthouse_wall');
 
@@ -472,86 +487,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (elen < minEdgeLen) minEdgeLen = elen;
           }
 
-          // 건물 속성 기반 높이 복원 (0% Flat 보장, 100% 수직 솟아오름)
-          const props = (feat.properties || {}) as Record<string, any>;
-          let height = Number(
-            props.height || props.hei || props.render_height || props.bld_hgt || 0
-          );
-          const levels = Number(
-            props.grnd_flr || props.gro_flo_co || props.levels || props['building:levels'] || 0
-          );
-          if (!height && levels > 0) height = levels * 3.2;
-
-          const name = String(
-            props.name || props.name_ko || props.buld_nm || props.buildingName || ''
-          ).toLowerCase();
-          const category = String(props.bld_category || props.usageType || '').toLowerCase();
-
-          // [요구사항 2] 아파트 단지 판정 (명칭, 태그, 한 변 30m+ 판상형 군집 또는 면적 200㎡+)
-          const isApt =
-            name.includes('아파트') ||
-            name.includes('apt') ||
-            name.includes('단지') ||
-            name.includes('푸르지오') ||
-            name.includes('자이') ||
-            name.includes('힐스테이트') ||
-            name.includes('래미안') ||
-            name.includes('e편한') ||
-            name.includes('더샵') ||
-            name.includes('아이파크') ||
-            name.includes('롯데캐슬') ||
-            name.includes('주공') ||
-            props.class === 'apartments' ||
-            props.building === 'apartments' ||
-            props.type === 'apartments' ||
-            category === 'apartment' ||
-            areaSqm >= 200 ||
-            maxEdgeLen >= 30.0;
-
-          const isComm =
-            name.includes('타워') ||
-            name.includes('빌딩') ||
-            name.includes('센터') ||
-            name.includes('프라자') ||
-            name.includes('플라자') ||
-            name.includes('오피스') ||
-            name.includes('마트') ||
-            name.includes('상가') ||
-            props.class === 'commercial' ||
-            props.class === 'retail' ||
-            props.class === 'office' ||
-            category === 'commercial' ||
-            (areaSqm > 150 && !isApt);
-
-          const isMilitary =
-            name.includes('사령부') ||
-            name.includes('군부대') ||
-            name.includes('대대') ||
-            name.includes('막사') ||
-            props.class === 'military' ||
-            props.building === 'military' ||
-            category === 'public_military' ||
-            props.isMilitaryOrPublic === true;
-
-          // [요구사항 2: 5,787동 전체 실제 높이 100% 수직 복원 (0% Flat 방지)]
-          // 1순위: 실측 층수 및 높이 (7.5m 이상일 때)
-          // 2순위: 지능형 스카이라인 추론 (최저 높이 7.5m 보장)
-          if (!height || height < 7.5) {
-            const seed = Math.abs(Math.sin(cLng * 1450 + cLat * 2350));
-            if (isApt) {
-              // 아파트 단지 구역 (원주 우산동·학성동·단계동·무실동 등): 16층 ~ 25층 (50m ~ 75m)
-              height = 50.0 + Math.floor(seed * 9) * 3.1;
-            } else if (isComm) {
-              // 시내 대로변 상가 및 오피스 빌딩: 5층 ~ 10층 (16m ~ 32m)
-              height = 16.0 + Math.floor(seed * 6) * 3.2;
-            } else if (isMilitary) {
-              // 군 막사/물류/창고 시설: 1층 ~ 3층 (9m ~ 14m)
-              height = 9.0 + Math.floor(seed * 3) * 2.5;
-            } else {
-              // 밀집 주택가 다세대 빌라·단독주택: 2층 ~ 4층 (7.5m ~ 12m)
-              height = 7.5 + Math.floor(seed * 3) * 2.2;
-            }
-          }
+          // 강원권 공간데이터 통합 메모이제이션 조회 및 6대 건축 속성 완성
+          const bldgId = generateBuildingId(feat, fIdx);
+          const meta = getMemoizedBuilding(bldgId) || parseAndClassifyBuilding(feat, rawCoords, fIdx);
+          const height = meta.height;
+          const isApt = meta.isApt;
+          const isComm = meta.isCommercial;
+          const isMilitary = meta.isMilitary;
 
           // 지형 표고 캐시 확인 및 안착 (clampedAltitude 기준 상대 표고)
           const rawElev =
@@ -627,15 +569,25 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (pts2D[i].z > maxZ) maxZ = pts2D[i].z;
           }
 
-          // 건물 고유 해시 기반 지붕 색상 4종 분포
-          const roofHash = Math.abs(Math.sin(cLng * 3780 + cLat * 7890)) % 1.0;
-          let roofUV = uvRoofConcrete; // ① 노후 콘크리트 웜그레이 35%
-          if (roofHash >= 0.35 && roofHash < 0.65) {
-            roofUV = uvRoofUrethane; // ② 우레탄 방수 세이지 그린 30%
-          } else if (roofHash >= 0.65 && roofHash < 0.85) {
-            roofUV = uvRoofAsphalt; // ③ 다크 슬레이트 아스팔트 20%
-          } else {
-            roofUV = uvRoofTile; // ④ 적갈색 기와/브라운 15%
+          // [위성 타일 색감 1:1 매칭 추출 기반 지붕 재질 UV 할당 (실제 초록우레탄·콘크리트·파란징크·적갈색기와)]
+          let roofUV = uvRoofConcrete;
+          switch (meta.roofColor.roofType) {
+            case 'urethane':
+              roofUV = uvRoofUrethane; // 실제 초록 우레탄 옥상 (#15803d)
+              break;
+            case 'zinc_blue':
+              roofUV = uvRoofZinc; // 실제 파란색 공장/물류/징크 지붕 (#1e3a8a, #2563eb)
+              break;
+            case 'terracotta':
+              roofUV = uvRoofTile; // 실제 적갈색 점토기와/슁글 (#991b1b)
+              break;
+            case 'asphalt':
+              roofUV = uvRoofAsphalt; // 실제 다크 차콜 아스팔트 (#334155)
+              break;
+            case 'concrete':
+            default:
+              roofUV = uvRoofConcrete; // 실제 회색 콘크리트 슬래브 (#64748b)
+              break;
           }
 
           const spanX = Math.max(1, maxX - minX);
@@ -678,9 +630,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           // -------------------------------------------------------------------
           // C. 입체 옥상 구조물 (0.9m 난간 + 3.0m 옥탑방 코어 or ㅅ자 박공지붕)
           // -------------------------------------------------------------------
-          const isGabled = !isApt && !isComm && height <= 12.0 && roofHash > 0.65;
+          const isGabled = meta.roofShape === 'gabled';
 
           if (isGabled) {
+            const gabledUV =
+              meta.roofColor.roofType === 'zinc_blue'
+                ? uvRoofZinc
+                : meta.roofColor.roofType === 'asphalt'
+                ? uvRoofAsphalt
+                : uvRoofTile;
+
             // 저층 주택 및 군 막사 ㅅ자형 경사 박공지붕
             const cx = (minX + maxX) / 2;
             const cz = (minZ + maxZ) / 2;
@@ -697,7 +656,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               r1,
               r0,
               [0.707, 0.707, 0],
-              uvRoofTile
+              gabledUV
             );
             // 서쪽 경사면
             addQuad(
@@ -706,7 +665,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               [minX, topElev, maxZ],
               [minX, topElev, minZ],
               [-0.707, 0.707, 0],
-              uvRoofTile
+              gabledUV
             );
           } else {
             // 평슬래브 옥상 테두리 0.9m 난간(Parapet) 돌출
