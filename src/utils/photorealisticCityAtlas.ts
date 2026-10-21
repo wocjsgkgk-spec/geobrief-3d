@@ -259,11 +259,11 @@ function drawRealisticWindowGlass(
 // =============================================================================
 
 /**
- * Slot 0: 아파트 Type A (웜 아이보리 #ebe6dc + 딥 브라운 투톤 기단부 #4a3b32)
+ * Slot 0: 아파트 Type A (따뜻한 크림 아이보리 #ece8df + 딥 브라운 투톤 기단부 #4a3b32)
  */
 function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 1. 베이스 웜 아이보리 외벽 (한국 도심 실사 색감)
-  ctx.fillStyle = '#ebe6dc';
+  // 1. 베이스 웜 아이보리 외벽 (한국 도심 실사 색감 #ece8df)
+  ctx.fillStyle = '#ece8df';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브 & 빗물 드립선
@@ -332,10 +332,10 @@ function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * Slot 1: 아파트 Type B (샌드 베이지 #dfd9ce + 차콜 브라운 #3e3835)
+ * Slot 1: 아파트 Type B (샌드 베이지 #e2dcd3 + 차콜 브라운 #3e3835)
  */
 function drawAptSandBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#dfd9ce';
+  ctx.fillStyle = '#e2dcd3';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브
@@ -377,10 +377,10 @@ function drawAptSandBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * Slot 2: 아파트 Type C (웜 그레이 #d4d4d0 + 모던 웜그레이 #4b5563 + 세로 계단실 창호)
+ * Slot 2: 아파트 Type C (라이트 웜그레이 #d6d3d1 + 모던 웜그레이 #4b5563 + 세로 계단실 창호)
  */
 function drawAptWarmGray(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#d4d4d0';
+  ctx.fillStyle = '#d6d3d1';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브
@@ -893,12 +893,12 @@ function drawRoofBaseGutterAndAO(
 }
 
 /**
- * Slot 14: 35% 노후 콘크리트 슬래브 (위성 실측 #64748b ~ #475569)
+ * Slot 14: 고층 아파트 & 중층 건물 웨더링된 콘크리트 슬래브 웜그레이 (#6e6a64 ~ #57534e, 60% 비중)
  */
 function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#64748b');
-  grad.addColorStop(1, '#475569');
+  grad.addColorStop(0, '#6e6a64');
+  grad.addColorStop(1, '#57534e');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -930,12 +930,12 @@ function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: n
 }
 
 /**
- * Slot 17: 25% 실사 우레탄 방수 옥상 (위성 실측 세이지 그린 #2d5a43 ~ #1e3d2d, 형광 초록 금지)
+ * Slot 17: 실제 우레탄 방수 저채도 딥 세이지 그린 (#3b5249 ~ #253831, 쨍한 초록/연두색 절대 금지)
  */
 function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#2d5a43');
-  grad.addColorStop(1, '#1e3d2d');
+  grad.addColorStop(0, '#3b5249');
+  grad.addColorStop(1, '#253831');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -955,7 +955,7 @@ function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: numbe
     const pw = 36 + (i * 19) % 40;
     const ph = 24 + (i * 13) % 30;
 
-    // 수리 덧칠 부위는 조금 더 짙은 올리브 그린
+    // 수리 덧칠 부위는 조금 더 짙은 세이지
     ctx.fillStyle = 'rgba(24, 43, 34, 0.38)';
     ctx.fillRect(px, py, pw, ph);
     ctx.strokeStyle = 'rgba(24, 43, 34, 0.60)';
@@ -968,12 +968,12 @@ function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 /**
- * Slot 15: 20% 다크 아스팔트 슁글 및 차콜 슬래브 (#383e42)
+ * Slot 15: 고층/중층 다크 차콜 슬레이트 및 아스팔트 방수 슬래브 (#475569 ~ #334155)
  */
 function drawRoofAsphaltCharcoal(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#383e42');
-  grad.addColorStop(1, '#25292c');
+  grad.addColorStop(0, '#475569');
+  grad.addColorStop(1, '#334155');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -988,12 +988,12 @@ function drawRoofAsphaltCharcoal(ctx: CanvasRenderingContext2D, x: number, y: nu
 }
 
 /**
- * Slot 16: 12% 적갈색 기와 및 브라운 슁글 (위성 실측 #6b2d1f ~ #451a13)
+ * Slot 16: 저층 주택/빌라 적갈색 기와 및 테라코타 브라운 (#6b3426 ~ #4a2318)
  */
 function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#6b2d1f');
-  grad.addColorStop(1, '#451a13');
+  grad.addColorStop(0, '#6b3426');
+  grad.addColorStop(1, '#4a2318');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -1008,12 +1008,12 @@ function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: num
 }
 
 /**
- * Slot 18: 8% 청회색/네이비 금속 징크 지붕 (#2c4257, 골강판 세로 줄무늬)
+ * Slot 18: 청회색/네이비 금속 징크 강판 (#334e68 ~ #213344)
  */
 function drawRoofZincBlue(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#2c4257');
-  grad.addColorStop(1, '#1b2936');
+  grad.addColorStop(0, '#334e68');
+  grad.addColorStop(1, '#213344');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -1032,7 +1032,8 @@ function drawRoofZincBlue(ctx: CanvasRenderingContext2D, x: number, y: number, w
 // =============================================================================
 
 function drawPenthouseWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#64748b';
+  // 중앙 밝은 회백색 엘리베이터 옥탑 코어 콘크리트 외벽 (#e2e8f0)
+  ctx.fillStyle = '#e2e8f0';
   ctx.fillRect(x, y, w, h);
 
   // 철제 출입문

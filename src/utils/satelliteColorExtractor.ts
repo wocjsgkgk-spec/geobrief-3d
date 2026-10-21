@@ -199,13 +199,14 @@ export function rgbToHex(r: number, g: number, b: number): string {
 export function getDefaultFallbackColor(hintCategory = 'general'): ExtractedRoofColor {
   switch (hintCategory) {
     case 'apartment':
+    case 'apartments':
       return {
-        r: 0.40,
-        g: 0.45,
-        b: 0.48,
-        hex: '#64748b',
+        r: 0.43,
+        g: 0.42,
+        b: 0.39,
+        hex: '#6e6a64', // 웨더링된 콘크리트 웜 그레이 (초록색 절대 금지)
         roofType: 'concrete',
-        luminance: 0.44,
+        luminance: 0.42,
         isShadowBoosted: false,
         isSampled: false,
         slotId: 14.0,
@@ -213,12 +214,12 @@ export function getDefaultFallbackColor(hintCategory = 'general'): ExtractedRoof
       };
     case 'commercial':
       return {
-        r: 0.15,
-        g: 0.52,
-        b: 0.28,
-        hex: '#15803d',
+        r: 0.23,
+        g: 0.32,
+        b: 0.29,
+        hex: '#3b5249', // 저채도 딥 세이지 그린 (35% 비중)
         roofType: 'urethane',
-        luminance: 0.38,
+        luminance: 0.30,
         isShadowBoosted: false,
         isSampled: false,
         slotId: 17.0,
@@ -226,10 +227,10 @@ export function getDefaultFallbackColor(hintCategory = 'general'): ExtractedRoof
       };
     case 'industrial':
       return {
-        r: 0.18,
-        g: 0.28,
-        b: 0.55,
-        hex: '#1e3a8a',
+        r: 0.20,
+        g: 0.31,
+        b: 0.41,
+        hex: '#334e68', // 청회색 징크 강판
         roofType: 'zinc_blue',
         luminance: 0.28,
         isShadowBoosted: false,
@@ -239,12 +240,12 @@ export function getDefaultFallbackColor(hintCategory = 'general'): ExtractedRoof
       };
     default:
       return {
-        r: 0.55,
-        g: 0.22,
-        b: 0.18,
-        hex: '#991b1b',
+        r: 0.42,
+        g: 0.20,
+        b: 0.15,
+        hex: '#6b3426', // 적갈색 기와 / 테라코타 브라운
         roofType: 'terracotta',
-        luminance: 0.32,
+        luminance: 0.28,
         isShadowBoosted: false,
         isSampled: false,
         slotId: 16.0,
@@ -343,27 +344,38 @@ export function sampleRoofColorFromTiles(
   const minC = Math.min(rNorm, gNorm, bNorm);
   const diffC = maxC - minC;
 
-  // 1. 초록색 우레탄 방수 옥상 (#15803d)
-  if (gNorm > rNorm * 1.10 && gNorm > bNorm * 1.05 && (gNorm - Math.max(rNorm, bNorm)) > 0.03) {
+  // [요구사항 1] 고층 아파트 단지: 초록색 절대 금지!
+  // 위성 사진에서 인접 조경 수목/잔디가 샘플링 박스에 침범해도 절대 우레탄으로 오분류하지 않고 콘크리트/아스팔트로 고정
+  if (hintCategory === 'apartment' || hintCategory === 'apartments') {
+    if (lum < 0.35) {
+      roofType = 'asphalt';
+      slotId = 15.0; // 다크 차콜 슬레이트 (#475569)
+    } else {
+      roofType = 'concrete';
+      slotId = 14.0; // 웨더링된 콘크리트 웜그레이 (#6e6a64)
+    }
+  }
+  // 1. 실제 우레탄 방수 딥 세이지 그린 (#3b5249, 쨍한 초록/연두색 절대 금지)
+  else if (gNorm > rNorm * 1.10 && gNorm > bNorm * 1.05 && (gNorm - Math.max(rNorm, bNorm)) > 0.03) {
     roofType = 'urethane';
     slotId = 17.0;
   }
-  // 2. 파란색 공장/물류/징크 지붕 (#1e3a8a, #2563eb)
+  // 2. 파란색 공장/물류/징크 지붕 (#334e68)
   else if (bNorm > rNorm * 1.10 && bNorm > gNorm * 1.05 && (bNorm - Math.max(rNorm, gNorm)) > 0.03) {
     roofType = 'zinc_blue';
     slotId = 18.0;
   }
-  // 3. 적갈색 점토기와/아스팔트 슁글 (#991b1b, #b91c1c)
+  // 3. 적갈색 점토기와/테라코타 (#6b3426)
   else if (rNorm > gNorm * 1.18 && rNorm > bNorm * 1.18 && (rNorm - Math.max(gNorm, bNorm)) > 0.04) {
     roofType = 'terracotta';
     slotId = 16.0;
   }
-  // 4. 다크 차콜 아스팔트/슬레이트 (#334155)
+  // 4. 다크 차콜 아스팔트/슬레이트 (#475569)
   else if (lum < 0.28 && diffC < 0.08) {
     roofType = 'asphalt';
     slotId = 15.0;
   }
-  // 5. 회색 콘크리트 슬래브 (#64748b, #94a3b8)
+  // 5. 회색 콘크리트 슬래브 (#6e6a64)
   else {
     roofType = 'concrete';
     slotId = 14.0;

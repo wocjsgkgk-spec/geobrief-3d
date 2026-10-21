@@ -392,7 +392,26 @@ export function parseAndClassifyBuilding(
   const tileKey = `16/${tileX}/${tileY}`;
 
   // 8. 지붕 색상 확정 (위성 추출 색상 or 폴백)
-  const roofColor = satelliteColor || getDefaultFallbackColor(usageType);
+  let roofColor = satelliteColor || getDefaultFallbackColor(usageType);
+  if (isApt || height >= 24.0) {
+    // [요구사항 1] 고층 아파트 및 대형 빌딩: 초록색 절대 금지!
+    // 콘크리트 웜그레이(#6e6a64, 60%) & 다크차콜 슬레이트(#475569, 40%)로 강제 고정
+    if (roofColor.roofType === 'urethane' || roofColor.slotId === 17.0) {
+      const hSeed = Math.abs(id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 100;
+      roofColor = {
+        r: 0.43,
+        g: 0.42,
+        b: 0.39,
+        hex: hSeed < 60 ? '#6e6a64' : '#475569',
+        roofType: hSeed < 60 ? 'concrete' : 'asphalt',
+        luminance: hSeed < 60 ? 0.42 : 0.30,
+        isShadowBoosted: false,
+        isSampled: false,
+        slotId: hSeed < 60 ? 14.0 : 15.0,
+        matchedSlotId: hSeed < 60 ? 14.0 : 15.0,
+      };
+    }
+  }
 
   const sourceStr = String(props.source || 'fused') as BuildingMeta['source'];
 

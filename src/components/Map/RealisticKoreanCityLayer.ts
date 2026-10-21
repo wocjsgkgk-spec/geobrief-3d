@@ -595,11 +595,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
 
           // -------------------------------------------------------------------
-          // B. 윗면(Roof) earcut 삼각분할 및 항공사진 실사 색감 4종 분포
-          // 1) 콘크리트 웜그레이 35% (#78716c)
-          // 2) 우레탄 세이지그린 30% (#3a5a40)
-          // 3) 다크 슬레이트 20% (#475569)
-          // 4) 적갈색 기와 15% (#7c2d12)
+          // B. 윗면(Roof) earcut 삼각분할 및 항공사진 실사 색감 엄격 분류
+          // 1) 고층 아파트 & 대형 빌딩 (24m 이상): 초록색 절대 금지!
+          //    웨더링된 콘크리트 웜그레이 60% (#6e6a64), 다크 차콜 슬레이트 40% (#475569)
+          // 2) 중층 시내 상가 (10m ~ 24m):
+          //    노후 시멘트 40% (#78716c), 딥 세이지 그린 35% (#3b5249), 다크차콜 25% (#334155)
+          // 3) 저층 주택·빌라·군막사 (10m 미만):
+          //    적갈색 기와/테라코타 45% (#6b3426), 아스팔트 슁글 30% (#3f3f46), 청회색 징크 25% (#334e68)
           // -------------------------------------------------------------------
           const flatCoords: number[] = [];
           let minX = Infinity,
@@ -615,25 +617,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (pts2D[i].z > maxZ) maxZ = pts2D[i].z;
           }
 
-          // [위성 타일 색감 1:1 매칭 추출 기반 지붕 재질 UV 할당 (실제 초록우레탄·콘크리트·파란징크·적갈색기와)]
+          // [건물 유형 및 층고에 맞춘 한국 실제 지붕 재질 UV 할당]
           let roofUV = uvRoofConcrete;
-          switch (meta.roofColor.roofType) {
-            case 'urethane':
-              roofUV = uvRoofUrethane; // 실제 초록 우레탄 옥상 (#15803d)
-              break;
-            case 'zinc_blue':
-              roofUV = uvRoofZinc; // 실제 파란색 공장/물류/징크 지붕 (#1e3a8a, #2563eb)
-              break;
-            case 'terracotta':
-              roofUV = uvRoofTile; // 실제 적갈색 점토기와/슁글 (#991b1b)
-              break;
-            case 'asphalt':
-              roofUV = uvRoofAsphalt; // 실제 다크 차콜 아스팔트 (#334155)
-              break;
-            case 'concrete':
-            default:
-              roofUV = uvRoofConcrete; // 실제 회색 콘크리트 슬래브 (#64748b)
-              break;
+          const roofSeed = Math.abs(fIdx * 12345 + Math.round(meta.areaSqm)) % 100;
+
+          if (isApt || height >= 24.0) {
+            // [요구사항 1] 고층 아파트 및 대형 빌딩: 초록색 절대 금지!
+            // 콘크리트 웜그레이(#6e6a64, 60%) & 다크 차콜 슬레이트(#475569, 40%)만 엄격 적용
+            roofUV = roofSeed < 60 ? uvRoofConcrete : uvRoofAsphalt;
+          } else if (height >= 10.0 && height < 24.0) {
+            // [요구사항 2] 중층 시내 상가 및 근린생활시설 (10m ~ 24m)
+            // 40% 노후 시멘트 그레이, 35% 딥 세이지 그린(#3b5249), 25% 다크 차콜 슬래브(#334155)
+            roofUV = roofSeed < 40 ? uvRoofConcrete : roofSeed < 75 ? uvRoofUrethane : uvRoofAsphalt;
+          } else {
+            // [요구사항 3] 저층 단독주택·빌라·군부대 막사 (10m 미만)
+            // 45% 적갈색 기와/테라코타(#6b3426), 30% 아스팔트 슁글(#3f3f46), 25% 청회색 징크(#334e68)
+            roofUV = roofSeed < 45 ? uvRoofTile : roofSeed < 75 ? uvRoofAsphalt : roofSeed < 90 ? uvRoofZinc : uvRoofUrethane;
           }
 
           const spanX = Math.max(1, maxX - minX);
@@ -706,8 +705,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             posIdx += roofMesh.positions.length;
             uvIdx += roofMesh.uvs.length;
           } else {
-            // 평슬래브 옥상 테두리 0.9m 난간(Parapet) 돌출
-            const parapetH = 0.9;
+            // 평슬래브 옥상 테두리 0.25m 날렵한 파라펫 난간 돌출 (초록 모자 형태 완전 제거)
+            const parapetH = 0.25;
             for (let i = 0; i < ptCount; i++) {
               const j = (i + 1) % ptCount;
               const p1 = pts2D[i];
