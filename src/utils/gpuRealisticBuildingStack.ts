@@ -424,10 +424,14 @@ export const GPU_BUILDING_LAYER_IDS = [
 
 export function createGpuBuildingStackLayers(
   sourceId: string = 'openmaptiles-vector',
-  sourceLayer: string = 'building',
+  sourceLayer?: string,
   prefix: string = ''
 ): maplibregl.LayerSpecification[] {
   const p = prefix ? `${prefix}-` : '';
+
+  // GeoJSON 소스('real-buildings-source', 'fusion-buildings-source' 등)는 source-layer 지정 시 MapLibre 오류 발생
+  const isGeojson = sourceId.endsWith('-source') || sourceId.includes('geojson') || !sourceLayer || sourceLayer === 'none';
+  const srcLayerObj = isGeojson ? {} : { 'source-layer': sourceLayer || 'building' };
 
   // Tier 0: 건물 바닥 접지 음영 (Ambient Occlusion Contact Shadow)
   // - 위성사진과 건물 바닥 경계선에 얇고 선명한 음영을 주어 건물이 바닥에 정확히 뿌리박혀 보이도록 정합
@@ -435,7 +439,7 @@ export function createGpuBuildingStackLayers(
     id: `${p}bldg-ground-ao`,
     type: 'line',
     source: sourceId,
-    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    ...srcLayerObj,
     minzoom: 12,
     maxzoom: 24,
     paint: {
@@ -480,7 +484,7 @@ export function createGpuBuildingStackLayers(
     id: `${p}bldg-tier1-podium`,
     type: 'fill-extrusion',
     source: sourceId,
-    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    ...srcLayerObj,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -500,7 +504,7 @@ export function createGpuBuildingStackLayers(
     id: `${p}bldg-tier2-mainwall`,
     type: 'fill-extrusion',
     source: sourceId,
-    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    ...srcLayerObj,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -520,7 +524,7 @@ export function createGpuBuildingStackLayers(
     id: `${p}bldg-tier3-pattern`,
     type: 'fill-extrusion',
     source: sourceId,
-    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    ...srcLayerObj,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -539,7 +543,7 @@ export function createGpuBuildingStackLayers(
     id: `${p}bldg-tier4-roofcap`,
     type: 'fill-extrusion',
     source: sourceId,
-    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    ...srcLayerObj,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -560,7 +564,7 @@ export function createGpuBuildingStackLayers(
     id: `${p}bldg-tier5-roofdetail`,
     type: 'fill-extrusion',
     source: sourceId,
-    ...(sourceLayer ? { 'source-layer': sourceLayer } : {}),
+    ...srcLayerObj,
     minzoom: 14.5,
     maxzoom: 24,
     paint: {
