@@ -47,6 +47,10 @@ import {
   calculateSafeRooftopCore,
   generateGabledRoofMesh,
 } from '@/lib/vendor/safeGeoAlgorithms';
+import {
+  classifyBuildingWithVendor,
+  ClassifiedBuildingInfo,
+} from '@/lib/vendor/buildingClassifier';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -79,6 +83,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private sunLight: THREE.DirectionalLight | null = null;
   private fillLight: THREE.DirectionalLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
+  private hemisphereLight: THREE.HemisphereLight | null = null;
 
   // 좌표계 변환 원점
   private originLngLat: [number, number] = [127.935, 37.359];
@@ -112,32 +117,35 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.map = map;
 
     try {
-      // 1. 조명 설정 (한국 도심 자연광: 따뜻한 직사광 + 시원한 하늘광 + 풍부한 환경광)
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.85);
+      // 1. 조명 설정 (한국 도심 자연광: 2.2배 주간 태양광 + 하늘빛 필라이트 + 1.2배 풍부한 환경광/헤미스피어)
+      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
       this.sunLight.position.set(120, 160, 90).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.55);
+      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.95);
       this.fillLight.position.set(-100, 120, -80).normalize();
       this.scene.add(this.fillLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.20);
       this.scene.add(this.ambientLight);
+
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
+      this.scene.add(this.hemisphereLight);
 
       // 2. 2048x2048 실사 Canvas 아틀라스 기반 Three.js PBR 재질 초기화
       const atlasTex = getPhotorealisticCityAtlasTexture();
       this.masterMaterial = new THREE.MeshStandardMaterial({
         map: atlasTex || undefined,
-        roughness: 0.65,
-        metalness: 0.12,
+        roughness: 0.40,
+        metalness: 0.05,
         side: THREE.DoubleSide,
       });
 
       this.rooftopMaterial = new THREE.MeshStandardMaterial({
         map: atlasTex || undefined,
-        roughness: 0.65,
-        metalness: 0.12,
+        roughness: 0.40,
+        metalness: 0.05,
         transparent: true,
         opacity: 0.0,
         side: THREE.DoubleSide,
@@ -610,13 +618,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (elen < minEdgeLen) minEdgeLen = elen;
           }
 
-          // 강원권 공간데이터 통합 메모이제이션 조회 및 6대 건축 속성 완성
-          const bldgId = generateBuildingId(feat, fIdx);
-          const meta = getMemoizedBuilding(bldgId) || parseAndClassifyBuilding(feat, rawCoords, fIdx);
-          const height = meta.height;
-          const isApt = meta.isApt;
-          const isComm = meta.isCommercial;
-          const isMilitary = meta.isMilitary;
+          // [벤더링 6대 분류기 적용] 좌표 시드 및 면적·형상 기반 절대 실패 없는 한국형 실측 분류
+          const classified = classifyBuildingWithVendor(rawCoords, (feat.properties || {}) as any);
+          const height = classified.height;
+          const isApt = classified.type === 'apartment';
+          const isComm = classified.type === 'commercial';
+          const isMilitary = classified.type === 'military';
 
           // 지형 표고 캐시 확인 및 안착 (clampedAltitude 기준 상대 표고)
           const rawElev =
@@ -644,11 +651,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             let wallUV: UVRect = uvAptCream;
 
-            if (isApt) {
-              // 긴 변은 발코니 창호 격자(웜 아이보리 #ebe6dc/웜그레이), 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
+            if (classified.type === 'apartment') {
+              // 긴 변은 발코니 창호 격자(크림 아이보리/베이지/웜그레이), 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
               if (edgeLen > minEdgeLen * 1.3 || edgeLen > 18.0) {
-                const aptSlot = (fIdx + i) % 3;
-                wallUV = aptSlot === 0 ? uvAptCream : aptSlot === 1 ? uvAptBeige : uvAptGray;
+                wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
               } else {
                 wallUV = uvAptSide;
               }
@@ -657,8 +663,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               const pTR: [number, number, number] = [p2.x, topElev, p2.z];
               const pTL: [number, number, number] = [p1.x, topElev, p1.z];
               addQuad(pBL, pBR, pTR, pTL, [nx, 0, nz], wallUV);
-            } else if (isComm) {
-              // 시내 상가 및 혁신도시 공공청사 (1층 0~3.8m 어두운 화강석 쇼윈도 기단부, 상층부 석재타일/스카이블루 커튼월)
+            } else if (classified.type === 'commercial' || classified.type === 'public') {
+              // 시내 상가 및 공공청사 (1층 0~3.8m 쇼윈도 기단부, 상층부 화강석/커튼월/모던그레이)
               const podiumH = 3.8;
               if (height > podiumH + 2.0) {
                 const podiumTop = baseElev + podiumH;
@@ -668,7 +674,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 const pPodTL: [number, number, number] = [p1.x, podiumTop, p1.z];
                 addQuad(pBL, pBR, pPodTR, pPodTL, [nx, 0, nz], uvCommShop);
 
-                const upperUV = (fIdx + i) % 2 === 0 ? uvCommCurtain : uvCommGranite;
+                const upperUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
                 const pTopTR: [number, number, number] = [p2.x, topElev, p2.z];
                 const pTopTL: [number, number, number] = [p1.x, topElev, p1.z];
                 addQuad(pPodTL, pPodTR, pTopTR, pTopTL, [nx, 0, nz], upperUV);
@@ -682,7 +688,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                   uvCommShop
                 );
               }
-            } else if (isMilitary) {
+            } else if (classified.type === 'industrial') {
+              // 산업단지·군수창고·대형공장: 밝은 실버/베이지 메탈 판넬
+              wallUV = getPhotorealisticSlotUV('facility_panel');
+              addQuad(
+                [p1.x, baseElev, p1.z],
+                [p2.x, baseElev, p2.z],
+                [p2.x, topElev, p2.z],
+                [p1.x, topElev, p1.z],
+                [nx, 0, nz],
+                wallUV
+              );
+            } else if (classified.type === 'military') {
+              // 군 영내 막사: 밝은 베이지/화이트 외벽
               wallUV = uvMilitary;
               addQuad(
                 [p1.x, baseElev, p1.z],
@@ -693,9 +711,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 wallUV
               );
             } else {
-              // 다세대 빌라 / 주택
-              const slot = (fIdx + i) % 3;
-              wallUV = slot === 0 ? uvVillaGranite : slot === 1 ? uvAptBeige : uvAptGray;
+              // 다세대 빌라 & 단독주택가: 따뜻한 적벽돌, 살구색/크림색 회벽, 밝은 화강석
+              wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
               addQuad(
                 [p1.x, baseElev, p1.z],
                 [p2.x, baseElev, p2.z],
@@ -708,13 +725,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
 
           // -------------------------------------------------------------------
-          // B. 윗면(Roof) earcut 삼각분할 및 항공사진 실사 색감 엄격 분류
-          // 1) 고층 아파트 & 대형 빌딩 (24m 이상): 초록색 절대 금지!
-          //    웨더링된 콘크리트 웜그레이 60% (#6e6a64), 다크 차콜 슬레이트 40% (#475569)
-          // 2) 중층 시내 상가 (10m ~ 24m):
-          //    노후 시멘트 40% (#78716c), 딥 세이지 그린 35% (#3b5249), 다크차콜 25% (#334155)
-          // 3) 저층 주택·빌라·군막사 (10m 미만):
-          //    적갈색 기와/테라코타 45% (#6b3426), 아스팔트 슁글 30% (#3f3f46), 청회색 징크 25% (#334e68)
+          // B. 윗면(Roof) earcut 삼각분할 및 항공사진 실사 색감 매핑
           // -------------------------------------------------------------------
           const flatCoords: number[] = [];
           let minX = Infinity,
@@ -730,23 +741,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (pts2D[i].z > maxZ) maxZ = pts2D[i].z;
           }
 
-          // [건물 유형 및 층고에 맞춘 한국 실제 지붕 재질 UV 할당]
-          let roofUV = uvRoofConcrete;
-          const roofSeed = Math.abs(fIdx * 12345 + Math.round(meta.areaSqm)) % 100;
-
-          if (isApt || height >= 24.0) {
-            // [요구사항 1] 고층 아파트 및 대형 빌딩: 초록색 절대 금지!
-            // 콘크리트 웜그레이(#6e6a64, 60%) & 다크 차콜 슬레이트(#475569, 40%)만 엄격 적용
-            roofUV = roofSeed < 60 ? uvRoofConcrete : uvRoofAsphalt;
-          } else if (height >= 10.0 && height < 24.0) {
-            // [요구사항 2] 중층 시내 상가 및 근린생활시설 (10m ~ 24m)
-            // 40% 노후 시멘트 그레이, 35% 딥 세이지 그린(#3b5249), 25% 다크 차콜 슬래브(#334155)
-            roofUV = roofSeed < 40 ? uvRoofConcrete : roofSeed < 75 ? uvRoofUrethane : uvRoofAsphalt;
-          } else {
-            // [요구사항 3] 저층 단독주택·빌라·군부대 막사 (10m 미만)
-            // 45% 적갈색 기와/테라코타(#6b3426), 30% 아스팔트 슁글(#3f3f46), 25% 청회색 징크(#334e68)
-            roofUV = roofSeed < 45 ? uvRoofTile : roofSeed < 75 ? uvRoofAsphalt : roofSeed < 90 ? uvRoofZinc : uvRoofUrethane;
-          }
+          // [분류기 기반 한국 실제 지붕 재질 UV 즉시 할당]
+          const roofUV = getPhotorealisticSlotUV(classified.atlasRoofSlot);
 
           const spanX = Math.max(1, maxX - minX);
           const spanZ = Math.max(1, maxZ - minZ);
@@ -788,19 +784,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           // -------------------------------------------------------------------
           // C. 입체 옥상 구조물 (0.9m 난간 + 3.0m 옥탑방 코어 or ㅅ자 박공지붕)
           // -------------------------------------------------------------------
-          const isGabled = meta.roofShape === 'gabled';
+          const isGabled = classified.isGabledRoof;
           const poly2D: [number, number][] = [];
           for (let i = 0; i < ptCount; i++) {
             poly2D.push([pts2D[i].x, pts2D[i].z]);
           }
 
           if (isGabled && height <= 12.0) {
-            const gabledUV =
-              meta.roofColor.roofType === 'zinc_blue'
-                ? uvRoofZinc
-                : meta.roofColor.roofType === 'asphalt'
-                ? uvRoofAsphalt
-                : uvRoofTile;
+            const gabledUV = roofUV;
 
             // OSMBuildings 알고리즘: OBB 장축 방향으로 용마루가 솟아오른 순수 삼각형 정점 생성 (저층 주택/군 막사)
             // Pre-allocated Float32Array.set()을 사용하여 루프 오버헤드 없이 단일 버퍼로 즉시 병합

@@ -771,18 +771,18 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.originLngLat = [center.lng, center.lat];
 
       // 1. [화사한 주간 태양광 3점 조명 시스템 - 검은색 벽면 방지 & 아이보리 톤 극대화]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
+      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 2.0);
       this.directionalLight.position.set(120, 180, 100).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 0.95);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
       this.scene.add(this.hemisphereLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.20);
       this.scene.add(this.ambientLight);
 
-      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.95);
       this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
 

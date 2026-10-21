@@ -11,6 +11,7 @@
 import earcut from 'earcut';
 import { classifyRegionalBuildingStyle, RegionalBuildingStyle } from '@/utils/regionalBuildingStyler';
 import type { SatelliteRoofColor } from '@/utils/satelliteRoofSampler';
+import { classifyBuildingWithVendor } from '@/lib/vendor/buildingClassifier';
 
 export interface OSMGeometryOptions {
   features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
@@ -661,98 +662,58 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
     // - 옥상 안쪽: 초록 우레탄(#2d5a43), 노후 시멘트 그레이(#57534e), 짙은 방수재(#334155)
     // - 저층 건물 중 약 30%는 백색 처마 + 적갈색(#6b2d1f)/청색(#1e3a8a) 기와 경사 박공지붕(ㅅ자)
     // -------------------------------------------------------------------------
-    let defaultWallSlotId = 10.0; // villa_red_brick 기본
-    let wallR = 0.420, wallG = 0.176, wallB = 0.122; // 적벽돌 #6b2d1f
+    // -------------------------------------------------------------------------
+    // [벤더링 6대 분류기 적용] 좌표 시드 및 면적·형상 기반 절대 실패 없는 한국형 실측 분류
+    // -------------------------------------------------------------------------
+    const classified = firstPoly && firstPoly.length >= 3 ? classifyBuildingWithVendor(firstPoly, props) : null;
 
-    if (bldType === 2.0 || isApt) {
-      // 아파트: 크림 아이보리(#ebe6dc) / 모던 그레이 / 아이보리 화이트
-      const aptVariant = Math.floor(buildingSeed * 3.0);
-      defaultWallSlotId = aptVariant === 0 ? 0.0 : aptVariant === 1 ? 1.0 : 2.0;
-      wallR = 0.957; wallG = 0.945; wallB = 0.918;
-    } else if (bldType === 1.0 || isComm) {
-      // 상가/오피스: 베이지 화강석(#a8a29e) / 적벽돌(#6b2d1f) / 커튼월(#0369a1)
-      if (buildingSeed < 0.40) {
-        defaultWallSlotId = 5.0; // comm_granite_beige (#a8a29e)
-        wallR = 0.659; wallG = 0.635; wallB = 0.620;
-      } else if (buildingSeed < 0.65) {
-        defaultWallSlotId = 7.0; // comm_red_brick (#6b2d1f)
-        wallR = 0.420; wallG = 0.176; wallB = 0.122;
-      } else if (buildingSeed < 0.85) {
-        defaultWallSlotId = 8.0; // comm_curtainwall (유리 커튼월)
-        wallR = 0.72; wallG = 0.85; wallB = 0.98;
-      } else {
-        defaultWallSlotId = 6.0; // comm_dark_metal
-        wallR = 0.35; wallG = 0.38; wallB = 0.42;
-      }
-    } else if (isStadiumOrArena || isHighriseLandmark) {
-      defaultWallSlotId = 8.0; // 커튼월 유리
-      wallR = 0.72; wallG = 0.85; wallB = 0.98;
-    } else {
-      // 일반 주택가 밀집 건물: 적벽돌(#6b2d1f), 화강석 빌라(#a8a29e), 크림 단독주택
-      if (buildingSeed < 0.45) {
-        defaultWallSlotId = 10.0; // villa_red_brick (#6b2d1f)
-        wallR = 0.420; wallG = 0.176; wallB = 0.122;
-      } else if (buildingSeed < 0.75) {
-        defaultWallSlotId = 11.0; // villa_granite (#a8a29e)
-        wallR = 0.659; wallG = 0.635; wallB = 0.620;
-      } else {
-        defaultWallSlotId = 12.0; // house_cream
-        wallR = 0.94; wallG = 0.92; wallB = 0.86;
+    let defaultWallSlotId = 0.0;
+    let wallR = 0.953, wallG = 0.937, wallB = 0.902; // 크림 아이보리 #f3efe6
+    let roofR = 0.549, roofG = 0.533, roofB = 0.506; // 밝은 콘크리트 #8c8881
+    let roofSlotId = 14.0;
+    const parapetSlotId = 21.0;
+
+    if (classified) {
+      wallR = classified.wallColorRgb[0];
+      wallG = classified.wallColorRgb[1];
+      wallB = classified.wallColorRgb[2];
+      roofR = classified.roofColorRgb[0];
+      roofG = classified.roofColorRgb[1];
+      roofB = classified.roofColorRgb[2];
+
+      if (!explicitH || explicitH <= 4.0) {
+        totalH = classified.height;
+        floors = classified.floors;
       }
     }
 
-    // [지붕 형태 분기]: 저층 건물(<=13m) 중 약 30%는 백색 처마 + 적갈색/청색 기와 경사 박공지붕(ㅅ자)
-    const isLowRise = totalH <= 13.5 && !isApt && !isComm && !isStadiumOrArena;
-    const isLowRiseGable = isLowRise && (seedRoof < 0.30); // 30% 비율 엄격 반영
+    if (bldType === 2.0 || isApt) {
+      const aptVariant = Math.floor(buildingSeed * 3.0);
+      defaultWallSlotId = aptVariant === 0 ? 0.0 : aptVariant === 1 ? 1.0 : 2.0;
+    } else if (bldType === 1.0 || isComm) {
+      if (buildingSeed < 0.40) defaultWallSlotId = 5.0; // comm_granite_beige
+      else if (buildingSeed < 0.70) defaultWallSlotId = 8.0; // comm_curtainwall
+      else defaultWallSlotId = 6.0; // comm_dark_metal
+    } else if (isStadiumOrArena || isHighriseLandmark) {
+      defaultWallSlotId = 8.0; // 커튼월 유리
+    } else {
+      if (buildingSeed < 0.40) defaultWallSlotId = 10.0; // villa_red_brick
+      else if (buildingSeed < 0.70) defaultWallSlotId = 11.0; // villa_granite
+      else defaultWallSlotId = 12.0; // house_cream
+    }
 
+    // [지붕 형태 분기]: 저층 주택/군 막사 박공지붕
+    const isLowRiseGable = classified ? classified.isGabledRoof : (totalH <= 13.5 && !isApt && !isComm && seedRoof < 0.30);
     let hasPitchedRoof = isLowRiseGable || isStadiumOrArena;
     let hasGabledRoof = isLowRiseGable;
     let hasHippedRoof = isStadiumOrArena;
-    let roofSlotId = 17.0; // 기본: 초록 우레탄 (#2d5a43)
-    let roofR = 0.176, roofG = 0.353, roofB = 0.263; // 초록 우레탄 #2d5a43
-    const parapetSlotId = 21.0; // parapet_concrete (0.9m 난간)
 
-    // 지붕 색상 및 재질 설정
-    if (isLowRiseGable) {
-      // 30% 저층 박공지붕: 적갈색(#6b2d1f) 또는 청색(#1e3a8a) 기와/강판
-      roofSlotId = seedRoof < 0.18 ? 16.0 : 18.0;
-      if (roofSlotId === 16.0) {
-        roofR = 0.420; roofG = 0.176; roofB = 0.122; // 적갈색 기와 #6b2d1f
-      } else {
-        roofR = 0.118; roofG = 0.227; roofB = 0.541; // 청색 강판 #1e3a8a
-      }
-    } else if (isStadiumOrArena) {
-      // 대형 경기장: 메탈 트러스 돔 지붕
-      roofSlotId = 18.0;
-      roofR = 0.28; roofG = 0.33; roofB = 0.41;
-    } else {
-      // 70% 저층 평지붕 및 중·고층 평지붕: 초록 우레탄(#2d5a43), 노후 시멘트 그레이(#57534e), 짙은 방수재(#334155)
-      if (isApt) {
-        // 아파트 옥상: 노후 시멘트 그레이(#57534e) 및 다크 방수재(#334155)
-        if (seedRoof < 0.55) {
-          roofSlotId = 14.0; roofR = 0.341; roofG = 0.325; roofB = 0.306; // 노후 시멘트 그레이 #57534e
-        } else if (seedRoof < 0.85) {
-          roofSlotId = 15.0; roofR = 0.200; roofG = 0.255; roofB = 0.333; // 짙은 방수재 #334155
-        } else {
-          roofSlotId = 17.0; roofR = 0.176; roofG = 0.353; roofB = 0.263; // 초록 우레탄 #2d5a43
-        }
-      } else if (isComm) {
-        // 상가/오피스: 70% 초록 우레탄(#2d5a43), 30% 노후 시멘트 그레이(#57534e)
-        if (seedRoof < 0.70) {
-          roofSlotId = 17.0; roofR = 0.176; roofG = 0.353; roofB = 0.263; // 초록 우레탄 #2d5a43
-        } else {
-          roofSlotId = 14.0; roofR = 0.341; roofG = 0.325; roofB = 0.306; // 노후 시멘트 그레이 #57534e
-        }
-      } else {
-        // 일반 주택가 평지붕: 65% 초록 우레탄(#2d5a43), 23% 노후 시멘트 그레이(#57534e), 12% 짙은 방수재(#334155)
-        if (seedRoof < 0.65) {
-          roofSlotId = 17.0; roofR = 0.176; roofG = 0.353; roofB = 0.263; // 초록 우레탄 #2d5a43
-        } else if (seedRoof < 0.88) {
-          roofSlotId = 14.0; roofR = 0.341; roofG = 0.325; roofB = 0.306; // 노후 시멘트 그레이 #57534e
-        } else {
-          roofSlotId = 15.0; roofR = 0.200; roofG = 0.255; roofB = 0.333; // 짙은 방수재 #334155
-        }
-      }
+    if (classified) {
+      if (classified.type === 'apartment') roofSlotId = 14.0;
+      else if (classified.type === 'industrial') roofSlotId = seedRoof < 0.5 ? 18.0 : 17.0;
+      else if (classified.type === 'commercial') roofSlotId = seedRoof < 0.5 ? 17.0 : 14.0;
+      else if (classified.type === 'residential') roofSlotId = seedRoof < 0.35 ? 16.0 : seedRoof < 0.65 ? 17.0 : 15.0;
+      else if (classified.type === 'military') roofSlotId = seedRoof < 0.5 ? 16.0 : 18.0;
     }
 
     // [위성 픽셀 실시간 샘플링 지붕 색상 오버라이드]
