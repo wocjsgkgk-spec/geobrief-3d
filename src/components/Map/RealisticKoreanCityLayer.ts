@@ -38,7 +38,6 @@ import {
   UVRect,
 } from '@/utils/photorealisticCityAtlas';
 import {
-  aggregateBuildingFeatures,
   generateBuildingId,
   getMemoizedBuilding,
   parseAndClassifyBuilding,
@@ -114,6 +113,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private tunnelInteriorMaterial: THREE.MeshBasicMaterial | null = null;
   private bridgesAndTunnelsData: any[] = [];
   private isBridgeTunnelVisible: boolean = true;
+
+  // 60fps 무지연 렌더링을 위한 사전 할당 수학 객체 (GC 프리즈 방지)
+  private renderMatrix = new THREE.Matrix4();
+  private localMatrix = new THREE.Matrix4();
+  private scaleVector = new THREE.Vector3();
+  private rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 
   constructor(options: RealisticKoreanCityLayerOptions = {}) {
     this.options = options;
@@ -251,7 +256,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleSourceData = (e: any): void => {
     if (
-      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'real-buildings-source') &&
+      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap') &&
       e.isSourceLoaded &&
       this.vectorTileFeatures.length === 0 &&
       !this.isMoving
@@ -467,26 +472,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     if (!this.isMoving) {
       this.buildRealisticCityMesh(this.cachedFeatures);
-      // 백그라운드 위성 타일 옥상 색상 일괄 샘플링 및 강원권 건물 메모이제이션 (무블로킹)
-      aggregateBuildingFeatures(this.cachedFeatures, { zoom: 16, sampleSatelliteColors: true })
-        .then((metas) => {
-          for (const meta of metas) {
-            const match = this.cachedFeatures.find((f) => f.id === meta.id);
-            if (match && meta.roofColor) {
-              match.properties = {
-                ...match.properties,
-                roofColour: meta.roofColor.hex,
-                roofColor: meta.roofColor.hex,
-                roofType: meta.roofColor.roofType,
-              };
-            }
-          }
-          if (!this.isMoving && this.map) {
-            this.buildRealisticCityMesh(this.cachedFeatures);
-            this.map.triggerRepaint();
-          }
-        })
-        .catch(() => {});
     }
   }
 
@@ -887,9 +872,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               const isLongFacade = edgeLen > minEdgeLen * 1.3 || edgeLen > 16.0;
               if (isLongFacade) {
                 wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-                // [요구사항 2-1]: 3m 층고마다 어두운 차콜(#1e293b) 베란다 유리창 격자가 가로·세로로 선명하게 박히도록 UV 매핑 강제 적용
-                const numFloors = Math.max(1, Math.round(height / 3.0));
-                const numBays = Math.max(1, Math.round(edgeLen / 6.0));
+                // [60fps LOD 최적화] 아파트 전면부: 적정 베이 x 층 티어 분할 (과도한 버텍스 폭증 방지)
+                const numFloors = Math.min(3, Math.max(1, Math.round(height / 16.0)));
+                const numBays = Math.min(4, Math.max(1, Math.round(edgeLen / 16.0)));
                 const dH = height / numFloors;
 
                 for (let f = 0; f < numFloors; f++) {
@@ -900,41 +885,30 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                     const t0 = b / numBays;
                     const t1 = (b + 1) / numBays;
 
-                    const x0 = p1.x + dx * t0;
-                    const z0 = p1.z + dz * t0;
-                    const x1 = p1.x + dx * t1;
-                    const z1 = p1.z + dz * t1;
-
                     addQuad(
-                      [x0, y0, z0],
-                      [x1, y0, z1],
-                      [x1, y1, z1],
-                      [x0, y1, z0],
+                      [p1.x + dx * t0, y0, p1.z + dz * t0],
+                      [p1.x + dx * t1, y0, p1.z + dz * t1],
+                      [p1.x + dx * t1, y1, p1.z + dz * t1],
+                      [p1.x + dx * t0, y1, p1.z + dz * t0],
                       [nx, 0, nz],
                       wallUV
                     );
                   }
                 }
               } else {
-                // [요구사항 2-2]: 아파트 측벽(양옆 좁은 벽) - 창문 격자 대신 밝은 아이보리/브라운 투톤 콘크리트 벽면
+                // [LOD 최적화] 아파트 측벽: 단일 쿼드로 경량화 (창문 없는 단색 측벽)
                 wallUV = uvAptSide;
-                const numTiers = Math.max(1, Math.min(3, Math.round(height / 20.0)));
-                const dH = height / numTiers;
-                for (let t = 0; t < numTiers; t++) {
-                  const y0 = baseElev + t * dH;
-                  const y1 = baseElev + (t + 1) * dH;
-                  addQuad(
-                    [p1.x, y0, p1.z],
-                    [p2.x, y0, p2.z],
-                    [p2.x, y1, p2.z],
-                    [p1.x, y1, p1.z],
-                    [nx, 0, nz],
-                    wallUV
-                  );
-                }
+                addQuad(
+                  [p1.x, baseElev, p1.z],
+                  [p2.x, baseElev, p2.z],
+                  [p2.x, topElev, p2.z],
+                  [p1.x, topElev, p1.z],
+                  [nx, 0, nz],
+                  wallUV
+                );
               }
             } else if (classified.type === 'commercial' || classified.type === 'public') {
-              // 시내 상가 및 공공청사 (1층 0~3.8m 쇼윈도 기단부, 상층부 화강석/커튼월/모던그레이)
+              // 시내 상가 및 공공청사 (1층 쇼윈도 기단부 + 상층부 화강석/커튼월 2단 쿼드 구성)
               const podiumH = 3.8;
               if (height > podiumH + 2.0) {
                 const podiumTop = baseElev + podiumH;
@@ -945,27 +919,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 addQuad(pBL, pBR, pPodTR, pPodTL, [nx, 0, nz], uvCommShop);
 
                 const upperUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-                const upperH = height - podiumH;
-                const numUpperFloors = Math.max(1, Math.round(upperH / 3.2));
-                const numBays = Math.max(1, Math.round(edgeLen / 7.0));
-                const dH = upperH / numUpperFloors;
-
-                for (let f = 0; f < numUpperFloors; f++) {
-                  const y0 = podiumTop + f * dH;
-                  const y1 = podiumTop + (f + 1) * dH;
-                  for (let b = 0; b < numBays; b++) {
-                    const t0 = b / numBays;
-                    const t1 = (b + 1) / numBays;
-                    addQuad(
-                      [p1.x + dx * t0, y0, p1.z + dz * t0],
-                      [p1.x + dx * t1, y0, p1.z + dz * t1],
-                      [p1.x + dx * t1, y1, p1.z + dz * t1],
-                      [p1.x + dx * t0, y1, p1.z + dz * t0],
-                      [nx, 0, nz],
-                      upperUV
-                    );
-                  }
-                }
+                addQuad(
+                  pPodTL,
+                  pPodTR,
+                  [p2.x, topElev, p2.z],
+                  [p1.x, topElev, p1.z],
+                  [nx, 0, nz],
+                  upperUV
+                );
               } else {
                 addQuad(
                   [p1.x, baseElev, p1.z],
@@ -977,7 +938,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 );
               }
             } else if (classified.type === 'industrial') {
-              // 산업단지·군수창고·대형공장: 밝은 실버/베이지 메탈 판넬
+              // 산업단지·군수창고·대형공장: 단일 쿼드 메탈 판넬
               wallUV = getPhotorealisticSlotUV('facility_panel');
               addQuad(
                 [p1.x, baseElev, p1.z],
@@ -988,7 +949,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 wallUV
               );
             } else if (classified.type === 'military') {
-              // 군 영내 막사: 밝은 베이지/화이트 외벽
+              // 군 영내 막사: 단일 쿼드 외벽
               wallUV = uvMilitary;
               addQuad(
                 [p1.x, baseElev, p1.z],
@@ -999,27 +960,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 wallUV
               );
             } else {
-              // 다세대 빌라 & 단독주택가: 따뜻한 적벽돌, 살구색/크림색 회벽, 밝은 화강석
+              // 다세대 빌라 & 단독주택가: 단일 쿼드로 60fps 극대화
               wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-              const numFloors = Math.max(1, Math.round(height / 3.2));
-              const numBays = Math.max(1, Math.round(edgeLen / 6.0));
-              const dH = height / numFloors;
-              for (let f = 0; f < numFloors; f++) {
-                const y0 = baseElev + f * dH;
-                const y1 = baseElev + (f + 1) * dH;
-                for (let b = 0; b < numBays; b++) {
-                  const t0 = b / numBays;
-                  const t1 = (b + 1) / numBays;
-                  addQuad(
-                    [p1.x + dx * t0, y0, p1.z + dz * t0],
-                    [p1.x + dx * t1, y0, p1.z + dz * t1],
-                    [p1.x + dx * t1, y1, p1.z + dz * t1],
-                    [p1.x + dx * t0, y1, p1.z + dz * t0],
-                    [nx, 0, nz],
-                    wallUV
-                  );
-                }
-              }
+              addQuad(
+                [p1.x, baseElev, p1.z],
+                [p2.x, baseElev, p2.z],
+                [p2.x, topElev, p2.z],
+                [p1.x, topElev, p1.z],
+                [nx, 0, nz],
+                wallUV
+              );
             }
           }
 
@@ -1447,7 +1397,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           (this.map.queryTerrainElevation ? this.map.queryTerrainElevation(this.originLngLat) || 0 : 0);
         if (queried > 5.0) {
           this.clampedAltitude = queried;
-          this.extractAndBuildFromMap();
+          setTimeout(() => {
+            if (!this.isMoving) this.extractAndBuildFromMap();
+          }, 50);
         }
       }
 
@@ -1464,18 +1416,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         0
       ).meterInMercatorCoordinateUnits();
 
-      const rotationX = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(1, 0, 0),
-        Math.PI / 2
-      );
-
-      const m = new THREE.Matrix4().fromArray(rawMatrix as any);
-      const l = new THREE.Matrix4()
+      this.renderMatrix.fromArray(rawMatrix as any);
+      this.scaleVector.set(meterScale, -meterScale, meterScale);
+      this.localMatrix
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
-        .multiply(rotationX);
+        .scale(this.scaleVector)
+        .multiply(this.rotationX);
 
-      this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrix.copy(this.renderMatrix).multiply(this.localMatrix);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       if (gl) {

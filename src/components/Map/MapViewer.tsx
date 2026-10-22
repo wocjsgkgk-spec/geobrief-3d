@@ -915,10 +915,10 @@ export const MapViewer: React.FC = () => {
                 lastChecked: Date.now(),
                 featureCount: count,
               });
-              if (deck3DTilesManagerRef.current) {
+              if (deck3DTilesManagerRef.current && useMapStore.getState().renderMode3D === 'tiles3d') {
                 deck3DTilesManagerRef.current.setBuildingFeatures(merged);
               }
-              if (lod2BuildingEngineRef.current && merged.length > 0) {
+              if (lod2BuildingEngineRef.current && useMapStore.getState().renderMode3D === 'native' && detail3DMode === 'lod2' && merged.length > 0) {
                 try {
                   const center = mapInstance.getCenter();
                   lod2BuildingEngineRef.current.updateBuildings(merged, [center.lng, center.lat]);
@@ -935,36 +935,6 @@ export const MapViewer: React.FC = () => {
                   // ignore
                 }
               }
-              // [2단계 직결] 강원권 실측 공간데이터 및 위성 타일 옥상 색상 백그라운드 집계/메모이제이션
-              aggregateBuildingFeatures(merged, { zoom: 16, sampleSatelliteColors: true })
-                .then((metas) => {
-                  let changed = false;
-                  for (const meta of metas) {
-                    const match = merged.find((f) => f.id === meta.id);
-                    if (match && meta.roofColor) {
-                      match.properties = {
-                        ...match.properties,
-                        roofColour: meta.roofColor.hex,
-                        roofColor: meta.roofColor.hex,
-                        roofType: meta.roofColor.roofType,
-                      };
-                      changed = true;
-                    }
-                  }
-                  if (changed) {
-                    const updatedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
-                      type: 'FeatureCollection',
-                      features: merged,
-                    };
-                    const safeUpdatedGeoJSON = sanitizeGeoJsonForMapLibre(updatedGeoJSON, 'bld');
-                    const rSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
-                    if (rSrc) rSrc.setData(safeUpdatedGeoJSON);
-                    const fSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
-                    if (fSrc) fSrc.setData(safeUpdatedGeoJSON);
-                    mapInstance.triggerRepaint();
-                  }
-                })
-                .catch(() => {});
               updateRealtimeMetrics();
               mapInstance.triggerRepaint();
             }
@@ -994,10 +964,10 @@ export const MapViewer: React.FC = () => {
                 lastChecked: Date.now(),
                 featureCount: count,
               });
-              if (deck3DTilesManagerRef.current) {
+              if (deck3DTilesManagerRef.current && useMapStore.getState().renderMode3D === 'tiles3d') {
                 deck3DTilesManagerRef.current.setBuildingFeatures(merged);
               }
-              if (lod2BuildingEngineRef.current && merged.length > 0) {
+              if (lod2BuildingEngineRef.current && useMapStore.getState().renderMode3D === 'native' && detail3DMode === 'lod2' && merged.length > 0) {
                 try {
                   const center = mapInstance.getCenter();
                   lod2BuildingEngineRef.current.updateBuildings(merged, [center.lng, center.lat]);
@@ -3096,7 +3066,7 @@ export const MapViewer: React.FC = () => {
       try {
         const initRenderMode = useMapStore.getState().renderMode3D;
         const lod2Engine = new LOD2BuildingEngine();
-        lod2Engine.setVisible(initRenderMode === 'facade' && !!layers.buildings3D);
+        lod2Engine.setVisible(false); // RealisticKoreanCityLayer가 주력 실사 3D 렌더링을 전담하므로 초기 중복 렌더링/충돌 방지
         lod2Engine.setOnError((err) => {
           console.warn('[MapViewer] LOD2 Building Engine fallback to LOD1:', err);
           setDetail3DMode('lod1');
