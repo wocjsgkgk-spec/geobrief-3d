@@ -16,6 +16,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,7 +42,28 @@ function getNormalizedDataGoKrKey(serviceType?: 'building' | 'transport'): strin
       '';
   }
 
-  const clean = envKey.trim();
+  // Node 프로덕션 환경에서 .env.local이 자동 로드되지 않는 경우 파일 직접 파싱 폴백
+  if (!envKey || envKey === 'your_public_data_portal_key_here') {
+    try {
+      const envPath = path.join(process.cwd(), '.env.local');
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const match =
+          serviceType === 'transport'
+            ? content.match(/TRANSPORT_DB_API_KEY=["']?([^"'\r\n]+)["']?/) ||
+              content.match(/DATA_GO_KR_API_KEY=["']?([^"'\r\n]+)["']?/)
+            : content.match(/DATA_GO_KR_BUILDING_KEY=["']?([^"'\r\n]+)["']?/) ||
+              content.match(/DATA_GO_KR_API_KEY=["']?([^"'\r\n]+)["']?/);
+        if (match && match[1]) {
+          envKey = match[1];
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  let clean = envKey.trim().replace(/^["']|["']$/g, '').trim();
   if (!clean || clean === 'your_public_data_portal_key_here') {
     return '';
   }
@@ -48,7 +71,7 @@ function getNormalizedDataGoKrKey(serviceType?: 'building' | 'transport'): strin
   // URL 인코딩된 문자열(%2B, %2F 등)이 들어있으면 한 번 디코딩하여 원본 키 확보
   try {
     if (clean.includes('%')) {
-      return decodeURIComponent(clean);
+      clean = decodeURIComponent(clean);
     }
   } catch {
     // ignore
@@ -415,60 +438,131 @@ async function fetchMolitBldRgstHub(
 }
 
 // -----------------------------------------------------------------------------
-// [2. 국토교통부 전국 교량 및 터널 현황정보 API 실시간 호출기]
+// [2. 국토교통부 전국 교량 및 터널 현황정보 API 실시간 호출기 (btiData 기반)]
 // -----------------------------------------------------------------------------
+function parseBtiXmlItems(xmlText: string, type: 'bridge' | 'tunnel', sigunguName: string): any[] {
+  const items: any[] = [];
+  const regex = /<item>([\s\S]*?)<\/item>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(xmlText)) !== null) {
+    const block = match[1];
+    const getTag = (tag: string): string => {
+      const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+      return m ? m[1].trim() : '';
+    };
+
+    const facilName = getTag('facilName');
+    if (!facilName) continue;
+
+    const sLatitude = Number(getTag('sLatitude') || 0);
+    const sLongitude = Number(getTag('sLongitude') || 0);
+    const lengthM = Number(getTag('length') || (type === 'bridge' ? 120.0 : 350.0));
+    const widthM = Number(getTag('totWidth') || 19.5);
+    const heightM = Number(getTag('height') || (type === 'bridge' ? 10.0 : 6.0));
+    const superstNm = getTag('superstNm') || (type === 'bridge' ? 'PSCI거더교' : 'NATM 터널');
+    const roadNm = getTag('roadNm') || '일반국도';
+    const sidoNm = getTag('sidoNm');
+    const sggNm = getTag('sggNm');
+    const openYear = Number(getTag('openYear') || 2004);
+
+    // 유효 위경도(한국 좌표계)가 있으면 사용
+    const hasValidCoords = sLatitude >= 33.0 && sLatitude <= 39.0 && sLongitude >= 124.0 && sLongitude <= 132.0;
+
+    items.push({
+      id: `${type}-${items.length + 1}`,
+      name: facilName,
+      type,
+      sido: sidoNm || '강원특별자치도',
+      sigungu: sggNm || sigunguName,
+      roadRoute: roadNm,
+      lengthM,
+      widthM,
+      spanCount: Math.max(1, Math.ceil(lengthM / 30)),
+      pierCount: type === 'bridge' ? Math.max(1, Math.ceil(lengthM / 30) - 1) : 0,
+      pierHeightM: heightM,
+      structureType: superstNm,
+      completionYear: openYear,
+      coordinates: hasValidCoords ? [sLongitude, sLatitude] : null,
+      source: 'molit_bridge_tunnel_api',
+    });
+  }
+
+  return items;
+}
+
 async function fetchMolitBridgeTunnel(apiKey: string, sigunguName = '원주시'): Promise<any[]> {
   const normKey = apiKey || getNormalizedDataGoKrKey('transport');
   if (!normKey) return [];
 
+  const results: any[] = [];
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
 
-    const params = new URLSearchParams({
-      serviceKey: normKey,
-      sido: '강원',
-      numOfRows: '100',
-      pageNo: '1',
-      _type: 'json',
-    });
+    // 1) 교량 목록 호출 (btiData/getBrdgList)
+    const brdgUrl = `https://apis.data.go.kr/1613000/btiData/getBrdgList?serviceKey=${encodeURIComponent(
+      normKey
+    )}&numOfRows=100&pageNo=1`;
 
-    const url = `https://apis.data.go.kr/1613000/BridgeTunnelService/getBrdgTunlList?${params.toString()}`;
-    const res = await fetch(url, {
+    const brdgRes = await fetch(brdgUrl, {
       signal: controller.signal,
-      headers: { Accept: 'application/json' },
       cache: 'no-store',
     });
-    clearTimeout(timeoutId);
 
-    if (!res.ok) return [];
-
-    const json = await res.json();
-    const items = json?.response?.body?.items?.item;
-    if (Array.isArray(items) && items.length > 0) {
-      return items.map((it: any, idx: number) => ({
-        id: String(it.fcltySn || `brdg-${idx}`),
-        name: String(it.fcltyNm || it.brdgNm || it.tunlNm || '도로구조물'),
-        type: String(it.fcltySeNm || '').includes('터널') ? 'tunnel' : 'bridge',
-        sido: '강원특별자치도',
-        sigungu: String(it.sggNm || sigunguName),
-        roadRoute: String(it.roadRoute || it.routeNm || '일반도로'),
-        lengthM: Number(it.fcltyLt || it.totLt || 120.0),
-        widthM: Number(it.fcltyWd || it.totWd || 20.0),
-        spanCount: Number(it.spanCo || 4),
-        pierCount: Math.max(1, Math.ceil(Number(it.fcltyLt || 120.0) / 35) - 1),
-        pierHeightM: 10.0,
-        structureType: String(it.upstrctStleNm || '프리스트레스트 콘크리트 거더교 (PSC I)'),
-        completionYear: Number(it.compYear || 2005),
-        coordinates: [Number(it.lot || 127.945), Number(it.lat || 37.342)],
-        source: 'molit_bridge_tunnel_api',
-      }));
+    if (brdgRes.ok) {
+      const xml = await brdgRes.text();
+      if (xml.includes('NORMAL SERVICE') || xml.includes('<item>')) {
+        const parsed = parseBtiXmlItems(xml, 'bridge', sigunguName);
+        for (const p of parsed) {
+          // 좌표가 강원권/원주권이거나 유효하면 주입
+          if (p.coordinates) {
+            results.push(p);
+          }
+        }
+      }
     }
+
+    // 2) 터널 목록 호출 (btiData/getTunlList)
+    const tunlUrl = `https://apis.data.go.kr/1613000/btiData/getTunlList?serviceKey=${encodeURIComponent(
+      normKey
+    )}&numOfRows=50&pageNo=1`;
+
+    const tunlRes = await fetch(tunlUrl, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    if (tunlRes.ok) {
+      const xml = await tunlRes.text();
+      if (xml.includes('NORMAL SERVICE') || xml.includes('<item>')) {
+        const parsed = parseBtiXmlItems(xml, 'tunnel', sigunguName);
+        for (const p of parsed) {
+          if (p.coordinates) {
+            results.push(p);
+          }
+        }
+      }
+    }
+
+    clearTimeout(timeoutId);
   } catch {
     // ignore
   }
 
-  return [];
+  // 3) 강원/원주 실측 교량(원주천교, 치악교, 단구지하차도교 등)을 항상 선두에 병합하여 100% 뷰포트 노출 보장
+  const merged = [...GANGWON_BRIDGES_TUNNELS];
+  const seenNames = new Set(merged.map((m) => m.name));
+
+  for (const r of results) {
+    if (!seenNames.has(r.name) && r.coordinates) {
+      seenNames.add(r.name);
+      merged.push(r);
+    }
+  }
+
+  return merged;
 }
 
 // -----------------------------------------------------------------------------

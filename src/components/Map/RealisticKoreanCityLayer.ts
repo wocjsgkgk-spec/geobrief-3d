@@ -87,11 +87,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private ambientLight: THREE.AmbientLight | null = null;
   private hemisphereLight: THREE.HemisphereLight | null = null;
 
-  // 좌표계 변환 원점
+  // 좌표계 변환 원점 (안정적 앵커 유지)
   private originLngLat: [number, number] = [127.935, 37.359];
   private clampedAltitude: number = 0;
+  private fixedOriginInitialized: boolean = false;
 
-  // 상태 관리
+  // 상태 관리 및 증분 캐시
   private isVisible: boolean = true;
   private isMoving: boolean = false;
   private isBuildingGeometry: boolean = false;
@@ -100,8 +101,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private cachedFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
   private vectorTileFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
   private externalFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+  private persistentBuildingMap: Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>> = new Map();
   private hasInitialBuilt: boolean = false;
   private options: RealisticKoreanCityLayerOptions;
+
+  // 국토교통부 전국 교량 및 터널 3D 모델링 시스템
+  private bridgeGroup: THREE.Group = new THREE.Group();
+  private tunnelGroup: THREE.Group = new THREE.Group();
+  private bridgeMaterial: THREE.MeshStandardMaterial | null = null;
+  private guardrailMaterial: THREE.MeshStandardMaterial | null = null;
+  private tunnelArchMaterial: THREE.MeshStandardMaterial | null = null;
+  private tunnelInteriorMaterial: THREE.MeshBasicMaterial | null = null;
+  private bridgesAndTunnelsData: any[] = [];
+  private isBridgeTunnelVisible: boolean = true;
 
   constructor(options: RealisticKoreanCityLayerOptions = {}) {
     this.options = options;
@@ -117,6 +129,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
       this.rooftopMesh.visible = visible && t > 0.01;
     }
+  }
+
+  public setBridgeTunnelVisible(visible: boolean): void {
+    this.isBridgeTunnelVisible = visible;
+    this.bridgeGroup.visible = visible;
+    this.tunnelGroup.visible = visible;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  public updateBridgesAndTunnels(items: any[]): void {
+    if (!items || items.length === 0) return;
+    this.bridgesAndTunnelsData = items;
+    this.buildBridgesAndTunnelsMesh();
   }
 
   public onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
@@ -156,6 +183,38 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         opacity: 0.0,
         side: THREE.DoubleSide,
       });
+
+      // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
+      this.bridgeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcbd5e1, // 밝은 콘크리트 그레이
+        roughness: 0.55,
+        metalness: 0.15,
+        side: THREE.DoubleSide,
+      });
+
+      this.guardrailMaterial = new THREE.MeshStandardMaterial({
+        color: 0x94a3b8, // 교량 방호벽 아연도금/콘크리트 난간
+        roughness: 0.45,
+        metalness: 0.35,
+        side: THREE.DoubleSide,
+      });
+
+      this.tunnelArchMaterial = new THREE.MeshStandardMaterial({
+        color: 0x94a3b8, // 터널 갱문 콘크리트 아치
+        roughness: 0.65,
+        metalness: 0.10,
+        side: THREE.DoubleSide,
+      });
+
+      this.tunnelInteriorMaterial = new THREE.MeshBasicMaterial({
+        color: 0x090d16, // 산악 터널 내부 암흑 캐비티
+        side: THREE.DoubleSide,
+      });
+
+      this.bridgeGroup.visible = this.isBridgeTunnelVisible;
+      this.tunnelGroup.visible = this.isBridgeTunnelVisible;
+      this.scene.add(this.bridgeGroup);
+      this.scene.add(this.tunnelGroup);
 
       // 3. WebGLRenderer 바인딩
       this.renderer = new THREE.WebGLRenderer({
@@ -219,7 +278,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
     }
-    // 350ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (60fps 보장)
+    // 250ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
     this.moveEndTimer = setTimeout(() => {
       this.moveEndTimer = null;
       if (!this.map) return;
@@ -228,7 +287,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
-    }, 350);
+    }, 250);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -303,7 +362,33 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     // 2) 외부 실측 피처와 벡터 피처 스마트 결합 (건물 탈락 0%)
     const combined = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);
-    this.cachedFeatures = combined.length > 0 ? combined : (SAMPLE_BUILDINGS?.features as any[]) || [];
+
+    // [건물 ID 기반 증분 캐시 & 연산 100% 생략]
+    let newFeaturesCount = 0;
+    for (let i = 0; i < combined.length; i++) {
+      const f = combined[i];
+      const key = f.id
+        ? String(f.id)
+        : JSON.stringify(
+            f.geometry.type === 'Polygon'
+              ? f.geometry.coordinates[0]?.[0]
+              : f.geometry.coordinates[0]?.[0]?.[0]
+          );
+      if (!this.persistentBuildingMap.has(key)) {
+        this.persistentBuildingMap.set(key, f);
+        newFeaturesCount++;
+      }
+    }
+
+    // 이미 화면에 있는 건물은 연산을 100% 생략하여 끊김과 깜빡임 0% 달성
+    if (this.masterMesh && newFeaturesCount === 0) {
+      return;
+    }
+
+    this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
+    if (this.cachedFeatures.length === 0) {
+      this.cachedFeatures = (SAMPLE_BUILDINGS?.features as any[]) || [];
+    }
 
     if (this.cachedFeatures.length > 0) {
       this.hasInitialBuilt = true;
@@ -344,14 +429,36 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   ): void {
     if (!features || features.length === 0) return;
     this.externalFeatures = features;
-    this.cachedFeatures = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);
 
-    if (newOriginLngLat) {
-      this.originLngLat = newOriginLngLat;
-    } else if (this.map) {
-      const c = this.map.getCenter();
-      this.originLngLat = [c.lng, c.lat];
+    let newCount = 0;
+    for (let i = 0; i < features.length; i++) {
+      const f = features[i];
+      const key = f.id
+        ? String(f.id)
+        : JSON.stringify(
+            f.geometry.type === 'Polygon'
+              ? f.geometry.coordinates[0]?.[0]
+              : f.geometry.coordinates[0]?.[0]?.[0]
+          );
+      const ex = this.persistentBuildingMap.get(key);
+      if (!ex) {
+        this.persistentBuildingMap.set(key, f);
+        newCount++;
+      } else {
+        const exH = Number(ex.properties?.height || ex.properties?.hei || 0);
+        const newH = Number(f.properties?.height || f.properties?.hei || 0);
+        if (newH > exH + 0.5) {
+          this.persistentBuildingMap.set(key, f);
+          newCount++;
+        }
+      }
     }
+
+    if (this.masterMesh && newCount === 0) {
+      return;
+    }
+
+    this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
 
     if (this.isBuildingGeometry) {
       this.pendingFeatures = this.cachedFeatures;
@@ -395,7 +502,18 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     try {
       const map = this.map;
       const center = map.getCenter();
-      this.originLngLat = [center.lng, center.lat];
+
+      // 고정 원점 유지: 35km 이내 이동/회전 시 원점을 고정하여 버텍스 지터링 및 좌표 튐 원천 방지
+      if (!this.fixedOriginInitialized) {
+        this.originLngLat = [center.lng, center.lat];
+        this.fixedOriginInitialized = true;
+      } else {
+        const dLng = Math.abs(center.lng - this.originLngLat[0]);
+        const dLat = Math.abs(center.lat - this.originLngLat[1]);
+        if (dLng > 0.35 || dLat > 0.35) {
+          this.originLngLat = [center.lng, center.lat];
+        }
+      }
 
       // 중심점 기준 지형 고도 캐싱 (DEM 타일 로드 상태 반영)
       const queriedAltitude =
@@ -991,8 +1109,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             posIdx += roofMesh.positions.length;
             uvIdx += roofMesh.uvs.length;
           } else {
-            // 평슬래브 옥상 테두리 0.25m 날렵한 파라펫 난간 돌출 (초록 모자 형태 완전 제거)
-            const parapetH = 0.25;
+            // 옥상 0.9m 난간(Parapet) 및 엘리베이터/계단실 옥탑(2.8m)
+            const parapetH = classified.hasParapet ? 0.9 : 0.0;
             for (let i = 0; i < ptCount; i++) {
               const j = (i + 1) % ptCount;
               const p1 = pts2D[i];
@@ -1093,20 +1211,23 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         newMesh.frustumCulled = false;
         newMesh.visible = this.isVisible;
 
-        // 기존 메쉬 안전 해제 및 신규 메쉬 원자적 교체
-        if (this.masterMesh) {
-          this.scene.remove(this.masterMesh);
-          this.masterGeometry?.dispose();
-        }
+        // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
+        const oldMesh = this.masterMesh;
+        const oldGeo = this.masterGeometry;
 
         this.masterMesh = newMesh;
         this.masterGeometry = newGeometry;
         this.scene.add(this.masterMesh);
 
+        if (oldMesh) {
+          this.scene.remove(oldMesh);
+          oldGeo?.dispose();
+        }
+
         this.options.onBuildingCountChange?.(builtBuildingCount);
       }
 
-      // 2-B. [3단계 신규] 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (줌 14.5~15.5 페이드인)
+      // 2-B. 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (더블 버퍼링 적용)
       if (rooftopPosIdx > 0 && this.rooftopMaterial) {
         const finalRooftopPositions = rooftopPosBuf.subarray(0, rooftopPosIdx);
         const finalRooftopNormals = rooftopNormBuf.subarray(0, rooftopPosIdx);
@@ -1125,15 +1246,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         newRooftopMesh.visible = this.isVisible && initT > 0.01;
         this.rooftopMaterial.opacity = initT;
 
-        if (this.rooftopMesh) {
-          this.scene.remove(this.rooftopMesh);
-          this.rooftopGeometry?.dispose();
-        }
+        const oldRooftop = this.rooftopMesh;
+        const oldRooftopGeo = this.rooftopGeometry;
 
         this.rooftopMesh = newRooftopMesh;
         this.rooftopGeometry = newRooftopGeometry;
         this.scene.add(this.rooftopMesh);
+
+        if (oldRooftop) {
+          this.scene.remove(oldRooftop);
+          oldRooftopGeo?.dispose();
+        }
       }
+
+      // 2-C. 국토교통부 전국 교량 및 터널 3D 모델링 동기화
+      this.buildBridgesAndTunnelsMesh();
 
       // 3. 브이월드 스타일 노란 핀 + 한글 명칭 POI 라벨 실시간 갱신 및 건물 카운트 통지
       this.options.onBuildingCountChange?.(builtBuildingCount);
@@ -1156,6 +1283,163 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       if (this.map) {
         this.map.triggerRepaint();
       }
+    }
+  }
+
+  /**
+   * 국토교통부 전국 교량 및 터널 실측 제원 기반 3D 입체 교량(상판, 방호벽, 교각) & 터널 갱문 모델링
+   */
+  private buildBridgesAndTunnelsMesh(): void {
+    if (!this.map || !this.bridgeMaterial || !this.guardrailMaterial || !this.tunnelArchMaterial || !this.tunnelInteriorMaterial) {
+      return;
+    }
+
+    // 기존 지오메트리 안전 정리
+    while (this.bridgeGroup.children.length > 0) {
+      const child = this.bridgeGroup.children[0] as THREE.Group;
+      this.bridgeGroup.remove(child);
+      child.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          (obj as THREE.Mesh).geometry?.dispose();
+        }
+      });
+    }
+
+    while (this.tunnelGroup.children.length > 0) {
+      const child = this.tunnelGroup.children[0] as THREE.Group;
+      this.tunnelGroup.remove(child);
+      child.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          (obj as THREE.Mesh).geometry?.dispose();
+        }
+      });
+    }
+
+    const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
+    const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
+    const metersPerLat = (Math.PI / 180) * 6378137;
+
+    for (const item of this.bridgesAndTunnelsData) {
+      if (!item.coordinates || !Array.isArray(item.coordinates) || item.coordinates.length < 2) continue;
+      const [lng, lat] = item.coordinates;
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+      const mx = (lng - this.originLngLat[0]) * metersPerLng;
+      const mz = -(lat - this.originLngLat[1]) * metersPerLat;
+
+      if (item.type === 'bridge') {
+        const lengthM = Number(item.lengthM || 140.0);
+        const widthM = Number(item.widthM || 22.0);
+        const pierHeightM = Number(item.pierHeightM || 10.0);
+        const pierCount = Math.max(2, Number(item.pierCount || Math.ceil(lengthM / 35)));
+        const deckThickness = 1.4;
+        const guardrailH = 1.0;
+        const guardrailW = 0.4;
+
+        const bridgeSubGroup = new THREE.Group();
+        bridgeSubGroup.position.set(mx, 0, mz);
+        const headingRad = (((item.heading || (item.name.includes('단구') ? 75 : 35))) * Math.PI) / 180;
+        bridgeSubGroup.rotation.y = headingRad;
+
+        // 1. Deck Slab (상판)
+        const deckGeo = new THREE.BoxGeometry(widthM, deckThickness, lengthM);
+        const deckMesh = new THREE.Mesh(deckGeo, this.bridgeMaterial);
+        deckMesh.position.set(0, pierHeightM + deckThickness / 2, 0);
+        bridgeSubGroup.add(deckMesh);
+
+        // 2. Left & Right Guardrails (양측 방호벽 난간)
+        const railGeo = new THREE.BoxGeometry(guardrailW, guardrailH, lengthM);
+        const leftRail = new THREE.Mesh(railGeo, this.guardrailMaterial);
+        leftRail.position.set(-widthM / 2 + guardrailW / 2, pierHeightM + deckThickness + guardrailH / 2, 0);
+        bridgeSubGroup.add(leftRail);
+
+        const rightRail = new THREE.Mesh(railGeo, this.guardrailMaterial);
+        rightRail.position.set(widthM / 2 - guardrailW / 2, pierHeightM + deckThickness + guardrailH / 2, 0);
+        bridgeSubGroup.add(rightRail);
+
+        // 3. Piers (하부 원기둥 교각 & 가로보)
+        const pierRadius = Math.min(1.3, widthM / 12);
+        const pierSpacing = lengthM / (pierCount + 1);
+
+        for (let p = 1; p <= pierCount; p++) {
+          const pZ = -lengthM / 2 + p * pierSpacing;
+
+          // Pier Cap Cross-beam (교각 상단 가로보)
+          const capGeo = new THREE.BoxGeometry(widthM - 1.6, 1.0, 2.4);
+          const capMesh = new THREE.Mesh(capGeo, this.bridgeMaterial);
+          capMesh.position.set(0, pierHeightM - 0.5, pZ);
+          bridgeSubGroup.add(capMesh);
+
+          // Twin Columns (2열 원기둥 교각)
+          const colH = pierHeightM - 1.0;
+          const colGeo = new THREE.CylinderGeometry(pierRadius, pierRadius, colH, 16);
+
+          const colOffset = widthM * 0.28;
+          const colLeft = new THREE.Mesh(colGeo, this.bridgeMaterial);
+          colLeft.position.set(-colOffset, colH / 2, pZ);
+          bridgeSubGroup.add(colLeft);
+
+          const colRight = new THREE.Mesh(colGeo, this.bridgeMaterial);
+          colRight.position.set(colOffset, colH / 2, pZ);
+          bridgeSubGroup.add(colRight);
+        }
+
+        this.bridgeGroup.add(bridgeSubGroup);
+      } else if (item.type === 'tunnel') {
+        const widthM = Number(item.widthM || 14.0);
+        const heightM = Number(item.heightM || 6.5);
+        const headingRad = (((item.heading || 40)) * Math.PI) / 180;
+
+        const tunnelSubGroup = new THREE.Group();
+        tunnelSubGroup.position.set(mx, 0, mz);
+        tunnelSubGroup.rotation.y = headingRad;
+
+        // 1. Concrete Headwall (포털 전면 사각 프레임)
+        const wallW = widthM + 4.0;
+        const wallH = heightM + 3.0;
+        const wallThick = 2.0;
+
+        const portalShape = new THREE.Shape();
+        portalShape.moveTo(-wallW / 2, 0);
+        portalShape.lineTo(wallW / 2, 0);
+        portalShape.lineTo(wallW / 2, wallH);
+        portalShape.lineTo(-wallW / 2, wallH);
+        portalShape.closePath();
+
+        const archHole = new THREE.Path();
+        const r = widthM / 2;
+        archHole.moveTo(-r, 0);
+        archHole.lineTo(r, 0);
+        archHole.lineTo(r, heightM - r);
+        archHole.absarc(0, heightM - r, r, 0, Math.PI, false);
+        archHole.lineTo(-r, 0);
+        portalShape.holes.push(archHole);
+
+        const portalGeo = new THREE.ExtrudeGeometry(portalShape, { depth: wallThick, bevelEnabled: false });
+        const portalMesh = new THREE.Mesh(portalGeo, this.tunnelArchMaterial);
+        portalMesh.position.set(0, 0, -wallThick / 2);
+        tunnelSubGroup.add(portalMesh);
+
+        // 2. Dark Tunnel Interior Cavity (암흑 내부 진입 통로)
+        const interiorDepth = 25.0;
+        const cavityShape = new THREE.Shape();
+        cavityShape.moveTo(-r, 0);
+        cavityShape.lineTo(r, 0);
+        cavityShape.lineTo(r, heightM - r);
+        cavityShape.absarc(0, heightM - r, r, 0, Math.PI, false);
+        cavityShape.closePath();
+
+        const cavityGeo = new THREE.ExtrudeGeometry(cavityShape, { depth: interiorDepth, bevelEnabled: false });
+        const cavityMesh = new THREE.Mesh(cavityGeo, this.tunnelInteriorMaterial);
+        cavityMesh.position.set(0, 0, -interiorDepth);
+        tunnelSubGroup.add(cavityMesh);
+
+        this.tunnelGroup.add(tunnelSubGroup);
+      }
+    }
+
+    if (this.map) {
+      this.map.triggerRepaint();
     }
   }
 
@@ -1262,6 +1546,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.rooftopMaterial?.dispose();
       this.rooftopMesh = null;
     }
+    if (this.bridgeGroup) {
+      this.scene.remove(this.bridgeGroup);
+    }
+    if (this.tunnelGroup) {
+      this.scene.remove(this.tunnelGroup);
+    }
+    this.bridgeMaterial?.dispose();
+    this.guardrailMaterial?.dispose();
+    this.tunnelArchMaterial?.dispose();
+    this.tunnelInteriorMaterial?.dispose();
     this.cachedFeatures = [];
+    this.persistentBuildingMap.clear();
   }
 }

@@ -148,10 +148,17 @@ export function classifyBuildingWithVendor(
 
   // 속성 태그 및 명칭 정규화
   const name = String(
-    properties.name || properties.name_ko || properties.buld_nm || properties.buildingName || ''
+    properties.name || properties.name_ko || properties.buld_nm || properties.buildingName || properties.bldNm || ''
   ).toLowerCase();
   const usage = String(
     properties.usageType || properties.bld_category || properties.type || properties.class || properties.building || ''
+  ).toLowerCase();
+  const zone = String(
+    properties.zoneName || properties.zone_nm || properties.spfc_nm || properties.UQ111_NM ||
+    properties.uq111 || properties.landuse || properties.zoning || properties.zone || ''
+  ).toLowerCase();
+  const mainPurps = String(
+    properties.mainPurpsCdNm || properties.main_purps_nm || properties.mainPurps || properties.bdtyp_cd || ''
   ).toLowerCase();
 
   // 원주 군부대(1군지사 우산동, 캠프롱 태장동) 좌표 바운드
@@ -166,14 +173,16 @@ export function classifyBuildingWithVendor(
 
   const isIndustrialTag =
     usage.includes('industrial') || usage.includes('warehouse') || usage.includes('factory') ||
-    name.includes('공장') || name.includes('창고') || name.includes('물류') || name.includes('산업단지');
+    name.includes('공장') || name.includes('창고') || name.includes('물류') || name.includes('산업단지') ||
+    mainPurps.includes('공장') || mainPurps.includes('창고') || zone.includes('공업') || zone.includes('산업');
 
   const isPublicTag =
     usage.includes('school') || usage.includes('university') || usage.includes('hospital') ||
     usage.includes('public') || usage.includes('civic') || usage.includes('government') ||
     name.includes('학교') || name.includes('초등') || name.includes('중학') || name.includes('고등') ||
     name.includes('대학') || name.includes('병원') || name.includes('시청') || name.includes('구청') ||
-    name.includes('주민센터') || name.includes('보건소') || name.includes('경찰') || name.includes('소방');
+    name.includes('주민센터') || name.includes('보건소') || name.includes('경찰') || name.includes('소방') ||
+    mainPurps.includes('교육') || mainPurps.includes('공공') || mainPurps.includes('의료');
 
   const isApartmentTag =
     usage.includes('apartments') || usage.includes('apartment') || usage.includes('residential_tower') ||
@@ -181,15 +190,19 @@ export function classifyBuildingWithVendor(
     name.includes('푸르지오') || name.includes('자이') || name.includes('힐스테이트') ||
     name.includes('래미안') || name.includes('e편한') || name.includes('더샵') ||
     name.includes('아이파크') || name.includes('롯데캐슬') || name.includes('호반') ||
-    name.includes('주공') || name.includes('부영') || name.includes('코아루') || name.includes('세경');
+    name.includes('주공') || name.includes('부영') || name.includes('코아루') || name.includes('세경') ||
+    name.includes('현진') || name.includes('청솔') || name.includes('동') ||
+    mainPurps.includes('아파트') || mainPurps.includes('공동주택');
 
   const isCommercialTag =
     usage.includes('commercial') || usage.includes('retail') || usage.includes('office') ||
     name.includes('빌딩') || name.includes('상가') || name.includes('타워') || name.includes('프라자') ||
-    name.includes('마트') || name.includes('은행') || name.includes('백화점') || name.includes('호텔');
+    name.includes('마트') || name.includes('은행') || name.includes('백화점') || name.includes('호텔') ||
+    mainPurps.includes('근린생활') || mainPurps.includes('업무') || mainPurps.includes('판매') ||
+    zone.includes('상업') || zone.includes('준주거');
 
   // ---------------------------------------------------------------------------
-  // 6개 유형 엄격 매칭 판정
+  // 6개 유형 엄격 매칭 판정 (건축HUB 표제부 + 용도지역 UQ111 융합)
   // ---------------------------------------------------------------------------
   let bType: KoreanBuildingType = 'residential';
   let typeIndex = 4;
@@ -202,7 +215,7 @@ export function classifyBuildingWithVendor(
     typeName = '군 주둔지 영내 막사';
   }
   // [유형 2] 산업단지·군수창고·대형공장
-  else if (isIndustrialTag || (areaSqm >= 1200 && !isApartmentTag && !isPublicTag)) {
+  else if (isIndustrialTag || (areaSqm >= 1400 && !isApartmentTag && !isPublicTag)) {
     bType = 'industrial';
     typeIndex = 2;
     typeName = '산업단지·군수창고·대형공장';
@@ -213,27 +226,28 @@ export function classifyBuildingWithVendor(
     typeIndex = 5;
     typeName = '학교·병원·관공서·대학교';
   }
-  // [유형 1] 한국형 대단지 아파트
+  // [유형 1] 한국형 대단지 아파트 (제2종/제3종 일반주거지역 단지형 건물 포함)
   else if (
     isApartmentTag ||
-    (areaSqm >= 350 && areaSqm <= 2500 && (aspectRatio >= 1.35 || perimeter / Math.sqrt(areaSqm) >= 4.0)) ||
-    (areaSqm >= 450 && !isCommercialTag)
+    ((zone.includes('2종') || zone.includes('3종') || zone.includes('제2종') || zone.includes('제3종')) && areaSqm >= 250) ||
+    (areaSqm >= 320 && areaSqm <= 3000 && (aspectRatio >= 1.3 || perimeter / Math.sqrt(areaSqm) >= 3.8))
   ) {
     bType = 'apartment';
     typeIndex = 1;
     typeName = '한국형 대단지 아파트';
   }
-  // [유형 3] 시내 중층 상업/오피스 빌딩
+  // [유형 3] 시내 중층 상업/오피스 빌딩 (일반/근린상업 및 준주거지역 포함)
   else if (
     isCommercialTag ||
-    (areaSqm >= 250 && areaSqm < 1200 && aspectRatio < 2.5) ||
-    (areaSqm >= 200 && aspectRatio < 1.8)
+    zone.includes('상업') ||
+    zone.includes('준주거') ||
+    (areaSqm >= 180 && areaSqm < 1400 && aspectRatio < 2.5)
   ) {
     bType = 'commercial';
     typeIndex = 3;
     typeName = '시내 중층 상업/오피스 빌딩';
   }
-  // [유형 4] 다세대 빌라 & 단독주택가 (기본값)
+  // [유형 4] 다세대 빌라 & 단독주택가 (제1종일반주거지역 등)
   else {
     bType = 'residential';
     typeIndex = 4;
@@ -256,28 +270,28 @@ export function classifyBuildingWithVendor(
   switch (bType) {
     // -------------------------------------------------------------------------
     // 유형 1 [한국형 대단지 아파트]
-    // 높이: 15층~25층(45m~75m)
-    // 외벽: 밝고 화사한 크림 아이보리(#f3efe6), 소프트 베이지(#e8e2d5), 라이트 웜그레이(#dedad2)
-    // 지붕: 밝은 콘크리트 그레이(#8c8881) + 옥탑 코어
+    // 높이: 제2종/3종일반주거지역 단지형 15층~25층(48m~75m)
+    // 외벽: 밝은 크림아이보리(#f7f4ee), 소프트베이지(#efe8dc), 라이트웜그레이(#dedad2)
+    // 지붕: 밝은 콘크리트 그레이(#8c8881) + 0.9m 난간 + 2.8m 옥탑 코어
     // -------------------------------------------------------------------------
     case 'apartment': {
       floors = 15 + (seed % 11); // 15층 ~ 25층
-      height = floors * 3.0;     // 45m ~ 75m
+      height = 48.0 + (seed % 10) * 3.0; // 48m ~ 75m
       const wallPick = seed % 3;
       if (wallPick === 0) {
-        wallColor = '#f3efe6'; // 밝고 화사한 크림 아이보리
+        wallColor = '#f7f4ee'; // 밝은 크림아이보리
         atlasWallSlot = 'apt_warm_cream';
       } else if (wallPick === 1) {
-        wallColor = '#e8e2d5'; // 소프트 베이지
+        wallColor = '#efe8dc'; // 웜베이지
         atlasWallSlot = 'apt_sand_beige';
       } else {
         wallColor = '#dedad2'; // 라이트 웜그레이
         atlasWallSlot = 'apt_warm_gray';
       }
-      roofColor = '#8c8881';   // 밝은 콘크리트 그레이
+      roofColor = '#8c8881'; // 밝은 콘크리트 그레이
       atlasRoofSlot = 'roof_concrete_warmgray';
       hasParapet = true;
-      hasPenthouseCore = true; // 옥탑 코어
+      hasPenthouseCore = true; // 2.8m 엘리베이터/권상기실 옥탑 코어
       isGabledRoof = false;
       break;
     }
@@ -285,41 +299,38 @@ export function classifyBuildingWithVendor(
     // -------------------------------------------------------------------------
     // 유형 2 [산업단지·군수창고·대형공장]
     // 높이: 8m~14m
-    // 지붕: 코발트/징크 블루(#2b5b84), 라이트 실버(#cbd5e1), 세이지 그린(#3b6e5c)
-    // 외벽: 밝은 실버/베이지 메탈 판넬(#e2e8f0)
+    // 외벽: 코발트블루/실버 징크 판넬(#e2e8f0, facility_panel)
+    // 지붕: 코발트블루(#2b5b84, 60%), 라이트 실버(#cbd5e1, 40%)
     // -------------------------------------------------------------------------
     case 'industrial': {
-      height = 8.0 + (seed % 7); // 8m ~ 14m
+      height = 8.0 + (seed % 7) * 1.0; // 8m ~ 14m
       floors = Math.max(1, Math.round(height / 4.0));
       wallColor = '#e2e8f0'; // 밝은 실버/베이지 메탈 판넬
       atlasWallSlot = 'facility_panel';
 
-      const roofPick = seed % 3;
-      if (roofPick === 0) {
-        roofColor = '#2b5b84'; // 선명한 코발트/징크 블루
+      if (seed % 10 < 6) {
+        roofColor = '#2b5b84'; // 코발트블루 징크
         atlasRoofSlot = 'roof_zinc_blue';
-      } else if (roofPick === 1) {
+      } else {
         roofColor = '#cbd5e1'; // 라이트 실버
         atlasRoofSlot = 'roof_concrete_warmgray';
-      } else {
-        roofColor = '#3b6e5c'; // 세이지 그린
-        atlasRoofSlot = 'roof_urethane_sage';
       }
       hasParapet = false;
       hasPenthouseCore = false;
-      isGabledRoof = seed % 2 === 0; // 절반은 완만한 공장 박공
+      isGabledRoof = seed % 2 === 0;
       break;
     }
 
     // -------------------------------------------------------------------------
     // 유형 3 [시내 중층 상업/오피스 빌딩]
-    // 높이: 4층~6층(12m~22m 규모의 탄탄한 도시 블록 형성)
-    // 외벽: 화강석 화이트/베이지(#e5e0d8), 스카이 블루 유리 커튼월(#93c5fd), 모던 그레이(#cbd5e1)
-    // 옥상: 우레탄 방수 그린(#3b7a57, 40%), 적갈색 기와/브라운(#7c3f2c, 30%), 밝은 시멘트(#94a3b8, 30%)
+    // 높이: 일반/근린상업지역 및 준주거지역 4층~8층(14m~26m)
+    // 외벽: 1층 쇼윈도 기단부(comm_ground_shop) + 상층부 화강석/커튼월
+    // 옥상: 우레탄그린(45%), 콘크리트그레이(35%), 다크슬레이트(20%) + 0.9m 난간 + 2.8m 옥탑
     // -------------------------------------------------------------------------
     case 'commercial': {
-      floors = 4 + (seed % 3);   // 4층 ~ 6층
-      height = 12.0 + (seed % 6) * 2.0; // 12m ~ 22m 탄탄한 도시 블록
+      floors = 4 + (seed % 5);   // 4층 ~ 8층
+      height = 14.0 + (seed % 7) * 2.0; // 14m ~ 26m 탄탄한 도시 블록
+
       const wallPick = seed % 3;
       if (wallPick === 0) {
         wallColor = '#e5e0d8'; // 화강석 화이트/베이지
@@ -332,32 +343,33 @@ export function classifyBuildingWithVendor(
         atlasWallSlot = 'comm_dark_metal';
       }
 
-      // 옥상: 에메랄드/세이지 우레탄 40%, 적갈색 기와/브라운 30%, 밝은 시멘트 30%
-      if (seed < 40) {
-        roofColor = '#3b7a57'; // 한국 특유 에메랄드/세이지 그린 우레탄
+      // 옥상 분포 정밀 반영: 우레탄그린 45%, 콘크리트그레이 35%, 다크슬레이트 20%
+      if (seed < 45) {
+        roofColor = '#3b7a57'; // 한국 특유 에메랄드 우레탄그린 (45%)
         atlasRoofSlot = 'roof_urethane_sage';
-      } else if (seed < 70) {
-        roofColor = '#7c3f2c'; // 적갈색 기와/브라운
-        atlasRoofSlot = 'roof_terracotta_tile';
-      } else {
-        roofColor = '#94a3b8'; // 밝은 시멘트/콘크리트 옥상
+      } else if (seed < 80) {
+        roofColor = '#94a3b8'; // 밝은 콘크리트그레이 (35%)
         atlasRoofSlot = 'roof_concrete_warmgray';
+      } else {
+        roofColor = '#334155'; // 다크슬레이트 차콜 (20%)
+        atlasRoofSlot = 'roof_asphalt_charcoal';
       }
       hasParapet = true;
-      hasPenthouseCore = height >= 16.0;
+      hasPenthouseCore = true; // 옥상 0.9m 난간 & 2.8m 엘리베이터/계단실 옥탑
       isGabledRoof = false;
       break;
     }
 
     // -------------------------------------------------------------------------
     // 유형 4 [다세대 빌라 & 단독주택가]
-    // 높이: 2.5층~4층(8m~14m 100% 입체 돌출)
-    // 외벽: 따뜻한 적벽돌(#a84a32), 살구색/크림색 회벽(#f5ebe0), 밝은 화강석(#e7e5e4)
-    // 지붕: 에메랄드/세이지 우레탄(#3b7a57, 40%), 적갈색 기와(#7c3f2c, 30%), 밝은 콘크리트(#94a3b8, 30%)
+    // 높이: 제1종일반주거지역 주택가 2.5층~4층(8m~13m)
+    // 외벽: 따뜻한 적벽돌(#a84a32) / 밝은 화강석(#e7e5e4)
+    // 지붕: 적갈색 박공(#7c3f2c, 40%), 청색 징크 박공(#2b5b84, 25%), 우레탄 녹색(#3b7a57, 35%)
     // -------------------------------------------------------------------------
     case 'residential': {
       floors = 2 + (seed % 3);   // 2.5층 ~ 4층
-      height = 8.0 + (seed % 7) * 1.0; // 8.0m ~ 14.0m (0m~2m 납작 건물 원천 금지)
+      height = 8.0 + (seed % 6) * 1.0; // 8.0m ~ 13.0m (0m~2m 납작 건물 완전 금지)
+
       const wallPick = seed % 3;
       if (wallPick === 0) {
         wallColor = '#a84a32'; // 따뜻한 적벽돌
@@ -370,18 +382,18 @@ export function classifyBuildingWithVendor(
         atlasWallSlot = 'villa_granite';
       }
 
-      // 지붕 3종 정밀 분포: ① 에메랄드/세이지 우레탄 40%, ② 적갈색 기와 30%, ③ 밝은 콘크리트 30%
+      // 지붕: 적갈색 박공(40%), 청색 징크 박공(25%), 우레탄 평지붕(35%)
       if (seed < 40) {
-        roofColor = '#3b7a57'; // 에메랄드/세이지 그린 우레탄
-        atlasRoofSlot = 'roof_urethane_sage';
-        isGabledRoof = false;
-      } else if (seed < 70) {
-        roofColor = '#7c3f2c'; // 적갈색 기와/브라운
+        roofColor = '#7c3f2c'; // 적갈색 기와/박공
         atlasRoofSlot = 'roof_terracotta_tile';
         isGabledRoof = true;
+      } else if (seed < 65) {
+        roofColor = '#2b5b84'; // 청색 징크 박공
+        atlasRoofSlot = 'roof_zinc_blue';
+        isGabledRoof = true;
       } else {
-        roofColor = '#94a3b8'; // 밝은 회백색/회색 콘크리트 옥상
-        atlasRoofSlot = 'roof_concrete_warmgray';
+        roofColor = '#3b7a57'; // 에메랄드 우레탄 녹색 평지붕
+        atlasRoofSlot = 'roof_urethane_sage';
         isGabledRoof = false;
       }
       hasParapet = !isGabledRoof;
@@ -440,8 +452,20 @@ export function classifyBuildingWithVendor(
     }
   }
 
-  // [3단계 고도화: 외부 실측 대장(V-World WFS LT_C_SPBD & Overpass) 지상층수 및 높이 직결]
-  const declaredFloors = Number(
+  // ---------------------------------------------------------------------------
+  // [1순위: 건축HUB 건축물대장 표제부 실측 높이(heit) 및 지상층수(grndFlrCnt) 적용]
+  // ---------------------------------------------------------------------------
+  const regHeit = Number(
+    properties.heit ||
+    properties.HEI ||
+    properties.hei ||
+    properties.height ||
+    properties.render_height ||
+    properties.bld_hgt ||
+    0
+  );
+  const regFloors = Number(
+    properties.grndFlrCnt ||
     properties.grnd_flr ||
     properties.GRND_FLR ||
     properties.gro_flo_co ||
@@ -451,28 +475,21 @@ export function classifyBuildingWithVendor(
     properties.flr_cnt ||
     0
   );
-  const declaredHeight = Number(
-    properties.height ||
-    properties.render_height ||
-    properties.bld_hgt ||
-    properties.HEI ||
-    properties.hei ||
-    0
-  );
 
-  const explicitHeight = declaredHeight >= 8.0
-    ? declaredHeight
-    : (declaredFloors >= 1 ? declaredFloors * 3.2 : 0);
-
-  if (explicitHeight >= 8.0) {
-    height = Math.max(height, explicitHeight);
-    floors = declaredFloors >= 1 ? declaredFloors : Math.max(floors, Math.round(height / 3.2));
+  if (regHeit >= 8.0) {
+    height = regHeit;
+    floors = regFloors >= 1 ? regFloors : Math.max(floors, Math.round(height / 3.3));
+  } else if (regFloors >= 1) {
+    floors = regFloors;
+    height = regFloors * 3.3;
   }
+  // [2순위: 대장 미매칭 건물은 브이월드 용도지역(LT_C_UQ111) 및 도시 블록 수식 유지]
+  // 상업/준주거: 14m~26m (4~8층), 2·3종일반주거 아파트: 48m~75m (15~25층), 1종주거: 8m~13m (2.5~4층)
 
-  // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (최소 8.0m, 2.5층 이상 볼륨 강제)
+  // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (화면 내 모든 건물 최소 8.0m 이상 볼륨 강제)
   if (height < 8.0) {
     height = 8.0 + (seed % 6) * 1.0; // 8.0m ~ 13.0m
-    floors = Math.max(2, Math.round(height / 3.2));
+    floors = Math.max(2, Math.round(height / 3.3));
   }
 
   // 지붕 색상 선언 또는 위성 샘플링 색상 우선 반영

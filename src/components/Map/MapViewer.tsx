@@ -67,6 +67,13 @@ import {
   Radio,
   Target,
   Sparkles,
+  Building2,
+  MapPin,
+  Copy,
+  ExternalLink,
+  Compass as CompassIcon,
+  ShieldCheck,
+  Info,
 } from 'lucide-react';
 import { calculateSunLight, safeSetLight } from '@/utils/sunLightCalculator';
 import { calculateViewshed } from '@/utils/viewshedAnalysis';
@@ -538,6 +545,7 @@ export const MapViewer: React.FC = () => {
   // [1단계: 무중단 원자적(Atomic) 건물 캐시 및 Double Buffering]
   // 지도 이동이나 줌 변경 시 기존 렌더링된 건물이 깜빡거리거나 소실되지 않도록 전역 영구 캐시 유지
   const persistentBuildingCacheRef = useRef<Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>>(new Map());
+  const hasInitialDataSetRef = useRef<boolean>(false);
 
   // [MapLibre varint 10-byte overflow 원천 방지 헬퍼]
   // 64비트 정수 범위를 초과하는 긴 숫자 ID가 MapLibre Protobuf varint 파싱 시 에러를 유발하지 않도록 문자열 접두어 강제 부여
@@ -589,14 +597,20 @@ export const MapViewer: React.FC = () => {
   const mergeIntoPersistentBuildingCache = useCallback(
     (
       newFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
-    ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] => {
+    ): {
+      merged: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+      addedCount: number;
+    } => {
       if (!newFeatures || newFeatures.length === 0) {
-        return Array.from(persistentBuildingCacheRef.current.values());
+        return {
+          merged: Array.from(persistentBuildingCacheRef.current.values()),
+          addedCount: 0,
+        };
       }
 
-      const MAX_PERSISTENT_FEATURES = 16000;
+      const MAX_PERSISTENT_FEATURES = 20000;
       if (persistentBuildingCacheRef.current.size > MAX_PERSISTENT_FEATURES) {
-        const excess = persistentBuildingCacheRef.current.size - 12000;
+        const excess = persistentBuildingCacheRef.current.size - 14000;
         let removed = 0;
         for (const k of persistentBuildingCacheRef.current.keys()) {
           if (removed >= excess) break;
@@ -605,6 +619,7 @@ export const MapViewer: React.FC = () => {
         }
       }
 
+      let addedCount = 0;
       newFeatures.forEach((feat, idx) => {
         if (!feat || !feat.geometry) return;
         const key = getBuildingFeatureKey(feat, idx);
@@ -619,18 +634,23 @@ export const MapViewer: React.FC = () => {
         const existing = persistentBuildingCacheRef.current.get(key);
         if (!existing) {
           persistentBuildingCacheRef.current.set(key, feat);
+          addedCount++;
         } else {
-          const exH = Number(existing.properties?.height || existing.properties?.hei || 0);
-          const newH = Number(feat.properties?.height || feat.properties?.hei || 0);
-          const exFlr = Number(existing.properties?.grnd_flr || existing.properties?.gro_flo_co || 0);
-          const newFlr = Number(feat.properties?.grnd_flr || feat.properties?.gro_flo_co || 0);
-          if (newH > exH || newFlr > exFlr) {
+          const exH = Number(existing.properties?.height || existing.properties?.hei || existing.properties?.heit || 0);
+          const newH = Number(feat.properties?.height || feat.properties?.hei || feat.properties?.heit || 0);
+          const exFlr = Number(existing.properties?.grnd_flr || existing.properties?.gro_flo_co || existing.properties?.grndFlrCnt || 0);
+          const newFlr = Number(feat.properties?.grnd_flr || feat.properties?.gro_flo_co || feat.properties?.grndFlrCnt || 0);
+          if (newH > exH + 0.5 || newFlr > exFlr) {
             persistentBuildingCacheRef.current.set(key, feat);
+            addedCount++;
           }
         }
       });
 
-      return Array.from(persistentBuildingCacheRef.current.values());
+      return {
+        merged: Array.from(persistentBuildingCacheRef.current.values()),
+        addedCount,
+      };
     },
     [getBuildingFeatureKey]
   );
@@ -822,9 +842,10 @@ export const MapViewer: React.FC = () => {
           regionId: selectedRegionId,
           signal: controller.signal,
           onImmediate: (immediate) => {
-            const merged = mergeIntoPersistentBuildingCache(immediate.features.features);
+            const { merged, addedCount } = mergeIntoPersistentBuildingCache(immediate.features.features);
             const count = Math.max(merged.length, immediate.totalCount);
-            if (count > 0) {
+            if (count > 0 && (addedCount > 0 || !hasInitialDataSetRef.current)) {
+              hasInitialDataSetRef.current = true;
               const mergedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
                 type: 'FeatureCollection',
                 features: merged,
@@ -900,9 +921,10 @@ export const MapViewer: React.FC = () => {
         })
           .then((result) => {
             if (controller.signal.aborted) return;
-            const merged = mergeIntoPersistentBuildingCache(result.features.features);
+            const { merged, addedCount } = mergeIntoPersistentBuildingCache(result.features.features);
             const count = Math.max(merged.length, result.totalCount);
-            if (count > 0) {
+            if (count > 0 && (addedCount > 0 || !hasInitialDataSetRef.current)) {
+              hasInitialDataSetRef.current = true;
               const mergedGeoJSON: GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon> = {
                 type: 'FeatureCollection',
                 features: merged,
@@ -1161,6 +1183,75 @@ export const MapViewer: React.FC = () => {
   // [신규] 클릭된 3D 건물 정보 및 화면 좌표
   const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuildingInfo | null>(null);
 
+  // [3단계: 연속지적도 + 용도지역 + 건축물대장 4대 실측 분석 리포트 카드 상태]
+  const [cadastralReport, setCadastralReport] = useState<any | null>(null);
+  const [isAnalyzingCadastral, setIsAnalyzingCadastral] = useState<boolean>(false);
+  const [copiedReport, setCopiedReport] = useState<boolean>(false);
+
+  const handleCloseCadastralReport = useCallback(() => {
+    setCadastralReport(null);
+    const map = mapRef.current;
+    if (map) {
+      const parcelSrc = map.getSource('selected-parcel-source') as maplibregl.GeoJSONSource;
+      if (parcelSrc) {
+        parcelSrc.setData({ type: 'FeatureCollection', features: [] });
+      }
+    }
+  }, []);
+
+  const fetchCadastralAnalysis = useCallback(
+    async (lat: number, lng: number, regionId?: string) => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      setIsAnalyzingCadastral(true);
+      try {
+        const targetRegion = regionId || selectedRegionId || 'wonju';
+        const url = `/api/cadastral-analysis?lat=${lat}&lng=${lng}&regionId=${targetRegion}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setCadastralReport(data);
+
+            // 필지 폴리곤을 네온 하이라이트 소스에 주입
+            if (data.parcelFeature) {
+              const parcelSrc = map.getSource('selected-parcel-source') as maplibregl.GeoJSONSource;
+              if (parcelSrc) {
+                parcelSrc.setData({
+                  type: 'FeatureCollection',
+                  features: [data.parcelFeature],
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[MapViewer] Cadastral analysis fetch notice:', err);
+      } finally {
+        setIsAnalyzingCadastral(false);
+      }
+    },
+    [selectedRegionId]
+  );
+
+  // [통합 검색 이벤트 리스너: gangwon-search-select]
+  useEffect(() => {
+    const handleSearchSelect = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const detail = customEvent.detail;
+      if (detail && detail.coords) {
+        const [lng, lat] = detail.coords;
+        fetchCadastralAnalysis(lat, lng, detail.regionId || selectedRegionId);
+      }
+    };
+
+    window.addEventListener('gangwon-search-select', handleSearchSelect);
+    return () => {
+      window.removeEventListener('gangwon-search-select', handleSearchSelect);
+    };
+  }, [fetchCadastralAnalysis, selectedRegionId]);
+
   // [교통·인프라 접근성] 3D 타깃 인프라 화면 좌표
   const [tieLineMarkerScreenPos, setTieLineMarkerScreenPos] = useState<{
     x: number;
@@ -1337,6 +1428,11 @@ export const MapViewer: React.FC = () => {
           },
           // [클릭된 3D 건물 하이라이트 소스]
           'building-highlight-source': {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          },
+          // [3단계: 선택된 필지/부지 연속지적도 네온 하이라이트 소스]
+          'selected-parcel-source': {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
@@ -1888,6 +1984,40 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'none' },
           },
 
+          // [3단계: 선택된 연속지적도 필지 폴리곤 반투명 채우기]
+          {
+            id: 'selected-parcel-fill',
+            type: 'fill',
+            source: 'selected-parcel-source',
+            paint: {
+              'fill-color': '#00f5ff',
+              'fill-opacity': 0.22,
+            },
+          },
+          // [선택된 필지 외곽 네온 글로우 (외곽 후광)]
+          {
+            id: 'selected-parcel-glow-outer',
+            type: 'line',
+            source: 'selected-parcel-source',
+            paint: {
+              'line-color': '#00f5ff',
+              'line-width': 7,
+              'line-blur': 4,
+              'line-opacity': 0.65,
+            },
+          },
+          // [선택된 필지 내곽 선명한 황금·하늘색 네온 경계선]
+          {
+            id: 'selected-parcel-glow-inner',
+            type: 'line',
+            source: 'selected-parcel-source',
+            paint: {
+              'line-color': '#fbbf24',
+              'line-width': 2.5,
+              'line-opacity': 1.0,
+            },
+          },
+
           // [Phase 2 고도화] 부지 회전축 연결선
           {
             id: 'handler-stem-line',
@@ -2290,17 +2420,27 @@ export const MapViewer: React.FC = () => {
     };
     map.on('idle', handleMapIdle);
 
+    let viewportMoveEndDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleViewportMoveEnd = () => {
-      const c = map.getCenter();
-      setViewport({
-        longitude: c.lng,
-        latitude: c.lat,
-        zoom: map.getZoom(),
-        pitch: map.getPitch(),
-        bearing: map.getBearing(),
-      });
-      syncExternalSpatialBuildings(map);
-      updateRealtimeMetrics();
+      if (viewportMoveEndDebounceTimer) {
+        clearTimeout(viewportMoveEndDebounceTimer);
+      }
+      viewportMoveEndDebounceTimer = setTimeout(() => {
+        viewportMoveEndDebounceTimer = null;
+        if (!map) return;
+        if (map.isMoving() || map.isRotating()) return;
+
+        const c = map.getCenter();
+        setViewport({
+          longitude: c.lng,
+          latitude: c.lat,
+          zoom: map.getZoom(),
+          pitch: map.getPitch(),
+          bearing: map.getBearing(),
+        });
+        syncExternalSpatialBuildings(map);
+        updateRealtimeMetrics();
+      }, 250);
     };
     map.on('moveend', handleViewportMoveEnd);
 
@@ -4246,7 +4386,7 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.zoning, isMapLoaded]);
 
-  // [공공데이터포털] 전국 교량 및 터널 레이어 가시성 동적 토글
+  // [공공데이터포털] 전국 교량 및 터널 레이어 가시성 동적 토글 (2D 심볼 + 3D Three.js 구조물)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
@@ -4256,6 +4396,10 @@ export const MapViewer: React.FC = () => {
     }
     if (map.getLayer('molit-bridge-tunnel-labels')) {
       map.setLayoutProperty('molit-bridge-tunnel-labels', 'visibility', vis);
+    }
+    // 3D Three.js 교량 및 터널 레이어 가시성 동적 반영
+    if (realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.setBridgeTunnelVisible(layers.bridgeTunnel);
     }
   }, [layers.bridgeTunnel, isMapLoaded]);
 
@@ -4273,8 +4417,49 @@ export const MapViewer: React.FC = () => {
           const bldCount = data.buildingRegisters?.length || 0;
           const btCount = data.bridgesAndTunnels?.length || 0;
 
-          if (data.buildingRegisters && Array.isArray(data.buildingRegisters)) {
+          if (data.buildingRegisters && Array.isArray(data.buildingRegisters) && data.buildingRegisters.length > 0) {
             cachedBuildingRegistersRef.current = data.buildingRegisters;
+
+            // [건축HUB 표제부 융합] PNU 및 건물명 색인 후 캐시 내 건물 속성 실시간 보정
+            const regMap = new Map<string, any>();
+            for (const b of data.buildingRegisters) {
+              if (b.pnu) regMap.set(String(b.pnu), b);
+              if (b.bldNm) {
+                regMap.set(`${b.bldNm}_${b.dongNm || ''}`, b);
+                regMap.set(b.bldNm, b);
+              }
+            }
+
+            let enrichedCount = 0;
+            persistentBuildingCacheRef.current.forEach((feat) => {
+              const p = feat.properties || {};
+              const match =
+                (p.pnu && regMap.get(String(p.pnu))) ||
+                (p.name && regMap.get(String(p.name))) ||
+                (p.buld_nm && regMap.get(String(p.buld_nm)));
+              if (match) {
+                feat.properties = {
+                  ...feat.properties,
+                  heit: match.heit || feat.properties?.height,
+                  height: match.heit || feat.properties?.height,
+                  grndFlrCnt: match.grndFlrCnt || feat.properties?.grnd_flr,
+                  mainPurpsCdNm: match.mainPurpsCdNm,
+                  strctCdNm: match.strctCdNm,
+                  roofCdNm: match.roofCdNm,
+                  bldNm: match.bldNm,
+                  dongNm: match.dongNm,
+                };
+                enrichedCount++;
+              }
+            });
+
+            if (enrichedCount > 0 && realisticKoreanCityLayerRef.current) {
+              const center = map.getCenter();
+              realisticKoreanCityLayerRef.current.updateBuildings(
+                Array.from(persistentBuildingCacheRef.current.values()),
+                [center.lng, center.lat]
+              );
+            }
           }
 
           setMolitDiagnostic({
@@ -4306,12 +4491,18 @@ export const MapViewer: React.FC = () => {
               features,
             });
           }
+
+          // [요구사항 3] 국토교통부 3D 입체 교량(상판, 방호벽, 교각) & 터널 갱문 Three.js 주입
+          if (realisticKoreanCityLayerRef.current && data.bridgesAndTunnels?.length > 0) {
+            realisticKoreanCityLayerRef.current.updateBridgesAndTunnels(data.bridgesAndTunnels);
+            realisticKoreanCityLayerRef.current.setBridgeTunnelVisible(layers.bridgeTunnel);
+          }
         }
       })
       .catch((err) => {
         console.warn('[MapViewer] Molit hub sync notice:', err);
       });
-  }, [isMapLoaded, selectedRegionId, setMolitDiagnostic]);
+  }, [isMapLoaded, selectedRegionId, layers.bridgeTunnel, setMolitDiagnostic]);
 
   // [Phase 2 고도화] 16. 부지 폴리곤 렌더링 스타일(사선 빗금 / 컬러) 동적 전환
   useEffect(() => {
@@ -4533,6 +4724,9 @@ export const MapViewer: React.FC = () => {
         losAnalysis.isActive
       )
         return;
+
+      // [3단계] 클릭 위치에 대한 연속지적도 + 용도지역 + 건축물대장 4대 실측 분석 자동 트리거
+      fetchCadastralAnalysis(e.lngLat.lat, e.lngLat.lng, selectedRegionId);
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
@@ -6337,6 +6531,226 @@ export const MapViewer: React.FC = () => {
 
               {/* 하단 툴팁 화살표 */}
               <div className="w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[7px] border-t-cyan-400 absolute -bottom-[7px] left-1/2 -translate-x-1/2" />
+            </div>
+          </div>
+        )}
+
+        {/* [3단계: 강원 18개 시·군 연속지적도 + 용도지역지구 + 건축물대장 4대 실측 분석 리포트 카드] */}
+        {cadastralReport && (
+          <div
+            id="cadastral-analysis-card"
+            className="absolute top-16 right-6 z-40 w-96 max-w-[calc(100vw-3rem)] bg-[#0a1410]/95 backdrop-blur-xl border border-cyan-400/80 rounded-2xl shadow-2xl overflow-hidden ring-2 ring-cyan-500/30 text-xs animate-in fade-in zoom-in-95 duration-150 select-none"
+          >
+            {/* 카드 헤더 */}
+            <div className="bg-gradient-to-r from-[#0d221a] via-[#102d21] to-[#0d221a] p-3 border-b border-[#234232] flex items-start justify-between">
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    4대 실측 분석 리포트
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60">
+                    {cadastralReport.target?.regionName || '강원특별자치도'}
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
+                    지목: {cadastralReport.target?.jimok || '대'}
+                  </span>
+                </div>
+                <h3 className="font-bold text-white text-sm truncate leading-snug">
+                  {cadastralReport.target?.address || '강원도 필지 실측 분석'}
+                </h3>
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                  PNU: {cadastralReport.target?.pnu || '-'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseCadastralReport}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-colors flex-shrink-0"
+                title="분석 리포트 닫기"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 카드 바디 (4대 실측 그리드) */}
+            <div className="p-3 space-y-2.5 max-h-[68vh] overflow-y-auto">
+              {/* [1. 면적 산출] */}
+              <div className="bg-[#101c15] p-2.5 rounded-xl border border-[#203728] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-emerald-300">
+                  <span className="flex items-center gap-1">
+                    <Ruler className="w-3.5 h-3.5 text-emerald-400" />
+                    [1] 필지 실측 면적 산출
+                  </span>
+                  <span className="text-[9.5px] font-mono text-slate-400">1㎡ = 0.3025평</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center bg-[#0c1611] p-2 rounded-lg border border-[#1b2f23]">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">정밀 면적 (㎡)</span>
+                    <span className="font-mono font-bold text-sm text-emerald-300">
+                      {Number(cadastralReport.areaReport?.areaSqm || 0).toLocaleString()} <span className="text-xs">㎡</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">평수 환산 (평)</span>
+                    <span className="font-mono font-bold text-sm text-amber-300">
+                      {Number(cadastralReport.areaReport?.areaPyeong || 0).toLocaleString()} <span className="text-xs">평</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-[10px] px-1 text-slate-400">
+                  <span>필지 둘레: <strong className="text-slate-200 font-mono">{cadastralReport.areaReport?.perimeterM} m</strong></span>
+                  <span className="text-cyan-300 font-medium">연속지적도 경계선 네온 매핑</span>
+                </div>
+              </div>
+
+              {/* [2. 용도지역지구 (V-World API)] */}
+              <div className="bg-[#101c15] p-2.5 rounded-xl border border-[#203728] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                  <span className="flex items-center gap-1">
+                    <CompassIcon className="w-3.5 h-3.5 text-amber-400" />
+                    [2] 용도지역지구 (브이월드 LT_C_UQ111)
+                  </span>
+                  <span className="text-[9.5px] font-semibold px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800/60">
+                    {cadastralReport.zoningReport?.zoneName}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center bg-[#0c1611] p-2 rounded-lg border border-[#1b2f23]">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">법정 건폐율</span>
+                    <span className="font-mono font-bold text-xs text-emerald-400">
+                      최대 {cadastralReport.zoningReport?.maxBcRat}% 이하
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">법정 용적률</span>
+                    <span className="font-mono font-bold text-xs text-emerald-400">
+                      최대 {cadastralReport.zoningReport?.maxVlRat}% 이하
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[10px] bg-[#14231a] p-1.5 rounded border border-[#233b2c] text-slate-300">
+                  <span className="text-amber-400 font-semibold">개발 가용성: </span>
+                  {cadastralReport.zoningReport?.feasibility}
+                </div>
+              </div>
+
+              {/* [3. 건축물대장 표제부 (국토교통부 API)] */}
+              <div className="bg-[#101c15] p-2.5 rounded-xl border border-[#203728] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-cyan-300">
+                  <span className="flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-cyan-400" />
+                    [3] 건축물대장 표제부 (국토교통부 API)
+                  </span>
+                  <span className="text-[9.5px] font-mono text-cyan-400">
+                    {cadastralReport.buildingReport?.approvalDate !== '-' ? `승인: ${cadastralReport.buildingReport?.approvalDate}` : '대장 연동'}
+                  </span>
+                </div>
+                <div className="space-y-1 bg-[#0c1611] p-2 rounded-lg border border-[#1b2f23] text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">건물명 / 주용도:</span>
+                    <span className="text-white font-bold truncate max-w-[200px]">
+                      {cadastralReport.buildingReport?.buildingName} ({cadastralReport.buildingReport?.mainPurpose})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">주구조 / 지붕:</span>
+                    <span className="text-slate-200">
+                      {cadastralReport.buildingReport?.structure} ({cadastralReport.buildingReport?.roofType})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">층수 / 건물높이:</span>
+                    <span className="text-cyan-300 font-mono font-medium">
+                      지상 {cadastralReport.buildingReport?.groundFloors}층 (지하 {cadastralReport.buildingReport?.undergroundFloors}층) · {cadastralReport.buildingReport?.heightM} m
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">건축 연면적:</span>
+                    <span className="text-emerald-400 font-mono font-semibold">
+                      {Number(cadastralReport.buildingReport?.totalAreaSqm || 0).toLocaleString()} ㎡
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* [4. 지형·교량 접근성] */}
+              <div className="bg-[#101c15] p-2.5 rounded-xl border border-[#203728] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold text-blue-300">
+                  <span className="flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5 text-blue-400" />
+                    [4] 지형·교량 접근성 & 인프라
+                  </span>
+                  <span className="text-[9.5px] font-mono text-slate-400">
+                    EL. {cadastralReport.accessibilityReport?.elevationM} m
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#0c1611] p-2 rounded-lg border border-[#1b2f23]">
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">평균 경사도</span>
+                    <span className="font-bold text-slate-200 font-mono">
+                      {cadastralReport.accessibilityReport?.averageSlopeDeg}° ({cadastralReport.accessibilityReport?.slopeGrade})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">주요 도로 접근성</span>
+                    <span className="font-bold text-emerald-400 font-mono">
+                      약 {cadastralReport.accessibilityReport?.arterialRoadDistanceM} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">인근 교량</span>
+                    <span className="font-medium text-cyan-300 truncate block">
+                      {cadastralReport.accessibilityReport?.nearestBridge?.name} ({cadastralReport.accessibilityReport?.nearestBridge?.distanceM}m)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">인근 터널</span>
+                    <span className="font-medium text-cyan-300 truncate block">
+                      {cadastralReport.accessibilityReport?.nearestTunnel?.name} ({cadastralReport.accessibilityReport?.nearestTunnel?.distanceM}m)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 액션 버튼 그룹 */}
+              <div className="pt-1 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (cadastralReport.target?.coords) {
+                      applyStampAt(cadastralReport.target.coords);
+                    }
+                  }}
+                  className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-emerald-950/60"
+                  title="이 필지를 분석 대상 부지로 등록하고 스탬프 생성"
+                >
+                  <Target className="w-3.5 h-3.5" />
+                  <span>🎯 개발 부지로 지정</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `[GeoBrief 3D 실측 분석 리포트]
+- 소재지: ${cadastralReport.target?.address}
+- PNU: ${cadastralReport.target?.pnu} (지목: ${cadastralReport.target?.jimok})
+- 실측 면적: ${cadastralReport.areaReport?.areaSqm}㎡ (${cadastralReport.areaReport?.areaPyeong}평, 둘레: ${cadastralReport.areaReport?.perimeterM}m)
+- 용도지역: ${cadastralReport.zoningReport?.zoneName} (건폐율: ${cadastralReport.zoningReport?.maxBcRat}%, 용적률: ${cadastralReport.zoningReport?.maxVlRat}%)
+- 건축물대장: ${cadastralReport.buildingReport?.buildingName} (지상 ${cadastralReport.buildingReport?.groundFloors}층, ${cadastralReport.buildingReport?.structure})
+- 인프라 접근성: 인근 교량 ${cadastralReport.accessibilityReport?.nearestBridge?.name}(${cadastralReport.accessibilityReport?.nearestBridge?.distanceM}m), 경사도 ${cadastralReport.accessibilityReport?.averageSlopeDeg}°`;
+                    navigator.clipboard.writeText(text);
+                    setCopiedReport(true);
+                    setTimeout(() => setCopiedReport(false), 2000);
+                  }}
+                  className="py-2 px-3 rounded-xl bg-[#1b2b21] hover:bg-[#253c2e] border border-[#2e4737] text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+                  title="분석 리포트 전체를 클립보드에 복사"
+                >
+                  {copiedReport ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-300" />}
+                  <span>{copiedReport ? '복사됨' : '복사'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

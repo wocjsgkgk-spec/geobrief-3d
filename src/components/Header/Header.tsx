@@ -37,7 +37,13 @@ import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
 import { RenderMode3D } from '@/types/map';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
-import { GANGWON_18_REGIONS, getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
+import {
+  GANGWON_18_REGIONS,
+  GANGWON_SUBREGIONS,
+  GangwonSubregion,
+  getGangwonRegionByIdOrName,
+} from '@/constants/gangwon18Regions';
+import { GangwonUnifiedSearch } from '@/components/Search/GangwonUnifiedSearch';
 
 type DropdownCategory = 'site' | 'view' | 'analysis' | 'tactical' | 'export' | null;
 
@@ -48,6 +54,7 @@ export const Header: React.FC = () => {
     selectIdleSite,
     selectedRegionId,
     selectRegion,
+    flyToLocation,
     isOrbiting,
     toggleOrbiting,
     resetProject,
@@ -207,9 +214,14 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* 중앙: 대상지 선택 & 기능 드롭다운 툴바 */}
-      <div ref={toolbarRef} className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0 mx-2 relative">
-        {/* 0. [📍 분석 대상지 선택] 드롭다운 */}
+      {/* 중앙: 대상지 선택 & 통합 검색 & 기능 드롭다운 툴바 */}
+      <div ref={toolbarRef} className="flex items-center space-x-1.5 sm:space-x-2.5 flex-shrink-0 mx-2 relative">
+        {/* 0-A. [🔍 강원 전 지역 주소·지번·부지 통합 검색창] */}
+        <div className="w-48 sm:w-64 md:w-80 lg:w-96 flex-shrink-0">
+          <GangwonUnifiedSearch />
+        </div>
+
+        {/* 0-B. [📍 분석 대상지 선택] 드롭다운 (4대 권역 체계 완비) */}
         <div className="relative">
           <button
             onClick={() => handleDropdownToggle('site')}
@@ -218,10 +230,10 @@ export const Header: React.FC = () => {
                 ? 'bg-amber-600/35 border-amber-400/90 text-amber-200 shadow-md ring-1 ring-amber-500/50'
                 : 'bg-[#18261c] border-[#2e4735] text-emerald-300 hover:text-white hover:bg-[#203325]'
             }`}
-            title="강원도 18개 시·군 전역 및 3D 스마트 복합단지 거점 선택 및 3D 항공 뷰 전환"
+            title="강원도 18개 시·군 전역 4대 권역 및 군 유휴부지 거점 선택"
           >
             <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-slate-300 hidden lg:inline">분석 대상지:</span>
+            <span className="text-slate-300 hidden lg:inline">대상지:</span>
             <span className="font-bold text-emerald-300">
               {currentDisplayName}
             </span>
@@ -229,9 +241,9 @@ export const Header: React.FC = () => {
           </button>
 
           {activeDropdown === 'site' && (
-            <div className="absolute top-11 left-0 w-88 bg-[#131c15]/95 backdrop-blur-xl border border-[#2a3e31] rounded-xl shadow-2xl p-2 z-50 flex flex-col space-y-2 animate-in fade-in zoom-in-95 duration-100 max-h-[80vh] overflow-y-auto">
-              {/* 탭 헤더: 18개 시·군 전역 vs 스마트 복합단지 */}
-              <div className="grid grid-cols-2 gap-1 bg-[#0e1610] p-1 rounded-lg border border-[#223528]">
+            <div className="absolute top-11 left-0 w-96 bg-[#111a14]/98 backdrop-blur-xl border border-[#2a4030] rounded-xl shadow-2xl p-2.5 z-50 flex flex-col space-y-2 animate-in fade-in zoom-in-95 duration-100 max-h-[82vh] overflow-y-auto">
+              {/* 탭 헤더: 18개 시·군 4대 권역 vs 스마트 복합단지 */}
+              <div className="grid grid-cols-2 gap-1 bg-[#0b130e] p-1 rounded-lg border border-[#203425]">
                 <button
                   onClick={() => setSiteTab('regions')}
                   className={`py-1 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1 ${
@@ -252,58 +264,116 @@ export const Header: React.FC = () => {
                   }`}
                 >
                   <Box className="w-3 h-3 text-emerald-400" />
-                  스마트 복합단지 (5)
+                  스마트 복합단지 ({GANGWON_MILITARY_SITES.length})
                 </button>
               </div>
 
-              {/* 1) 강원특별자치도 18개 시·군 목록 */}
+              {/* 1) 강원특별자치도 18개 시·군 4대 권역별 목록 */}
               {siteTab === 'regions' && (
-                <div className="flex flex-col space-y-1">
-                  <div className="px-1.5 py-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-[#243529] pb-1">
-                    <span className="text-emerald-300">강원 18개 시·군 행정구역 거점</span>
-                    <span className="text-emerald-400 font-mono text-[9.5px]">클릭 시 3D 항공 비행</span>
+                <div className="flex flex-col space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+                  <div className="px-1 py-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-[#24382a] pb-1">
+                    <span className="text-emerald-300">강원특별자치도 18개 시·군 4대 권역</span>
+                    <span className="text-emerald-400 font-mono text-[9px]">권역별 즉시 3D 이동</span>
                   </div>
-                  <div className="flex flex-col space-y-1 max-h-[55vh] overflow-y-auto pr-1">
-                    {GANGWON_18_REGIONS.map((region) => {
-                      const isSelected = selectedRegionId === region.id;
-                      return (
-                        <button
-                          key={region.id}
-                          onClick={() => {
-                            selectRegion(region.id);
-                            setActiveDropdown(null);
-                          }}
-                          className={`w-full px-2.5 py-1.5 text-xs rounded-lg text-left transition-all flex items-center justify-between ${
-                            isSelected
-                              ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 shadow-inner'
-                              : 'hover:bg-[#1e2e22] text-slate-200 border border-transparent'
-                          }`}
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9.5px] px-1.5 py-0.5 rounded font-mono font-semibold bg-[#17251c] text-emerald-300 border border-[#263c2c]">
-                                {region.subregion}
-                              </span>
-                              <span className="font-bold text-slate-100">
-                                {region.name}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
-                              {region.terrainCharacteristic}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end flex-shrink-0 text-[10px] font-mono">
-                            <span className="text-emerald-400 font-semibold">
-                              {region.type}
-                            </span>
-                            <span className="text-slate-400">
-                              {region.pitch}° 3D
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+
+                  {GANGWON_SUBREGIONS.map((subregion) => {
+                    const regionsInSub = GANGWON_18_REGIONS.filter((r) => r.subregion === subregion);
+                    return (
+                      <div key={subregion} className="bg-[#142017]/80 rounded-lg p-1.5 border border-[#233829]">
+                        <div className="px-1.5 py-0.5 text-[10.5px] font-bold text-amber-300/90 flex items-center justify-between mb-1">
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            {subregion}
+                          </span>
+                          <span className="text-[9.5px] font-mono text-slate-400">{regionsInSub.length}개 시·군</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          {regionsInSub.map((region) => {
+                            const isSelected = selectedRegionId === region.id;
+                            return (
+                              <div
+                                key={region.id}
+                                className={`rounded-lg transition-all border p-1.5 ${
+                                  isSelected
+                                    ? 'bg-emerald-950/90 border-emerald-500/80 shadow-inner'
+                                    : 'bg-[#101912] hover:bg-[#18261c] border-transparent'
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    selectRegion(region.id);
+                                    setActiveDropdown(null);
+                                  }}
+                                  className="w-full text-left flex items-center justify-between"
+                                >
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-xs text-slate-100">{region.name}</span>
+                                      <span className="text-[9.5px] px-1 py-0.2 rounded font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/50">
+                                        {region.admCode}
+                                      </span>
+                                    </div>
+                                    <p className="text-[9.5px] text-slate-400 truncate mt-0.5 max-w-[240px]">
+                                      {region.terrainCharacteristic}
+                                    </p>
+                                  </div>
+                                  <div className="text-[10px] text-right font-mono flex-shrink-0">
+                                    <span className="text-emerald-400 block font-semibold">{region.type}</span>
+                                    <span className="text-slate-400">{region.pitch}° 3D</span>
+                                  </div>
+                                </button>
+
+                                {/* 군 유휴부지 & 핵심 거점 퀵 배지 */}
+                                {region.militarySites && region.militarySites.length > 0 && (
+                                  <div className="mt-1.5 pt-1 border-t border-[#1d2f22] flex flex-wrap gap-1">
+                                    {region.militarySites.map((site) => (
+                                      <button
+                                        key={site.siteId}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          selectRegion(region.id);
+                                          flyToLocation({
+                                            longitude: site.coords[0],
+                                            latitude: site.coords[1],
+                                            zoom: site.recommendedCamera?.zoom || 15.8,
+                                            pitch: site.recommendedCamera?.pitch || 55,
+                                            bearing: site.recommendedCamera?.bearing || 20,
+                                          });
+                                          // 4대 리포트 트리거
+                                          window.dispatchEvent(
+                                            new CustomEvent('gangwon-search-select', {
+                                              detail: {
+                                                id: `site-${site.siteId}`,
+                                                title: site.name,
+                                                category: 'military_site',
+                                                categoryLabel: '군 유휴부지',
+                                                coords: site.coords,
+                                                regionId: region.id,
+                                                regionName: region.name,
+                                              },
+                                            })
+                                          );
+                                          setActiveDropdown(null);
+                                        }}
+                                        className="text-[9.5px] px-1.5 py-0.5 rounded bg-[#18271e] hover:bg-emerald-900/60 text-slate-300 hover:text-emerald-200 border border-[#273d2d] transition-colors flex items-center gap-1"
+                                        title={`${site.name} (${site.description})`}
+                                      >
+                                        <span className="text-amber-400">📍</span>
+                                        <span className="truncate max-w-[150px]">{site.name.split('(')[0]}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
