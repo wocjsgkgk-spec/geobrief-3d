@@ -116,6 +116,24 @@ const DEFAULT_SLIDE_PACK_PROGRESS: SlidePackProgress = {
   statusText: '',
 };
 
+export interface MolitDiagnosticState {
+  hasApiKey: boolean;
+  status: 'live_api' | 'verified_cache_fallback' | 'connecting';
+  buildingCount: number;
+  bridgeTunnelCount: number;
+  message: string;
+  lastChecked: number | null;
+}
+
+const DEFAULT_MOLIT_DIAGNOSTIC: MolitDiagnosticState = {
+  hasApiKey: false,
+  status: 'connecting',
+  buildingCount: 0,
+  bridgeTunnelCount: 0,
+  message: '공공데이터포털(건축HUB & 교량·터널) 상태 확인 중...',
+  lastChecked: null,
+};
+
 const DEFAULT_VWORLD_DIAGNOSTIC: VworldDiagnosticState = {
   status: 'unconfigured',
   message: 'API 키 미등록 (오픈 무료 벡터 건물로 자동 대체 중)',
@@ -241,6 +259,7 @@ interface MapStoreState {
     demContours: boolean;
     cadastral: boolean; // 브이월드 연속지적도(필지선)
     zoning: boolean; // 브이월드 국토계획법 용도지역지구 (주거·상업·공업·녹지)
+    bridgeTunnel: boolean; // [공공데이터포털] 국토부 전국 교량 및 터널 현황정보 3D 마커
     ssaoPostProcessing: boolean; // 디지털 트윈 SSAO & Bloom 후처리
     firstLogisticsSmartCity: boolean; // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
     proceduralTrees: boolean; // [4단계: 3D 식생·가로수 표시 (InstancedMesh)]
@@ -339,6 +358,10 @@ interface MapStoreState {
   // V-World API 연결 상태 실시간 진단
   vworldDiagnostic: VworldDiagnosticState;
   setVworldDiagnostic: (data: Partial<VworldDiagnosticState>) => void;
+
+  // [신규] 국토교통부 공공데이터포털(건축HUB & 전국 교량·터널) 실시간 진단 상태
+  molitDiagnostic: MolitDiagnosticState;
+  setMolitDiagnostic: (data: Partial<MolitDiagnosticState>) => void;
 
   // 전략 군 유휴지 실증 프리셋 (8개소+)
   selectedIdleSiteId: string | null;
@@ -573,6 +596,7 @@ export const useMapStore = create<MapStoreState>()(
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
         zoning: false, // 브이월드 국토계획법 용도지역지구
+        bridgeTunnel: true, // [공공데이터포털] 국토부 전국 교량 및 터널 현황정보 3D 마커 기본 ON
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
         firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
         proceduralTrees: false, // [4단계: 3D 식생·가로수 표시 기본 OFF]
@@ -1002,6 +1026,13 @@ export const useMapStore = create<MapStoreState>()(
       setVworldDiagnostic: (data) =>
         set((state) => ({
           vworldDiagnostic: { ...state.vworldDiagnostic, ...data },
+        })),
+
+      // [신규] 국토교통부 공공데이터포털(건축HUB & 전국 교량·터널) 실시간 진단 상태
+      molitDiagnostic: DEFAULT_MOLIT_DIAGNOSTIC,
+      setMolitDiagnostic: (data) =>
+        set((state) => ({
+          molitDiagnostic: { ...state.molitDiagnostic, ...data },
         })),
 
       // 전략 군 유휴지 실증 프리셋 (강원 6대+ 다중 거점 통합)

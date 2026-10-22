@@ -151,6 +151,8 @@ export const ControlPanel: React.FC = () => {
     viewport,
     vworldDiagnostic,
     setVworldDiagnostic,
+    molitDiagnostic,
+    setMolitDiagnostic,
     // [신규] 전략 군 유휴지 실증 프리셋
     selectedIdleSiteId,
     selectIdleSite,
@@ -3362,6 +3364,53 @@ export const ControlPanel: React.FC = () => {
             </p>
           </div>
 
+          {/* [국토교통부 공공데이터포털(건축HUB & 전국 교량·터널) 실시간 연동 진단 카드] */}
+          <div className="p-2.5 rounded-lg bg-[#111713] border border-[#243328] space-y-2 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span
+                  className="w-2 h-2 rounded-full inline-block animate-pulse"
+                  style={{
+                    backgroundColor: molitDiagnostic.hasApiKey ? '#10B981' : '#F59E0B',
+                  }}
+                />
+                국토교통부 공공데이터포털
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  molitDiagnostic.hasApiKey
+                    ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                    : 'bg-amber-950/80 border-amber-600/80 text-amber-300'
+                }`}
+              >
+                {molitDiagnostic.hasApiKey ? '실시간 Live API' : '검증 프리셋 가동'}
+              </span>
+            </div>
+
+            <div className="space-y-1 text-[10px] text-slate-400">
+              <div className="flex items-center justify-between">
+                <span>• 건축HUB 표제부 (층수·구조·지붕):</span>
+                <span className="font-mono text-slate-300">
+                  {molitDiagnostic.hasApiKey ? '실시간 쿼리 연동' : '원주권 검증 프리셋'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• 전국 교량 및 터널 (교통 DB):</span>
+                <span className="font-mono text-cyan-400">
+                  {molitDiagnostic.bridgeTunnelCount > 0
+                    ? `강원권 ${molitDiagnostic.bridgeTunnelCount}개소 입체 표출`
+                    : '연동 완료'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-500 leading-tight">
+              {molitDiagnostic.hasApiKey
+                ? '공공데이터포털 승인 API 키가 정상 등록되어 실시간 표제부 및 교통 시설물이 반영됩니다.'
+                : '키 미입력 시 강원권 실측 검증 프리셋(원주천교, 치악교, 백운터널 등)이 자동 표출됩니다.'}
+            </p>
+          </div>
+
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
             <span className="flex items-center gap-2 text-slate-300 font-medium">
               <Route className="w-3.5 h-3.5 text-amber-400" />
@@ -3375,6 +3424,28 @@ export const ControlPanel: React.FC = () => {
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          {/* [공공데이터포털] 전국 교량 및 터널 현황정보 3D 마커 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <span className="text-cyan-400 text-xs">🌉</span>
+              <div>
+                <span className="text-slate-200 font-medium">교량·터널 현황 (국토부)</span>
+                <span className="text-[10px] text-cyan-400/90 ml-1.5 font-mono">
+                  (원주천교·백운터널 등)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.bridgeTunnel}
+                onChange={() => handleToggleLayer('bridgeTunnel')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
             </label>
           </div>
 

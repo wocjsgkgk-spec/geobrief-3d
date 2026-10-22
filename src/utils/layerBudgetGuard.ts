@@ -20,6 +20,7 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'vworld-poi',
   'vworld-zoning',
   'local-cadastral',
+  'molit-bridge-tunnel',
   'bldg-',
   'real-',
   '3d-buildings',

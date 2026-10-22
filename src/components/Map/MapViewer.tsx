@@ -532,6 +532,8 @@ export const MapViewer: React.FC = () => {
   const videoRecorderRef = useRef<CanvasVideoRecorder | null>(null);
   const cinematicAnimRef = useRef<number | null>(null);
   const cinematicStartTimeRef = useRef<number>(0);
+  // [공공데이터포털] 건축HUB 실측 표제부 인메모리 참조 캐시
+  const cachedBuildingRegistersRef = useRef<any[]>([]);
 
   // [1단계: 무중단 원자적(Atomic) 건물 캐시 및 Double Buffering]
   // 지도 이동이나 줌 변경 시 기존 렌더링된 건물이 깜빡거리거나 소실되지 않도록 전역 영구 캐시 유지
@@ -681,6 +683,8 @@ export const MapViewer: React.FC = () => {
     selectedRegionId,
     accessibilityResult,
     setVworldDiagnostic,
+    molitDiagnostic,
+    setMolitDiagnostic,
     // [신규] 토목·지형 단면 및 경사도 분석 상태
     showSlopeAnalysis,
     toggleSlopeAnalysis,
@@ -2771,6 +2775,50 @@ export const MapViewer: React.FC = () => {
           });
         }
 
+        // [국토교통부 전국 교량 및 터널 현황정보 GeoJSON 소스 & 입체 마커 레이어]
+        if (!map.getSource('molit-bridge-tunnel-source')) {
+          map.addSource('molit-bridge-tunnel-source', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          });
+        }
+        if (!map.getLayer('molit-bridge-tunnel-circles')) {
+          map.addLayer({
+            id: 'molit-bridge-tunnel-circles',
+            type: 'circle',
+            source: 'molit-bridge-tunnel-source',
+            minzoom: 10,
+            paint: {
+              'circle-radius': 7,
+              'circle-color': ['case', ['==', ['get', 'type'], 'bridge'], '#06b6d4', '#a855f7'],
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#ffffff',
+              'circle-opacity': 0.92,
+            },
+            layout: { visibility: layers.bridgeTunnel ? 'visible' : 'none' },
+          });
+        }
+        if (!map.getLayer('molit-bridge-tunnel-labels')) {
+          map.addLayer({
+            id: 'molit-bridge-tunnel-labels',
+            type: 'symbol',
+            source: 'molit-bridge-tunnel-source',
+            minzoom: 11,
+            layout: {
+              'text-field': ['get', 'name'],
+              'text-size': 11,
+              'text-offset': [0, 1.2],
+              'text-anchor': 'top',
+              visibility: layers.bridgeTunnel ? 'visible' : 'none',
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#0f172a',
+              'text-halo-width': 2,
+            },
+          });
+        }
+
         // 3D 건축물 레이어들을 맵 스타일 최상단으로 강제 승격
         promoteBuildingLayersToTop(map);
       } catch (vectorErr) {
@@ -4198,6 +4246,73 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.zoning, isMapLoaded]);
 
+  // [공공데이터포털] 전국 교량 및 터널 레이어 가시성 동적 토글
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+    const vis = layers.bridgeTunnel ? 'visible' : 'none';
+    if (map.getLayer('molit-bridge-tunnel-circles')) {
+      map.setLayoutProperty('molit-bridge-tunnel-circles', 'visibility', vis);
+    }
+    if (map.getLayer('molit-bridge-tunnel-labels')) {
+      map.setLayoutProperty('molit-bridge-tunnel-labels', 'visibility', vis);
+    }
+  }, [layers.bridgeTunnel, isMapLoaded]);
+
+  // [공공데이터포털] 건축HUB 표제부 & 전국 교량·터널 현황정보 실시간 연동
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const sggCd = selectedRegionId === 'chuncheon' ? '51110' : '51130';
+    fetch(`/api/molit-hub?service=all&sigunguCd=${sggCd}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          const hasKey = Boolean(data.hasApiKey);
+          const bldCount = data.buildingRegisters?.length || 0;
+          const btCount = data.bridgesAndTunnels?.length || 0;
+
+          if (data.buildingRegisters && Array.isArray(data.buildingRegisters)) {
+            cachedBuildingRegistersRef.current = data.buildingRegisters;
+          }
+
+          setMolitDiagnostic({
+            hasApiKey: hasKey,
+            status: hasKey ? 'live_api' : 'verified_cache_fallback',
+            buildingCount: bldCount,
+            bridgeTunnelCount: btCount,
+            message: hasKey
+              ? `공공데이터포털 실시간 연동 완료 (교량·터널 ${btCount}개소)`
+              : `검증 프리셋 가동 중 (교량·터널 ${btCount}개소)`,
+            lastChecked: Date.now(),
+          });
+
+          // 교량/터널 마커 GeoJSON 소스 업데이트
+          const features = (data.bridgesAndTunnels || []).map((bt: any) => ({
+            type: 'Feature',
+            id: `bt_${bt.id}`,
+            properties: bt,
+            geometry: {
+              type: 'Point',
+              coordinates: bt.coordinates,
+            },
+          }));
+
+          const src = map.getSource('molit-bridge-tunnel-source') as maplibregl.GeoJSONSource;
+          if (src) {
+            src.setData({
+              type: 'FeatureCollection',
+              features,
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('[MapViewer] Molit hub sync notice:', err);
+      });
+  }, [isMapLoaded, selectedRegionId, setMolitDiagnostic]);
+
   // [Phase 2 고도화] 16. 부지 폴리곤 렌더링 스타일(사선 빗금 / 컬러) 동적 전환
   useEffect(() => {
     const map = mapRef.current;
@@ -4365,6 +4480,12 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const buildingLayers = [
+      'real-bldg-tier2-mainwall',
+      'real-bldg-tier1-podium',
+      'real-bldg-tier4-roofcap',
+      'fusion-bldg-tier2-mainwall',
+      'fusion-bldg-tier1-podium',
+      'fusion-bldg-tier4-roofcap',
       'bldg-tier2-mainwall',
       'bldg-tier1-podium',
       'bldg-tier4-roofcap',
@@ -4415,7 +4536,35 @@ export const MapViewer: React.FC = () => {
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
-        // [신규] 용도지역지구 또는 연속지적도 필지 클릭 처리
+        // [신규 1] 국토교통부 전국 교량 및 터널 마커 클릭 처리
+        const btLayers = ['molit-bridge-tunnel-circles'].filter((l) => map.getLayer(l));
+        const btFeatures = btLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: btLayers }) : [];
+        if (btFeatures.length > 0) {
+          const btFeat = btFeatures[0];
+          const bp = (btFeat.properties || {}) as Record<string, any>;
+          const clickCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+          const projected = map.project(clickCoords);
+          setSelectedBuilding({
+            name: bp.name || '교량·터널 구조물',
+            category: bp.type === 'bridge' ? '국토교통부 교량시설' : '국토교통부 터널시설',
+            levels: bp.laneCount ? Number(bp.laneCount) : 0,
+            height: bp.lengthM ? Number(bp.lengthM) : 0,
+            center: clickCoords,
+            screenPos: { x: projected.x, y: projected.y },
+            rawProperties: {
+              '시설구분': bp.type === 'bridge' ? '교량 (Bridge)' : '터널 (Tunnel)',
+              '시설연장': `${bp.lengthM || 0} m`,
+              '총폭': `${bp.widthM || 0} m`,
+              '상부구조 / 형식': bp.structureType || bp.tunnelPortalType || '-',
+              '소재지 / 노선': `${bp.sigungu || '원주시'} / ${bp.roadRoute || '-'}`,
+              '준공연도': `${bp.completionYear || '-'}년`,
+              '출처': '국토교통부 전국 교량 및 터널 현황정보',
+            },
+          });
+          return;
+        }
+
+        // [신규 2] 용도지역지구 또는 연속지적도 필지 클릭 처리
         const landLayers = ['vworld-zoning-fill', 'local-cadastral-fill'].filter((l) => map.getLayer(l));
         const landFeatures = landLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: landLayers }) : [];
         if (landFeatures.length > 0) {
@@ -4456,6 +4605,21 @@ export const MapViewer: React.FC = () => {
         props.bul_man_no ||
         props.bld_nm_dc ||
         '일반 건축물';
+
+      // [신규 3] 국토교통부 건축HUB 표제부 정보 보강 (BldRgstHubService 매칭)
+      const cachedBld = cachedBuildingRegistersRef.current.find(
+        (b) => (b.pnu && b.pnu === props.pnu) || (b.bldNm && (bldName.includes(b.bldNm) || b.bldNm.includes(bldName)))
+      );
+      if (cachedBld) {
+        props.main_purps_cd_nm = cachedBld.mainPurpsCdNm || props.main_purps_cd_nm;
+        props.strctCdNm = cachedBld.strctCdNm || props.strctCdNm;
+        props.roofCdNm = cachedBld.roofCdNm || props.roofCdNm;
+        props.useAprDay = cachedBld.useAprDay || props.useAprDay;
+        props.bcRat = cachedBld.bcRat || props.bcRat;
+        props.vlRat = cachedBld.vlRat || props.vlRat;
+        props.source = 'molit_hub_api';
+        props.bldHubMatched = true;
+      }
 
       const rawLevels = parseInt(
         String(props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.levels || props.grnd_flr_cnt || '3'),
@@ -6048,20 +6212,101 @@ export const MapViewer: React.FC = () => {
 
               {/* 팝업 바디 */}
               <div className="p-3 space-y-2.5">
-                <div className="grid grid-cols-2 gap-2 text-[11px] bg-[#101b16] p-2 rounded-lg border border-[#203328]">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">지상 층수</span>
-                    <span className="font-bold text-cyan-300 font-mono text-xs">
-                      지상 {selectedBuilding.levels}층
-                    </span>
+                {selectedBuilding.rawProperties?.type === 'bridge' || selectedBuilding.rawProperties?.type === 'tunnel' ? (
+                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-[#101b16] p-2 rounded-lg border border-[#203328]">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">시설 연장</span>
+                      <span className="font-bold text-cyan-300 font-mono text-xs">
+                        {selectedBuilding.rawProperties['시설연장'] || `${selectedBuilding.height} m`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">총 폭</span>
+                      <span className="font-bold text-emerald-400 font-mono text-xs">
+                        {selectedBuilding.rawProperties['총폭'] || '-'}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">건물 높이</span>
-                    <span className="font-bold text-emerald-400 font-mono text-xs">
-                      {selectedBuilding.height} m
-                    </span>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-[#101b16] p-2 rounded-lg border border-[#203328]">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">지상 층수</span>
+                      <span className="font-bold text-cyan-300 font-mono text-xs">
+                        지상 {selectedBuilding.levels}층
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">건물 높이</span>
+                      <span className="font-bold text-emerald-400 font-mono text-xs">
+                        {selectedBuilding.height} m
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* [상세 속성 카드: 건축HUB 표제부 / 용도지역 / 지적도 / 교량터널] */}
+                {selectedBuilding.rawProperties && Object.keys(selectedBuilding.rawProperties).length > 0 && (
+                  <div className="space-y-1 bg-[#101b16] p-2 rounded-lg border border-[#203328] text-[10px]">
+                    {selectedBuilding.rawProperties.strctCdNm && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">주구조:</span>
+                        <span className="text-slate-200 font-medium">{selectedBuilding.rawProperties.strctCdNm}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties.roofCdNm && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">지붕재:</span>
+                        <span className="text-slate-200 font-medium">{selectedBuilding.rawProperties.roofCdNm}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['용도지역'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">용도지역:</span>
+                        <span className="text-amber-300 font-medium">{selectedBuilding.rawProperties['용도지역']}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['건폐율 기준'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">법정 건폐율:</span>
+                        <span className="text-emerald-400 font-mono">{selectedBuilding.rawProperties['건폐율 기준']}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['용적률 기준'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">법정 용적률:</span>
+                        <span className="text-emerald-400 font-mono">{selectedBuilding.rawProperties['용적률 기준']}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['지번'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">지번 / 지목:</span>
+                        <span className="text-slate-200 font-mono">{selectedBuilding.rawProperties['지번']} ({selectedBuilding.rawProperties['지목'] || '대'})</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['상부구조 / 형식'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">구조형식:</span>
+                        <span className="text-cyan-300 font-medium">{selectedBuilding.rawProperties['상부구조 / 형식']}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['소재지 / 노선'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">경유노선:</span>
+                        <span className="text-slate-300">{selectedBuilding.rawProperties['소재지 / 노선']}</span>
+                      </div>
+                    )}
+                    {selectedBuilding.rawProperties['준공연도'] && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">준공연도:</span>
+                        <span className="text-slate-400 font-mono">{selectedBuilding.rawProperties['준공연도']}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-[9px] pt-1 border-t border-[#1c2c23] text-slate-500">
+                      <span>공간정보 소스:</span>
+                      <span className="text-emerald-400 font-semibold">{selectedBuilding.rawProperties['출처'] || '국토교통부 공간정보'}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono px-1">
                   <span>
