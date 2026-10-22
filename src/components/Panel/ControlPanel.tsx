@@ -97,6 +97,10 @@ export const ControlPanel: React.FC = () => {
     setTerrainExaggeration,
     baseMap,
     setBaseMap,
+    buildingTheme,
+    setBuildingTheme,
+    isViewshedMode,
+    toggleViewshedMode,
     layers,
     toggleLayer,
     metadata,
@@ -2975,6 +2979,30 @@ export const ControlPanel: React.FC = () => {
           </label>
         </div>
 
+        {/* [3단계: 3D 조망점·가시권 시뮬레이션 토글] */}
+        <div className="flex items-center justify-between p-2.5 rounded bg-[#18221b] border border-[#29382e]">
+          <div>
+            <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5 text-teal-400" />
+              <span>3D 조망점·가시권 시뮬레이션</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              지형+3D건물 차폐 360° 가시(녹색)·차폐(적색) 연산
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={toggleViewshedMode}
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all ${
+              isViewshedMode
+                ? 'bg-teal-500 border-teal-300 text-teal-950 shadow-md ring-1 ring-teal-400 animate-pulse'
+                : 'bg-[#121c16] border-teal-800/60 text-teal-300 hover:bg-[#1a2920]'
+            }`}
+          >
+            {isViewshedMode ? '클릭 측정 중' : '시뮬레이션'}
+          </button>
+        </div>
+
         {/* 3단 경사도 판정 기준 범례 */}
         <div className="grid grid-cols-3 gap-1.5 text-[9.5px] font-medium text-center">
           <div className="p-1.5 rounded bg-emerald-950/50 border border-emerald-700/50 text-emerald-300">
@@ -3249,6 +3277,95 @@ export const ControlPanel: React.FC = () => {
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
+
+          {/* [3단계: V-World 3D 건물 표현 테마 스타일러] */}
+          {layers.buildings3D && (
+            <div className="p-2.5 rounded-lg bg-[#142018] border border-[#233b2a] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                  V-World 3D 건물 표현 테마
+                </span>
+                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800/60 font-mono">
+                  {buildingTheme === 'photorealistic' ? '실사 포토' : buildingTheme === 'landuse' ? '용도별 색상' : '층수·높이 스펙트럼'}
+                </span>
+              </div>
+
+              {/* 3대 테마 버튼 */}
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setBuildingTheme('photorealistic')}
+                  className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center space-y-0.5 border ${
+                    buildingTheme === 'photorealistic'
+                      ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200 font-bold shadow-md shadow-emerald-950/60 ring-1 ring-emerald-500/40'
+                      : 'bg-[#18231c] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#203126]'
+                  }`}
+                >
+                  <span className="text-[11px]">실사 포토</span>
+                  <span className="text-[9px] opacity-75">창문+지붕</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuildingTheme('landuse')}
+                  className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center space-y-0.5 border ${
+                    buildingTheme === 'landuse'
+                      ? 'bg-amber-600/30 border-amber-400 text-amber-200 font-bold shadow-md shadow-amber-950/60 ring-1 ring-amber-500/40'
+                      : 'bg-[#18231c] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#203126]'
+                  }`}
+                >
+                  <span className="text-[11px]">용도별 색상</span>
+                  <span className="text-[9px] opacity-75">주거/상업/공업</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuildingTheme('height_spectrum')}
+                  className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center space-y-0.5 border ${
+                    buildingTheme === 'height_spectrum'
+                      ? 'bg-cyan-600/30 border-cyan-400 text-cyan-200 font-bold shadow-md shadow-cyan-950/60 ring-1 ring-cyan-500/40'
+                      : 'bg-[#18231c] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#203126]'
+                  }`}
+                >
+                  <span className="text-[11px]">층수·높이</span>
+                  <span className="text-[9px] opacity-75">저층→초고층</span>
+                </button>
+              </div>
+
+              {/* 테마별 색상 가이드 범례 */}
+              {buildingTheme === 'landuse' && (
+                <div className="grid grid-cols-2 gap-1 pt-1 border-t border-[#1d2f23] text-[9.5px]">
+                  <span className="flex items-center gap-1.5 text-amber-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B]" />
+                    주거 (아파트/주택)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-red-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#EF4444]" />
+                    상업·업무시설
+                  </span>
+                  <span className="flex items-center gap-1.5 text-purple-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#A855F7]" />
+                    공업·제조물류
+                  </span>
+                  <span className="flex items-center gap-1.5 text-blue-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]" />
+                    공공청사·군사시설
+                  </span>
+                </div>
+              )}
+
+              {buildingTheme === 'height_spectrum' && (
+                <div className="space-y-1 pt-1 border-t border-[#1d2f23] text-[9.5px]">
+                  <div className="h-2 rounded-full w-full bg-gradient-to-r from-[#06B6D4] via-[#10B981] via-[#F59E0B] via-[#F97316] to-[#EF4444]" />
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>저층 (4m)</span>
+                    <span>중층 (22m)</span>
+                    <span>고층 (55m)</span>
+                    <span>초고층 (75m+)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* [1단계 신규] 디지털 트윈 SSAO 앰비언트 오클루전 & 정밀 조명 후처리 토글 */}
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">

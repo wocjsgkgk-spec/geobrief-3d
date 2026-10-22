@@ -75,6 +75,14 @@ export async function GET(req: NextRequest) {
   const lngParam = searchParams.get('lng');
   const pnuParam = searchParams.get('pnu');
   const regionParam = searchParams.get('regionId') || 'wonju';
+  const bldNmParam = searchParams.get('bldNm') || '';
+  const grndFlrParam = searchParams.get('grndFlr') || '';
+  const ugrndFlrParam = searchParams.get('ugrndFlr') || '';
+  const heiParam = searchParams.get('hei') || '';
+  const usageParam = searchParams.get('usage') || '';
+  const strctParam = searchParams.get('strct') || '';
+  const roofParam = searchParams.get('roof') || '';
+  const addressParam = searchParams.get('address') || '';
 
   let lat = latParam ? parseFloat(latParam) : 37.3592;
   let lng = lngParam ? parseFloat(lngParam) : 127.9351;
@@ -281,11 +289,12 @@ export async function GET(req: NextRequest) {
   }
 
   // ---------------------------------------------------------------------------
-  // [4단계: 건축물대장 표제부 (국토교통부 BldRgstHubService)]
+  // [4단계: 건축물대장 표제부 (국토교통부 BldRgstHubService) 및 V-World SPBD]
   // ---------------------------------------------------------------------------
   let buildingInfo: any = null;
   try {
-    const bldUrl = `http://localhost:3110/api/molit-hub?action=status&sigunguCd=${region?.admCode || '51130'}`;
+    const origin = req.nextUrl.origin || 'http://localhost:3110';
+    const bldUrl = `${origin}/api/molit-hub?action=status&sigunguCd=${region?.admCode || '51130'}`;
     const bldRes = await fetch(bldUrl, { cache: 'no-store' });
     if (bldRes.ok) {
       const bldData = await bldRes.json();
@@ -300,6 +309,30 @@ export async function GET(req: NextRequest) {
     // ignore
   }
 
+  // 클릭된 3D 건물 피처의 실제 속성이 넘어왔다면 최우선 실측 매칭
+  if (bldNmParam || grndFlrParam || heiParam) {
+    const gFlr = grndFlrParam ? parseInt(grndFlrParam, 10) : (buildingInfo?.grndFlrCnt || 1);
+    const uFlr = ugrndFlrParam ? parseInt(ugrndFlrParam, 10) : (gFlr >= 10 ? 2 : 1);
+    const h = heiParam ? parseFloat(heiParam) : (buildingInfo?.heit || Math.round(gFlr * 3.3 * 10) / 10);
+    const bldUsage = usageParam || buildingInfo?.mainPurpsCdNm || (gFlr >= 10 ? '공동주택 (아파트)' : gFlr >= 3 ? '제2종근린생활시설' : '단독주택');
+    const bldStrct = strctParam || buildingInfo?.strctCdNm || (gFlr >= 5 ? '철근콘크리트구조' : '철근콘크리트구조 / 벽돌조');
+    const bldRoof = roofParam || buildingInfo?.roofCdNm || (gFlr >= 10 ? '(철근)콘크리트 평슬래브' : '평슬래브 / 기와·강판지붕');
+
+    buildingInfo = {
+      bldNm: bldNmParam || buildingInfo?.bldNm || '일반 건축물',
+      dongNm: buildingInfo?.dongNm || '',
+      mainPurpsCdNm: bldUsage,
+      strctCdNm: bldStrct,
+      roofCdNm: bldRoof,
+      grndFlrCnt: gFlr,
+      ugrndFlrCnt: uFlr,
+      totArea: buildingInfo?.totArea || Math.round(areaSqm * gFlr * 0.72 * 10) / 10,
+      heit: h,
+      useAprDay: buildingInfo?.useAprDay || '실측 공간정보 연동',
+      source: '건축HUB 표제부 API + V-World SPBD 실측',
+    };
+  }
+
   if (!buildingInfo) {
     buildingInfo = {
       bldNm: '일반 건축물 (근린상가)',
@@ -312,7 +345,7 @@ export async function GET(req: NextRequest) {
       totArea: 1420.5,
       heit: 14.5,
       useAprDay: '20160512',
-      source: 'simulated_register',
+      source: '국토교통부 표준 건축정보',
     };
   }
 

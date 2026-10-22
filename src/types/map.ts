@@ -8,6 +8,8 @@ export interface ViewportState {
 
 export type BaseMapType = 'satellite' | 'clean' | 'topo';
 
+export type BuildingThemeType = 'photorealistic' | 'landuse' | 'height_spectrum';
+
 export interface LocationPreset {
   id: string;
   name: string;

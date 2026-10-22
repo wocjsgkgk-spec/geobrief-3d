@@ -32,6 +32,7 @@ import {
   Layers,
   Target,
   MapPin,
+  Building2,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -98,6 +99,8 @@ export const Header: React.FC = () => {
     losAnalysis,
     startLosAnalysis,
     resetLosAnalysis,
+    buildingTheme,
+    setBuildingTheme,
   } = useMapStore();
 
   const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
@@ -658,6 +661,66 @@ export const Header: React.FC = () => {
                 </div>
                 <span className="text-[10px] text-slate-400">모달 분석</span>
               </button>
+
+              {/* [3단계: V-World 3D 건물 스타일러 (테마 즉시 전환)] */}
+              <div className="pt-2 mt-1 border-t border-[#24372a] space-y-1.5 px-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                  <span className="flex items-center gap-1.5 text-amber-300">
+                    <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                    V-World 건물 스타일러
+                  </span>
+                  <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800/60 font-mono">
+                    {buildingTheme === 'photorealistic' ? '실사 포토' : buildingTheme === 'landuse' ? '용도별' : '층수·높이'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBuildingTheme('photorealistic');
+                      setActiveDropdown(null);
+                    }}
+                    className={`px-1.5 py-1.5 text-[10.5px] rounded-lg font-medium flex flex-col items-center justify-center transition-all ${
+                      buildingTheme === 'photorealistic'
+                        ? 'bg-emerald-600 text-white font-bold shadow-md shadow-emerald-950/80 ring-1 ring-emerald-400'
+                        : 'bg-[#18231c] text-slate-300 hover:text-white hover:bg-[#203126]'
+                    }`}
+                    title="실사 포토 모드: 밝은 아이보리/베이지 창문 외벽 + 우레탄/기와/슬래브 지붕"
+                  >
+                    <span>실사 포토</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBuildingTheme('landuse');
+                      setActiveDropdown(null);
+                    }}
+                    className={`px-1.5 py-1.5 text-[10.5px] rounded-lg font-medium flex flex-col items-center justify-center transition-all ${
+                      buildingTheme === 'landuse'
+                        ? 'bg-amber-600 text-white font-bold shadow-md shadow-amber-950/80 ring-1 ring-amber-400'
+                        : 'bg-[#18231c] text-slate-300 hover:text-white hover:bg-[#203126]'
+                    }`}
+                    title="용도별 색상 모드: 주거(황색), 상업(적색), 공업(자주색), 공공·군사(청색)"
+                  >
+                    <span>용도별 색상</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBuildingTheme('height_spectrum');
+                      setActiveDropdown(null);
+                    }}
+                    className={`px-1.5 py-1.5 text-[10.5px] rounded-lg font-medium flex flex-col items-center justify-center transition-all ${
+                      buildingTheme === 'height_spectrum'
+                        ? 'bg-cyan-600 text-white font-bold shadow-md shadow-cyan-950/80 ring-1 ring-cyan-400'
+                        : 'bg-[#18231c] text-slate-300 hover:text-white hover:bg-[#203126]'
+                    }`}
+                    title="층수/높이 스펙트럼 모드: 저층(청록) -> 중층(황색) -> 고층(적색)"
+                  >
+                    <span>층수·높이</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -301,6 +301,143 @@ export const gpuBuildingRoofColorExpr: any = [
 ];
 
 // -----------------------------------------------------------------------------
+// [V-World 3D 건물 스타일러 테마별 Expression]
+// 1) 용도별 색상 모드 (Landuse): 주거-황색, 상업-적색, 공업-자주색, 공공/군사-청색
+// 2) 층수/높이 스펙트럼 모드 (Height Spectrum): 저층-청록 -> 중층-황색 -> 고층-적색
+// -----------------------------------------------------------------------------
+export const gpuBuildingLanduseWallColorExpr: any = [
+  'case',
+  // 주거: 황색 (#EAB308)
+  [
+    'any',
+    ['==', ['get', 'class'], 'apartments'],
+    ['==', ['get', 'class'], 'residential'],
+    ['==', ['get', 'building'], 'apartments'],
+    ['==', ['get', 'building'], 'residential'],
+    ['==', ['get', 'building'], 'house'],
+    ['==', ['get', 'type'], 'apartments'],
+    ['==', ['get', 'usageType'], 'apartment'],
+    ['==', ['get', 'usageType'], 'residential'],
+    ['==', ['get', 'bld_category'], 'apartment'],
+    ['==', ['get', 'bld_category'], 'residential'],
+  ],
+  '#F59E0B',
+
+  // 상업·업무: 적색 (#EF4444)
+  [
+    'any',
+    ['==', ['get', 'class'], 'commercial'],
+    ['==', ['get', 'class'], 'retail'],
+    ['==', ['get', 'class'], 'office'],
+    ['==', ['get', 'class'], 'hospital'],
+    ['==', ['get', 'building'], 'commercial'],
+    ['==', ['get', 'building'], 'office'],
+    ['==', ['get', 'building'], 'retail'],
+    ['==', ['get', 'usageType'], 'commercial'],
+    ['==', ['get', 'bld_category'], 'commercial'],
+  ],
+  '#EF4444',
+
+  // 공업·물류: 자주색 (#A855F7)
+  [
+    'any',
+    ['==', ['get', 'class'], 'industrial'],
+    ['==', ['get', 'class'], 'warehouse'],
+    ['==', ['get', 'building'], 'industrial'],
+    ['==', ['get', 'building'], 'warehouse'],
+    ['==', ['get', 'usageType'], 'industrial'],
+  ],
+  '#A855F7',
+
+  // 공공·군사·청사: 청색 (#3B82F6)
+  [
+    'any',
+    ['==', ['get', 'class'], 'military'],
+    ['==', ['get', 'class'], 'public'],
+    ['==', ['get', 'class'], 'government'],
+    ['==', ['get', 'class'], 'school'],
+    ['==', ['get', 'class'], 'university'],
+    ['==', ['get', 'building'], 'public'],
+    ['==', ['get', 'building'], 'government'],
+    ['==', ['get', 'usageType'], 'military_public'],
+    ['==', ['get', 'bld_category'], 'public_military'],
+    ['get', 'isMilitaryOrPublic'],
+  ],
+  '#3B82F6',
+
+  // 기타: 주거 황색 폴백
+  '#F59E0B',
+];
+
+export const gpuBuildingLanduseRoofColorExpr: any = [
+  'case',
+  // 주거 옥상: 짙은 앰버
+  [
+    'any',
+    ['==', ['get', 'class'], 'apartments'],
+    ['==', ['get', 'class'], 'residential'],
+    ['==', ['get', 'usageType'], 'apartment'],
+    ['==', ['get', 'usageType'], 'residential'],
+    ['==', ['get', 'bld_category'], 'apartment'],
+  ],
+  '#D97706',
+
+  // 상업 옥상: 짙은 적색
+  [
+    'any',
+    ['==', ['get', 'class'], 'commercial'],
+    ['==', ['get', 'class'], 'retail'],
+    ['==', ['get', 'class'], 'office'],
+    ['==', ['get', 'usageType'], 'commercial'],
+  ],
+  '#DC2626',
+
+  // 공업 옥상: 짙은 자주색
+  [
+    'any',
+    ['==', ['get', 'class'], 'industrial'],
+    ['==', ['get', 'class'], 'warehouse'],
+  ],
+  '#9333EA',
+
+  // 공공·군사 옥상: 짙은 청색
+  [
+    'any',
+    ['==', ['get', 'class'], 'military'],
+    ['==', ['get', 'class'], 'public'],
+    ['==', ['get', 'usageType'], 'military_public'],
+    ['get', 'isMilitaryOrPublic'],
+  ],
+  '#2563EB',
+
+  '#D97706',
+];
+
+export const gpuBuildingHeightSpectrumWallColorExpr: any = [
+  'interpolate',
+  ['linear'],
+  BUILDING_HEIGHT_EXPR,
+  4.0, '#06B6D4',  // 저층 (1~2층, 4m): 청록(Cyan)
+  12.0, '#0EA5E9', // 저-중층 (3~4층, 12m): 스카이블루
+  22.0, '#10B981', // 중층 (5~7층, 22m): 에메랄드
+  36.0, '#F59E0B', // 중-고층 (10~12층, 36m): 황색
+  55.0, '#F97316', // 고층 (15~18층, 55m): 주황
+  75.0, '#EF4444'  // 초고층 (25층+, 75m+): 적색
+];
+
+export const gpuBuildingHeightSpectrumRoofColorExpr: any = [
+  'interpolate',
+  ['linear'],
+  BUILDING_HEIGHT_EXPR,
+  4.0, '#0891B2',
+  12.0, '#0284C7',
+  22.0, '#059669',
+  36.0, '#D97706',
+  55.0, '#EA580C',
+  75.0, '#DC2626'
+];
+
+// -----------------------------------------------------------------------------
 // 5. 실사 창문 패턴 & 옥상 난간/코어 텍스처 등록 함수 (한국형 아파트 베란다 및 옥상 디테일)
 // -----------------------------------------------------------------------------
 export const BUILDING_PATTERN_IMAGE_ID = 'facade-window-grid';
@@ -726,6 +863,75 @@ export function setGpuBuildingLayersMode(
     }
     if (map.getLayer('bldg-tier2-mainwall')) {
       map.setPaintProperty('bldg-tier2-mainwall', 'fill-extrusion-color', gpuBuildingWallColorExpr);
+    }
+  }
+}
+
+/**
+ * [V-World 3D 건물 스타일러 테마 원클릭 즉시 적용 엔진]
+ * - photorealistic: 실사 포토 모드 (밝은 아이보리 창문 벽체 + 다크 슬래브 / 초록 우레탄 / 테라코타 / 청색 강판 지붕)
+ * - landuse: 용도별 색상 모드 (주거: 황색, 상업: 적색, 공업: 자주색, 공공·군사: 청색)
+ * - height_spectrum: 층수/높이 스펙트럼 모드 (저층: 청록 -> 중층: 황색 -> 고층: 적색)
+ */
+export function applyBuildingThemeToMap(
+  map: maplibregl.Map,
+  theme: 'photorealistic' | 'landuse' | 'height_spectrum'
+): void {
+  if (!map) return;
+
+  let wallExpr: any = gpuBuildingWallColorExpr;
+  let roofExpr: any = gpuBuildingRoofColorExpr;
+  let patternOpacity = 0.85;
+
+  if (theme === 'landuse') {
+    wallExpr = gpuBuildingLanduseWallColorExpr;
+    roofExpr = gpuBuildingLanduseRoofColorExpr;
+    patternOpacity = 0.15;
+  } else if (theme === 'height_spectrum') {
+    wallExpr = gpuBuildingHeightSpectrumWallColorExpr;
+    roofExpr = gpuBuildingHeightSpectrumRoofColorExpr;
+    patternOpacity = 0.10;
+  }
+
+  const wallLayers = [
+    'real-bldg-tier2-mainwall',
+    'real-bldg-tier1-podium',
+    'fusion-bldg-tier2-mainwall',
+    'fusion-bldg-tier1-podium',
+    'bldg-tier2-mainwall',
+    'bldg-tier1-podium',
+    '3d-buildings',
+  ];
+  wallLayers.forEach((layerId) => {
+    if (map.getLayer(layerId)) {
+      try {
+        map.setPaintProperty(layerId, 'fill-extrusion-color', wallExpr);
+      } catch (err) {
+        console.warn(`[applyBuildingTheme] Set wall color skipped for ${layerId}:`, err);
+      }
+    }
+  });
+
+  const roofLayers = [
+    'real-bldg-tier4-roofcap',
+    'fusion-bldg-tier4-roofcap',
+    'bldg-tier4-roof',
+  ];
+  roofLayers.forEach((layerId) => {
+    if (map.getLayer(layerId)) {
+      try {
+        map.setPaintProperty(layerId, 'fill-extrusion-color', roofExpr);
+      } catch (err) {
+        console.warn(`[applyBuildingTheme] Set roof color skipped for ${layerId}:`, err);
+      }
+    }
+  });
+
+  if (map.getLayer('bldg-tier3-pattern')) {
+    try {
+      map.setPaintProperty('bldg-tier3-pattern', 'fill-extrusion-opacity', patternOpacity);
+    } catch {
+      // ignore
     }
   }
 }

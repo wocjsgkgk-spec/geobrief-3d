@@ -34,6 +34,7 @@ import {
   setGpuBuildingLayersVisibility,
   GPU_BUILDING_LAYER_IDS,
   gpuBuildingTotalHeightExpr,
+  applyBuildingThemeToMap,
 } from '@/utils/gpuRealisticBuildingStack';
 import { applyAdaptiveFoundationToFeatures } from '@/utils/terrainFoundation';
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
@@ -711,6 +712,7 @@ export const MapViewer: React.FC = () => {
     terrainEnabled,
     terrainExaggeration,
     baseMap,
+    buildingTheme,
     layers,
     isOrbiting,
     toggleOrbiting,
@@ -1249,14 +1251,40 @@ export const MapViewer: React.FC = () => {
   }, []);
 
   const fetchCadastralAnalysis = useCallback(
-    async (lat: number, lng: number, regionId?: string) => {
+    async (
+      lat: number,
+      lng: number,
+      regionId?: string,
+      bldMeta?: {
+        bldNm?: string;
+        grndFlr?: number;
+        ugrndFlr?: number;
+        hei?: number;
+        usage?: string;
+        strct?: string;
+        roof?: string;
+        pnu?: string;
+        address?: string;
+      }
+    ) => {
       const map = mapRef.current;
       if (!map) return;
 
       setIsAnalyzingCadastral(true);
       try {
         const targetRegion = regionId || selectedRegionId || 'wonju';
-        const url = `/api/cadastral-analysis?lat=${lat}&lng=${lng}&regionId=${targetRegion}`;
+        let url = `/api/cadastral-analysis?lat=${lat}&lng=${lng}&regionId=${targetRegion}`;
+        if (bldMeta) {
+          if (bldMeta.bldNm) url += `&bldNm=${encodeURIComponent(bldMeta.bldNm)}`;
+          if (bldMeta.grndFlr) url += `&grndFlr=${bldMeta.grndFlr}`;
+          if (bldMeta.ugrndFlr) url += `&ugrndFlr=${bldMeta.ugrndFlr}`;
+          if (bldMeta.hei) url += `&hei=${bldMeta.hei}`;
+          if (bldMeta.usage) url += `&usage=${encodeURIComponent(bldMeta.usage)}`;
+          if (bldMeta.strct) url += `&strct=${encodeURIComponent(bldMeta.strct)}`;
+          if (bldMeta.roof) url += `&roof=${encodeURIComponent(bldMeta.roof)}`;
+          if (bldMeta.pnu) url += `&pnu=${encodeURIComponent(bldMeta.pnu)}`;
+          if (bldMeta.address) url += `&address=${encodeURIComponent(bldMeta.address)}`;
+        }
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
@@ -4791,11 +4819,10 @@ export const MapViewer: React.FC = () => {
       )
         return;
 
-      // [3단계] 클릭 위치에 대한 연속지적도 + 용도지역 + 건축물대장 4대 실측 분석 자동 트리거
-      fetchCadastralAnalysis(e.lngLat.lat, e.lngLat.lng, selectedRegionId);
-
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
+        // [3단계] 건물이 없는 지점 클릭 시 연속지적도 + 용도지역 4대 실측 분석 자동 트리거
+        fetchCadastralAnalysis(e.lngLat.lat, e.lngLat.lng, selectedRegionId);
         // [신규 1] 국토교통부 전국 교량 및 터널 마커/라벨 배지 클릭 처리
         const btLayers = ['molit-bridge-tunnel-circles', 'molit-bridge-tunnel-labels'].filter((l) => map.getLayer(l));
         const btFeatures = btLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: btLayers }) : [];
@@ -4937,6 +4964,18 @@ export const MapViewer: React.FC = () => {
         center: centerCoords,
         screenPos: { x: projected.x, y: projected.y },
         rawProperties: props,
+      });
+
+      // [브이월드 스타일] 3D 건물 클릭 시 해당 실측 속성을 4대 분석 리포트 카드에 즉시 동기화
+      fetchCadastralAnalysis(e.lngLat.lat, e.lngLat.lng, selectedRegionId, {
+        bldNm: bldName,
+        grndFlr: levels,
+        hei: Math.round(height * 10) / 10,
+        usage: category,
+        strct: props.strctCdNm,
+        roof: props.roofCdNm,
+        pnu: props.pnu,
+        address: props.rd_nm || props.address,
       });
     };
 
@@ -5191,7 +5230,33 @@ export const MapViewer: React.FC = () => {
       hidSource?.setData({ type: 'FeatureCollection', features: [] });
       originSource?.setData({ type: 'FeatureCollection', features: [] });
     }
+
+    // [3D 가시권(사계) 레이어 가시성 동적 전환]
+    const vsVis = viewshedResult ? 'visible' : 'none';
+    const vsLayers = [
+      'viewshed-visible-fill',
+      'viewshed-visible-line',
+      'viewshed-hidden-fill',
+      'viewshed-hidden-line',
+      'viewshed-origin-circle',
+    ];
+    vsLayers.forEach((id) => {
+      if (map.getLayer(id)) {
+        try {
+          map.setLayoutProperty(id, 'visibility', vsVis);
+        } catch {
+          // ignore
+        }
+      }
+    });
   }, [viewshedResult, isMapLoaded]);
+
+  // [신규: V-World 건물 표현 테마 실시간 전환 (실사 포토 / 용도별 / 층수·높이)]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+    applyBuildingThemeToMap(map, buildingTheme);
+  }, [buildingTheme, isMapLoaded]);
 
   // 21. [3D 실측 줄자 (3D Ruler) 인터랙션 & GeoJSON 동기화]
   useEffect(() => {
@@ -6613,7 +6678,7 @@ export const MapViewer: React.FC = () => {
                 <div className="flex items-center gap-1.5 flex-wrap mb-1">
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                    4대 실측 분석 리포트
+                    V-World 실측 공간정보 인스펙터
                   </span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60">
                     {cadastralReport.target?.regionName || '강원특별자치도'}
@@ -6623,7 +6688,9 @@ export const MapViewer: React.FC = () => {
                   </span>
                 </div>
                 <h3 className="font-bold text-white text-sm truncate leading-snug">
-                  {cadastralReport.target?.address || '강원도 필지 실측 분석'}
+                  {cadastralReport.buildingReport?.buildingName && cadastralReport.buildingReport?.buildingName !== '일반 건축물' && cadastralReport.buildingReport?.buildingName !== '미등기/나대지'
+                    ? `${cadastralReport.buildingReport?.buildingName} (${cadastralReport.target?.address || '원주시'})`
+                    : cadastralReport.target?.address || '강원도 필지 실측 분석'}
                 </h3>
                 <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
                   PNU: {cadastralReport.target?.pnu || '-'}
@@ -6735,7 +6802,7 @@ export const MapViewer: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-slate-400">건축 연면적:</span>
                     <span className="text-emerald-400 font-mono font-semibold">
-                      {Number(cadastralReport.buildingReport?.totalAreaSqm || 0).toLocaleString()} ㎡
+                      {Number(cadastralReport.buildingReport?.totalAreaSqm || 0).toLocaleString()} ㎡ (약 {Math.round((cadastralReport.buildingReport?.totalAreaSqm || 0) * 0.3025).toLocaleString()} 평)
                     </span>
                   </div>
                 </div>

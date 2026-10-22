@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import * as turf from '@turf/turf';
 import {
   BaseMapType,
+  BuildingThemeType,
   Bookmark,
   BriefingMetadata,
   PolygonArea,
@@ -243,9 +244,11 @@ interface MapStoreState {
   terrainEnabled: boolean;
   terrainExaggeration: number;
   baseMap: BaseMapType;
+  buildingTheme: BuildingThemeType; // V-World 건물 표현 테마: 실사 포토 / 용도별 색상 / 층수·높이 스펙트럼
   setTerrainEnabled: (enabled: boolean) => void;
   setTerrainExaggeration: (val: number) => void;
   setBaseMap: (type: BaseMapType) => void;
+  setBuildingTheme: (theme: BuildingThemeType) => void;
 
   // 2D 평면 / 3D 입체 뷰 모드
   viewMode: ViewMode;
@@ -573,9 +576,11 @@ export const useMapStore = create<MapStoreState>()(
       terrainEnabled: true,
       terrainExaggeration: 1.0,
       baseMap: 'satellite',
+      buildingTheme: 'photorealistic',
       setTerrainEnabled: (terrainEnabled) => set({ terrainEnabled }),
       setTerrainExaggeration: (terrainExaggeration) => set({ terrainExaggeration }),
       setBaseMap: (baseMap) => set({ baseMap }),
+      setBuildingTheme: (buildingTheme) => set({ buildingTheme }),
 
       viewMode: '3D',
       setViewMode: (mode) => {

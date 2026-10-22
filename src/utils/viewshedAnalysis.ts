@@ -28,10 +28,58 @@ export function calculateViewshed(
 
   if (!map || !origin) return null;
 
-  // 1. 관측점 지표면 표고 조회
+  // 1. 관측점 지표면 표고 및 3D 건물 차폐체 조회
   const rawOriginElev = map.queryTerrainElevation ? map.queryTerrainElevation(origin) : 100;
   const originGroundElevation = rawOriginElev !== null && rawOriginElev !== undefined ? rawOriginElev : 100;
-  const observerEyeElevation = originGroundElevation + observerHeightMeters;
+
+  // 1-B. 3D 건물 차폐체(Building Obstacles) 공간 인덱스 추출
+  interface BldgObstacle {
+    minLng: number;
+    minLat: number;
+    maxLng: number;
+    maxLat: number;
+    height: number;
+  }
+  const obstacles: BldgObstacle[] = [];
+  try {
+    const bldgLayers = [
+      'real-bldg-tier2-mainwall',
+      'fusion-bldg-tier2-mainwall',
+      'bldg-tier2-mainwall',
+      '3d-buildings',
+    ].filter((l) => Boolean(map.getLayer(l)));
+
+    if (bldgLayers.length > 0) {
+      const rendered = map.queryRenderedFeatures({ layers: bldgLayers });
+      for (const b of rendered) {
+        if (b.geometry && (b.geometry.type === 'Polygon' || b.geometry.type === 'MultiPolygon')) {
+          const bbox = turf.bbox(b);
+          const p = (b.properties || {}) as Record<string, any>;
+          const h =
+            parseFloat(p.height || p.hei || p.HEI) ||
+            (parseFloat(p.levels || p.grnd_flr || p.GRND_FLR || 3) * 3.3);
+          if (h > 2.5) {
+            obstacles.push({
+              minLng: bbox[0],
+              minLat: bbox[1],
+              maxLng: bbox[2],
+              maxLat: bbox[3],
+              height: h,
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // query fallback
+  }
+
+  // 관측점 자체에 건물이 있는지 확인 (예: 아파트 옥상, 고층 빌딩, 군 관측소 클릭 시 자동 고도 반영)
+  const originBldg = obstacles.find(
+    (b) => origin[0] >= b.minLng && origin[0] <= b.maxLng && origin[1] >= b.minLat && origin[1] <= b.maxLat
+  );
+  const observerBaseElevation = originGroundElevation + (originBldg ? originBldg.height : 0);
+  const observerEyeElevation = observerBaseElevation + observerHeightMeters;
 
   const visiblePolygons: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
   const hiddenPolygons: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
@@ -42,7 +90,7 @@ export function calculateViewshed(
   let visibleCount = 0;
   let totalCells = 0;
 
-  // 2. 360도 방위각 레이 마칭 (Ray Marching)
+  // 2. 360도 방위각 레이 마칭 (Ray Marching) - DEM 지형 + 3D 건물 복합 가시성 연산
   for (let az = 0; az < 360; az += azimuthStepDegrees) {
     const nextAz = az + azimuthStepDegrees;
     let maxSightAngle = -Infinity; // 현재까지의 최대 시선각 (Horizon angle)
@@ -63,6 +111,13 @@ export function calculateViewshed(
 
       const rawMidElev = map.queryTerrainElevation ? map.queryTerrainElevation(midCoords) : null;
       const targetGroundElev = rawMidElev !== null && rawMidElev !== undefined ? rawMidElev : originGroundElevation;
+
+      // 해당 지점의 3D 건물 유무 및 차폐 높이 판정
+      const bldgHit = obstacles.find(
+        (b) => midCoords[0] >= b.minLng && midCoords[0] <= b.maxLng && midCoords[1] >= b.minLat && midCoords[1] <= b.maxLat
+      );
+      const bldgHeight = bldgHit ? bldgHit.height : 0;
+      const obstacleTopElev = targetGroundElev + bldgHeight;
       const targetObjectElev = targetGroundElev + targetHeightMeters;
 
       // 시선 각도 계산 (라디안)
@@ -72,10 +127,13 @@ export function calculateViewshed(
       const isVisible = currentSightAngle >= maxSightAngle;
 
       if (isVisible) {
-        maxSightAngle = currentSightAngle;
         visibleCount++;
       }
       totalCells++;
+
+      // 건물 또는 능선에 의해 다음 원거리 셀이 가려지도록 최대 시선각 갱신
+      const obstacleAngle = Math.atan2(obstacleTopElev - observerEyeElevation, distMid);
+      maxSightAngle = Math.max(maxSightAngle, obstacleAngle);
 
       // 부채꼴 섹터 쿼드 폴리곤 셀 좌표 생성
       const p1 = turf.destination(originPoint, distStart / 1000, az, { units: 'kilometers' }).geometry.coordinates;
