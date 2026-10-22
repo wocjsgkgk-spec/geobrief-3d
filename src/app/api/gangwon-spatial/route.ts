@@ -254,11 +254,11 @@ out geom 5000;`;
             properties: {
               name: t.name || t['name:ko'] || '건물',
               building: t.building,
-              levels: levels || 2,
-              height: height || 6.5,
-              roofShape: t['roof:shape'] || 'flat',
-              roofColour: t['roof:colour'] || t['roof:color'] || '#334155',
-              buildingColour: t['building:colour'] || '#f8fafc',
+              levels: levels || (t.building === 'apartments' ? 15 : 2),
+              height: height || (t.building === 'apartments' ? 45.0 : 6.5),
+              roofShape: t['roof:shape'] || (t.building === 'apartments' ? 'flat' : 'gabled'),
+              roofColour: t['roof:colour'] || t['roof:color'] || (t.building === 'apartments' ? '#57534e' : '#357a56'),
+              buildingColour: t['building:colour'] || (t.building === 'apartments' ? '#f5f2eb' : '#dfd9ce'),
               source: 'overpass',
             },
             geometry: {

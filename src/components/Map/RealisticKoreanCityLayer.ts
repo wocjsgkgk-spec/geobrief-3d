@@ -543,6 +543,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const uvMilitary = getPhotorealisticSlotUV('public_military');
 
       const uvRoofConcrete = getPhotorealisticSlotUV('roof_concrete_warmgray');
+      const uvRoofAptSlab = getPhotorealisticSlotUV('roof_apt_slab');
       const uvRoofUrethane = getPhotorealisticSlotUV('roof_urethane_sage');
       const uvRoofAsphalt = getPhotorealisticSlotUV('roof_asphalt_charcoal');
       const uvRoofTile = getPhotorealisticSlotUV('roof_terracotta_tile');
@@ -1062,16 +1063,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             }
           } else if (directRoofCol) {
             const low = String(directRoofCol).toLowerCase();
-            if (low.includes('green') || low === '#15803d' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
+            if (low.includes('green') || low === '#15803d' || low === '#357a56' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
               roofUV = getPhotorealisticSlotUV('roof_urethane_sage');
-            } else if (low.includes('blue') || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68') {
+            } else if (low.includes('blue') || low === '#254e7a' || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68') {
               roofUV = getPhotorealisticSlotUV('roof_zinc_blue');
-            } else if (low.includes('red') || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
+            } else if (low.includes('red') || low === '#7c3a27' || low === '#6e3222' || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
               roofUV = getPhotorealisticSlotUV('roof_terracotta_tile');
+            } else if (low === '#57534e') {
+              roofUV = uvRoofAptSlab;
+            } else if (low === '#78716c' || low === '#94a3b8') {
+              roofUV = getPhotorealisticSlotUV('roof_concrete_warmgray');
             } else if (low === '#64748b' || low === '#334155' || low === '#1e293b') {
               roofUV = getPhotorealisticSlotUV('roof_asphalt_charcoal');
             } else {
-              roofUV = getPhotorealisticSlotUV('roof_concrete_warmgray');
+              roofUV = isApt ? uvRoofAptSlab : getPhotorealisticSlotUV('roof_concrete_warmgray');
             }
           }
 
@@ -1215,7 +1220,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 [cX1, coreTopY, cZ1],
                 [cX0, coreTopY, cZ1],
                 [0, 1, 0],
-                uvRoofConcrete
+                isApt ? uvRoofAptSlab : uvRoofConcrete
               );
             }
           }

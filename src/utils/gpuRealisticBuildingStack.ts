@@ -57,24 +57,26 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     0,
 
-    // 1. 이미 실측 높이(>= 8.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결, 0~2m 납작 건물 완전 금지)
-    ['>=', ['var', 'declaredHeight'], 8.0],
+    // 1. 이미 실측 높이(>= 3.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결, 0~2m 납작 건물 완전 금지)
+    ['>=', ['var', 'declaredHeight'], 3.0],
     ['var', 'declaredHeight'],
 
-    // 2. 아파트 단지 및 고층 주거 태그: 45m ~ 75m (15~25층)
+    // 2. 아파트 단지 및 고층 주거 태그: 36m ~ 75m (12~25층)
     [
       'any',
       ['==', ['get', 'class'], 'apartments'],
       ['==', ['get', 'building'], 'apartments'],
       ['==', ['get', 'type'], 'apartments'],
+      ['==', ['get', 'usageType'], 'apartment'],
+      ['==', ['get', 'bld_category'], 'apartment'],
     ],
     [
       '+',
-      45,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 31], // 45..75m
+      36,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 40], // 36..75m
     ],
 
-    // 3. 시내 대로변 상업/업무/공공/의료/대학/격자형 시가지: 12m ~ 22m (4~6층 탄탄한 도시 블록 형성)
+    // 3. 중·저층 상가·원룸·근린생활 블록: 10m ~ 20m (3~6층 탄탄한 도시 블록 형성)
     [
       'any',
       ['==', ['get', 'class'], 'commercial'],
@@ -85,14 +87,16 @@ export const gpuBuildingTotalHeightExpr: any = [
       ['==', ['get', 'class'], 'university'],
       ['==', ['get', 'building'], 'commercial'],
       ['==', ['get', 'building'], 'office'],
+      ['==', ['get', 'usageType'], 'commercial'],
+      ['==', ['get', 'bld_category'], 'commercial'],
     ],
     [
       '+',
-      12,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 11], // 12..22m
+      10,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 11], // 10..20m
     ],
 
-    // 4. 산업/군사/물류/창고: 8m ~ 14m
+    // 4. 산업/군사/물류/창고: 6m ~ 12m
     [
       'any',
       ['==', ['get', 'class'], 'industrial'],
@@ -103,21 +107,18 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      8,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 7], // 8..14m
+      6,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 7], // 6..12m
     ],
 
-    // 5. 일반 시가지 (태그 부재 건물 대상 100% 입체 볼륨 보장 스카이라인 분포 해시)
-    // - 30% 아파트 단지 스카이라인 (45m ~ 75m)
-    // - 40% 격자형 상가·오피스·근린생활 블록 (12m ~ 22m, 4~6층)
-    // - 30% 다세대 빌라/단독주택 (8m ~ 14m, 2.5~4층, 절대 0~2m 금지)
+    // 5. 일반 시가지 / 단독주택·다세대 빌라 (1층~3층, 4m~10m)
     [
       'case',
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 30],
-      ['+', 45, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 31]], // 45..75m 아파트
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 70],
-      ['+', 12, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 11]], // 12..22m 탄탄한 상업/원룸 블록
-      ['+', 8, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 7]],  // 8..14m 주택 (100% 입체화)
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 25],
+      ['+', 36, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 40]], // 36..75m 아파트
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 60],
+      ['+', 10, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 11]], // 10..20m 상가
+      ['+', 4.5, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 6]],  // 4.5..10m 주택 (100% 입체화)
     ],
   ],
 ];
@@ -137,30 +138,30 @@ export const gpuBuildingBaseExpr: any = [
 
 // -----------------------------------------------------------------------------
 // 3. 중층 외벽 본체(Main Wall) 색상 Expression
-// - 아파트 단지: 밝은 크림 아이보리(#f3efe6), 소프트 베이지(#e8e2d5), 라이트 웜그레이(#dedad2)
-// - 상업/오피스: 화강석 화이트/베이지(#e5e0d8), 스카이 블루 유리 커튼월(#93c5fd), 모던 그레이(#cbd5e1)
+// - 아파트 단지: 밝은 크림 아이보리(#f5f2eb) 및 웜 베이지(#eae3d5)
+// - 상업/오피스: 밝은 화강석 베이지(#dfd9ce), 적벽돌(#8c3f2b), 라이트 웜그레이(#d6d3d1)
 // - 산업/물류: 밝은 실버/베이지 메탈 판넬(#e2e8f0)
-// - 일반 주택가: 따뜻한 적벽돌(#a84a32), 살구색/크림색 회벽(#f5ebe0), 밝은 화강석(#e7e5e4)
+// - 일반 주택가: 적벽돌(#8c3f2b), 밝은 화강석 베이지(#dfd9ce), 웜 베이지(#eae3d5)
 // -----------------------------------------------------------------------------
 export const gpuBuildingWallColorExpr: any = [
   'case',
-  // 1) 아파트 단지: 크림 아이보리, 소프트 베이지, 라이트 웜그레이
+  // 1) 고층 아파트 단지: 밝은 크림 아이보리(#f5f2eb) 및 웜 베이지(#eae3d5)
   [
     'any',
     ['==', ['get', 'class'], 'apartments'],
     ['==', ['get', 'building'], 'apartments'],
     ['==', ['get', 'type'], 'apartments'],
+    ['==', ['get', 'usageType'], 'apartment'],
+    ['==', ['get', 'bld_category'], 'apartment'],
   ],
   [
     'case',
-    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 3], 1],
-    '#f3efe6', // 밝고 화사한 크림 아이보리
-    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 3], 2],
-    '#e8e2d5', // 소프트 베이지
-    '#dedad2', // 라이트 웜그레이
+    ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 2], 1],
+    '#f5f2eb', // 밝은 크림 아이보리
+    '#eae3d5', // 웜 베이지
   ],
 
-  // 2) 상업/오피스: 화강석 화이트/베이지, 스카이 블루 유리 커튼월, 모던 그레이
+  // 2) 중·저층 상가·원룸·근린생활 블록: 밝은 화강석 베이지(#dfd9ce), 적벽돌(#8c3f2b), 라이트 웜그레이(#d6d3d1)
   [
     'any',
     ['==', ['get', 'class'], 'commercial'],
@@ -171,14 +172,16 @@ export const gpuBuildingWallColorExpr: any = [
     ['==', ['get', 'class'], 'university'],
     ['==', ['get', 'building'], 'commercial'],
     ['==', ['get', 'building'], 'office'],
+    ['==', ['get', 'usageType'], 'commercial'],
+    ['==', ['get', 'bld_category'], 'commercial'],
   ],
   [
     'case',
     ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 3], 1],
-    '#e5e0d8', // 화강석 화이트/베이지
+    '#dfd9ce', // 밝은 화강석 베이지
     ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 3], 2],
-    '#93c5fd', // 스카이 블루 유리 커튼월
-    '#cbd5e1', // 모던 그레이
+    '#8c3f2b', // 적벽돌
+    '#d6d3d1', // 라이트 웜그레이
   ],
 
   // 3) 산업/군사/물류: 밝은 실버/베이지 메탈 판넬
@@ -192,23 +195,26 @@ export const gpuBuildingWallColorExpr: any = [
   ],
   '#e2e8f0', // 밝은 실버/베이지 메탈 판넬
 
-  // 4) 일반 시가지 / 다세대 빌라 / 주택 (따뜻한 적벽돌, 살구색/크림색 회벽, 밝은 화강석)
+  // 4) 단독주택·다세대 빌라·주거: 적벽돌(#8c3f2b), 밝은 화강석 베이지(#dfd9ce), 웜 베이지(#eae3d5)
   [
     'case',
     ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 3], 1],
-    '#a84a32', // 따뜻한 적벽돌
+    '#8c3f2b', // 적벽돌
     ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 3], 2],
-    '#f5ebe0', // 살구색/크림색 회벽
-    '#e7e5e4', // 밝은 화강석
+    '#dfd9ce', // 밝은 화강석 베이지
+    '#eae3d5', // 웜 베이지
   ],
 ];
 
 // -----------------------------------------------------------------------------
 // 4. 건물 유형별 실제 한국 지붕 색상 Expression (건물 높이 & ID 해시 엄격 분류)
-// 1) 고층 아파트: 밝은 콘크리트 그레이(#8c8881) + 옥탑 코어
-// 2) 산업/창고: 코발트/징크 블루(#2b5b84), 라이트 실버(#cbd5e1), 세이지 그린(#3b6e5c)
-// 3) 중층 시내 상가: 한국 특유 우레탄 방수 그린(#356854, 50%), 밝은 시멘트 옥상(#94a3b8, 50%)
-// 4) 저층 주택/빌라: 적갈색 기와(#8c3b2b, 35%), 우레탄 녹색(#3d6b58, 30%), 슬레이트 그레이(#64748b, 35%)
+// 1) 고층 아파트 단지: 차분한 다크 그레이/브라운 슬래브(#57534e)
+// 2) 중·저층 상가·원룸 블록:
+//    ① 우레탄 방수 에메랄드/세이지 그린(#357a56, 45%)
+//    ② 테라코타 적갈색/브라운(#7c3a27, 30%)
+//    ③ 콘크리트 그레이(#78716c, 25%)
+// 3) 단독주택·다세대 빌라·군 주둔지 막사:
+//    적갈색 기와(#6e3222, 40%), 청색 강판(#254e7a, 30%), 세이지 그린(#357a56, 30%)
 // -----------------------------------------------------------------------------
 export const gpuBuildingRoofColorExpr: any = [
   'let',
@@ -228,15 +234,17 @@ export const gpuBuildingRoofColorExpr: any = [
     ['!=', ['coalesce', ['get', 'roof_color'], ''], ''],
     ['get', 'roof_color'],
 
-    // 1) 고층 아파트 (높이 24m 이상 또는 아파트 태그): 밝은 콘크리트 그레이(#8c8881)
+    // 1) 고층 아파트 단지 (12층~25층, 36m~75m): 차분한 다크 그레이/브라운 슬래브(#57534e)
     [
       'any',
-      ['>=', ['var', 'bH'], 24.0],
+      ['>=', ['var', 'bH'], 28.0],
       ['==', ['get', 'class'], 'apartments'],
       ['==', ['get', 'building'], 'apartments'],
       ['==', ['get', 'type'], 'apartments'],
+      ['==', ['get', 'usageType'], 'apartment'],
+      ['==', ['get', 'bld_category'], 'apartment'],
     ],
-    '#8c8881',
+    '#57534e',
 
     // 2) 산업단지/물류/창고/군사
     [
@@ -249,23 +257,45 @@ export const gpuBuildingRoofColorExpr: any = [
     [
       'case',
       ['<', ['var', 'hash'], 40],
-      '#2b5b84', // 코발트/징크 블루
+      '#254e7a', // 청색 강판 지붕
       ['<', ['var', 'hash'], 75],
       '#cbd5e1', // 라이트 실버
-      '#3b6e5c', // 세이지 그린
+      '#357a56', // 세이지 그린
     ],
 
-    // 3) 중·저층 시가지 상가 및 다세대 빌라/단독주택 (한국 실제 위성사진 3색 엄격 분포)
-    // ① 에메랄드/세이지 우레탄 방수 옥상 (#3b7a57, 40%)
-    // ② 적갈색 기와/브라운 지붕 (#7c3f2c, 30%)
-    // ③ 밝은 회백색/회색 콘크리트 옥상 (#94a3b8, 30%)
+    // 3) 중·저층 시내 상가·원룸·근린생활 블록 (3층~6층, 10m~20m):
+    //    ① 우레탄 방수 에메랄드/세이지 그린(#357a56, 45%)
+    //    ② 테라코타 적갈색/브라운(#7c3a27, 30%)
+    //    ③ 콘크리트 그레이(#78716c, 25%)
+    [
+      'any',
+      ['==', ['get', 'class'], 'commercial'],
+      ['==', ['get', 'class'], 'retail'],
+      ['==', ['get', 'class'], 'office'],
+      ['==', ['get', 'building'], 'commercial'],
+      ['==', ['get', 'building'], 'office'],
+      ['==', ['get', 'usageType'], 'commercial'],
+      ['==', ['get', 'bld_category'], 'commercial'],
+      ['>=', ['var', 'bH'], 10.0],
+    ],
+    [
+      'case',
+      ['<', ['var', 'hash'], 45],
+      '#357a56', // ① 우레탄 방수 에메랄드/세이지 그린 (45%)
+      ['<', ['var', 'hash'], 75],
+      '#7c3a27', // ② 테라코타 적갈색/브라운 (30%)
+      '#78716c', // ③ 콘크리트 그레이 (25%)
+    ],
+
+    // 4) 단독주택·다세대 빌라·군 주둔지 막사 (1층~3층, 4m~10m):
+    //    적갈색 기와(#6e3222, 40%), 청색 강판(#254e7a, 30%), 세이지 그린(#357a56, 30%)
     [
       'case',
       ['<', ['var', 'hash'], 40],
-      '#3b7a57', // 에메랄드/세이지 우레탄 방수 (40%)
+      '#6e3222', // 적갈색 기와 지붕 (40%)
       ['<', ['var', 'hash'], 70],
-      '#7c3f2c', // 적갈색 기와/브라운 지붕 (30%)
-      '#94a3b8', // 밝은 회백색 콘크리트 옥상 (30%)
+      '#254e7a', // 청색 강판 지붕 (30%)
+      '#357a56', // 세이지 그린 옥상 (30%)
     ],
   ],
 ];
@@ -291,16 +321,16 @@ export function ensureBuildingPatterns(map: maplibregl.Map): void {
         ctx.clearRect(0, 0, size, size);
 
         // (1) 층간 슬래브 분리선 (Floor Slab Dividing Line)
-        ctx.fillStyle = 'rgba(71, 85, 105, 0.55)'; // 다크 슬레이트 층간 라인
-        ctx.fillRect(0, 0, size, 4);
-        ctx.fillRect(0, size - 4, size, 4);
-        ctx.fillRect(0, size / 2 - 2, size, 4); // 2개 층 표현
+        ctx.fillStyle = '#1e293b'; // 다크 차콜 슬래브 라인
+        ctx.fillRect(0, 0, size, 3);
+        ctx.fillRect(0, size - 3, size, 3);
+        ctx.fillRect(0, size / 2 - 1.5, size, 3); // 2개 층 표현
 
-        // (2) 창호 외곽 알루미늄/하이샤시 프레임 (세로 기둥)
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.40)';
-        ctx.fillRect(0, 0, 4, size);
-        ctx.fillRect(size - 4, 0, 4, size);
-        ctx.fillRect(size / 2 - 2, 0, 4, size);
+        // (2) 창호 외곽 하이샤시 프레임 (세로 기둥)
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, 3, size);
+        ctx.fillRect(size - 3, 0, 3, size);
+        ctx.fillRect(size / 2 - 1.5, 0, 3, size);
 
         // (3) 베란다 창문 4구획 (2개 층 x 2개 세대/창호)
         const windowSlots = [

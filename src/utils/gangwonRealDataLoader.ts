@@ -160,12 +160,12 @@ function mapBuildingAttributes(
       height: 0,
       min_height: 0,
       roofShape: 'flat',
-      roofColour: '#94a3b8',
+      roofColour: '#78716c',
       usageType: 'general' as any,
       isMilitaryOrPublic: false,
       bld_category: 'site_boundary',
       bld_category_label: '부지/필지 경계 (압출 제외)',
-      color: '#cbd5e1',
+      color: '#dfd9ce',
       source: (rawProps.source as any) || 'fused',
       sources: {
         ofm: false,
@@ -259,13 +259,15 @@ function mapBuildingAttributes(
     rawProps['roof:colour'] ||
     rawProps.roof_colour ||
     rawProps.roof_color ||
-    (regStyle.roofSlotId === 17.0
-      ? '#2e5a44' // 녹색 우레탄
+    (regStyle.bldType === 2.0
+      ? '#57534e' // 아파트 슬래브
+      : regStyle.roofSlotId === 17.0
+      ? '#357a56' // 에메랄드/세이지 우레탄
       : regStyle.roofSlotId === 16.0
-      ? '#7c2d12' // 적갈색 기와
+      ? '#7c3a27' // 테라코타 적갈색/기와
       : regStyle.roofSlotId === 18.0
-      ? '#1e3a8a' // 청색 강판
-      : '#334155'); // 차콜 슬래브
+      ? '#254e7a' // 청색 강판
+      : '#78716c'); // 콘크리트 그레이
 
   const usageType = (
     regStyle.bldType === 2.0

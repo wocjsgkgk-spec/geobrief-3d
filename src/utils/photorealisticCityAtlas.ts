@@ -51,6 +51,7 @@ export const CITY_SLOT_NAME_TO_ID: Record<string, number> = {
   facility_panel: 13,
   roof_concrete_warmgray: 14,
   roof_asphalt_charcoal: 15,
+  roof_apt_slab: 15,
   roof_terracotta_tile: 16,
   roof_urethane_sage: 17,
   roof_zinc_blue: 18,
@@ -259,15 +260,15 @@ function drawRealisticWindowGlass(
 // =============================================================================
 
 /**
- * Slot 0: 아파트 Type A (밝고 화사한 크림 아이보리 #f3efe6)
+ * Slot 0: 아파트 Type A (밝은 크림 아이보리 #f5f2eb + 선명한 차콜 #1e293b 창호 격자)
  */
 function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 1. 베이스 웜 아이보리 외벽 (한국 도심 실사 색감 #f3efe6)
-  ctx.fillStyle = '#f3efe6';
+  // 1. 베이스 웜 아이보리 외벽 (한국 브이월드 도심 실사 색감 #f5f2eb)
+  ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브 & 빗물 드립선
-  ctx.fillStyle = '#e8e2d5';
+  ctx.fillStyle = '#eae3d5';
   ctx.fillRect(x, y, w, 20);
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x, y + 18, w, 2);
@@ -276,14 +277,14 @@ function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w
   // 하단 10% 화강석 걸레받이 (단정하고 밝은 베이지 림)
   const lowerH = Math.round(h * 0.10);
   const lowerY = y + h - lowerH;
-  ctx.fillStyle = '#dcd5c9';
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, lowerY, w, lowerH);
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x, lowerY - 2, w, 2);
 
   // 세대 간 수직 콘크리트 날개벽 (Wing Wall)
   const wingW = 12;
-  ctx.fillStyle = '#dedad2';
+  ctx.fillStyle = '#eae3d5';
   ctx.fillRect(x, y, wingW, h);
   ctx.fillRect(x + w - wingW, y, wingW, h);
 
@@ -293,12 +294,12 @@ function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const winY = y + 36;
   const winH = Math.round(h * 0.50);
 
-  // 거실 대형 발코니 창 (60%)
+  // 거실 대형 발코니 창 (60%): 선명한 다크 차콜(#1e293b) 프레임
   const livW = Math.round(availW * 0.58);
   const livX = x + marginX;
   drawRealisticWindowGlass(ctx, livX, winY, livW, winH, 0);
 
-  // 안방 중형 창 (38%)
+  // 안방 중형 창 (38%): 선명한 다크 차콜(#1e293b) 프레임
   const bedX = livX + livW + 10;
   const bedW = availW - livW - 10;
   drawRealisticWindowGlass(ctx, bedX, winY, bedW, winH, 1);
@@ -332,14 +333,14 @@ function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * Slot 1: 아파트 Type B (소프트 베이지 #e8e2d5)
+ * Slot 1: 아파트 Type B (웜 베이지 #eae3d5 + 차콜 #1e293b 창문 격자)
  */
 function drawAptSandBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#e8e2d5';
+  ctx.fillStyle = '#eae3d5';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브
-  ctx.fillStyle = '#dedad2';
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, y, w, 20);
   applyVerticalRainGrime(ctx, x, y, w, h, y + 20, 24, 0.08);
 
@@ -353,7 +354,7 @@ function drawAptSandBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.fillStyle = '#c2533c';
   ctx.fillRect(x + 16, y, 6, h);
 
-  // 3연동 모던 발코니 창호
+  // 3연동 모던 발코니 창호 (차콜 #1e293b 프레임)
   const winX = x + 30;
   const winW = w - 46;
   const winY = y + 36;
@@ -377,14 +378,14 @@ function drawAptSandBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * Slot 2: 아파트 Type C (라이트 웜그레이 #dedad2 + 세로 계단실 창호)
+ * Slot 2: 아파트 Type C (밝은 크림 아이보리 #f5f2eb + 세로 계단실 창호)
  */
 function drawAptWarmGray(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#dedad2';
+  ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브
-  ctx.fillStyle = '#d3cec5';
+  ctx.fillStyle = '#eae3d5';
   ctx.fillRect(x, y, w, 20);
   applyVerticalRainGrime(ctx, x, y, w, h, y + 20, 24, 0.08);
 
@@ -450,12 +451,12 @@ function drawAptModernTwotone(ctx: CanvasRenderingContext2D, x: number, y: numbe
  * Slot 4: 아파트 측벽 (Side Wall)
  */
 function drawAptSideWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 1. 매끈한 베이지 웜 아이보리 콘크리트 외벽 (위성 정합 #ebe6dc)
-  ctx.fillStyle = '#ebe6dc';
+  // 1. 매끈한 크림 아이보리/베이지 콘크리트 외벽 (위성 정합 #f5f2eb)
+  ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브
-  ctx.fillStyle = '#d5cfc4';
+  ctx.fillStyle = '#eae3d5';
   ctx.fillRect(x, y, w, 24);
   applyVerticalRainGrime(ctx, x, y, w, h, y + 24, 35, 0.18);
 
@@ -517,15 +518,15 @@ function drawAptSideWall(ctx: CanvasRenderingContext2D, x: number, y: number, w:
 // =============================================================================
 
 /**
- * Slot 5: 상가 Type A (화강석 화이트/베이지 #e5e0d8)
+ * Slot 5: 상가 Type A (밝은 화강석 베이지 #dfd9ce)
  */
 function drawCommGraniteBeige(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 화강석 화이트/베이지 외벽
-  ctx.fillStyle = '#e5e0d8';
+  // 밝은 화강석 베이지 외벽 (#dfd9ce)
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, y, w, h);
 
   // 석재 타일 줄눈 그리드 (Stone Grout Grid)
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.40)';
+  ctx.fillStyle = 'rgba(168, 162, 158, 0.45)';
   for (let px = x; px < x + w; px += 42) {
     ctx.fillRect(px, y, 1.5, h);
   }
@@ -549,15 +550,15 @@ function drawCommGraniteBeige(ctx: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 /**
- * Slot 6: 상가 Type B (모던 그레이 #cbd5e1)
+ * Slot 6: 상가 Type B (라이트 웜그레이 #d6d3d1)
  */
 function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 모던 그레이 복합패널 베이스
-  ctx.fillStyle = '#cbd5e1';
+  // 라이트 웜그레이 복합패널 베이스 (#d6d3d1)
+  ctx.fillStyle = '#d6d3d1';
   ctx.fillRect(x, y, w, h);
 
   // 패널 그리드 줄눈
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = '#a8a29e';
   for (let px = x; px < x + w; px += 56) {
     ctx.fillRect(px, y, 2, h);
   }
@@ -581,15 +582,15 @@ function drawCommDarkMetal(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /**
- * Slot 7: 상가 Type C (적벽돌 상가 건물)
+ * Slot 7: 상가 Type C (적벽돌 #8c3f2b 상가 건물)
  */
 function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 밝고 화사한 샌드베이지 외벽
-  ctx.fillStyle = '#e8e2d5';
+  // 선명한 적벽돌 외벽 (#8c3f2b)
+  ctx.fillStyle = '#8c3f2b';
   ctx.fillRect(x, y, w, h);
 
   // 석재 타일 가로 줄눈
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+  ctx.fillStyle = 'rgba(245, 245, 244, 0.40)';
   for (let py = y; py < y + h; py += 16) {
     ctx.fillRect(x, py, w, 1);
   }
@@ -600,7 +601,7 @@ function drawCommRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w
   const winY = y + Math.round(h * 0.24);
   const winH = Math.round(h * 0.50);
 
-  ctx.fillStyle = '#f1f5f9';
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(winX - 6, winY - 6, winW + 12, 6); // 상단 인방
   ctx.fillRect(winX - 6, winY + winH, winW + 12, 6); // 하단 창대
 
@@ -726,11 +727,11 @@ function drawPublicMilitary(ctx: CanvasRenderingContext2D, x: number, y: number,
 // =============================================================================
 
 /**
- * Slot 10: 따뜻한 적벽돌 다세대 빌라 (#a84a32)
+ * Slot 10: 적벽돌 다세대 빌라 (#8c3f2b)
  */
 function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 따뜻한 적벽돌 외벽 (#a84a32)
-  ctx.fillStyle = '#a84a32';
+  // 선명한 적벽돌 외벽 (#8c3f2b)
+  ctx.fillStyle = '#8c3f2b';
   ctx.fillRect(x, y, w, h);
 
   // 미세 백색 몰탈 줄눈선 (Brick Mortar Joints)
@@ -752,10 +753,10 @@ function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.fillRect(winX - 4, winY - 4, winW + 8, winH + 8);
   drawRealisticWindowGlass(ctx, winX, winY, winW, winH, 1);
 
-  // 하단 1층 필로티 주차장 기단부 화강석 (#e2e8f0 ~ #cbd5e1)
+  // 하단 1층 필로티 주차장 기단부 화강석 (#dfd9ce ~ #cbd5e1)
   const lowerH = Math.round(h * 0.15);
   const lowerY = y + h - lowerH;
-  ctx.fillStyle = '#e2e8f0';
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, lowerY, w, lowerH);
 
   // 콘크리트 사각 기둥 2개 (밝은 그레이 #cbd5e1)
@@ -768,14 +769,14 @@ function drawVillaRedBrick(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 /**
- * Slot 11: 화강석 빌라 (밝은 화강석 #e7e5e4 외벽)
+ * Slot 11: 화강석 빌라 (밝은 화강석 베이지 #dfd9ce 외벽)
  */
 function drawVillaGranite(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#e7e5e4';
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, y, w, h);
 
   // 석재 줄눈
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+  ctx.fillStyle = 'rgba(168, 162, 158, 0.40)';
   for (let py = y; py < y + h; py += 32) {
     ctx.fillRect(x, py, w, 1.5);
   }
@@ -793,10 +794,10 @@ function drawVillaGranite(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /**
- * Slot 12: 살구색/크림색 회벽 단독주택 (#f5ebe0)
+ * Slot 12: 크림 아이보리 단독주택 (#f5f2eb)
  */
 function drawHouseCream(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  ctx.fillStyle = '#f5ebe0';
+  ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(x, y, w, h);
 
   const winX = x + 30;
@@ -891,12 +892,12 @@ function drawRoofBaseGutterAndAO(
 }
 
 /**
- * Slot 14: 밝은 콘크리트 그레이 옥상 (#94a3b8 ~ #cbd5e1)
+ * Slot 14: 콘크리트 그레이 옥상 (#78716c)
  */
 function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#cbd5e1');
-  grad.addColorStop(1, '#94a3b8');
+  grad.addColorStop(0, '#8d8680');
+  grad.addColorStop(1, '#78716c');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -928,12 +929,12 @@ function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: n
 }
 
 /**
- * Slot 17: 한국 특유의 에메랄드/세이지 그린 우레탄 방수 (#3b7a57)
+ * Slot 17: 우레탄 방수 에메랄드/세이지 그린 (#357a56)
  */
 function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#4d946c');
-  grad.addColorStop(1, '#3b7a57');
+  grad.addColorStop(0, '#448d67');
+  grad.addColorStop(1, '#357a56');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -965,39 +966,22 @@ function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 /**
- * Slot 15: 모던 슬레이트 그레이 지붕 (#64748b)
+ * Slot 15: 아파트 차분한 다크 그레이/브라운 슬래브 (#57534e)
  */
 function drawRoofAsphaltCharcoal(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#7889a0');
-  grad.addColorStop(1, '#64748b');
+  grad.addColorStop(0, '#6b6660');
+  grad.addColorStop(1, '#57534e');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
-  // 슬레이트 슁글 가로선
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+  // 슬래브 팽창 줄눈
+  ctx.fillStyle = 'rgba(28, 25, 23, 0.35)';
   for (let py = y; py < y + h; py += 24) {
     ctx.fillRect(x, py, w, 1.5);
   }
-
-  drawRoofBaseGutterAndAO(ctx, x, y, w, h);
-  applyConcreteGrainNoise(ctx, x, y, w, h, 0.04);
-}
-
-/**
- * Slot 16: 적갈색 기와 및 테라코타 (#7c3f2c)
- */
-function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#944d37');
-  grad.addColorStop(1, '#7c3f2c');
-  ctx.fillStyle = grad;
-  ctx.fillRect(x, y, w, h);
-
-  // 기와 골 줄무늬
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
-  for (let py = y; py < y + h; py += 18) {
-    ctx.fillRect(x, py, w, 2);
+  for (let px = x; px < x + w; px += 36) {
+    ctx.fillRect(px, y, 1.5, h);
   }
 
   drawRoofBaseGutterAndAO(ctx, x, y, w, h);
@@ -1005,12 +989,32 @@ function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: num
 }
 
 /**
- * Slot 18: 선명한 코발트/징크 블루 강판 (#2b5b84)
+ * Slot 16: 테라코타 적갈색/브라운 & 기와 지붕 (#7c3a27 / #6e3222)
+ */
+function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
+  grad.addColorStop(0, '#8f4430');
+  grad.addColorStop(1, '#7c3a27');
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, w, h);
+
+  // 기와 골 줄무늬 (#6e3222)
+  ctx.fillStyle = 'rgba(110, 50, 34, 0.45)';
+  for (let py = y; py < y + h; py += 16) {
+    ctx.fillRect(x, py, w, 3);
+  }
+
+  drawRoofBaseGutterAndAO(ctx, x, y, w, h);
+  applyConcreteGrainNoise(ctx, x, y, w, h, 0.04);
+}
+
+/**
+ * Slot 18: 청색 강판 지붕 (#254e7a)
  */
 function drawRoofZincBlue(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#356e9e');
-  grad.addColorStop(1, '#2b5b84');
+  grad.addColorStop(0, '#346596');
+  grad.addColorStop(1, '#254e7a');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 

@@ -96,12 +96,12 @@ export function getAtlasSlotUV(slot: AtlasSlot): UVRect {
 // =============================================================================
 
 function drawApartmentFront(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 외벽 베이스: 실제 한국 아파트 특유의 따뜻한 크림 아이보리 (#f4f1ea)
-  ctx.fillStyle = '#f4f1ea';
+  // 1) 외벽 베이스: 실제 한국 아파트 특유의 밝은 크림 아이보리 (#f5f2eb)
+  ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(x, y, s, s);
 
-  // 미세 콘크리트 결 및 라이트 웜그레이(#e2e8f0) 투톤 패널 배분
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.55)';
+  // 미세 콘크리트 결 및 라이트 웜그레이(#eae3d5) 투톤 패널 배분
+  ctx.fillStyle = 'rgba(234, 227, 213, 0.65)';
   ctx.fillRect(x, y + s * 0.45, s, s * 0.55);
 
   ctx.fillStyle = 'rgba(203, 213, 225, 0.25)';
@@ -111,12 +111,12 @@ function drawApartmentFront(ctx: CanvasRenderingContext2D, x: number, y: number,
 
   // 2) 층간 콘크리트 슬래브 (상단 & 하단 마감: 1개 층 3.0m 기준)
   const slabH = 22;
-  // 상단 슬래브 (#e2e8f0 ~ #cbd5e1)
-  ctx.fillStyle = '#e2e8f0';
+  // 상단 슬래브 (#eae3d5 ~ #cbd5e1)
+  ctx.fillStyle = '#eae3d5';
   ctx.fillRect(x, y, s, slabH);
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x, y + slabH - 4, s, 4);
-  ctx.fillStyle = '#475569';
+  ctx.fillStyle = '#1e293b';
   ctx.fillRect(x, y + slabH, s, 2);
 
   // [입면 요철 강화] 층간 슬래브 하단 0.25m 폭(약 36px) 미세한 드롭 섀도우 그라데이션
@@ -206,8 +206,8 @@ function drawApartmentFront(ctx: CanvasRenderingContext2D, x: number, y: number,
 }
 
 function drawApartmentSide(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 외벽 베이스: 매끈한 크림 아이보리 콘크리트 외벽 (#f4f1ea)
-  ctx.fillStyle = '#f4f1ea';
+  // 1) 외벽 베이스: 매끈한 크림 아이보리 콘크리트 외벽 (#f5f2eb)
+  ctx.fillStyle = '#f5f2eb';
   ctx.fillRect(x, y, s, s);
 
   // 콘크리트 수직 패널 줄눈
@@ -259,8 +259,8 @@ function drawApartmentSide(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 function drawCommercialMid(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 화강석/타일 줄눈이 살아있는 베이지·그레이 스톤 외벽 (#d6d3d1)
-  ctx.fillStyle = '#d6d3d1';
+  // 1) 화강석/타일 줄눈이 살아있는 밝은 화강석 베이지 스톤 외벽 (#dfd9ce)
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, y, s, s);
 
   // 화강석 질감 미세 반점
@@ -420,24 +420,24 @@ function drawCurtainwallHigh(ctx: CanvasRenderingContext2D, x: number, y: number
 }
 
 function drawVillaResidential(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 한국 빌라/단독주택 특유의 적벽돌(#9a3412) 및 밝은 회벽(#f1f5f9) 외벽
-  ctx.fillStyle = '#9a3412';
+  // 1) 한국 빌라/단독주택 특유의 적벽돌(#8c3f2b) 및 밝은 베이지(#dfd9ce) 외벽
+  ctx.fillStyle = '#8c3f2b';
   ctx.fillRect(x, y, s, s);
 
-  // 상단 25% 구간 밝은 회벽 투톤 마감 (#f1f5f9)
-  ctx.fillStyle = '#f1f5f9';
+  // 상단 25% 구간 밝은 회벽 투톤 마감 (#dfd9ce)
+  ctx.fillStyle = '#dfd9ce';
   ctx.fillRect(x, y, s, s * 0.25);
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x, y + s * 0.25 - 4, s, 4);
 
-  // 벽돌 패턴 (#7c2d12 ~ #9a3412)
+  // 벽돌 패턴 (#8c3f2b)
   const bW = 32;
   const bH = 14;
   let row = 0;
   for (let py = y + s * 0.25; py < y + s; py += bH + 2) {
     const shift = (row % 2) * (bW * 0.5);
     for (let px = x - bW + shift; px < x + s; px += bW + 2) {
-      ctx.fillStyle = (row + px) % 3 === 0 ? '#7c2d12' : '#9a3412';
+      ctx.fillStyle = (row + px) % 3 === 0 ? '#7c2d12' : '#8c3f2b';
       ctx.fillRect(px, py, bW, bH);
     }
     row++;
@@ -536,15 +536,15 @@ function drawPublicFacility(ctx: CanvasRenderingContext2D, x: number, y: number,
 
 function drawRoofGreenUrethane(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
   // 1) 실제 한국 도심 중·저층 상가/빌라 우레탄 방수 옥상:
-  // 형광 제거, 차분한 세이지 그린(#2e5a44) 및 다크 올리브 그린(#365314) 실사 색감
+  // 실사 에메랄드/세이지 그린 (#357a56)
   const roofGrad = ctx.createRadialGradient(
     x + s * 0.45, y + s * 0.45, 40,
     x + s * 0.5, y + s * 0.5, s * 0.7
   );
-  roofGrad.addColorStop(0, '#365314'); // 다크 올리브
-  roofGrad.addColorStop(0.35, '#2e5a44'); // 세이지 그린
-  roofGrad.addColorStop(0.75, '#234433');
-  roofGrad.addColorStop(1, '#1b3528');
+  roofGrad.addColorStop(0, '#448d67');
+  roofGrad.addColorStop(0.4, '#357a56');
+  roofGrad.addColorStop(0.8, '#26573e');
+  roofGrad.addColorStop(1, '#1b3f2c');
   ctx.fillStyle = roofGrad;
   ctx.fillRect(x, y, s, s);
 
@@ -618,15 +618,15 @@ function drawRoofGreenUrethane(ctx: CanvasRenderingContext2D, x: number, y: numb
 }
 
 function drawRoofBlueZinc(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 차분한 다크 네이비 슬레이트 지붕 (#1e3a8a ~ #1e293b)
-  ctx.fillStyle = '#1e3a8a';
+  // 1) 청색 강판 지붕 (#254e7a)
+  ctx.fillStyle = '#254e7a';
   ctx.fillRect(x, y, s, s);
 
   // 2) 돌출 이음(Standing Seam) 리브 라인 (세로 줄무늬)
   const ribStep = 24;
   for (let px = x; px < x + s; px += ribStep) {
     // 하이라이트
-    ctx.fillStyle = '#3b82f6';
+    ctx.fillStyle = '#38bdf8';
     ctx.fillRect(px, y, 1.5, s);
     // 섀도우
     ctx.fillStyle = '#0f172a';
@@ -647,18 +647,18 @@ function drawRoofBlueZinc(ctx: CanvasRenderingContext2D, x: number, y: number, s
 }
 
 function drawRoofBrownShingle(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 차분한 테라코타 브라운 베이스 (#7c2d12 ~ #5c1d06)
-  ctx.fillStyle = '#7c2d12';
+  // 1) 테라코타 적갈색/브라운 & 기와 베이스 (#7c3a27 / #6e3222)
+  ctx.fillStyle = '#7c3a27';
   ctx.fillRect(x, y, s, s);
 
-  // 비늘형 아스팔트 슁글 타일
+  // 비늘형 아스팔트 슁글/기와 타일
   const sW = 40;
   const sH = 20;
   let r = 0;
   for (let py = y; py < y + s; py += sH) {
     const shift = (r % 2) * (sW * 0.5);
     for (let px = x - sW + shift; px < x + s; px += sW) {
-      ctx.fillStyle = (r + px) % 3 === 0 ? '#9a3412' : (r + px) % 3 === 1 ? '#7c2d12' : '#5c1d06';
+      ctx.fillStyle = (r + px) % 3 === 0 ? '#8f4430' : (r + px) % 3 === 1 ? '#7c3a27' : '#6e3222';
       ctx.fillRect(px, py, sW - 1, sH - 1);
       ctx.fillStyle = '#1c1917';
       ctx.fillRect(px, py + sH - 2, sW - 1, 2);
@@ -668,8 +668,8 @@ function drawRoofBrownShingle(ctx: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 function drawRoofConcreteCool(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
-  // 1) 대단지 아파트 및 오피스 옥상: 웨더링된 콘크리트 웜 그레이 (#64748b) 및 다크 차콜 (#475569)
-  ctx.fillStyle = '#64748b';
+  // 1) 아파트 및 오피스 옥상: 차분한 다크 그레이/브라운 슬래브 (#57534e) 및 콘크리트 그레이 (#78716c)
+  ctx.fillStyle = '#57534e';
   ctx.fillRect(x, y, s, s);
 
   // 콘크리트 팽창 줄눈 (Expansion Joints)

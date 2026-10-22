@@ -48,6 +48,10 @@ export function extractRenderedVectorBuildings(
 
   try {
     const targetLayers = [
+      'bldg-ground-ao',
+      'real-bldg-ground-ao',
+      'fusion-bldg-ground-ao',
+      'bldg-tier2-mainwall',
       'building-vector-carrier',
       'bldg-tier2-facade',
       'bldg-tier1-podium',
@@ -210,31 +214,35 @@ export function extractRenderedVectorBuildings(
         props.hei || props.HEI || props.render_height || props.height || props.bld_hgt || 0
       );
 
-      let renderHeight = rawHei >= 8.0 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : 0);
+      let renderHeight = rawHei >= 3.0 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : 0);
 
-      // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (최소 8.0m 이상 볼륨 강제)
-      if (!renderHeight || renderHeight < 8.0) {
+      // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (최소 4.5m 이상 볼륨 강제)
+      if (!renderHeight || renderHeight < 4.0) {
         if (isMilitary) {
-          // 군 표준 병영막사 및 군수창고: 2층~3층 (8m~12m)
+          // 군 표준 병영막사 및 군수창고: 1층~3층 (4.5m~9.5m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
-          renderHeight = 8.0 + seed * 4.0; // 8.0m ~ 12.0m
+          renderHeight = 4.5 + seed * 4.5;
         } else if (isApartment) {
-          // 한국형 아파트 단지(원주·춘천 등): 15층~25층 (45m~75m)
+          // 한국형 아파트 단지(원주·춘천 등): 12층~25층 (36m~75m)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
-          const aptStories = Math.round(15 + seed * 10);
-          renderHeight = aptStories * 3.0; // 45m ~ 75m
+          const aptStories = Math.round(12 + seed * 13);
+          renderHeight = aptStories * 3.0; // 36m ~ 75m
         } else if (isCommercial) {
-          // 시내 상가·원룸·근린생활 블록: 4층~6층 (12m~22m 규모의 탄탄한 도시 블록)
+          // 시내 상가·원룸·근린생활 블록: 3층~6층 (10m~19m)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
-          renderHeight = 12.0 + seed * 10.0; // 12m ~ 22m
+          renderHeight = 10.0 + seed * 9.0; // 10m ~ 19m
         } else {
-          // 단독주택 및 다세대 빌라: 2.5층~4층 (8m~14m)
+          // 단독주택 및 다세대 빌라: 1층~3층 (4.5m~10m)
           const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-          renderHeight = 8.0 + seed * 6.0; // 8m ~ 14m
+          renderHeight = 4.5 + seed * 5.0; // 4.5m ~ 9.5m
         }
       }
 
       const levels = rawFlr >= 1 ? rawFlr : Math.max(1, Math.round(renderHeight / 3.2));
+
+      // 지붕 색상 실사 팔레트
+      const seedVal = Math.abs(Math.floor(cLng * 100000 + cLat * 100000)) % 100;
+      let computedRoofCol = isApartment ? '#57534e' : isCommercial ? (seedVal < 45 ? '#357a56' : seedVal < 75 ? '#7c3a27' : '#78716c') : (seedVal < 40 ? '#6e3222' : seedVal < 70 ? '#254e7a' : '#357a56');
 
       uniqueFeatures.push({
         type: 'Feature',
@@ -246,11 +254,11 @@ export function extractRenderedVectorBuildings(
           height: renderHeight,
           levels,
           grnd_flr: rawFlr || levels,
-          roofShape: isMilitary ? 'gabled' : (props['roof:shape'] || props.roof_shape || 'flat'),
-          roofColour: isMilitary ? '#1e3a8a' : (props['roof:colour'] || '#334155'),
+          roofShape: isMilitary ? 'gabled' : (props['roof:shape'] || props.roof_shape || (isApartment || isCommercial ? 'flat' : 'gabled')),
+          roofColour: props['roof:colour'] || props['roof:color'] || computedRoofCol,
           usageType: isApartment ? 'apartment' : isMilitary ? 'military' : isCommercial ? 'commercial' : 'residential',
           isMilitaryOrPublic: isMilitary,
-          color: isApartment ? '#F4F1EA' : isMilitary ? '#CBD5E1' : isCommercial ? '#E2E8F0' : '#8C3B2B',
+          color: isApartment ? '#f5f2eb' : isMilitary ? '#ece7de' : isCommercial ? '#dfd9ce' : '#8c3f2b',
           bld_category: isApartment ? 'apartment' : isMilitary ? 'military' : isCommercial ? 'commercial' : 'residential',
           source: 'openfreemap',
         },

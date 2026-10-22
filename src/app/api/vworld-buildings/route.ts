@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 function classifyBuilding(name = '', detailName = '') {
   const combined = `${name} ${detailName}`.toLowerCase();
 
-  // 1. 대형 아파트 단지 (#F8FAFC)
+  // 1. 대형 아파트 단지 (#f5f2eb)
   if (
     combined.includes('아파트') ||
     combined.includes('apt') ||
@@ -23,11 +23,12 @@ function classifyBuilding(name = '', detailName = '') {
     return {
       bld_category: 'apartment' as const,
       bld_category_label: '공동주택·아파트',
-      color: '#F8FAFC',
+      color: '#f5f2eb',
+      roofColour: '#57534e',
     };
   }
 
-  // 2. 단독/연립 주택가 (#FDE68A)
+  // 2. 단독/연립 주택가 (#8c3f2b)
   if (
     combined.includes('빌라') ||
     combined.includes('연립') ||
@@ -41,11 +42,12 @@ function classifyBuilding(name = '', detailName = '') {
     return {
       bld_category: 'residential' as const,
       bld_category_label: '단독·연립주택',
-      color: '#FDE68A',
+      color: '#8c3f2b',
+      roofColour: '#6e3222',
     };
   }
 
-  // 3. 공공청사 / 군사시설 (#93C5FD)
+  // 3. 공공청사 / 군사시설 (#ece7de)
   if (
     combined.includes('청사') ||
     combined.includes('시청') ||
@@ -73,11 +75,12 @@ function classifyBuilding(name = '', detailName = '') {
     return {
       bld_category: 'public_military' as const,
       bld_category_label: '공공청사·군사·교육시설',
-      color: '#93C5FD',
+      color: '#ece7de',
+      roofColour: '#254e7a',
     };
   }
 
-  // 4. 상업 / 업무시설 (#BAE6FD)
+  // 4. 상업 / 업무시설 (#dfd9ce)
   if (
     combined.includes('타워') ||
     combined.includes('빌딩') ||
@@ -98,15 +101,17 @@ function classifyBuilding(name = '', detailName = '') {
     return {
       bld_category: 'commercial' as const,
       bld_category_label: '상업·업무시설',
-      color: '#BAE6FD',
+      color: '#dfd9ce',
+      roofColour: '#357a56',
     };
   }
 
-  // 5. 일반 건축물 (#F1F5F9)
+  // 5. 일반 건축물 (#eae3d5)
   return {
     bld_category: 'general' as const,
     bld_category_label: '일반 건축물',
-    color: '#F1F5F9',
+    color: '#eae3d5',
+    roofColour: '#357a56',
   };
 }
 
@@ -321,7 +326,7 @@ export async function GET(request: NextRequest) {
           bldName = '일반 건축물';
         }
 
-        const { bld_category, bld_category_label, color } = classifyBuilding(
+        const { bld_category, bld_category_label, color, roofColour } = classifyBuilding(
           bldName,
           buldNmDc
         );
@@ -395,6 +400,8 @@ export async function GET(request: NextRequest) {
             bld_category,
             bld_category_label,
             color,
+            roofColour,
+            roofColor: roofColour,
             source: 'vworld',
           },
           geometry: item.geometry,

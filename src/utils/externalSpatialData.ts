@@ -217,19 +217,28 @@ export function applyKoreanSkylineRules(
   finalHeight = Math.max(3.2, finalHeight);
   const finalLevels = rawLevels >= 1 ? rawLevels : Math.max(1, Math.round(finalHeight / 3.2));
 
-  let color = regStyle.wallR > 0.9 && regStyle.wallB > 0.9 ? '#F8FAFC' : (regStyle.bldType === 1.0 ? '#BAE6FD' : (regStyle.bldType === 3.0 ? '#CBD5E1' : '#FDE68A'));
+  let color = regStyle.bldType === 2.0 ? '#f5f2eb' : (regStyle.bldType === 1.0 ? '#dfd9ce' : (regStyle.bldType === 3.0 ? '#ece7de' : '#8c3f2b'));
   if (rawProps['building:colour'] || rawProps.building_colour) {
     color = rawProps['building:colour'] || rawProps.building_colour;
   } else if (rawProps.color) {
     color = rawProps.color;
   }
 
-  const roofShape = rawProps['roof:shape'] || rawProps.roof_shape || regStyle.roofShape;
-  const roofColour = rawProps['roof:colour'] || rawProps.roof_color || (regStyle.roofSlotId === 17.0 ? '#2e5a44' : regStyle.roofSlotId === 16.0 ? '#7c2d12' : regStyle.roofSlotId === 18.0 ? '#1e3a8a' : '#334155');
-
+  const isApartment = regStyle.bldType === 2.0 || rawProps.building === 'apartments' || rawProps.usageType === 'apartment';
+  const isCommercial = regStyle.bldType === 1.0 || rawProps.usageType === 'commercial';
   const isMilitary = regStyle.bldType === 3.0 || rawProps.isMilitaryOrPublic === true;
   const isPublicOrCampus = regStyle.category === 'public_innovation_hq' || regStyle.bldType === 1.0;
 
+  const defaultRoofColor = isApartment
+    ? '#57534e'
+    : isCommercial
+    ? (regStyle.roofSlotId === 17.0 ? '#357a56' : regStyle.roofSlotId === 16.0 ? '#7c3a27' : '#78716c')
+    : isMilitary
+    ? '#6e3222'
+    : (regStyle.roofSlotId === 16.0 ? '#6e3222' : regStyle.roofSlotId === 18.0 ? '#254e7a' : '#357a56');
+
+  const roofShape = rawProps['roof:shape'] || rawProps.roof_shape || regStyle.roofShape;
+  const roofColour = rawProps['roof:colour'] || rawProps.roof_color || defaultRoofColor;
   return {
     height: finalHeight,
     levels: finalLevels,
@@ -402,15 +411,76 @@ export async function fetchVworldBuildings(
 }
 
 // -----------------------------------------------------------------------------
-// [외부 소스 3: OpenFreeMap 오픈 벡터 타일 0ms 즉시 추출]
+// [외부 소스 3: OpenFreeMap 오픈 벡터 타일 0ms 즉시 추출 및 결합]
 // -----------------------------------------------------------------------------
 export function extractOpenFreeMapBuildings(
-  _map: maplibregl.Map
+  map: maplibregl.Map
 ): ExternalSpatialBuildingFeature[] {
-  // [1단계: 렉 유발 querySourceFeatures / queryRenderedFeatures JS 6,985동 루프 전면 중단]
-  // GPU 다층 슬라이싱 엔진(gpuRealisticBuildingStack)이 C++/WebGL 셰이더로 100% 직접 렌더링하므로
-  // 메인 스레드에서 수천 개 건물을 매번 역직렬화 및 OBB 삼각화 계산하지 않음 (60fps 보장).
-  return [];
+  if (!map) return [];
+  try {
+    const vectorSources = ['openmaptiles-vector', 'openfreemap', 'openmaptiles'].filter((s) => map.getSource(s));
+    if (vectorSources.length === 0) return [];
+
+    const bounds = map.getBounds();
+    const minLng = bounds.getWest() - 0.008;
+    const maxLng = bounds.getEast() + 0.008;
+    const minLat = bounds.getSouth() - 0.008;
+    const maxLat = bounds.getNorth() + 0.008;
+
+    const seen = new Set<string>();
+    const results: ExternalSpatialBuildingFeature[] = [];
+
+    for (const srcId of vectorSources) {
+      const feats = map.querySourceFeatures(srcId, { sourceLayer: 'building' });
+      for (let i = 0; i < feats.length; i++) {
+        const f = feats[i];
+        if (!f.geometry || (f.geometry.type !== 'Polygon' && f.geometry.type !== 'MultiPolygon')) continue;
+
+        const coords = f.geometry.type === 'Polygon' ? f.geometry.coordinates[0]?.[0] : f.geometry.coordinates[0]?.[0]?.[0];
+        if (!coords) continue;
+        const [lng, lat] = coords;
+        if (lng < minLng || lng > maxLng || lat < minLat || lat > maxLat) continue;
+
+        const fid = f.id !== undefined && f.id !== null ? `ofm_${f.id}` : `ofm_${lng.toFixed(5)}_${lat.toFixed(5)}`;
+        if (seen.has(fid)) continue;
+        seen.add(fid);
+
+        const props = (f.properties || {}) as Record<string, any>;
+        const rawHei = Number(props.render_height || props.height || 0);
+        const rawFlr = Number(props.levels || props['building:levels'] || 0);
+        const isApt = props.building === 'apartments' || props.type === 'apartments';
+        const height = rawHei >= 3.0 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : (isApt ? 45.0 : 6.5));
+        const levels = rawFlr >= 1 ? rawFlr : Math.max(1, Math.round(height / 3.2));
+
+        results.push({
+          type: 'Feature',
+          id: fid,
+          properties: {
+            id: fid,
+            name: props.name || props.name_ko || (isApt ? '아파트' : '건물'),
+            buildingName: props.name || props.name_ko || '',
+            height,
+            levels,
+            grnd_flr: levels,
+            roofShape: props['roof:shape'] || 'flat',
+            roofColour: props['roof:colour'] || props['roof:color'],
+            usageType: isApt ? 'apartment' : 'general',
+            isMilitaryOrPublic: false,
+            bld_category: isApt ? 'apartment' : 'general',
+            source: 'openfreemap',
+            sources: { ofm: true, overpass: false, vworld: false },
+          },
+          geometry: f.geometry,
+        });
+
+        if (results.length >= 8000) break;
+      }
+      if (results.length > 0) break;
+    }
+    return results;
+  } catch {
+    return [];
+  }
 }
 
 // -----------------------------------------------------------------------------

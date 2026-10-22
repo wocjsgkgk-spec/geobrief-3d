@@ -162,7 +162,12 @@ export async function fetchLocalVworldBuildings(options: {
 
   const rId = match.matchedRegionId;
   const info = match.manifestInfo;
-  const fileName = useCoreOnly && info.coreFile ? info.coreFile : info.file;
+  // BBOX가 코어 경계(127.91~127.98, 37.31~37.37) 내에 완전히 들어올 때만 경량 coreFile 사용, 벗어나면 9.1만동 전체 파일 자동 연동
+  const isWithinCore = bbox
+    ? bbox[0] >= 127.91 && bbox[2] <= 127.98 && bbox[1] >= 37.31 && bbox[3] <= 37.37
+    : false;
+  const preferCore = useCoreOnly && isWithinCore && Boolean(info.coreFile);
+  const fileName = preferCore ? info.coreFile! : info.file;
   const cacheKey = `${rId}_${fileName}`;
 
   // 1) 인메모리 캐시 선확인
