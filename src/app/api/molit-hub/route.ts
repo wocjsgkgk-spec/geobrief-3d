@@ -21,13 +21,24 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // -----------------------------------------------------------------------------
-// [도우미] 공공데이터포털 인증키 표준화 (인코딩/디코딩 키 자동 감지)
+// [도우미] 공공데이터포털 인증키 표준화 (인코딩/디코딩 키 자동 감지 및 개별 서비스 분기)
 // -----------------------------------------------------------------------------
-function getNormalizedDataGoKrKey(): string {
-  const envKey =
-    process.env.DATA_GO_KR_API_KEY ||
-    process.env.NEXT_PUBLIC_DATA_GO_KR_KEY ||
-    '';
+function getNormalizedDataGoKrKey(serviceType?: 'building' | 'transport'): string {
+  let envKey = '';
+  if (serviceType === 'transport') {
+    envKey =
+      process.env.TRANSPORT_DB_API_KEY ||
+      process.env.DATA_GO_KR_TRANSPORT_KEY ||
+      process.env.DATA_GO_KR_API_KEY ||
+      process.env.NEXT_PUBLIC_DATA_GO_KR_KEY ||
+      '';
+  } else {
+    envKey =
+      process.env.DATA_GO_KR_BUILDING_KEY ||
+      process.env.DATA_GO_KR_API_KEY ||
+      process.env.NEXT_PUBLIC_DATA_GO_KR_KEY ||
+      '';
+  }
 
   const clean = envKey.trim();
   if (!clean || clean === 'your_public_data_portal_key_here') {
@@ -319,7 +330,7 @@ async function fetchMolitBldRgstHub(
   bun?: string,
   ji?: string
 ): Promise<any[]> {
-  const normKey = getNormalizedDataGoKrKey();
+  const normKey = apiKey || getNormalizedDataGoKrKey('building');
   if (!normKey) return [];
 
   // 강원도 신코드(51xxx) 및 구코드(42xxx) 매핑
@@ -407,7 +418,7 @@ async function fetchMolitBldRgstHub(
 // [2. 국토교통부 전국 교량 및 터널 현황정보 API 실시간 호출기]
 // -----------------------------------------------------------------------------
 async function fetchMolitBridgeTunnel(apiKey: string, sigunguName = '원주시'): Promise<any[]> {
-  const normKey = getNormalizedDataGoKrKey();
+  const normKey = apiKey || getNormalizedDataGoKrKey('transport');
   if (!normKey) return [];
 
   try {
@@ -473,8 +484,9 @@ export async function GET(req: NextRequest) {
   const ji = searchParams.get('ji') || undefined;
   const sigunguName = searchParams.get('sigunguName') || '원주시';
 
-  const normKey = getNormalizedDataGoKrKey();
-  const hasValidKey = Boolean(normKey && normKey.length > 10);
+  const buildingKey = getNormalizedDataGoKrKey('building');
+  const transportKey = getNormalizedDataGoKrKey('transport');
+  const hasValidKey = Boolean((buildingKey && buildingKey.length > 5) || (transportKey && transportKey.length > 5));
 
   const result: {
     success: boolean;
@@ -508,8 +520,8 @@ export async function GET(req: NextRequest) {
 
   // 1) 건축물대장 표제부 조회
   if (service === 'building-register' || service === 'all') {
-    if (hasValidKey) {
-      const liveBld = await fetchMolitBldRgstHub(normKey, sigunguCd, bjdongCd, bun, ji);
+    if (buildingKey && buildingKey.length > 5) {
+      const liveBld = await fetchMolitBldRgstHub(buildingKey, sigunguCd, bjdongCd, bun, ji);
       if (liveBld.length > 0) {
         result.buildingRegisters = liveBld;
         result.sourceStatus.buildingRegister = 'live_api';
@@ -529,8 +541,8 @@ export async function GET(req: NextRequest) {
 
   // 2) 전국 교량 및 터널 현황정보 조회
   if (service === 'bridge-tunnel' || service === 'all') {
-    if (hasValidKey) {
-      const liveBrdg = await fetchMolitBridgeTunnel(normKey, sigunguName);
+    if (transportKey && transportKey.length > 5) {
+      const liveBrdg = await fetchMolitBridgeTunnel(transportKey, sigunguName);
       if (liveBrdg.length > 0) {
         result.bridgesAndTunnels = liveBrdg;
         result.sourceStatus.bridgeTunnel = 'live_api';
