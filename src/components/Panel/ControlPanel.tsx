@@ -3385,7 +3385,7 @@ export const ControlPanel: React.FC = () => {
               <div>
                 <span className="text-slate-200 font-medium">지적도 (필지선) 표시</span>
                 <span className="text-[10px] text-amber-400/90 ml-1.5 font-mono">
-                  (브이월드 WMS)
+                  (브이월드 & 로컬)
                 </span>
               </div>
             </div>
@@ -3397,6 +3397,28 @@ export const ControlPanel: React.FC = () => {
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          {/* [Phase 2 신규] 브이월드 국토계획법 용도지역지구 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <Palette className="w-3.5 h-3.5 text-emerald-400" />
+              <div>
+                <span className="text-slate-200 font-medium">용도지역지구 (국토계획법)</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                  (주거·상업·공업·녹지)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.zoning}
+                onChange={() => handleToggleLayer('zoning')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
             </label>
           </div>
 

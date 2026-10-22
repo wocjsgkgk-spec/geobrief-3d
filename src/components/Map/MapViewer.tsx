@@ -537,6 +537,30 @@ export const MapViewer: React.FC = () => {
   // 지도 이동이나 줌 변경 시 기존 렌더링된 건물이 깜빡거리거나 소실되지 않도록 전역 영구 캐시 유지
   const persistentBuildingCacheRef = useRef<Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>>>(new Map());
 
+  // [MapLibre varint 10-byte overflow 원천 방지 헬퍼]
+  // 64비트 정수 범위를 초과하는 긴 숫자 ID가 MapLibre Protobuf varint 파싱 시 에러를 유발하지 않도록 문자열 접두어 강제 부여
+  const sanitizeGeoJsonForMapLibre = useCallback(
+    <T extends GeoJSON.FeatureCollection<any>>(fc: T, prefix = 'bld'): T => {
+      if (!fc || !fc.features || !Array.isArray(fc.features)) return fc;
+      const sanitized = fc.features.map((f, idx) => {
+        if (!f) return f;
+        let fid = f.id !== undefined && f.id !== null ? String(f.id) : `${prefix}_${idx + 1}`;
+        if (/^\d+$/.test(fid)) {
+          fid = `${prefix}_${fid}`;
+        }
+        return {
+          ...f,
+          id: fid,
+        };
+      });
+      return {
+        ...fc,
+        features: sanitized,
+      };
+    },
+    []
+  );
+
   const getBuildingFeatureKey = useCallback(
     (f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>, idx: number): string => {
       const props = (f.properties || {}) as Record<string, any>;
@@ -582,6 +606,14 @@ export const MapViewer: React.FC = () => {
       newFeatures.forEach((feat, idx) => {
         if (!feat || !feat.geometry) return;
         const key = getBuildingFeatureKey(feat, idx);
+
+        // [MapLibre Protobuf varint 10-byte 에러 완전 차단] 숫자 ID에 'bld_' 강제 접두
+        let fid = feat.id !== undefined && feat.id !== null ? String(feat.id) : `bld_${idx + 1}`;
+        if (/^\d+$/.test(fid)) {
+          fid = `bld_${fid}`;
+        }
+        feat.id = fid;
+
         const existing = persistentBuildingCacheRef.current.get(key);
         if (!existing) {
           persistentBuildingCacheRef.current.set(key, feat);
@@ -795,10 +827,11 @@ export const MapViewer: React.FC = () => {
               };
 
               // [1단계 직결] 지도의 메인 건물 소스에 실측 GeoJSON 즉시 주입
+              const safeGeoJSON = sanitizeGeoJsonForMapLibre(mergedGeoJSON, 'bld');
               const realSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
-              if (realSrc) realSrc.setData(mergedGeoJSON);
+              if (realSrc) realSrc.setData(safeGeoJSON);
               const fusionSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
-              if (fusionSrc) fusionSrc.setData(mergedGeoJSON);
+              if (fusionSrc) fusionSrc.setData(safeGeoJSON);
 
               setVworldDiagnostic({
                 status: 'connected',
@@ -847,10 +880,11 @@ export const MapViewer: React.FC = () => {
                       type: 'FeatureCollection',
                       features: merged,
                     };
+                    const safeUpdatedGeoJSON = sanitizeGeoJsonForMapLibre(updatedGeoJSON, 'bld');
                     const rSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
-                    if (rSrc) rSrc.setData(updatedGeoJSON);
+                    if (rSrc) rSrc.setData(safeUpdatedGeoJSON);
                     const fSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
-                    if (fSrc) fSrc.setData(updatedGeoJSON);
+                    if (fSrc) fSrc.setData(safeUpdatedGeoJSON);
                     mapInstance.triggerRepaint();
                   }
                 })
@@ -871,10 +905,11 @@ export const MapViewer: React.FC = () => {
               };
 
               // [1단계 직결] 지도의 메인 건물 소스에 실측 GeoJSON 즉시 주입 (실제 지상층수 grnd_flr * 3.2m 즉시 솟아오름)
+              const safeGeoJSON = sanitizeGeoJsonForMapLibre(mergedGeoJSON, 'bld');
               const realSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
-              if (realSrc) realSrc.setData(mergedGeoJSON);
+              if (realSrc) realSrc.setData(safeGeoJSON);
               const fusionSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
-              if (fusionSrc) fusionSrc.setData(mergedGeoJSON);
+              if (fusionSrc) fusionSrc.setData(safeGeoJSON);
 
               setVworldDiagnostic({
                 status: 'connected',
@@ -923,10 +958,11 @@ export const MapViewer: React.FC = () => {
                       type: 'FeatureCollection',
                       features: merged,
                     };
+                    const safeUpdatedGeoJSON = sanitizeGeoJsonForMapLibre(updatedGeoJSON, 'bld');
                     const rSrc = mapInstance.getSource('real-buildings-source') as maplibregl.GeoJSONSource;
-                    if (rSrc) rSrc.setData(updatedGeoJSON);
+                    if (rSrc) rSrc.setData(safeUpdatedGeoJSON);
                     const fSrc = mapInstance.getSource('fusion-buildings-source') as maplibregl.GeoJSONSource;
-                    if (fSrc) fSrc.setData(updatedGeoJSON);
+                    if (fSrc) fSrc.setData(safeUpdatedGeoJSON);
                     mapInstance.triggerRepaint();
                   }
                 })
@@ -2665,6 +2701,76 @@ export const MapViewer: React.FC = () => {
           }
         }
 
+        // [용도지역지구 실시간 GeoJSON 소스 & 레이어]
+        if (!map.getSource('vworld-zoning-source')) {
+          map.addSource('vworld-zoning-source', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          });
+        }
+        if (!map.getLayer('vworld-zoning-fill')) {
+          map.addLayer({
+            id: 'vworld-zoning-fill',
+            type: 'fill',
+            source: 'vworld-zoning-source',
+            minzoom: 10,
+            paint: {
+              'fill-color': ['coalesce', ['get', 'fillColor'], '#fbbf24'],
+              'fill-opacity': ['coalesce', ['get', 'fillOpacity'], 0.35],
+            },
+            layout: { visibility: layers.zoning ? 'visible' : 'none' },
+          });
+        }
+        if (!map.getLayer('vworld-zoning-line')) {
+          map.addLayer({
+            id: 'vworld-zoning-line',
+            type: 'line',
+            source: 'vworld-zoning-source',
+            minzoom: 10,
+            paint: {
+              'line-color': ['coalesce', ['get', 'strokeColor'], '#92400e'],
+              'line-width': 1.5,
+              'line-opacity': 0.85,
+            },
+            layout: { visibility: layers.zoning ? 'visible' : 'none' },
+          });
+        }
+
+        // [로컬 연속지적도 GeoJSON 소스 & 레이어]
+        if (!map.getSource('local-cadastral-source')) {
+          map.addSource('local-cadastral-source', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          });
+        }
+        if (!map.getLayer('local-cadastral-fill')) {
+          map.addLayer({
+            id: 'local-cadastral-fill',
+            type: 'fill',
+            source: 'local-cadastral-source',
+            minzoom: 12,
+            paint: {
+              'fill-color': ['coalesce', ['get', 'fillColor'], '#fef08a'],
+              'fill-opacity': 0.28,
+            },
+            layout: { visibility: layers.cadastral ? 'visible' : 'none' },
+          });
+        }
+        if (!map.getLayer('local-cadastral-line')) {
+          map.addLayer({
+            id: 'local-cadastral-line',
+            type: 'line',
+            source: 'local-cadastral-source',
+            minzoom: 12,
+            paint: {
+              'line-color': '#334155',
+              'line-width': 1.2,
+              'line-opacity': 0.85,
+            },
+            layout: { visibility: layers.cadastral ? 'visible' : 'none' },
+          });
+        }
+
         // 3D 건축물 레이어들을 맵 스타일 최상단으로 강제 승격
         promoteBuildingLayersToTop(map);
       } catch (vectorErr) {
@@ -4022,7 +4128,7 @@ export const MapViewer: React.FC = () => {
     };
   }, [completedPolygon, isMapLoaded, movePolygon, rotatePolygon]);
 
-  // [Phase 2 고도화] 15. 브이월드 연속지적도(필지선) 레이어 토글
+  // [Phase 2 고도화] 15. 브이월드 연속지적도(필지선) 및 로컬 지적 GeoJSON 레이어 토글
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
@@ -4034,7 +4140,63 @@ export const MapViewer: React.FC = () => {
     if (map.getLayer('cadastral-parcels-line')) {
       map.setLayoutProperty('cadastral-parcels-line', 'visibility', vis);
     }
-  }, [layers.cadastral, isMapLoaded]);
+    if (map.getLayer('local-cadastral-fill')) {
+      map.setLayoutProperty('local-cadastral-fill', 'visibility', vis);
+    }
+    if (map.getLayer('local-cadastral-line')) {
+      map.setLayoutProperty('local-cadastral-line', 'visibility', vis);
+    }
+
+    if (layers.cadastral) {
+      try {
+        const bounds = map.getBounds();
+        const bboxStr = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+        fetch(`/api/cadastral-local?bbox=${bboxStr}&regionId=${selectedRegionId}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.features) {
+              const src = map.getSource('local-cadastral-source') as maplibregl.GeoJSONSource;
+              if (src) src.setData(sanitizeGeoJsonForMapLibre(data.features, 'parcel'));
+            }
+          })
+          .catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+  }, [layers.cadastral, isMapLoaded, selectedRegionId]);
+
+  // [Phase 2 신규] 브이월드 국토계획법 용도지역지구 레이어 토글
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
+    const vis = layers.zoning ? 'visible' : 'none';
+    if (map.getLayer('vworld-zoning-fill')) {
+      map.setLayoutProperty('vworld-zoning-fill', 'visibility', vis);
+    }
+    if (map.getLayer('vworld-zoning-line')) {
+      map.setLayoutProperty('vworld-zoning-line', 'visibility', vis);
+    }
+
+    if (layers.zoning) {
+      try {
+        const bounds = map.getBounds();
+        const bboxStr = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+        fetch(`/api/vworld-zoning?bbox=${bboxStr}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.features) {
+              const src = map.getSource('vworld-zoning-source') as maplibregl.GeoJSONSource;
+              if (src) src.setData(sanitizeGeoJsonForMapLibre(data.features, 'zone'));
+            }
+          })
+          .catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+  }, [layers.zoning, isMapLoaded]);
 
   // [Phase 2 고도화] 16. 부지 폴리곤 렌더링 스타일(사선 빗금 / 컬러) 동적 전환
   useEffect(() => {
@@ -4253,6 +4415,33 @@ export const MapViewer: React.FC = () => {
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
+        // [신규] 용도지역지구 또는 연속지적도 필지 클릭 처리
+        const landLayers = ['vworld-zoning-fill', 'local-cadastral-fill'].filter((l) => map.getLayer(l));
+        const landFeatures = landLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: landLayers }) : [];
+        if (landFeatures.length > 0) {
+          const landFeat = landFeatures[0];
+          const lp = (landFeat.properties || {}) as Record<string, any>;
+          const clickCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+          const projected = map.project(clickCoords);
+
+          setSelectedBuilding({
+            name: lp.zoneName || lp.jibun || '토지·필지 정보',
+            category: lp.categoryLabel || lp.jimokLabel || '용도지역지구',
+            levels: 0,
+            height: 0,
+            center: clickCoords,
+            screenPos: { x: projected.x, y: projected.y },
+            rawProperties: {
+              ...(lp.zoneName ? { '용도지역': lp.zoneName } : {}),
+              ...(lp.maxBcRat ? { '건폐율 기준': `최대 ${lp.maxBcRat}% 이하` } : {}),
+              ...(lp.maxVlRat ? { '용적률 기준': `최대 ${lp.maxVlRat}% 이하` } : {}),
+              ...(lp.legalStandard ? { '법적 근거': lp.legalStandard } : {}),
+              ...(lp.jibun ? { '지번': lp.jibun } : {}),
+              ...(lp.jimokLabel ? { '지목': lp.jimokLabel } : {}),
+              ...(lp.pnu ? { 'PNU(고유번호)': lp.pnu } : {}),
+            },
+          });
+        }
         return;
       }
 

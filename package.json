@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "convert-vworld": "node scripts/ingest-vworld-data.mjs"
+    "convert-vworld": "node scripts/ingest-vworld-data.mjs",
+    "convert-cadastral": "node scripts/load-cadastral.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.4.0",

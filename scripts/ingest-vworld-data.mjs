@@ -438,7 +438,9 @@ export async function convertVworldShp(shpPath, dbfPath, shxPath, prjPath, optio
         displayName = bdtypNm || '건축물';
       }
 
-      const featureId = rawProps.A1 || rawProps.A0 || `vw_loc_${matchedCount}`;
+      // [보안/호환성] 28자리 숫자 ID가 MapLibre Protobuf varint 64비트(10바이트) 오버플로우를 유발하지 않도록 'bld_' 접두어 강제 부여
+      const rawId = rawProps.A1 || rawProps.A0 || `vw_loc_${matchedCount}`;
+      const featureId = String(rawId).startsWith('bld_') ? String(rawId) : `bld_${rawId}`;
 
       const feature = {
         type: 'Feature',

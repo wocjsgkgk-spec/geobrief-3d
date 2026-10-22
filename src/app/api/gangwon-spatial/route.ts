@@ -96,6 +96,36 @@ function parseJimok(raw: string = '') {
   );
 }
 
+async function fetchLocalCadastralParcels(bbox: [number, number, number, number], regionId = 'wonju'): Promise<any[]> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    let filePath = path.join(process.cwd(), 'public/data/cadastral', `${regionId}_core.geojson`);
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(process.cwd(), 'public/data/cadastral', `${regionId}.geojson`);
+    }
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const json = JSON.parse(raw);
+      const features = json.features || [];
+      const [minLng, minLat, maxLng, maxLat] = bbox;
+      const pad = 0.005;
+      return features.filter((f: any) => {
+        const coords =
+          f.geometry.type === 'Polygon'
+            ? f.geometry.coordinates[0]?.[0]
+            : f.geometry.coordinates[0]?.[0]?.[0];
+        if (!coords) return false;
+        const [lng, lat] = coords;
+        return lng >= minLng - pad && lng <= maxLng + pad && lat >= minLat - pad && lat <= maxLat + pad;
+      });
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
 // -----------------------------------------------------------------------------
 // [1. 브이월드 Data 2.0 수집기: 3.5초 타임아웃]
 // -----------------------------------------------------------------------------
@@ -393,10 +423,15 @@ export async function GET(req: NextRequest) {
     promises.push(Promise.resolve([]));
   }
 
-  // (2) 브이월드 연속지적도
+  // (2) 연속지적도 (1순위: 로컬 인제스트 데이터 -> 2순위: 실시간 브이월드 LP_PA_CBND_BUBUN WFS)
   if (requestedLayers.includes('parcels')) {
     promises.push(
-      fetchVworldDataLayer('LP_PA_CBND_BUBUN', bbox, vworldApiKey, 3500).catch(() => [])
+      fetchLocalCadastralParcels(bbox, currentRegion.id)
+        .then((localParcels) => {
+          if (localParcels.length > 0) return localParcels;
+          return fetchVworldDataLayer('LP_PA_CBND_BUBUN', bbox, vworldApiKey, 3500).catch(() => []);
+        })
+        .catch(() => fetchVworldDataLayer('LP_PA_CBND_BUBUN', bbox, vworldApiKey, 3500).catch(() => []))
     );
   } else {
     promises.push(Promise.resolve([]));
@@ -503,6 +538,9 @@ export async function GET(req: NextRequest) {
   // (B) 지적도 필지 가공
   const parsedParcels = rawParcels.map((f: any, idx: number) => {
     const p = f.properties || {};
+    if (p.source === 'cadastral_local') {
+      return f;
+    }
     const rawJimok = p.jimok || p.jibun_jimok || (p.jibun ? p.jibun.replace(/[0-9-\s]/g, '') : '');
     const jimokInfo = parseJimok(rawJimok);
     return {

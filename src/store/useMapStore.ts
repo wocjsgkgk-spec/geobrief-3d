@@ -240,6 +240,7 @@ interface MapStoreState {
     roads: boolean;
     demContours: boolean;
     cadastral: boolean; // 브이월드 연속지적도(필지선)
+    zoning: boolean; // 브이월드 국토계획법 용도지역지구 (주거·상업·공업·녹지)
     ssaoPostProcessing: boolean; // 디지털 트윈 SSAO & Bloom 후처리
     firstLogisticsSmartCity: boolean; // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
     proceduralTrees: boolean; // [4단계: 3D 식생·가로수 표시 (InstancedMesh)]
@@ -571,6 +572,7 @@ export const useMapStore = create<MapStoreState>()(
         roads: true,
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
+        zoning: false, // 브이월드 국토계획법 용도지역지구
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
         firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
         proceduralTrees: false, // [4단계: 3D 식생·가로수 표시 기본 OFF]

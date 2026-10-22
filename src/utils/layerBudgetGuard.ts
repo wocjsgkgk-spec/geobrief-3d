@@ -18,6 +18,8 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'streetsgl-road',
   'realistic-korean',
   'vworld-poi',
+  'vworld-zoning',
+  'local-cadastral',
   'bldg-',
   'real-',
   '3d-buildings',

@@ -277,13 +277,31 @@ function filterFeaturesByBbox(
   const bMinLat = minLat - padLat;
   const bMaxLat = maxLat + padLat;
 
-  return features.filter((f) => {
-    const coords =
-      f.geometry.type === 'Polygon'
-        ? f.geometry.coordinates[0]?.[0]
-        : f.geometry.coordinates[0]?.[0]?.[0];
-    if (!coords) return false;
-    const [lng, lat] = coords;
-    return lng >= bMinLng && lng <= bMaxLng && lat >= bMinLat && lat <= bMaxLat;
+  const filtered = bbox
+    ? features.filter((f) => {
+        const coords =
+          f.geometry.type === 'Polygon'
+            ? f.geometry.coordinates[0]?.[0]
+            : f.geometry.coordinates[0]?.[0]?.[0];
+        if (!coords) return false;
+        const [lng, lat] = coords;
+        return lng >= bMinLng && lng <= bMaxLng && lat >= bMinLat && lat <= bMaxLat;
+      })
+    : features;
+
+  // [MapLibre varint 10-byte overflow 방지] 순수 숫자 ID에 'bld_' 강제 접두
+  return filtered.map((f, idx) => {
+    let fid = f.id !== undefined && f.id !== null ? String(f.id) : `bld_local_${idx}`;
+    if (/^\d+$/.test(fid)) {
+      fid = `bld_${fid}`;
+    }
+    return {
+      ...f,
+      id: fid,
+      properties: {
+        ...(f.properties || {}),
+        id: fid,
+      },
+    };
   });
 }
