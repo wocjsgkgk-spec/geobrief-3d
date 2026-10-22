@@ -361,7 +361,7 @@ export const gpuBuildingLanduseWallColorExpr: any = [
     ['==', ['get', 'building'], 'government'],
     ['==', ['get', 'usageType'], 'military_public'],
     ['==', ['get', 'bld_category'], 'public_military'],
-    ['get', 'isMilitaryOrPublic'],
+    ['==', ['coalesce', ['get', 'isMilitaryOrPublic'], false], true],
   ],
   '#3B82F6',
 
@@ -406,17 +406,26 @@ export const gpuBuildingLanduseRoofColorExpr: any = [
     ['==', ['get', 'class'], 'military'],
     ['==', ['get', 'class'], 'public'],
     ['==', ['get', 'usageType'], 'military_public'],
-    ['get', 'isMilitaryOrPublic'],
+    ['==', ['coalesce', ['get', 'isMilitaryOrPublic'], false], true],
   ],
   '#2563EB',
 
   '#D97706',
 ];
 
+const HEIGHT_NUM_FOR_INTERPOLATE: any = [
+  'coalesce',
+  ['to-number', ['get', 'render_height']],
+  ['to-number', ['get', 'height']],
+  ['to-number', ['get', 'hei']],
+  ['*', ['to-number', ['coalesce', ['get', 'grnd_flr'], ['get', 'levels'], 3]], 3.3],
+  12,
+];
+
 export const gpuBuildingHeightSpectrumWallColorExpr: any = [
   'interpolate',
   ['linear'],
-  BUILDING_HEIGHT_EXPR,
+  HEIGHT_NUM_FOR_INTERPOLATE,
   4.0, '#06B6D4',  // 저층 (1~2층, 4m): 청록(Cyan)
   12.0, '#0EA5E9', // 저-중층 (3~4층, 12m): 스카이블루
   22.0, '#10B981', // 중층 (5~7층, 22m): 에메랄드
@@ -428,7 +437,7 @@ export const gpuBuildingHeightSpectrumWallColorExpr: any = [
 export const gpuBuildingHeightSpectrumRoofColorExpr: any = [
   'interpolate',
   ['linear'],
-  BUILDING_HEIGHT_EXPR,
+  HEIGHT_NUM_FOR_INTERPOLATE,
   4.0, '#0891B2',
   12.0, '#0284C7',
   22.0, '#059669',
