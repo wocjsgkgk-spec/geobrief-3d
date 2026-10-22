@@ -834,10 +834,20 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       return;
     }
 
-    this.lastFeatures = features;
+    // [요구사항 2] 비건물 및 4,500㎡ 초과 거대 구역 폴리곤 3D 압출 필터링
+    const validFeatures = features.filter((feat) => {
+      if (!feat || !feat.geometry) return false;
+      const p = (feat.properties || {}) as Record<string, any>;
+      if (p.is_non_building || p.is_site_boundary) return false;
+      if (p.UQ111 || p.UQ111_NM || p.zoneName || p.zone_nm || p.spfc_nm || p.landuse || p.leisure) return false;
+      if (p.areaSqm && p.areaSqm > 4500) return false;
+      return true;
+    });
+
+    this.lastFeatures = validFeatures;
 
     // [4단계 Frustum & 시선 벡터 우선순위 정렬] 카메라 정면 및 가시 영역 건물 우선 배치
-    let workingFeatures = features;
+    let workingFeatures = validFeatures;
     if (features.length > 1 && this.map) {
       try {
         const center = this.map.getCenter();

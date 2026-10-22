@@ -528,6 +528,29 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
       trueArea = Math.max(10, Math.abs(areaSum) * 0.5);
       truePerimeter = Math.max(10, pSum);
     }
+
+    // [요구사항 2] 바닥 면적이 4,500㎡를 초과하는 거대 구역 폴리곤(학교 부지, 아파트 단지 외곽, 군부대 경계 등) 및 비건물 3D 압출 즉시 제외
+    const isNonBuildingTag =
+      props.is_non_building === true ||
+      props.is_site_boundary === true ||
+      Boolean(props.UQ111 || props.UQ111_NM || props.uq111 || props.zoneName || props.zone_nm || props.spfc_nm || props.spfc_cd) ||
+      Boolean(props.landuse || props.leisure || props.boundary || props.admin_level || props.natural) ||
+      (Boolean(props.pnu || props.jimok || props.jibun) &&
+        !props.bd_mgt_sn &&
+        !props.buld_nm &&
+        !props.bldNm &&
+        !props.buildingName &&
+        !props.grnd_flr &&
+        !props.gro_flo_co &&
+        !props.grndFlrCnt &&
+        !props.hei &&
+        !props.heit &&
+        !props.height);
+
+    if (isNonBuildingTag || trueArea > 4500) {
+      continue;
+    }
+
     const aspectRatio = dimMax / Math.max(1, dimMin);
     const pToAreaRatio = truePerimeter / Math.sqrt(trueArea);
 

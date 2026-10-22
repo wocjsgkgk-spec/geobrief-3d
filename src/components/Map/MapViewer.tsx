@@ -622,6 +622,55 @@ export const MapViewer: React.FC = () => {
       let addedCount = 0;
       newFeatures.forEach((feat, idx) => {
         if (!feat || !feat.geometry) return;
+
+        // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역 구역, 공원/단지 landuse) 3D 건물 캐시 유입 100% 원천 차단
+        const p = (feat.properties || {}) as Record<string, any>;
+        if (p.is_non_building || p.is_site_boundary) return;
+        if (p.UQ111 || p.UQ111_NM || p.uq111 || p.zoneName || p.zone_nm || p.spfc_nm || p.spfc_cd) return;
+        if (p.landuse || p.leisure || p.boundary || p.admin_level || p.natural) return;
+
+        const isParcelWithoutBld =
+          Boolean(p.pnu || p.jimok || p.jibun) &&
+          !p.bd_mgt_sn &&
+          !p.buld_nm &&
+          !p.bldNm &&
+          !p.buildingName &&
+          !p.grnd_flr &&
+          !p.gro_flo_co &&
+          !p.grndFlrCnt &&
+          !p.hei &&
+          !p.heit &&
+          !p.height;
+        if (isParcelWithoutBld) return;
+
+        // [요구사항 2] 바닥 면적 4,500㎡ 초과 거대 구역 폴리곤(학교 부지, 아파트 단지 외곽, 군부대 경계 등) 3D 압출 즉시 제외
+        const coords =
+          feat.geometry.type === 'Polygon'
+            ? feat.geometry.coordinates[0]
+            : feat.geometry.coordinates[0]?.[0];
+        if (!coords || coords.length < 3) return;
+
+        let areaSum = 0;
+        const n = coords.length;
+        const cLat = coords[0][1];
+        const cosLat = Math.cos((cLat * Math.PI) / 180);
+        const mPerLng = 111320 * cosLat;
+        const mPerLat = 110574;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const x1 = coords[i][0] * mPerLng;
+          const y1 = coords[i][1] * mPerLat;
+          const x2 = coords[j][0] * mPerLng;
+          const y2 = coords[j][1] * mPerLat;
+          areaSum += x1 * y2 - x2 * y1;
+        }
+        const areaSqm = Math.abs(areaSum) * 0.5;
+        if (areaSqm > 4500) {
+          return;
+        }
+
+        feat.properties = { ...feat.properties, areaSqm };
+
         const key = getBuildingFeatureKey(feat, idx);
 
         // [MapLibre Protobuf varint 10-byte 에러 완전 차단] 숫자 ID에 'bld_' 강제 접두
@@ -2945,7 +2994,21 @@ export const MapViewer: React.FC = () => {
             source: 'molit-bridge-tunnel-source',
             minzoom: 11,
             layout: {
-              'text-field': ['get', 'name'],
+              // [요구사항 1] 교량 명칭·제원 배지 (예: 치악교 (연장 280m, 폭 25m))
+              'text-field': [
+                'case',
+                ['all', ['has', 'lengthM'], ['>', ['to-number', ['get', 'lengthM'], 0], 0]],
+                [
+                  'concat',
+                  ['get', 'name'],
+                  ' (연장 ',
+                  ['to-string', ['get', 'lengthM']],
+                  'm, 폭 ',
+                  ['to-string', ['coalesce', ['get', 'widthM'], 20]],
+                  'm)',
+                ],
+                ['get', 'name'],
+              ],
               'text-size': 11,
               'text-offset': [0, 1.2],
               'text-anchor': 'top',
@@ -3320,6 +3383,9 @@ export const MapViewer: React.FC = () => {
     });
 
     mapRef.current = map;
+    if (typeof window !== 'undefined') {
+      (window as any).__map = map;
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       map.resize();
@@ -4730,8 +4796,8 @@ export const MapViewer: React.FC = () => {
 
       const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
       if (features.length === 0) {
-        // [신규 1] 국토교통부 전국 교량 및 터널 마커 클릭 처리
-        const btLayers = ['molit-bridge-tunnel-circles'].filter((l) => map.getLayer(l));
+        // [신규 1] 국토교통부 전국 교량 및 터널 마커/라벨 배지 클릭 처리
+        const btLayers = ['molit-bridge-tunnel-circles', 'molit-bridge-tunnel-labels'].filter((l) => map.getLayer(l));
         const btFeatures = btLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: btLayers }) : [];
         if (btFeatures.length > 0) {
           const btFeat = btFeatures[0];

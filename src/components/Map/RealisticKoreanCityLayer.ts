@@ -802,6 +802,34 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
           const areaSqm = Math.max(10, Math.abs(area2D) * 0.5);
 
+          // [요구사항 2] 바닥 면적이 4,500㎡를 초과하는 거대 구역 폴리곤(학교 운동장 포함 부지 전체, 아파트 단지 외곽 전체 경계, 군부대 부지 전체 경계 등) 3D 압출 즉시 제외
+          if (areaSqm > 4500) {
+            continue;
+          }
+
+          // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역, 공원/단지 landuse/leisure 경계) 3D 압출 100% 원천 차단
+          const featProps = (feat.properties || {}) as Record<string, any>;
+          const isNonBuildingTag =
+            featProps.is_non_building === true ||
+            featProps.is_site_boundary === true ||
+            Boolean(featProps.UQ111 || featProps.UQ111_NM || featProps.uq111 || featProps.zoneName || featProps.zone_nm || featProps.spfc_nm || featProps.spfc_cd) ||
+            Boolean(featProps.landuse || featProps.leisure || featProps.boundary || featProps.admin_level || featProps.natural) ||
+            (Boolean(featProps.pnu || featProps.jimok || featProps.jibun) &&
+              !featProps.bd_mgt_sn &&
+              !featProps.buld_nm &&
+              !featProps.bldNm &&
+              !featProps.buildingName &&
+              !featProps.grnd_flr &&
+              !featProps.gro_flo_co &&
+              !featProps.grndFlrCnt &&
+              !featProps.hei &&
+              !featProps.heit &&
+              !featProps.height);
+
+          if (isNonBuildingTag) {
+            continue;
+          }
+
           // 와인딩 오더 보정 (CCW)
           if (area2D < 0) {
             pts2D.reverse();
@@ -818,8 +846,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
 
           // [벤더링 6대 분류기 적용] 좌표 시드 및 면적·형상 기반 절대 실패 없는 한국형 실측 분류
-          const classified = classifyBuildingWithVendor(rawCoords, (feat.properties || {}) as any);
+          const classified = classifyBuildingWithVendor(rawCoords, featProps);
           const height = classified.height;
+          if (height <= 0) {
+            continue;
+          }
           const isApt = classified.type === 'apartment';
           const isComm = classified.type === 'commercial';
           const isMilitary = classified.type === 'military';
@@ -1327,65 +1358,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const mx = (lng - this.originLngLat[0]) * metersPerLng;
       const mz = -(lat - this.originLngLat[1]) * metersPerLat;
 
-      if (item.type === 'bridge') {
-        const lengthM = Number(item.lengthM || 140.0);
-        const widthM = Number(item.widthM || 22.0);
-        const pierHeightM = Number(item.pierHeightM || 10.0);
-        const pierCount = Math.max(2, Number(item.pierCount || Math.ceil(lengthM / 35)));
-        const deckThickness = 1.4;
-        const guardrailH = 1.0;
-        const guardrailW = 0.4;
-
-        const bridgeSubGroup = new THREE.Group();
-        bridgeSubGroup.position.set(mx, 0, mz);
-        const headingRad = (((item.heading || (item.name.includes('단구') ? 75 : 35))) * Math.PI) / 180;
-        bridgeSubGroup.rotation.y = headingRad;
-
-        // 1. Deck Slab (상판)
-        const deckGeo = new THREE.BoxGeometry(widthM, deckThickness, lengthM);
-        const deckMesh = new THREE.Mesh(deckGeo, this.bridgeMaterial);
-        deckMesh.position.set(0, pierHeightM + deckThickness / 2, 0);
-        bridgeSubGroup.add(deckMesh);
-
-        // 2. Left & Right Guardrails (양측 방호벽 난간)
-        const railGeo = new THREE.BoxGeometry(guardrailW, guardrailH, lengthM);
-        const leftRail = new THREE.Mesh(railGeo, this.guardrailMaterial);
-        leftRail.position.set(-widthM / 2 + guardrailW / 2, pierHeightM + deckThickness + guardrailH / 2, 0);
-        bridgeSubGroup.add(leftRail);
-
-        const rightRail = new THREE.Mesh(railGeo, this.guardrailMaterial);
-        rightRail.position.set(widthM / 2 - guardrailW / 2, pierHeightM + deckThickness + guardrailH / 2, 0);
-        bridgeSubGroup.add(rightRail);
-
-        // 3. Piers (하부 원기둥 교각 & 가로보)
-        const pierRadius = Math.min(1.3, widthM / 12);
-        const pierSpacing = lengthM / (pierCount + 1);
-
-        for (let p = 1; p <= pierCount; p++) {
-          const pZ = -lengthM / 2 + p * pierSpacing;
-
-          // Pier Cap Cross-beam (교각 상단 가로보)
-          const capGeo = new THREE.BoxGeometry(widthM - 1.6, 1.0, 2.4);
-          const capMesh = new THREE.Mesh(capGeo, this.bridgeMaterial);
-          capMesh.position.set(0, pierHeightM - 0.5, pZ);
-          bridgeSubGroup.add(capMesh);
-
-          // Twin Columns (2열 원기둥 교각)
-          const colH = pierHeightM - 1.0;
-          const colGeo = new THREE.CylinderGeometry(pierRadius, pierRadius, colH, 16);
-
-          const colOffset = widthM * 0.28;
-          const colLeft = new THREE.Mesh(colGeo, this.bridgeMaterial);
-          colLeft.position.set(-colOffset, colH / 2, pZ);
-          bridgeSubGroup.add(colLeft);
-
-          const colRight = new THREE.Mesh(colGeo, this.bridgeMaterial);
-          colRight.position.set(colOffset, colH / 2, pZ);
-          bridgeSubGroup.add(colRight);
-        }
-
-        this.bridgeGroup.add(bridgeSubGroup);
-      } else if (item.type === 'tunnel') {
+      // [요구사항 1] 공중부양 교량 3D 박스 메쉬 전면 삭제
+      // 교량(Bridge)은 국토부 단일 좌표에 가짜 박스를 띄우지 않고, 실제 도로 선형(LineString)을 따라가며
+      // MapLibre DEM 지형에 밀착된 콘크리트 상판(#e2e8f0) 및 난간 라인과 마커 배지로만 표출합니다.
+      if (item.type === 'tunnel') {
         const widthM = Number(item.widthM || 14.0);
         const heightM = Number(item.heightM || 6.5);
         const headingRad = (((item.heading || 40)) * Math.PI) / 180;

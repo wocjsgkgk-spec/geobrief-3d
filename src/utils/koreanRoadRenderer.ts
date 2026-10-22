@@ -13,6 +13,8 @@ import type { LayerSpecification } from 'maplibre-gl';
  * 한국형 실측 도로망 MapLibre 등록 통합 레이어 ID 목록
  */
 export const KOREAN_ROAD_LAYER_IDS: string[] = [
+  'road-bridge-casing',
+  'road-bridge-deck',
   'road-asphalt',
   'road-centerline',
   'road-lanes',
@@ -80,7 +82,85 @@ export function getKoreanRoadLayerDefinitions(
     false,
   ];
 
+  // [요구사항 1] 실제 지도 도로 레이어의 brunnel === 'bridge' / bridge === 'yes' 교량 선형 필터
+  const bridgeFilter: any = [
+    'any',
+    ['==', ['get', 'brunnel'], 'bridge'],
+    ['==', ['get', 'bridge'], 'yes'],
+    ['==', ['get', 'bridge'], 1],
+    ['==', ['get', 'bridge'], '1'],
+    ['==', ['get', 'class'], 'bridge'],
+  ];
+
   const layers: LayerSpecification[] = [
+    // -------------------------------------------------------------------------
+    // 0-A. 교량 외곽 방호벽/난간 케이싱 라인 (road-bridge-casing)
+    // - 실제 도로 선형(LineString)을 따라 지형 고도(DEM)에 밀착된 짙은 그레이(#64748b) 난간
+    // -------------------------------------------------------------------------
+    {
+      id: 'road-bridge-casing',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 11,
+      maxzoom: 24,
+      filter: bridgeFilter,
+      paint: {
+        'line-color': '#64748b',
+        'line-opacity': 0.98,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          11, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 4.0, ['secondary', 'tertiary'], 2.6, 1.6],
+          13, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 7.5, ['secondary', 'tertiary'], 4.5, 2.6],
+          15, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 14.0, ['secondary', 'tertiary'], 7.5, 4.2],
+          16.5, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 22.0, ['secondary', 'tertiary'], 11.5, 6.5],
+          18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 36.0, ['secondary', 'tertiary'], 17.0, 9.5],
+          20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 64.0, ['secondary', 'tertiary'], 29.0, 15.0],
+        ],
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-B. 콘크리트 교량 상판 슬래브 레이어 (road-bridge-deck)
+    // - 요구사항 1: brunnel === 'bridge' 도로 선형을 따라 지형 DEM에 밀착된 콘크리트 상판(#e2e8f0)
+    // -------------------------------------------------------------------------
+    {
+      id: 'road-bridge-deck',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 11,
+      maxzoom: 24,
+      filter: bridgeFilter,
+      paint: {
+        'line-color': '#e2e8f0', // 콘크리트 교량 상판
+        'line-opacity': 1.0,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          11, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 3.2, ['secondary', 'tertiary'], 2.0, 1.2],
+          13, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 6.2, ['secondary', 'tertiary'], 3.6, 2.0],
+          15, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 12.0, ['secondary', 'tertiary'], 6.2, 3.4],
+          16.5, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 19.5, ['secondary', 'tertiary'], 9.8, 5.4],
+          18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 32.5, ['secondary', 'tertiary'], 14.8, 8.0],
+          20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 58.5, ['secondary', 'tertiary'], 25.8, 12.8],
+        ],
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
     // -------------------------------------------------------------------------
     // 1. 도로 본체 아스팔트 노면 레이어 (road-asphalt)
     // - 주간선도로: 짙은 다크 차콜 아스팔트 (#1E293B, 투명도 0.92)

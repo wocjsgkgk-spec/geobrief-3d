@@ -490,6 +490,30 @@ export async function GET(req: NextRequest) {
   for (const b of rawBuildings) {
     if (!b.geometry) continue;
     const p = b.properties || {};
+
+    // [요구사항 2] 비건물 및 4,500㎡ 초과 거대 구역 폴리곤 제외
+    if (p.is_non_building || p.is_site_boundary || p.UQ111 || p.zoneName || p.landuse || p.leisure) continue;
+
+    const coords = b.geometry.type === 'Polygon' ? b.geometry.coordinates[0] : b.geometry.coordinates[0]?.[0];
+    if (!coords || coords.length < 3) continue;
+
+    let areaSum = 0;
+    const n = coords.length;
+    const cLat = coords[0][1];
+    const cosLat = Math.cos((cLat * Math.PI) / 180);
+    const mPerLng = 111320 * cosLat;
+    const mPerLat = 110574;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const x1 = coords[i][0] * mPerLng;
+      const y1 = coords[i][1] * mPerLat;
+      const x2 = coords[j][0] * mPerLng;
+      const y2 = coords[j][1] * mPerLat;
+      areaSum += x1 * y2 - x2 * y1;
+    }
+    const areaSqm = Math.abs(areaSum) * 0.5;
+    if (areaSqm > 4500) continue;
+
     const grndFlr = Number(p.levels || p.gro_flo_co || p.grnd_flr || 0);
     const ugrndFlr = Number(p.ugrnd_flr || p.und_flo_co || 0);
     const height = Number(p.height || p.bd_hgt || p.hei || (grndFlr > 0 ? grndFlr * 3.3 : 8.0));
@@ -502,6 +526,7 @@ export async function GET(req: NextRequest) {
       properties: {
         ...p,
         id,
+        areaSqm,
         name: p.name || p.buld_nm || '건축물',
         buildingName: p.buildingName || p.buld_nm || '',
         dongName: p.dongName || '',
@@ -525,6 +550,27 @@ export async function GET(req: NextRequest) {
 
   // 2) Overpass 건물 결합
   for (const b of overpassData.buildings) {
+    if (!b.geometry) continue;
+    const coords = b.geometry.type === 'Polygon' ? b.geometry.coordinates[0] : b.geometry.coordinates[0]?.[0];
+    if (coords && coords.length >= 3) {
+      let areaSum = 0;
+      const n = coords.length;
+      const cLat = coords[0][1];
+      const cosLat = Math.cos((cLat * Math.PI) / 180);
+      const mPerLng = 111320 * cosLat;
+      const mPerLat = 110574;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const x1 = coords[i][0] * mPerLng;
+        const y1 = coords[i][1] * mPerLat;
+        const x2 = coords[j][0] * mPerLng;
+        const y2 = coords[j][1] * mPerLat;
+        areaSum += x1 * y2 - x2 * y1;
+      }
+      const areaSqm = Math.abs(areaSum) * 0.5;
+      if (areaSqm > 4500) continue;
+      b.properties.areaSqm = areaSqm;
+    }
     const id = b.id;
     if (!buildingsMap.has(id)) {
       buildingsMap.set(id, b);

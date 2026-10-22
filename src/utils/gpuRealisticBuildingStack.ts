@@ -39,6 +39,24 @@ export const gpuBuildingTotalHeightExpr: any = [
   ],
   [
     'case',
+    // 0. 비건물 / 부지 경계 / 연속지적도 필지 / 용도지역 / 면적 4,500㎡ 초과 시 높이 0m (3D 압출 즉시 제외)
+    [
+      'any',
+      ['==', ['get', 'is_non_building'], true],
+      ['==', ['get', 'is_site_boundary'], true],
+      ['>', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 0], 0], 4500],
+      ['has', 'UQ111'],
+      ['has', 'UQ111_NM'],
+      ['has', 'uq111'],
+      ['has', 'zoneName'],
+      ['has', 'zone_nm'],
+      ['has', 'spfc_nm'],
+      ['has', 'spfc_cd'],
+      ['has', 'landuse'],
+      ['has', 'leisure'],
+    ],
+    0,
+
     // 1. 이미 실측 높이(>= 8.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결, 0~2m 납작 건물 완전 금지)
     ['>=', ['var', 'declaredHeight'], 8.0],
     ['var', 'declaredHeight'],
@@ -424,6 +442,25 @@ export function createGpuBuildingStackLayers(
   const isGeojson = sourceId.endsWith('-source') || sourceId.includes('geojson') || !sourceLayer || sourceLayer === 'none';
   const srcLayerObj = isGeojson ? {} : { 'source-layer': sourceLayer || 'building' };
 
+  // [요구사항 2] 3D 건물 압출 레이어 필터: 비건물, 부지/필지 경계, 용도지역, 공원/단지(landuse) 및 4,500㎡ 초과 구역 100% 원천 차단
+  const buildingFilter: any = [
+    'all',
+    ['!=', ['get', 'is_non_building'], true],
+    ['!=', ['get', 'is_site_boundary'], true],
+    ['!=', ['get', 'layer_type'], 'cadastral'],
+    ['!=', ['get', 'layer_type'], 'zoning'],
+    ['<=', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 0], 0], 4500],
+    ['!', ['has', 'UQ111']],
+    ['!', ['has', 'UQ111_NM']],
+    ['!', ['has', 'uq111']],
+    ['!', ['has', 'zoneName']],
+    ['!', ['has', 'zone_nm']],
+    ['!', ['has', 'spfc_nm']],
+    ['!', ['has', 'spfc_cd']],
+    ['!', ['has', 'landuse']],
+    ['!', ['has', 'leisure']],
+  ];
+
   // Tier 0: 건물 바닥 접지 음영 (Ambient Occlusion Contact Shadow)
   // - 위성사진과 건물 바닥 경계선에 얇고 선명한 음영을 주어 건물이 바닥에 정확히 뿌리박혀 보이도록 정합
   const tier0GroundAO: maplibregl.LayerSpecification = {
@@ -431,6 +468,7 @@ export function createGpuBuildingStackLayers(
     type: 'line',
     source: sourceId,
     ...srcLayerObj,
+    filter: buildingFilter,
     minzoom: 12,
     maxzoom: 24,
     paint: {
@@ -476,6 +514,7 @@ export function createGpuBuildingStackLayers(
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
+    filter: buildingFilter,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -496,6 +535,7 @@ export function createGpuBuildingStackLayers(
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
+    filter: buildingFilter,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -516,6 +556,7 @@ export function createGpuBuildingStackLayers(
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
+    filter: buildingFilter,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -535,6 +576,7 @@ export function createGpuBuildingStackLayers(
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
+    filter: buildingFilter,
     minzoom: 11,
     maxzoom: 24,
     paint: {
@@ -556,6 +598,7 @@ export function createGpuBuildingStackLayers(
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
+    filter: buildingFilter,
     minzoom: 14.5,
     maxzoom: 24,
     paint: {

@@ -146,6 +146,47 @@ export function classifyBuildingWithVendor(
   // 1. 고유 시드 생성 (옆 건물과 절대 똑같아지지 않는 0 ~ 99 정수 해시)
   const seed = Math.abs(Math.floor(firstLng * 100000 + firstLat * 100000)) % 100;
 
+  // [요구사항 2] 연속지적도 필지, 용도지역 구역, 공원/단지(landuse) 경계 및 바닥면적 4,500㎡ 초과 거대 구역 3D 압출 즉시 차단
+  const isNonBuildingTag =
+    properties.is_non_building === true ||
+    properties.is_site_boundary === true ||
+    Boolean(properties.UQ111 || properties.UQ111_NM || properties.uq111 || properties.zoneName || properties.zone_nm || properties.spfc_nm || properties.spfc_cd) ||
+    Boolean(properties.landuse || properties.leisure || properties.boundary || properties.admin_level || properties.natural) ||
+    (Boolean(properties.pnu || properties.jimok || properties.jibun) &&
+      !properties.bd_mgt_sn &&
+      !properties.buld_nm &&
+      !properties.bldNm &&
+      !properties.buildingName &&
+      !properties.grnd_flr &&
+      !properties.gro_flo_co &&
+      !properties.grndFlrCnt &&
+      !properties.hei &&
+      !properties.heit &&
+      !properties.height);
+
+  if (isNonBuildingTag || areaSqm > 4500) {
+    return {
+      type: 'residential',
+      typeIndex: 0,
+      typeName: '부지/필지 경계 (3D 압출 제외)',
+      seed,
+      height: 0,
+      floors: 0,
+      areaSqm,
+      perimeter,
+      aspectRatio,
+      wallColor: '#cbd5e1',
+      wallColorRgb: [0.8, 0.83, 0.88],
+      roofColor: '#94a3b8',
+      roofColorRgb: [0.58, 0.64, 0.72],
+      atlasWallSlot: 'apt_warm_gray',
+      atlasRoofSlot: 'roof_concrete_warmgray',
+      hasParapet: false,
+      hasPenthouseCore: false,
+      isGabledRoof: false,
+    };
+  }
+
   // 속성 태그 및 명칭 정규화
   const name = String(
     properties.name || properties.name_ko || properties.buld_nm || properties.buildingName || properties.bldNm || ''

@@ -130,6 +130,51 @@ function mapBuildingAttributes(
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon
 ): ExternalSpatialBuildingProperties {
   const metrics = calculateMetrics(geometry);
+
+  // [요구사항 2] 바닥 면적 4,500㎡ 초과 거대 구역(학교 부지, 아파트 단지 외곽, 군부대 경계) 또는 비건물(지적 필지, 용도지역, landuse) 압출 차단
+  const isNonBuildingTag =
+    rawProps.is_non_building === true ||
+    rawProps.is_site_boundary === true ||
+    Boolean(rawProps.UQ111 || rawProps.UQ111_NM || rawProps.uq111 || rawProps.zoneName || rawProps.zone_nm || rawProps.spfc_nm || rawProps.spfc_cd) ||
+    Boolean(rawProps.landuse || rawProps.leisure || rawProps.boundary || rawProps.admin_level || rawProps.natural) ||
+    (Boolean(rawProps.pnu || rawProps.jimok || rawProps.jibun) &&
+      !rawProps.bd_mgt_sn &&
+      !rawProps.buld_nm &&
+      !rawProps.bldNm &&
+      !rawProps.buildingName &&
+      !rawProps.grnd_flr &&
+      !rawProps.gro_flo_co &&
+      !rawProps.grndFlrCnt &&
+      !rawProps.hei &&
+      !rawProps.heit &&
+      !rawProps.height);
+
+  if (isNonBuildingTag || metrics.approxArea > 4500) {
+    return {
+      name: '부지/필지 경계',
+      buildingName: '부지/필지 경계',
+      main_purps_nm: '부지경계',
+      grnd_flr: 0,
+      ugrnd_flr: 0,
+      levels: 0,
+      height: 0,
+      min_height: 0,
+      roofShape: 'flat',
+      roofColour: '#94a3b8',
+      usageType: 'general' as any,
+      isMilitaryOrPublic: false,
+      bld_category: 'site_boundary',
+      bld_category_label: '부지/필지 경계 (압출 제외)',
+      color: '#cbd5e1',
+      source: (rawProps.source as any) || 'fused',
+      sources: {
+        ofm: false,
+        overpass: rawProps.source === 'overpass',
+        vworld: rawProps.source === 'vworld',
+      },
+    };
+  }
+
   const regStyle = classifyRegionalBuildingStyle(rawProps, metrics);
 
   // 1) 실제 지상층수 (grnd_flr / gro_flo_co / building:levels)
