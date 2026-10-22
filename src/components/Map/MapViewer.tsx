@@ -5255,8 +5255,20 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
-    applyBuildingThemeToMap(map, buildingTheme);
-  }, [buildingTheme, isMapLoaded]);
+
+    if (buildingTheme === 'photorealistic') {
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
+      }
+      setGpuBuildingLayersVisibility(map, false, true);
+    } else {
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setVisible(false);
+      }
+      setGpuBuildingLayersVisibility(map, layers.buildings3D, true);
+      applyBuildingThemeToMap(map, buildingTheme);
+    }
+  }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
   // 21. [3D 실측 줄자 (3D Ruler) 인터랙션 & GeoJSON 동기화]
   useEffect(() => {
