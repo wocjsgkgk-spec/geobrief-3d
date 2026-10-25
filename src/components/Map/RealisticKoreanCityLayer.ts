@@ -716,8 +716,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         rooftopPosBuf[rooftopPosIdx + 7] = p2[1];
         rooftopPosBuf[rooftopPosIdx + 8] = p2[2];
         rooftopNormBuf[rooftopPosIdx + 6] = norm[0];
-        rooftopNormBuf[rooftopPosIdx + 1] = norm[1];
-        rooftopNormBuf[rooftopPosIdx + 2] = norm[2];
+        rooftopNormBuf[rooftopPosIdx + 7] = norm[1];
+        rooftopNormBuf[rooftopPosIdx + 8] = norm[2];
         rooftopUvBuf[rooftopUvIdx + 4] = uv2[0];
         rooftopUvBuf[rooftopUvIdx + 5] = uv2[1];
         rooftopHeightBuf[rooftopHeightIdx + 2] = Math.max(0, p2[1] - currentBuildingBaseElev);

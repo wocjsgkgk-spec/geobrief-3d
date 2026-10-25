@@ -205,6 +205,7 @@ export function getOrCreatePbrRmaTexture(diffuseCanvas?: HTMLCanvasElement): THR
 const PBR_VERTEX_PARS = /* glsl */ `
   attribute float aHeight;
   varying float vBuildingHeight;
+  varying float vHeight;
   varying vec3 vWorldNormalVec;
   varying vec3 vWorldPositionVec;
   varying vec2 vPbrUv;
@@ -212,6 +213,7 @@ const PBR_VERTEX_PARS = /* glsl */ `
 
 const PBR_VERTEX_MAIN = /* glsl */ `
   vBuildingHeight = aHeight;
+  vHeight = aHeight;
   vPbrUv = uv;
   vec4 pbrWorldPos = modelMatrix * vec4(position, 1.0);
   vWorldPositionVec = pbrWorldPos.xyz;
@@ -220,6 +222,7 @@ const PBR_VERTEX_MAIN = /* glsl */ `
 
 const PBR_FRAGMENT_PARS = /* glsl */ `
   varying float vBuildingHeight;
+  varying float vHeight;
   varying vec3 vWorldNormalVec;
   varying vec3 vWorldPositionVec;
   varying vec2 vPbrUv;
@@ -315,8 +318,8 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
 
   // 4. [F4map & OSMBuildings 벤더링] 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion)
   // 건물이 지형에 견고하게 맞닿도록 0.0m ~ 4.0m 구간 짙은 그라데이션 섀도우 적용
-  float contactAoFactor = smoothstep(0.0, 4.0, max(0.0, vBuildingHeight));
-  float finalGroundingAo = mix(0.40, 1.0, contactAoFactor);
+  float shadowFactor = smoothstep(0.0, 4.0, max(0.0, vHeight));
+  float finalGroundingAo = mix(0.40, 1.0, shadowFactor);
 
   // 차폐 음영 및 텍스처 미세 AO 결합 적용
   diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity));
