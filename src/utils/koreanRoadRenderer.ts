@@ -10,11 +10,17 @@
 import type { LayerSpecification } from 'maplibre-gl';
 
 /**
- * 한국형 실측 도로망 MapLibre 등록 통합 레이어 ID 목록
+ * 한국형 실측 도로망 & 단지 지상 인프라 MapLibre 등록 통합 레이어 ID 목록
  */
 export const KOREAN_ROAD_LAYER_IDS: string[] = [
   'road-bridge-casing',
   'road-bridge-deck',
+  'complex-parking-area',
+  'complex-parking-curb',
+  'complex-service-casing',
+  'complex-service-asphalt',
+  'complex-pedestrian-path',
+  'complex-parking-bays',
   'road-asphalt',
   'road-centerline',
   'road-lanes',
@@ -153,6 +159,173 @@ export function getKoreanRoadLayerDefinitions(
           18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 32.5, ['secondary', 'tertiary'], 14.8, 8.0],
           20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 58.5, ['secondary', 'tertiary'], 25.8, 12.8],
         ],
+      },
+      layout: {
+        'line-cap': 'butt',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-C. [3단계 지상 인프라] 단지 및 상업지구 주차장 구역 아스팔트 포장 (complex-parking-area)
+    // - 건물 주변의 빈 땅이 흐릿한 위성사진으로 방치되지 않도록 매끄러운 다크 아스팔트 포장 톤(#1e242d) 오버레이
+    // -------------------------------------------------------------------------
+    {
+      id: 'complex-parking-area',
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'landuse',
+      minzoom: 13,
+      maxzoom: 24,
+      filter: ['match', ['get', 'class'], ['parking', 'garages'], true, false],
+      paint: {
+        'fill-color': '#1e242d',
+        'fill-opacity': 0.88,
+        'fill-antialias': true,
+      },
+      layout: {
+        visibility: 'visible',
+      },
+    },
+    {
+      id: 'complex-parking-curb',
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'landuse',
+      minzoom: 14,
+      maxzoom: 24,
+      filter: ['match', ['get', 'class'], ['parking', 'garages'], true, false],
+      paint: {
+        'line-color': '#94a3b8',
+        'line-opacity': 0.90,
+        'line-width': 1.8,
+      },
+      layout: {
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-D. [3단계 지상 인프라] 단지 내부 도로망(service, residential) 보도블록 연석 케이싱 라인
+    // - 도로 양 가장자리를 감싸는 밝은 콘크리트/화강석 연석(#cbd5e1)을 깔끔하게 오버레이
+    // -------------------------------------------------------------------------
+    {
+      id: 'complex-service-casing',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13,
+      maxzoom: 24,
+      filter: ['match', ['get', 'class'], ['service', 'residential', 'living_street', 'unclassified'], true, false],
+      paint: {
+        'line-color': '#cbd5e1',
+        'line-opacity': 0.95,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          13, 2.8,
+          14, 4.6,
+          15, 8.0,
+          16.5, 13.5,
+          18, 22.5,
+          20, 38.0,
+        ],
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-E. [3단계 지상 인프라] 단지 내부 도로망 깔끔한 다크 아스팔트 포장 톤
+    // -------------------------------------------------------------------------
+    {
+      id: 'complex-service-asphalt',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 13,
+      maxzoom: 24,
+      filter: ['match', ['get', 'class'], ['service', 'residential', 'living_street', 'unclassified'], true, false],
+      paint: {
+        'line-color': '#212631',
+        'line-opacity': 0.92,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          13, 1.8,
+          14, 3.4,
+          15, 6.2,
+          16.5, 10.8,
+          18, 18.5,
+          20, 32.0,
+        ],
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-F. [3단계 지상 인프라] 단지 보행로·산책로 인터로킹 보도블록 라인
+    // -------------------------------------------------------------------------
+    {
+      id: 'complex-pedestrian-path',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 14,
+      maxzoom: 24,
+      filter: ['match', ['get', 'class'], ['path', 'pedestrian', 'footway', 'steps'], true, false],
+      paint: {
+        'line-color': '#c29b82', // 웜톤 인터로킹 보도블록
+        'line-opacity': 0.88,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          14, 1.5,
+          15, 2.8,
+          16.5, 5.2,
+          18, 8.8,
+          20, 15.0,
+        ],
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'visible',
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // 0-G. [3단계 지상 인프라] 주차 구획선 및 단지 내 보조 점선 오버레이
+    // -------------------------------------------------------------------------
+    {
+      id: 'complex-parking-bays',
+      type: 'line',
+      source: sourceId,
+      'source-layer': sourceLayer,
+      minzoom: 16.5,
+      maxzoom: 24,
+      filter: [
+        'any',
+        ['==', ['get', 'service'], 'parking_aisle'],
+        ['match', ['get', 'class'], ['service'], true, false],
+      ],
+      paint: {
+        'line-color': '#ffffff',
+        'line-dasharray': [2, 3],
+        'line-opacity': 0.70,
+        'line-width': 1.2,
       },
       layout: {
         'line-cap': 'butt',

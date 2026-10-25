@@ -43,6 +43,7 @@ import {
   parseAndClassifyBuilding,
 } from '@/utils/gangwonSpatialAggregator';
 import {
+  calculateOBB,
   calculateSafeRooftopCore,
   generateGabledRoofMesh,
 } from '@/lib/vendor/safeGeoAlgorithms';
@@ -1094,148 +1095,217 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             }
           }
 
-          const spanX = Math.max(1, maxX - minX);
-          const spanZ = Math.max(1, maxZ - minZ);
-
-          const triangles = Earcut(flatCoords, null, 2);
-          for (let t = 0; t < triangles.length; t += 3) {
-            const i0 = triangles[t];
-            const i1 = triangles[t + 1];
-            const i2 = triangles[t + 2];
-
-            const pt0 = pts2D[i0];
-            const pt1 = pts2D[i1];
-            const pt2 = pts2D[i2];
-
-            const uv0: [number, number] = [
-              roofUV.u0 + ((pt0.x - minX) / spanX) * (roofUV.u1 - roofUV.u0),
-              roofUV.v0 + ((pt0.z - minZ) / spanZ) * (roofUV.v1 - roofUV.v0),
-            ];
-            const uv1: [number, number] = [
-              roofUV.u0 + ((pt1.x - minX) / spanX) * (roofUV.u1 - roofUV.u0),
-              roofUV.v0 + ((pt1.z - minZ) / spanZ) * (roofUV.v1 - roofUV.v0),
-            ];
-            const uv2: [number, number] = [
-              roofUV.u0 + ((pt2.x - minX) / spanX) * (roofUV.u1 - roofUV.u0),
-              roofUV.v0 + ((pt2.z - minZ) / spanZ) * (roofUV.v1 - roofUV.v0),
-            ];
-
-            addTriangle(
-              [pt0.x, topElev, pt0.z],
-              [pt1.x, topElev, pt1.z],
-              [pt2.x, topElev, pt2.z],
-              [0, 1, 0],
-              uv0,
-              uv1,
-              uv2
-            );
-          }
-
           // -------------------------------------------------------------------
-          // C. 입체 옥상 구조물 (0.9m 난간 + 3.0m 옥탑방 코어 or ㅅ자 박공지붕)
+          // B & C. [GeoBrief 3D 3단계] 실제 입체 지붕 조형 다각화 (옥탑 코어 & 박공지붕 & 3D 난간)
           // -------------------------------------------------------------------
-          const isGabled = classified.isGabledRoof;
+          const isGabled =
+            (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
+            height <= 16.0;
+
           const poly2D: [number, number][] = [];
           for (let i = 0; i < ptCount; i++) {
             poly2D.push([pts2D[i].x, pts2D[i].z]);
           }
 
-          if (isGabled && height <= 12.0) {
-            const gabledUV = roofUV;
+          if (isGabled) {
+            // [1. 단독주택·다세대 빌라·군부대 막사: 장축을 따라 솟아오른 ㅅ자형 박공지붕(Gabled Roof)]
+            // - 직사각형 평면의 장축을 따라 능선이 올라오는 실제 ㅅ자형 박공지붕 정점 생성
+            // - 슬로프: 적갈색 기와(#7c3829) / 청회색 강판(#254e7a)
+            // - 박공벽: 건물 외벽과 1:1 매칭되는 마감 텍스처
+            const obb = calculateOBB(poly2D);
+            const halfLen = obb.length / 2;
+            const halfWid = obb.width / 2;
+            const [ox, oz] = obb.origin;
+            const [ux, uz] = obb.majorAxis;
+            const [vx, vz] = obb.minorAxis;
 
-            // OSMBuildings 알고리즘: OBB 장축 방향으로 용마루가 솟아오른 순수 삼각형 정점 생성 (저층 주택/군 막사)
-            // Pre-allocated Float32Array.set()을 사용하여 루프 오버헤드 없이 단일 버퍼로 즉시 병합
-            const roofMesh = generateGabledRoofMesh(
-              poly2D,
-              topElev,
-              2.8,
-              'gabled',
-              [gabledUV.u0, gabledUV.v0, gabledUV.u1 - gabledUV.u0, gabledUV.v1 - gabledUV.v0]
+            const ridgeH = Math.max(1.8, Math.min(3.4, obb.width * 0.40));
+            const topY = topElev;
+            const ridgeY = topElev + ridgeH;
+
+            // 4개 처마 모서리점 (Eaves) at topY
+            const e00: [number, number, number] = [ox - halfLen * ux - halfWid * vx, topY, oz - halfLen * uz - halfWid * vz];
+            const e10: [number, number, number] = [ox + halfLen * ux - halfWid * vx, topY, oz + halfLen * uz - halfWid * vz];
+            const e11: [number, number, number] = [ox + halfLen * ux + halfWid * vx, topY, oz + halfLen * uz + halfWid * vz];
+            const e01: [number, number, number] = [ox - halfLen * ux + halfWid * vx, topY, oz - halfLen * uz + halfWid * vz];
+
+            // 2개 용마루 정점 (Ridge line) at ridgeY
+            const r0: [number, number, number] = [ox - halfLen * ux, ridgeY, oz - halfLen * uz];
+            const r1: [number, number, number] = [ox + halfLen * ux, ridgeY, oz + halfLen * uz];
+
+            // 슬로프 법선 벡터
+            const hyp = Math.hypot(ridgeH, halfWid);
+            const sinA = ridgeH / hyp;
+            const cosA = halfWid / hyp;
+
+            // 경사면 1 (-V 방향 슬로프): 법선 (-vx * sinA, cosA, -vz * sinA)
+            const n1: [number, number, number] = [-vx * sinA, cosA, -vz * sinA];
+            addQuad(e00, e10, r1, r0, n1, roofUV);
+
+            // 경사면 2 (+V 방향 슬로프): 법선 (vx * sinA, cosA, vz * sinA)
+            const n2: [number, number, number] = [vx * sinA, cosA, vz * sinA];
+            addQuad(r0, r1, e11, e01, n2, roofUV);
+
+            // 박공벽 1 (-U 방향 끝단 박공 삼각형)
+            const bldWallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
+            const n3: [number, number, number] = [-ux, 0, -uz];
+            addTriangle(
+              e01, e00, r0,
+              n3,
+              [bldWallUV.u0, bldWallUV.v0],
+              [bldWallUV.u1, bldWallUV.v0],
+              [(bldWallUV.u0 + bldWallUV.u1) * 0.5, bldWallUV.v1]
             );
-            ensureCapacity(roofMesh.vertexCount);
-            posBuf.set(roofMesh.positions, posIdx);
-            normBuf.set(roofMesh.normals, posIdx);
-            uvBuf.set(roofMesh.uvs, uvIdx);
-            posIdx += roofMesh.positions.length;
-            uvIdx += roofMesh.uvs.length;
+
+            // 박공벽 2 (+U 방향 끝단 박공 삼각형)
+            const n4: [number, number, number] = [ux, 0, uz];
+            addTriangle(
+              e10, e11, r1,
+              n4,
+              [bldWallUV.u0, bldWallUV.v0],
+              [bldWallUV.u1, bldWallUV.v0],
+              [(bldWallUV.u0 + bldWallUV.u1) * 0.5, bldWallUV.v1]
+            );
           } else {
-            // 옥상 0.9m 난간(Parapet) 및 엘리베이터/계단실 옥탑(2.8m)
-            const parapetH = classified.hasParapet ? 0.9 : 0.0;
-            for (let i = 0; i < ptCount; i++) {
-              const j = (i + 1) % ptCount;
-              const p1 = pts2D[i];
-              const p2 = pts2D[j];
+            // [2. 아파트 및 중대형 상업 빌딩: 평평한 뚜껑 제거 -> 침하형 옥상 슬래브 + 0.35m 돌출 난간 + 2.8m 옥탑 코어]
+            // A. 지붕 슬래브 earcut 분할 (40% 우레탄 그린 / 35% 콘크리트 슬래브 / 25% 기와)
+            const spanX = Math.max(1, maxX - minX);
+            const spanZ = Math.max(1, maxZ - minZ);
 
-              const dx = p2.x - p1.x;
-              const dz = p2.z - p1.z;
-              const edgeLen = Math.hypot(dx, dz);
-              if (edgeLen < 0.2) continue;
+            const triangles = Earcut(flatCoords, null, 2);
+            for (let t = 0; t < triangles.length; t += 3) {
+              const i0 = triangles[t];
+              const i1 = triangles[t + 1];
+              const i2 = triangles[t + 2];
 
-              const nx = dz / edgeLen;
-              const nz = -dx / edgeLen;
+              const pt0 = pts2D[i0];
+              const pt1 = pts2D[i1];
+              const pt2 = pts2D[i2];
 
-              addRooftopQuad(
-                [p1.x, topElev, p1.z],
-                [p2.x, topElev, p2.z],
-                [p2.x, topElev + parapetH, p2.z],
-                [p1.x, topElev + parapetH, p1.z],
-                [nx, 0, nz],
-                uvParapet
+              const uv0: [number, number] = [
+                roofUV.u0 + ((pt0.x - minX) / spanX) * (roofUV.u1 - roofUV.u0),
+                roofUV.v0 + ((pt0.z - minZ) / spanZ) * (roofUV.v1 - roofUV.v0),
+              ];
+              const uv1: [number, number] = [
+                roofUV.u0 + ((pt1.x - minX) / spanX) * (roofUV.u1 - roofUV.u0),
+                roofUV.v0 + ((pt1.z - minZ) / spanZ) * (roofUV.v1 - roofUV.v0),
+              ];
+              const uv2: [number, number] = [
+                roofUV.u0 + ((pt2.x - minX) / spanX) * (roofUV.u1 - roofUV.u0),
+                roofUV.v0 + ((pt2.z - minZ) / spanZ) * (roofUV.v1 - roofUV.v0),
+              ];
+
+              addTriangle(
+                [pt0.x, topElev, pt0.z],
+                [pt1.x, topElev, pt1.z],
+                [pt2.x, topElev, pt2.z],
+                [0, 1, 0],
+                uv0,
+                uv1,
+                uv2
               );
             }
 
-            // mapbox/polylabel 기반 옥탑방 권상기실 코어 (내접원 반지름 r > 4.0m, 높이 >= 15m)
-            // 건물 다각형 내부 최적 중심점(Pole of Inaccessibility)에만 2.8m 코어 배치
-            const safeCore = calculateSafeRooftopCore(poly2D, height, topElev, 4.0);
-            if (safeCore) {
-              const [cX0, cZ0] = safeCore.box2D[0];
-              const [cX1, cZ1] = safeCore.box2D[2];
-              const coreBaseY = safeCore.baseElevation;
-              const coreTopY = safeCore.topElevation; // topElev + 2.8m
+            // B. 옥상 테두리 3D 돌출 난간 (두께 0.35m, 높이 0.9m)
+            const parapetH = classified.hasParapet ? 0.9 : 0.0;
+            const parapetW = 0.35; // 0.35m 실측 두께
 
-              // 옥탑 외벽 4면
-              addRooftopQuad(
-                [cX0, coreBaseY, cZ0],
-                [cX1, coreBaseY, cZ0],
-                [cX1, coreTopY, cZ0],
-                [cX0, coreTopY, cZ0],
-                [0, 0, -1],
-                uvPenthouse
-              );
-              addRooftopQuad(
-                [cX1, coreBaseY, cZ0],
-                [cX1, coreBaseY, cZ1],
-                [cX1, coreTopY, cZ1],
-                [cX1, coreTopY, cZ0],
-                [1, 0, 0],
-                uvPenthouse
-              );
-              addRooftopQuad(
-                [cX1, coreBaseY, cZ1],
-                [cX0, coreBaseY, cZ1],
-                [cX0, coreTopY, cZ1],
-                [cX1, coreTopY, cZ1],
-                [0, 0, 1],
-                uvPenthouse
-              );
-              addRooftopQuad(
-                [cX0, coreBaseY, cZ1],
-                [cX0, coreBaseY, cZ0],
-                [cX0, coreTopY, cZ0],
-                [cX0, coreTopY, cZ1],
-                [-1, 0, 0],
-                uvPenthouse
-              );
+            if (parapetH > 0.0) {
+              const topCapY = topElev + parapetH;
 
-              // 옥탑 윗면 (상부 슬래브)
-              addRooftopQuad(
-                [cX0, coreTopY, cZ0],
-                [cX1, coreTopY, cZ0],
-                [cX1, coreTopY, cZ1],
-                [cX0, coreTopY, cZ1],
-                [0, 1, 0],
-                isApt ? uvRoofAptSlab : uvRoofConcrete
-              );
+              for (let i = 0; i < ptCount; i++) {
+                const j = (i + 1) % ptCount;
+                const p1 = pts2D[i];
+                const p2 = pts2D[j];
+
+                const dx = p2.x - p1.x;
+                const dz = p2.z - p1.z;
+                const edgeLen = Math.hypot(dx, dz);
+                if (edgeLen < 0.2) continue;
+
+                const nx = dz / edgeLen;
+                const nz = -dx / edgeLen;
+
+                // 0.35m 안쪽 점
+                const p1In = { x: p1.x - nx * parapetW, z: p1.z - nz * parapetW };
+                const p2In = { x: p2.x - nx * parapetW, z: p2.z - nz * parapetW };
+
+                // 1) 외측 수직면 (높이 0.9m)
+                addRooftopQuad(
+                  [p1.x, topElev, p1.z],
+                  [p2.x, topElev, p2.z],
+                  [p2.x, topCapY, p2.z],
+                  [p1.x, topCapY, p1.z],
+                  [nx, 0, nz],
+                  uvParapet
+                );
+
+                // 2) 상단 수평 코핑 캡 (두께 0.35m)
+                addRooftopQuad(
+                  [p1.x, topCapY, p1.z],
+                  [p2.x, topCapY, p2.z],
+                  [p2In.x, topCapY, p2In.z],
+                  [p1In.x, topCapY, p1In.z],
+                  [0, 1, 0],
+                  uvParapet
+                );
+
+                // 3) 내측 수직면 (높이 0.9m, 지붕 바닥으로 하강)
+                addRooftopQuad(
+                  [p2In.x, topCapY, p2In.z],
+                  [p1In.x, topCapY, p1In.z],
+                  [p1In.x, topElev, p1In.z],
+                  [p2In.x, topElev, p2In.z],
+                  [-nx, 0, -nz],
+                  uvParapet
+                );
+              }
+            }
+
+            // C. 옥상 중심 엘리베이터 권상기실(옥탑방 큐브, 높이 2.8m)
+            const coreHeight = 2.8;
+            const obb = calculateOBB(poly2D);
+
+            if (isApt && obb.length >= 36.0) {
+              // 판상형 대형 아파트: 2개 계단/엘리베이터 코어 배치
+              const coreW = 4.2;
+              const coreD = 3.6;
+              const halfW = coreW / 2;
+              const halfD = coreD / 2;
+              const offsets = [-0.22 * obb.length, 0.22 * obb.length];
+
+              for (const off of offsets) {
+                const cx = obb.origin[0] + off * obb.majorAxis[0];
+                const cz = obb.origin[1] + off * obb.majorAxis[1];
+
+                const cX0 = cx - halfW;
+                const cX1 = cx + halfW;
+                const cZ0 = cz - halfD;
+                const cZ1 = cz + halfD;
+                const coreTopY = topElev + coreHeight;
+
+                addRooftopQuad([cX0, topElev, cZ0], [cX1, topElev, cZ0], [cX1, coreTopY, cZ0], [cX0, coreTopY, cZ0], [0, 0, -1], uvPenthouse);
+                addRooftopQuad([cX1, topElev, cZ0], [cX1, topElev, cZ1], [cX1, coreTopY, cZ1], [cX1, coreTopY, cZ0], [1, 0, 0], uvPenthouse);
+                addRooftopQuad([cX1, topElev, cZ1], [cX0, topElev, cZ1], [cX0, coreTopY, cZ1], [cX1, coreTopY, cZ1], [0, 0, 1], uvPenthouse);
+                addRooftopQuad([cX0, topElev, cZ1], [cX0, topElev, cZ0], [cX0, coreTopY, cZ0], [cX0, coreTopY, cZ1], [-1, 0, 0], uvPenthouse);
+
+                addRooftopQuad([cX0, coreTopY, cZ0], [cX1, coreTopY, cZ0], [cX1, coreTopY, cZ1], [cX0, coreTopY, cZ1], [0, 1, 0], uvRoofAptSlab);
+              }
+            } else {
+              // 단일 중심 코어 (아파트 소형동 또는 중대형 상업 빌딩)
+              const safeCore = calculateSafeRooftopCore(poly2D, height, topElev, 2.4);
+              if (safeCore) {
+                const [cX0, cZ0] = safeCore.box2D[0];
+                const [cX1, cZ1] = safeCore.box2D[2];
+                const coreTopY = topElev + coreHeight;
+
+                addRooftopQuad([cX0, topElev, cZ0], [cX1, topElev, cZ0], [cX1, coreTopY, cZ0], [cX0, coreTopY, cZ0], [0, 0, -1], uvPenthouse);
+                addRooftopQuad([cX1, topElev, cZ0], [cX1, topElev, cZ1], [cX1, coreTopY, cZ1], [cX1, coreTopY, cZ0], [1, 0, 0], uvPenthouse);
+                addRooftopQuad([cX1, topElev, cZ1], [cX0, topElev, cZ1], [cX0, coreTopY, cZ1], [cX1, coreTopY, cZ1], [0, 0, 1], uvPenthouse);
+                addRooftopQuad([cX0, topElev, cZ1], [cX0, topElev, cZ0], [cX0, coreTopY, cZ0], [cX0, coreTopY, cZ1], [-1, 0, 0], uvPenthouse);
+
+                addRooftopQuad([cX0, coreTopY, cZ0], [cX1, coreTopY, cZ0], [cX1, coreTopY, cZ1], [cX0, coreTopY, cZ1], [0, 1, 0], isApt ? uvRoofAptSlab : uvRoofConcrete);
+              }
             }
           }
 
