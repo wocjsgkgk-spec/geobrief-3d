@@ -44,6 +44,7 @@ export const WONJU_CORE_POIS: VWorldPoiItem[] = [
   { id: 'apt-segyeong', name: '세경아파트', category: 'apt', coordinates: [127.9490, 37.3330], elevationOffset: 50 },
   { id: 'apt-dongbo', name: '동보렉스', category: 'apt', coordinates: [127.9535, 37.3245], elevationOffset: 55 },
   { id: 'apt-heights', name: '중앙하이츠', category: 'apt', coordinates: [127.9505, 37.3265], elevationOffset: 55 },
+  { id: 'apt-seongil', name: '성일아파트', category: 'apt', coordinates: [127.9450, 37.3280], elevationOffset: 55 },
   { id: 'apt-epyeonhan', name: '대림e편한세상', category: 'apt', coordinates: [127.9475, 37.3325], elevationOffset: 60 },
   { id: 'apt-ipark', name: '단구아이파크', category: 'apt', coordinates: [127.9515, 37.3355], elevationOffset: 65 },
   { id: 'apt-samho', name: '삼호아파트', category: 'apt', coordinates: [127.9360, 37.3620], elevationOffset: 55 },

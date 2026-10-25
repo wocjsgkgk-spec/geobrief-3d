@@ -21,6 +21,7 @@ import rbush from 'rbush';
 import { updateVworldPoisWithBuildings } from '@/utils/koreanPoiLayer';
 import type { RealisticKoreanCityLayer } from '@/components/Map/RealisticKoreanCityLayer';
 import { resolveFullUrl } from '@/utils/urlHelper';
+import { isNearApartmentAnchor, APT_KEYWORDS } from '@/lib/vendor/buildingClassifier';
 
 export function sanitizeGeoJsonForMapLibre<T extends GeoJSON.FeatureCollection<any>>(fc: T, prefix = 'bld'): T {
   if (!fc || !fc.features || !Array.isArray(fc.features)) return fc;
@@ -553,6 +554,53 @@ export function injectRealDataIntoFeatures(
       if (rec.pnu) {
         props.pnu = rec.pnu;
       }
+    } else {
+      // [1단계: 미매칭 건물 100% 입체화 및 높이 수식 강제 교정]
+      // OpenFreeMap의 1~3m 기본값 무시: POI 반경, 명칭, 형상 결합
+      const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '').toLowerCase();
+      const usage = String(props.usageType || props.bld_category || props.type || props.class || props.building || '').toLowerCase();
+      const seed = Math.abs(Math.floor(centroid[0] * 100000 + centroid[1] * 100000)) % 100;
+
+      const isNearApt = isNearApartmentAnchor(centroid[0], centroid[1]);
+      const isAptKw = APT_KEYWORDS.some((kw) => name.includes(kw));
+      const isApt = isNearApt || isAptKw || usage.includes('apartment') || usage.includes('apartments');
+
+      const isComm = usage.includes('commercial') || usage.includes('retail') || usage.includes('office') ||
+        name.includes('상가') || name.includes('빌딩') || name.includes('타워') || name.includes('마트') || name.includes('프라자');
+
+      let height = Number(props.height || props.render_height || props.hei || props.heit || 0);
+
+      if (height < 10.0) {
+        if (isApt) {
+          // 청솔아파트, 동보렉스, 중앙하이츠, 단구아이파크, 성일아파트 등 16층~25층 (48m ~ 75m)
+          height = 48.0 + (seed % 28) * 1.0;
+          props.grndFlrCnt = 16 + (seed % 10);
+        } else if (isComm) {
+          // 시내 상가·오피스 블록: 4층~8층 (14m ~ 26m)
+          height = 14.0 + (seed % 13) * 1.0;
+          props.grndFlrCnt = 4 + (seed % 5);
+        } else {
+          // 일반 주택가 및 다세대 빌라: 2.5층~4층 (8m ~ 13m)
+          height = 8.0 + (seed % 6) * 1.0;
+          props.grndFlrCnt = 2 + (seed % 3);
+        }
+      }
+
+      props.height = height;
+      props.render_height = height;
+      props.hei = height;
+      props.heit = height;
+      props.levels = props.grndFlrCnt || Math.max(2, Math.round(height / 3.3));
+      props.grnd_flr = props.levels;
+
+      const mat = determineMaterialSlots(isApt ? '아파트' : isComm ? '근린생활시설' : '단독주택', '철근콘크리트', name);
+      props.atlasWallSlot = mat.atlasWallSlot;
+      props.atlasRoofSlot = mat.atlasRoofSlot;
+      props.bld_category = mat.bldCategory;
+      props.roofShape = mat.roofShape;
+      props.color = mat.wallColorHex;
+      props.roofColor = mat.roofColorHex;
+      props.roofColour = mat.roofColorHex;
     }
 
     return {
@@ -561,62 +609,8 @@ export function injectRealDataIntoFeatures(
     };
   });
 
-  // 4. 저장소에 존재하는 미매칭 실측 건물(geometry 보유) 피처 직접 주입
-  if (options?.includeUnmatchedStoreFeatures !== false) {
-    const allRecords = store.getAllRecords();
-    for (const rec of allRecords) {
-      if (!rec.geometry) continue;
-      const keyId = rec.id !== undefined ? rec.id : rec.mgmBldrgstPk;
-      if (keyId && matchedRecordIds.has(keyId)) continue;
-      if (rec.pnu && matchedRecordIds.has(rec.pnu)) continue;
-
-      const rawFloors = Number(rec.grndFlrCnt || (rec as any).grnd_flr || 1);
-      const floors = rawFloors > 0 ? rawFloors : Math.max(1, Math.round(Number(rec.heit || 10) / 3.3));
-      const height = rec.heit && rec.heit >= 3.0 ? Math.round(rec.heit * 10) / 10 : Math.round(floors * 3.3 * 10) / 10;
-      const mainPurps = rec.mainPurpsCdNm || '';
-      const strct = rec.strctCdNm || '철근콘크리트구조';
-      const bldName = rec.bldNm || '';
-      const mat = determineMaterialSlots(mainPurps, strct, bldName);
-      const dongPart = rec.dongNm && !bldName.includes(rec.dongNm) ? ` ${rec.dongNm}` : '';
-      const fullTitle = `${bldName}${dongPart}`.trim();
-
-      enrichedFeatures.push({
-        type: 'Feature',
-        id: rec.id || `real_${rec.mgmBldrgstPk || Math.random().toString(36).substring(7)}`,
-        geometry: rec.geometry,
-        properties: {
-          grndFlrCnt: floors,
-          grnd_flr: floors,
-          gro_flo_co: String(floors),
-          levels: floors,
-          height,
-          render_height: height,
-          hei: height,
-          heit: height,
-          is_real_measured: true,
-          mainPurpsCdNm: mainPurps,
-          strctCdNm: strct,
-          atlasWallSlot: mat.atlasWallSlot,
-          atlasRoofSlot: mat.atlasRoofSlot,
-          bld_category: mat.bldCategory,
-          roofShape: mat.roofShape,
-          color: mat.wallColorHex,
-          roofColor: mat.roofColorHex,
-          roofColour: mat.roofColorHex,
-          name: fullTitle || '실측 건물',
-          name_ko: fullTitle || '실측 건물',
-          bldNm: fullTitle || '실측 건물',
-          buld_nm: fullTitle || '실측 건물',
-          buildingName: fullTitle || '실측 건물',
-          address: rec.platPlc,
-          pnu: rec.pnu,
-          source: rec.source || 'vworld_wfs_fusion',
-        },
-      });
-      matchedCount++;
-    }
-  }
-
+  // 4. 저장소 전체 30,000건 루프 전면 제거 (렉/버벅거림 원천 차단):
+  // 뷰포트 내 지오메트리는 baseFeatures로 이미 100% 포괄되므로 메인 스레드 대용량 이중 루프 금지
   return {
     enrichedFeatures,
     matchedCount,
@@ -632,6 +626,11 @@ export function applyInjectedDataToMap(
   realisticLayer?: RealisticKoreanCityLayer | null
 ): void {
   if (!map || !enrichedFeatures || enrichedFeatures.length === 0) return;
+
+  // 카메라 이동/회전 중에는 Three.js 정점 버퍼 재계산을 차단하여 60fps 보호
+  if (map.isMoving() || map.isRotating()) {
+    return;
+  }
 
   if (typeof window !== 'undefined') {
     (window as any).__lastInjectedBuildings = enrichedFeatures;

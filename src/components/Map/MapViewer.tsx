@@ -2457,7 +2457,7 @@ export const MapViewer: React.FC = () => {
       viewportMoveEndDebounceTimer = setTimeout(() => {
         viewportMoveEndDebounceTimer = null;
         if (!map) return;
-        if (map.isMoving() || map.isRotating()) return;
+        if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) return;
 
         const c = map.getCenter();
         setViewport({
@@ -2469,24 +2469,13 @@ export const MapViewer: React.FC = () => {
         });
         syncExternalSpatialBuildings(map);
         updateRealtimeMetrics();
-      }, 250);
+      }, 350);
     };
     map.on('moveend', handleViewportMoveEnd);
 
-    let sourceDataDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleSourceData = (e: any) => {
-      if (
-        (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openmaptiles' || e.sourceId === 'openfreemap') &&
-        e.isSourceLoaded &&
-        e.sourceDataType !== 'metadata'
-      ) {
-        if (sourceDataDebounceTimer) clearTimeout(sourceDataDebounceTimer);
-        sourceDataDebounceTimer = setTimeout(() => {
-          if (isInteractingRef.current) return;
-          syncExternalSpatialBuildings(map);
-          updateRealtimeMetrics();
-        }, 500);
-      }
+    // sourcedata 이벤트에서는 건물 동기화 연산을 차단하여 지도 이동 중 버벅거림(렉) 완전 제거
+    const handleSourceData = (_e: any) => {
+      // no-op during streaming
     };
     map.on('sourcedata', handleSourceData);
 
@@ -5203,23 +5192,18 @@ export const MapViewer: React.FC = () => {
     });
   }, [viewshedResult, isMapLoaded]);
 
-  // [신규: V-World 건물 표현 테마 실시간 전환 (실사 포토 / 용도별 / 층수·높이)]
+  // [V-World 건물 표현 테마 실시간 전환 (모드 A, B, C 전체 실사 3D 건물 일관 렌더링)]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (buildingTheme === 'photorealistic') {
-      if (realisticKoreanCityLayerRef.current) {
-        realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
-      }
-      setGpuBuildingLayersVisibility(map, false, true);
-    } else {
-      if (realisticKoreanCityLayerRef.current) {
-        realisticKoreanCityLayerRef.current.setVisible(false);
-      }
-      setGpuBuildingLayersVisibility(map, layers.buildings3D, true);
-      applyBuildingThemeToMap(map, buildingTheme);
+    // 모드 A, 모드 B, 모드 C 어느 것을 선택하더라도 건물들이 파란색이나 붉은색 납작한 판으로 변하지 않고
+    // 항상 실사 3D 건물(밝은 아이보리/베이지 외벽 + 다채로운 지붕)로 렌더링되게 통일
+    if (realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
     }
+    // 단색 도배의 원인이었던 MapLibre GPU 중복 레이어는 항상 비활성화 유지
+    setGpuBuildingLayersVisibility(map, false, true);
   }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
   // 21. [3D 실측 줄자 (3D Ruler) 인터랙션 & GeoJSON 동기화]

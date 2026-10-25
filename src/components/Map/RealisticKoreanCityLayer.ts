@@ -248,8 +248,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       moveStartEvents.forEach((evt) => map.on(evt, this.handleMoveStart));
       moveEndEvents.forEach((evt) => map.on(evt, this.handleMoveEnd));
 
-      // 벡터 타일 데이터 로드 완료 즉시 감지 (사용자가 화면을 움직이지 않아도 6,400여동 즉시 3D 빌드)
-      map.on('sourcedata', this.handleSourceData);
       map.on('idle', this.handleMapIdle);
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
@@ -290,16 +288,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
     }
-    // 250ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
+    // 350ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
     this.moveEndTimer = setTimeout(() => {
       this.moveEndTimer = null;
       if (!this.map) return;
-      if (this.map.isMoving() || this.map.isRotating()) {
+      if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
         return;
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
-    }, 250);
+    }, 350);
   };
 
   public setInteracting(interacting: boolean): void {

@@ -133,6 +133,60 @@ export function calculatePolygonMetrics(coords: [number, number][]): {
   };
 }
 
+// -----------------------------------------------------------------------------
+// [강원권 주요 아파트 단지 POI 앵커 및 250m 반경 공간 색인]
+// -----------------------------------------------------------------------------
+export interface ApartmentPoiAnchor {
+  name: string;
+  lng: number;
+  lat: number;
+  radiusMeters: number;
+}
+
+export const APARTMENT_POI_ANCHORS: ApartmentPoiAnchor[] = [
+  { name: '청솔아파트', lng: 127.9585, lat: 37.3250, radiusMeters: 300 },
+  { name: '동보렉스', lng: 127.9535, lat: 37.3245, radiusMeters: 280 },
+  { name: '중앙하이츠', lng: 127.9505, lat: 37.3265, radiusMeters: 280 },
+  { name: '단구아이파크', lng: 127.9515, lat: 37.3355, radiusMeters: 300 },
+  { name: '성일아파트', lng: 127.9450, lat: 37.3280, radiusMeters: 280 },
+  { name: '현진에버빌', lng: 127.9555, lat: 37.3275, radiusMeters: 320 },
+  { name: '단구한신휴플러스', lng: 127.9520, lat: 37.3300, radiusMeters: 300 },
+  { name: '구곡주공아파트', lng: 127.9570, lat: 37.3220, radiusMeters: 300 },
+  { name: '세경아파트', lng: 127.9490, lat: 37.3330, radiusMeters: 280 },
+  { name: '대림e편한세상', lng: 127.9475, lat: 37.3325, radiusMeters: 300 },
+  { name: '삼호아파트', lng: 127.9360, lat: 37.3620, radiusMeters: 280 },
+  { name: '우산현대아파트', lng: 127.9320, lat: 37.3660, radiusMeters: 300 },
+  { name: '무실주공', lng: 127.9260, lat: 37.3360, radiusMeters: 300 },
+  { name: '무실e편한세상', lng: 127.9230, lat: 37.3340, radiusMeters: 300 },
+  { name: '단계이안', lng: 127.9310, lat: 37.3520, radiusMeters: 300 },
+  { name: '원주푸르지오', lng: 127.9340, lat: 37.3470, radiusMeters: 300 },
+  { name: '태장주공', lng: 127.9610, lat: 37.3780, radiusMeters: 300 },
+  { name: '반곡아이파크', lng: 127.9780, lat: 37.3280, radiusMeters: 300 },
+  { name: '혁신중흥S클래스', lng: 127.9820, lat: 37.3230, radiusMeters: 300 },
+];
+
+export const APT_KEYWORDS = [
+  '아파트', '타운', '맨션', '빌라트', '아이파크', '에버빌', '하이츠', '렉스',
+  '주공', '부영', '롯데', '현대', 'e편한세상', 'e편한', '푸르지오', '자이', '더샵',
+  '청솔', '동보', '성일', '한신', '세경', '삼호', '코아루', '호반', '센트럴', '단지',
+  'apt', 'apartment'
+];
+
+export function isNearApartmentAnchor(lng: number, lat: number): boolean {
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  const mPerLng = 111320 * cosLat;
+  const mPerLat = 110574;
+  for (let i = 0; i < APARTMENT_POI_ANCHORS.length; i++) {
+    const a = APARTMENT_POI_ANCHORS[i];
+    const dx = (lng - a.lng) * mPerLng;
+    const dy = (lat - a.lat) * mPerLat;
+    if (dx * dx + dy * dy <= a.radiusMeters * a.radiusMeters) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * 절대 실패하지 않는 좌표·면적·형상 기반 한국형 건축물 분류기
  */
@@ -225,14 +279,13 @@ export function classifyBuildingWithVendor(
     name.includes('주민센터') || name.includes('보건소') || name.includes('경찰') || name.includes('소방') ||
     mainPurps.includes('교육') || mainPurps.includes('공공') || mainPurps.includes('의료');
 
+  const isNearAptAnchor = isNearApartmentAnchor(centerLng, centerLat);
+  const isAptKeyword = APT_KEYWORDS.some((kw) => name.includes(kw));
+
   const isApartmentTag =
     usage.includes('apartments') || usage.includes('apartment') || usage.includes('residential_tower') ||
-    name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
-    name.includes('푸르지오') || name.includes('자이') || name.includes('힐스테이트') ||
-    name.includes('래미안') || name.includes('e편한') || name.includes('더샵') ||
-    name.includes('아이파크') || name.includes('롯데캐슬') || name.includes('호반') ||
-    name.includes('주공') || name.includes('부영') || name.includes('코아루') || name.includes('세경') ||
-    name.includes('현진') || name.includes('청솔') || name.includes('동') ||
+    isAptKeyword ||
+    isNearAptAnchor ||
     mainPurps.includes('아파트') || mainPurps.includes('공동주택');
 
   const isCommercialTag =
@@ -267,11 +320,12 @@ export function classifyBuildingWithVendor(
     typeIndex = 5;
     typeName = '학교·병원·관공서·대학교';
   }
-  // [유형 1] 한국형 대단지 아파트 (제2종/제3종 일반주거지역 단지형 건물 포함)
+  // [유형 1] 한국형 대단지 아파트 (POI 반경 250m, 명칭, 제2종/제3종 일반주거지역 단지형 건물, 판상형/ㄱ자형 직사각형 형상 포함)
   else if (
     isApartmentTag ||
-    ((zone.includes('2종') || zone.includes('3종') || zone.includes('제2종') || zone.includes('제3종')) && areaSqm >= 250) ||
-    (areaSqm >= 320 && areaSqm <= 3000 && (aspectRatio >= 1.3 || perimeter / Math.sqrt(areaSqm) >= 3.8))
+    isNearAptAnchor ||
+    ((zone.includes('2종') || zone.includes('3종') || zone.includes('제2종') || zone.includes('제3종')) && areaSqm >= 200) ||
+    (areaSqm >= 240 && (aspectRatio >= 1.25 || perimeter / Math.sqrt(areaSqm) >= 3.6))
   ) {
     bType = 'apartment';
     typeIndex = 1;
@@ -310,13 +364,13 @@ export function classifyBuildingWithVendor(
 
   switch (bType) {
     // -------------------------------------------------------------------------
-    // 유형 1 [한국형 대단지 아파트] (12층~25층, 36m~75m)
+    // 유형 1 [한국형 대단지 아파트] (16층~25층, 48m~75m 우뚝 솟은 스카이라인)
     // 외벽: 밝은 크림 아이보리(#f5f2eb) 및 웜 베이지(#eae3d5)
     // 지붕: 차분한 다크 그레이/브라운 슬래브(#57534e) + 2.8m 옥탑 엘리베이터 코어
     // -------------------------------------------------------------------------
     case 'apartment': {
-      floors = 12 + (seed % 14); // 12층 ~ 25층
-      height = 36.0 + (seed % 14) * 3.0; // 36m ~ 75m
+      floors = 16 + (seed % 10); // 16층 ~ 25층
+      height = 48.0 + (seed % 28) * 1.0; // 48m ~ 75m 고층 아파트 스카이라인
       const wallPick = seed % 2;
       if (wallPick === 0) {
         wallColor = '#f5f2eb'; // 밝은 크림 아이보리
@@ -359,7 +413,7 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 3 [시내 중·저층 상가·원룸·근린생활 블록] (3층~6층, 10m~20m)
+    // 유형 3 [시내 중·저층 상가·원룸·근린생활 블록] (4층~8층, 14m~26m)
     // 외벽: 밝은 화강석 베이지(#dfd9ce), 적벽돌(#8c3f2b), 라이트 웜그레이(#d6d3d1)
     // 지붕: 실제 한국 상가 옥상 비율
     //   ① 우레탄 방수 에메랄드/세이지 그린 (#357a56, 45%)
@@ -367,8 +421,8 @@ export function classifyBuildingWithVendor(
     //   ③ 콘크리트 그레이 (#78716c, 25%)
     // -------------------------------------------------------------------------
     case 'commercial': {
-      floors = 3 + (seed % 4);   // 3층 ~ 6층
-      height = 10.0 + (seed % 4) * 3.0; // 10m ~ 19m
+      floors = 4 + (seed % 5);   // 4층 ~ 8층
+      height = 14.0 + (seed % 13) * 1.0; // 14m ~ 26m
 
       const wallPick = seed % 3;
       if (wallPick === 0) {
@@ -400,13 +454,13 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 4 [단독주택·다세대 빌라·주거] (1층~3층, 4m~10m)
+    // 유형 4 [단독주택·다세대 빌라·주거] (2.5층~4층, 8m~13m)
     // 외벽: 적벽돌(#8c3f2b), 밝은 화강석(#dfd9ce), 웜 베이지(#eae3d5)
     // 지붕: 적갈색 기와(#6e3222, 40%), 청색 강판(#254e7a, 30%), 세이지 그린(#357a56, 30%)
     // -------------------------------------------------------------------------
     case 'residential': {
-      floors = 1 + (seed % 3);   // 1층 ~ 3층
-      height = 4.5 + (seed % 6) * 1.0; // 4.5m ~ 9.5m
+      floors = 2 + (seed % 3);   // 2.5층 ~ 4층
+      height = 8.0 + (seed % 6) * 1.0; // 8m ~ 13m
 
       const wallPick = seed % 3;
       if (wallPick === 0) {
@@ -494,6 +548,8 @@ export function classifyBuildingWithVendor(
 
   // ---------------------------------------------------------------------------
   // [1순위: 건축HUB 건축물대장 표제부 실측 높이(heit) 및 지상층수(grndFlrCnt) 적용]
+  // - OpenFreeMap 타일의 1~3m 임의 기본값에 의한 납작화 방지:
+  //   10m 이상이거나, 검증된 대장 실측 플래그(is_real_measured/mgmBldrgstPk)가 있을 때만 우선 적용
   // ---------------------------------------------------------------------------
   const regHeit = Number(
     properties.heit ||
@@ -516,18 +572,22 @@ export function classifyBuildingWithVendor(
     0
   );
 
-  if (regHeit >= 3.0) {
+  const isRealMeasured = properties.is_real_measured === true || Boolean(properties.mgmBldrgstPk);
+  if (isRealMeasured && regHeit >= 3.0) {
     height = regHeit;
     floors = regFloors >= 1 ? regFloors : Math.max(1, Math.round(height / 3.3));
-  } else if (regFloors >= 1) {
+  } else if (regHeit >= 10.0) {
+    height = regHeit;
+    floors = regFloors >= 1 ? regFloors : Math.max(1, Math.round(height / 3.3));
+  } else if (regFloors >= 3) {
     floors = regFloors;
-    height = Math.max(4.0, regFloors * 3.3);
+    height = Math.max(10.0, regFloors * 3.3);
   }
 
-  // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (화면 내 모든 건물 최소 4.5m 이상 볼륨 강제)
-  if (height < 4.0) {
-    height = 4.5 + (seed % 5) * 1.0; // 4.5m ~ 8.5m
-    floors = Math.max(1, Math.round(height / 3.3));
+  // [강원권 전 건물 강제 입체화 규칙]: 단 하나의 건물도 바닥에 납작한 스티커처럼 깔리지 않게 최소 8.0m 이상 볼륨 강제
+  if (height < 8.0) {
+    height = 8.0 + (seed % 6) * 1.0; // 8m ~ 13m
+    floors = Math.max(2, Math.round(height / 3.3));
   }
 
   // 지붕 색상 선언 또는 위성 샘플링 색상 우선 반영

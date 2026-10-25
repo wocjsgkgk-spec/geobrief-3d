@@ -57,11 +57,11 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     0,
 
-    // 1. 이미 실측 높이(>= 3.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.2m 100% 직결, 0~2m 납작 건물 완전 금지)
-    ['>=', ['var', 'declaredHeight'], 3.0],
+    // 1. 이미 실측 높이(>= 10.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.3m 100% 직결)
+    ['>=', ['var', 'declaredHeight'], 10.0],
     ['var', 'declaredHeight'],
 
-    // 2. 아파트 단지 및 고층 주거 태그: 36m ~ 75m (12~25층)
+    // 2. 아파트 단지 및 고층 주거: 48m ~ 75m (16~25층)
     [
       'any',
       ['==', ['get', 'class'], 'apartments'],
@@ -72,11 +72,11 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      36,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 40], // 36..75m
+      48,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 28], // 48..75m
     ],
 
-    // 3. 중·저층 상가·원룸·근린생활 블록: 10m ~ 20m (3~6층 탄탄한 도시 블록 형성)
+    // 3. 중·저층 상가·원룸·근린생활 블록: 14m ~ 26m (4~8층 중층 빌딩)
     [
       'any',
       ['==', ['get', 'class'], 'commercial'],
@@ -92,11 +92,11 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      10,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 11], // 10..20m
+      14,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 13], // 14..26m
     ],
 
-    // 4. 산업/군사/물류/창고: 6m ~ 12m
+    // 4. 산업/군사/물류/창고: 10m ~ 18m
     [
       'any',
       ['==', ['get', 'class'], 'industrial'],
@@ -107,18 +107,21 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     [
       '+',
-      6,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 7], // 6..12m
+      10,
+      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 9], // 10..18m
     ],
 
-    // 5. 일반 시가지 / 단독주택·다세대 빌라 (1층~3층, 4m~10m)
+    // 5. 일반 시가지 / 단지형 중대형 건물 vs 시내 상가 vs 일반 주택가 (100% 입체화)
     [
       'case',
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 25],
-      ['+', 36, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 40]], // 36..75m 아파트
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 60],
-      ['+', 10, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 11]], // 10..20m 상가
-      ['+', 4.5, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 6]],  // 4.5..10m 주택 (100% 입체화)
+      // 단지형 중대형 건물: 42m ~ 68m (14층 ~ 23층 아파트)
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 40],
+      ['+', 42, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 27]], // 42..68m
+      // 시내 상가·오피스 블록: 14m ~ 26m (4층 ~ 8층)
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 75],
+      ['+', 14, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 13]], // 14..26m
+      // 일반 주택가: 8m ~ 13m (2.5층 ~ 4층)
+      ['+', 8, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 6]],   // 8..13m
     ],
   ],
 ];
@@ -307,7 +310,7 @@ export const gpuBuildingRoofColorExpr: any = [
 // -----------------------------------------------------------------------------
 export const gpuBuildingLanduseWallColorExpr: any = [
   'case',
-  // 주거: 황색 (#EAB308)
+  // 주거: 밝은 크림 아이보리 (#f5f2eb)
   [
     'any',
     ['==', ['get', 'class'], 'apartments'],
@@ -321,9 +324,9 @@ export const gpuBuildingLanduseWallColorExpr: any = [
     ['==', ['get', 'bld_category'], 'apartment'],
     ['==', ['get', 'bld_category'], 'residential'],
   ],
-  '#F59E0B',
+  '#f5f2eb',
 
-  // 상업·업무: 적색 (#EF4444)
+  // 상업·업무: 밝은 화강석 베이지 (#dfd9ce)
   [
     'any',
     ['==', ['get', 'class'], 'commercial'],
@@ -336,9 +339,9 @@ export const gpuBuildingLanduseWallColorExpr: any = [
     ['==', ['get', 'usageType'], 'commercial'],
     ['==', ['get', 'bld_category'], 'commercial'],
   ],
-  '#EF4444',
+  '#dfd9ce',
 
-  // 공업·물류: 자주색 (#A855F7)
+  // 공업·물류: 밝은 실버 판넬 (#e2e8f0)
   [
     'any',
     ['==', ['get', 'class'], 'industrial'],
@@ -347,9 +350,9 @@ export const gpuBuildingLanduseWallColorExpr: any = [
     ['==', ['get', 'building'], 'warehouse'],
     ['==', ['get', 'usageType'], 'industrial'],
   ],
-  '#A855F7',
+  '#e2e8f0',
 
-  // 공공·군사·청사: 청색 (#3B82F6)
+  // 공공·군사·청사: 웜 베이지 그레이 (#ece7de)
   [
     'any',
     ['==', ['get', 'class'], 'military'],
@@ -363,15 +366,15 @@ export const gpuBuildingLanduseWallColorExpr: any = [
     ['==', ['get', 'bld_category'], 'public_military'],
     ['==', ['coalesce', ['get', 'isMilitaryOrPublic'], false], true],
   ],
-  '#3B82F6',
+  '#ece7de',
 
-  // 기타: 주거 황색 폴백
-  '#F59E0B',
+  // 기타: 밝은 크림 아이보리 폴백
+  '#f5f2eb',
 ];
 
 export const gpuBuildingLanduseRoofColorExpr: any = [
   'case',
-  // 주거 옥상: 짙은 앰버
+  // 주거 옥상: 차분한 다크 그레이 슬래브
   [
     'any',
     ['==', ['get', 'class'], 'apartments'],
@@ -380,9 +383,9 @@ export const gpuBuildingLanduseRoofColorExpr: any = [
     ['==', ['get', 'usageType'], 'residential'],
     ['==', ['get', 'bld_category'], 'apartment'],
   ],
-  '#D97706',
+  '#57534e',
 
-  // 상업 옥상: 짙은 적색
+  // 상업 옥상: 우레탄 세이지 그린
   [
     'any',
     ['==', ['get', 'class'], 'commercial'],
@@ -390,17 +393,17 @@ export const gpuBuildingLanduseRoofColorExpr: any = [
     ['==', ['get', 'class'], 'office'],
     ['==', ['get', 'usageType'], 'commercial'],
   ],
-  '#DC2626',
+  '#357a56',
 
-  // 공업 옥상: 짙은 자주색
+  // 공업 옥상: 청색 강판 지붕
   [
     'any',
     ['==', ['get', 'class'], 'industrial'],
     ['==', ['get', 'class'], 'warehouse'],
   ],
-  '#9333EA',
+  '#254e7a',
 
-  // 공공·군사 옥상: 짙은 청색
+  // 공공·군사 옥상: 적갈색 기와 박공
   [
     'any',
     ['==', ['get', 'class'], 'military'],
@@ -408,9 +411,9 @@ export const gpuBuildingLanduseRoofColorExpr: any = [
     ['==', ['get', 'usageType'], 'military_public'],
     ['==', ['coalesce', ['get', 'isMilitaryOrPublic'], false], true],
   ],
-  '#2563EB',
+  '#6e3222',
 
-  '#D97706',
+  '#57534e',
 ];
 
 const HEIGHT_NUM_FOR_INTERPOLATE: any = [
@@ -419,31 +422,30 @@ const HEIGHT_NUM_FOR_INTERPOLATE: any = [
   ['to-number', ['get', 'height']],
   ['to-number', ['get', 'hei']],
   ['*', ['to-number', ['coalesce', ['get', 'grnd_flr'], ['get', 'levels'], 3]], 3.3],
-  12,
+  14,
 ];
 
 export const gpuBuildingHeightSpectrumWallColorExpr: any = [
   'interpolate',
   ['linear'],
   HEIGHT_NUM_FOR_INTERPOLATE,
-  4.0, '#06B6D4',  // 저층 (1~2층, 4m): 청록(Cyan)
-  12.0, '#0EA5E9', // 저-중층 (3~4층, 12m): 스카이블루
-  22.0, '#10B981', // 중층 (5~7층, 22m): 에메랄드
-  36.0, '#F59E0B', // 중-고층 (10~12층, 36m): 황색
-  55.0, '#F97316', // 고층 (15~18층, 55m): 주황
-  75.0, '#EF4444'  // 초고층 (25층+, 75m+): 적색
+  8.0, '#f5f2eb',   // 저층 (2~3층, 8m): 밝은 크림 아이보리
+  16.0, '#dfd9ce',  // 저-중층 (4~5층, 16m): 밝은 화강석 베이지
+  28.0, '#d6d3d1',  // 중층 (7~9층, 28m): 세련된 웜그레이
+  45.0, '#eae3d5',  // 중-고층 (12~15층, 45m): 웜 샌드 베이지
+  60.0, '#f5f2eb',  // 고층 (18~20층, 60m): 밝은 아이보리
+  75.0, '#f6f3eb'   // 초고층 (25층+, 75m+): 밝은 크림 아이보리
 ];
 
 export const gpuBuildingHeightSpectrumRoofColorExpr: any = [
   'interpolate',
   ['linear'],
   HEIGHT_NUM_FOR_INTERPOLATE,
-  4.0, '#0891B2',
-  12.0, '#0284C7',
-  22.0, '#059669',
-  36.0, '#D97706',
-  55.0, '#EA580C',
-  75.0, '#DC2626'
+  8.0, '#6e3222',   // 저층: 적갈색 기와
+  16.0, '#357a56',  // 중층: 우레탄 세이지 그린
+  28.0, '#78716c',  // 중-고층: 콘크리트 그레이
+  50.0, '#57534e',  // 고층: 아파트 다크 슬래브
+  75.0, '#57534e'   // 초고층: 아파트 다크 슬래브
 ];
 
 // -----------------------------------------------------------------------------

@@ -214,27 +214,29 @@ export function extractRenderedVectorBuildings(
         props.hei || props.HEI || props.render_height || props.height || props.bld_hgt || 0
       );
 
-      let renderHeight = rawHei >= 3.0 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : 0);
+      // [1단계 수식 교정]: OpenFreeMap 타일의 1~3m 무의미한 기본값 무시, 10m 이상 실측치만 수용
+      const isRealMeasured = props.is_real_measured === true || Boolean(props.mgmBldrgstPk);
+      let renderHeight = (isRealMeasured && rawHei >= 3.0) || rawHei >= 10.0 ? rawHei : (rawFlr >= 3 ? rawFlr * 3.3 : 0);
 
-      // [100% 입체 돌출 보장]: 0~2m 납작 건물 완전 금지 (최소 4.5m 이상 볼륨 강제)
-      if (!renderHeight || renderHeight < 4.0) {
+      // [강원권 전 건물 강제 입체화 규칙]: 단 하나의 건물도 바닥에 납작한 스티커처럼 깔리지 않게 100% 입체화
+      if (!renderHeight || renderHeight < 8.0) {
         if (isMilitary) {
-          // 군 표준 병영막사 및 군수창고: 1층~3층 (4.5m~9.5m)
+          // 군 표준 병영막사: 1층~3층 (4.5m~9.5m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
           renderHeight = 4.5 + seed * 4.5;
         } else if (isApartment) {
-          // 한국형 아파트 단지(원주·춘천 등): 12층~25층 (36m~75m)
+          // 한국형 아파트 단지(청솔, 동보렉스, 중앙하이츠, 단구아이파크 등): 16층~25층 (48m~75m)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
-          const aptStories = Math.round(12 + seed * 13);
-          renderHeight = aptStories * 3.0; // 36m ~ 75m
+          const aptStories = Math.round(16 + seed * 9);
+          renderHeight = 48.0 + seed * 27.0; // 48m ~ 75m
         } else if (isCommercial) {
-          // 시내 상가·원룸·근린생활 블록: 3층~6층 (10m~19m)
+          // 시내 상가·오피스 블록: 4층~8층 (14m~26m)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
-          renderHeight = 10.0 + seed * 9.0; // 10m ~ 19m
+          renderHeight = 14.0 + seed * 12.0; // 14m ~ 26m
         } else {
-          // 단독주택 및 다세대 빌라: 1층~3층 (4.5m~10m)
+          // 일반 주택가 및 다세대 빌라: 2.5층~4층 (8m~13m)
           const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-          renderHeight = 4.5 + seed * 5.0; // 4.5m ~ 9.5m
+          renderHeight = 8.0 + seed * 5.0; // 8m ~ 13m
         }
       }
 
