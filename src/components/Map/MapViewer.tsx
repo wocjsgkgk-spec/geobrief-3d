@@ -83,9 +83,13 @@ import {
   Info,
 } from 'lucide-react';
 import { calculateSunLight, safeSetLight } from '@/utils/sunLightCalculator';
-import { calculateViewshed } from '@/utils/viewshedAnalysis';
+import {
+  runViewshedSimulation as calculateViewshed,
+  runCutFillCalculation as calculateCutFill,
+  runFloodSimulation,
+} from '@/lib/vendor/spatialAnalysisEngine';
 import { calculate3DMeasurement } from '@/utils/measure3D';
-import { calculateCutFill } from '@/utils/cutFillAnalysis';
+import { MILITARY_IDLE_SITES } from '@/constants/militaryIdleSites';
 import { WaterLevelLayer } from './WaterLevelLayer';
 import { TitleBlock, drawCadTitleBlockOnCanvas } from './TitleBlock';
 import { buildTacticalArrowsFeatureCollection } from '@/utils/tacticalArrowGenerator';
@@ -2207,6 +2211,11 @@ export const MapViewer: React.FC = () => {
     (window as any).__map = map;
     (window as any).__setRenderMode3D = setRenderMode3D;
     (window as any).__useMapStore = useMapStore;
+    (window as any).__spatialAnalysisEngine = {
+      runViewshedSimulation: calculateViewshed,
+      runFloodSimulation,
+      runCutFillCalculation: calculateCutFill,
+    };
 
     // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
     setTimeout(() => {
@@ -2895,6 +2904,53 @@ export const MapViewer: React.FC = () => {
               'line-opacity': 0.85,
             },
             layout: { visibility: layers.zoning ? 'visible' : 'none' },
+          });
+        }
+
+        // [가상 수위·침수 시뮬레이터 침수 위험 건물 하이라이트 소스 & 레이어]
+        if (!map.getSource('flooded-buildings-source')) {
+          map.addSource('flooded-buildings-source', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          });
+        }
+        if (!map.getLayer('flooded-buildings-fill')) {
+          map.addLayer({
+            id: 'flooded-buildings-fill',
+            type: 'fill',
+            source: 'flooded-buildings-source',
+            paint: {
+              'fill-color': [
+                'case',
+                ['==', ['get', 'riskLevel'], '심각'],
+                '#ef4444',
+                ['==', ['get', 'riskLevel'], '경보'],
+                '#f59e0b',
+                '#eab308',
+              ],
+              'fill-opacity': 0.45,
+            },
+            layout: { visibility: waterLevel.enabled ? 'visible' : 'none' },
+          });
+        }
+        if (!map.getLayer('flooded-buildings-line')) {
+          map.addLayer({
+            id: 'flooded-buildings-line',
+            type: 'line',
+            source: 'flooded-buildings-source',
+            paint: {
+              'line-color': [
+                'case',
+                ['==', ['get', 'riskLevel'], '심각'],
+                '#dc2626',
+                ['==', ['get', 'riskLevel'], '경보'],
+                '#d97706',
+                '#ca8a04',
+              ],
+              'line-width': 2.0,
+              'line-opacity': 0.9,
+            },
+            layout: { visibility: waterLevel.enabled ? 'visible' : 'none' },
           });
         }
 
@@ -5308,17 +5364,68 @@ export const MapViewer: React.FC = () => {
 
   // 23. [강원 지형 저류·침수 수위(Water Level) 시뮬레이션 동기화]
   useEffect(() => {
-    if (!waterLevelLayerRef.current) return;
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+
     const center = polygonCenter || [viewport.longitude, viewport.latitude];
-    waterLevelLayerRef.current.setVisible(waterLevel.enabled);
-    waterLevelLayerRef.current.setElevation(waterLevel.elevation);
-    waterLevelLayerRef.current.setCenter(center);
+
+    if (waterLevelLayerRef.current) {
+      waterLevelLayerRef.current.setVisible(waterLevel.enabled);
+      waterLevelLayerRef.current.setElevation(waterLevel.elevation);
+      waterLevelLayerRef.current.setCenter(center);
+    }
+
+    const floodedSource = map.getSource('flooded-buildings-source') as maplibregl.GeoJSONSource;
+
+    if (waterLevel.enabled) {
+      // 실시간 저지대 지형 표고 기반 침수 위험 건물 및 유역 집계 (60fps 무지연)
+      const floodRes = runFloodSimulation(map, waterLevel.elevation, { center });
+
+      if (floodedSource) {
+        floodedSource.setData(floodRes.floodedPolygonsGeojson);
+      }
+      if (map.getLayer('flooded-buildings-fill')) {
+        map.setLayoutProperty('flooded-buildings-fill', 'visibility', 'visible');
+      }
+      if (map.getLayer('flooded-buildings-line')) {
+        map.setLayoutProperty('flooded-buildings-line', 'visibility', 'visible');
+      }
+
+      // 침수 위험 집계 상태 동기화 (불필요한 무한 렌더 방지를 위해 수치 변경 시만 갱신)
+      if (
+        waterLevel.floodedBuildingCount !== floodRes.floodedBuildingsCount ||
+        waterLevel.floodRiskLevel !== floodRes.overallRiskLevel
+      ) {
+        setWaterLevel({
+          floodedBuildingCount: floodRes.floodedBuildingsCount,
+          totalBuildingCount: floodRes.totalBuildingsCount,
+          floodRatio: floodRes.floodingRatio,
+          floodRiskLevel: floodRes.overallRiskLevel,
+          criticalCount: floodRes.riskBreakdown.criticalCount,
+          alertCount: floodRes.riskBreakdown.alertCount,
+          warningCount: floodRes.riskBreakdown.warningCount,
+          primaryBasin: floodRes.primaryBasinName,
+          relativeRiseMeters: floodRes.relativeRiseMeters,
+        });
+      }
+    } else {
+      if (floodedSource) {
+        floodedSource.setData({ type: 'FeatureCollection', features: [] });
+      }
+      if (map.getLayer('flooded-buildings-fill')) {
+        map.setLayoutProperty('flooded-buildings-fill', 'visibility', 'none');
+      }
+      if (map.getLayer('flooded-buildings-line')) {
+        map.setLayoutProperty('flooded-buildings-line', 'visibility', 'none');
+      }
+    }
   }, [
     waterLevel.enabled,
     waterLevel.elevation,
     polygonCenter,
     viewport.longitude,
     viewport.latitude,
+    isMapLoaded,
   ]);
 
   // 24. [3D 계획·접근 축선 전술 화살표 (Tactical Arrow) 인터랙션 & GeoJSON 동기화]
@@ -5415,14 +5522,24 @@ export const MapViewer: React.FC = () => {
       return;
     }
 
-    const poly = completedPolygon;
+    let poly = completedPolygon;
+    if (!poly) {
+      // 사용자 드로잉 부지가 없을 경우 기본 대상지(원주 1군지사 이전부지 등) 자동 적용
+      const defaultSite =
+        MILITARY_IDLE_SITES.find((s) => s.id === (selectedIdleSiteId || 'first-logistics-wonju')) ||
+        MILITARY_IDLE_SITES[0];
+      if (defaultSite && defaultSite.polygon) {
+        poly = defaultSite.polygon as GeoJSON.Feature<GeoJSON.Polygon>;
+      }
+    }
+
     if (!poly) {
       source.setData({ type: 'FeatureCollection', features: [] });
       setCutFillResult(null);
       return;
     }
 
-    // 연산 수행
+    // 연산 수행 (벤더링된 고성능 spatialAnalysisEngine)
     const res = calculateCutFill(map, poly, {
       gridSizeMeters: cutFill.gridSizeMeters,
       targetElevation: cutFill.targetElevation,
@@ -5443,6 +5560,7 @@ export const MapViewer: React.FC = () => {
     cutFill.gridSizeMeters,
     cutFill.targetElevation,
     completedPolygon,
+    selectedIdleSiteId,
     isMapLoaded,
     setCutFillResult,
     setCutFillTargetElevation,

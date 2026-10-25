@@ -291,6 +291,15 @@ export interface TacticalArrow {
 export interface WaterLevelState {
   enabled: boolean;
   elevation: number; // EL. 50m ~ 300m
+  relativeRiseMeters?: number; // 기준 하천수위 대비 상승 (+1m ~ +30m)
+  floodedBuildingCount?: number; // 실시간 침수 위험 건물 수
+  totalBuildingCount?: number; // 검토 건물 총수
+  floodRatio?: number; // 침수 비율 (%)
+  floodRiskLevel?: '안전' | '주의' | '경보' | '심각';
+  criticalCount?: number; // 3m 이상 심각 침수
+  alertCount?: number; // 1~3m 경보 침수
+  warningCount?: number; // 1m 미만 주의 침수
+  primaryBasin?: string; // 대상 하천 유역명 (원주천, 섬강, 소양강 등)
 }
 
 // [감시 초소/CCTV 3D 레이더 센서 콘 (Sensor FOV)]
@@ -352,6 +361,11 @@ export interface CutFillResult {
   balancedAreaPercent: number;
   zeroBalanceElevation: number; // 절토와 성토가 균형을 이루는 최적 계획고
   geojson: GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+}
+
+export interface CutFillOptions {
+  gridSizeMeters?: 5 | 10;
+  targetElevation?: number | null;
 }
 
 export interface CutFillState {

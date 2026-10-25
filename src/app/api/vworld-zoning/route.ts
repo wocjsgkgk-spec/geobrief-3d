@@ -178,13 +178,13 @@ function resolveZoningRegulations(name = '', code = ''): ZoningRegulationInfo {
     };
   }
 
-  // 3. 공업지역 (청색/보라)
+  // 3. 공업지역 (보라 #a855f7)
   if (combined.includes('전용공업')) {
     return {
       category: 'industrial',
       categoryLabel: '전용공업지역',
-      fillColor: '#60a5fa',
-      strokeColor: '#1d4ed8',
+      fillColor: '#9333ea',
+      strokeColor: '#6b21a8',
       maxBcRat: 70,
       maxVlRat: 300,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 70% 이하 / 용적률 150~300% 이하)',
@@ -194,8 +194,8 @@ function resolveZoningRegulations(name = '', code = ''): ZoningRegulationInfo {
     return {
       category: 'industrial',
       categoryLabel: '일반공업지역',
-      fillColor: '#3b82f6',
-      strokeColor: '#1e40af',
+      fillColor: '#a855f7',
+      strokeColor: '#7e22ce',
       maxBcRat: 70,
       maxVlRat: 350,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 70% 이하 / 용적률 200~350% 이하)',
@@ -205,8 +205,8 @@ function resolveZoningRegulations(name = '', code = ''): ZoningRegulationInfo {
     return {
       category: 'industrial',
       categoryLabel: '준공업지역',
-      fillColor: '#818cf8',
-      strokeColor: '#3730a3',
+      fillColor: '#c084fc',
+      strokeColor: '#9333ea',
       maxBcRat: 70,
       maxVlRat: 400,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 70% 이하 / 용적률 200~400% 이하)',
@@ -216,21 +216,21 @@ function resolveZoningRegulations(name = '', code = ''): ZoningRegulationInfo {
     return {
       category: 'industrial',
       categoryLabel: '공업지역',
-      fillColor: '#3b82f6',
-      strokeColor: '#1e40af',
+      fillColor: '#a855f7',
+      strokeColor: '#7e22ce',
       maxBcRat: 70,
       maxVlRat: 350,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 70% 이하 / 용적률 350% 이하)',
     };
   }
 
-  // 4. 녹지지역 (녹색)
+  // 4. 녹지지역 (초록 #22c55e)
   if (combined.includes('보전녹지')) {
     return {
       category: 'green',
       categoryLabel: '보전녹지지역',
-      fillColor: '#6ee7b7',
-      strokeColor: '#047857',
+      fillColor: '#4ade80',
+      strokeColor: '#166534',
       maxBcRat: 20,
       maxVlRat: 80,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 20% 이하 / 용적률 50~80% 이하)',
@@ -240,8 +240,8 @@ function resolveZoningRegulations(name = '', code = ''): ZoningRegulationInfo {
     return {
       category: 'green',
       categoryLabel: '생산녹지지역',
-      fillColor: '#34d399',
-      strokeColor: '#065f46',
+      fillColor: '#16a34a',
+      strokeColor: '#14532d',
       maxBcRat: 20,
       maxVlRat: 100,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 20% 이하 / 용적률 50~100% 이하)',
@@ -251,8 +251,8 @@ function resolveZoningRegulations(name = '', code = ''): ZoningRegulationInfo {
     return {
       category: 'green',
       categoryLabel: '자연녹지지역',
-      fillColor: '#10b981',
-      strokeColor: '#064e3b',
+      fillColor: '#22c55e',
+      strokeColor: '#15803d',
       maxBcRat: 20,
       maxVlRat: 100,
       legalStandard: '국토계획법 제77조·제78조 (건폐율 20% 이하 / 용적률 50~100% 이하)',

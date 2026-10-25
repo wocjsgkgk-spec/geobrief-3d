@@ -101,6 +101,8 @@ export const ControlPanel: React.FC = () => {
     setBuildingTheme,
     isViewshedMode,
     toggleViewshedMode,
+    viewshedResult,
+    clearViewshed,
     layers,
     toggleLayer,
     metadata,
@@ -3003,6 +3005,49 @@ export const ControlPanel: React.FC = () => {
           </button>
         </div>
 
+        {/* [3D 조망점/가시권 실시간 연산 결과 카드] */}
+        {viewshedResult && (
+          <div className="p-2.5 rounded-lg bg-[#0c1c14] border border-teal-500/50 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-teal-300 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+                360° 가시권(Viewshed) 분석 결과
+              </span>
+              <button
+                type="button"
+                onClick={clearViewshed}
+                className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+              >
+                결과 초기화
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+              <div className="p-1.5 rounded bg-[#07130e] border border-teal-800/40">
+                <span className="text-slate-400 block text-[9px]">관측점 표고</span>
+                <span className="font-mono font-bold text-teal-200">
+                  EL. {viewshedResult.elevation}m (+{viewshedResult.observerHeight}m)
+                </span>
+              </div>
+              <div className="p-1.5 rounded bg-[#07130e] border border-teal-800/40">
+                <span className="text-slate-400 block text-[9px]">가시율 (반경 {viewshedResult.radiusMeters}m)</span>
+                <span className="font-mono font-bold text-emerald-400 text-sm">
+                  {viewshedResult.coverageRatio}%
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-[9.5px] text-slate-300 pt-1 border-t border-teal-900/40">
+              <span className="flex items-center gap-1 font-semibold text-emerald-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+                가시 구역: {(viewshedResult.visibleAreaSqm / 1000000).toFixed(2)}㎢
+              </span>
+              <span className="flex items-center gap-1 font-semibold text-rose-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm"></span>
+                차폐 구역: {(viewshedResult.hiddenAreaSqm / 1000000).toFixed(2)}㎢
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* 3단 경사도 판정 기준 범례 */}
         <div className="grid grid-cols-3 gap-1.5 text-[9.5px] font-medium text-center">
           <div className="p-1.5 rounded bg-emerald-950/50 border border-emerald-700/50 text-emerald-300">
@@ -3049,13 +3094,16 @@ export const ControlPanel: React.FC = () => {
           </div>
 
           {waterLevel.enabled && (
-            <div className="space-y-2 pt-1 border-t border-sky-900/50 animate-fade-in">
+            <div className="space-y-2.5 pt-1 border-t border-sky-900/50 animate-fade-in">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-300 font-medium">
                   수면 해발고도 (Water Surface EL.)
                 </span>
                 <span className="font-extrabold font-mono text-sky-300 text-sm bg-sky-950/80 px-2 py-0.5 rounded border border-sky-700/60">
                   EL. {waterLevel.elevation} m
+                  <span className="text-[10px] text-sky-400 font-normal ml-1">
+                    (+{waterLevel.relativeRiseMeters ?? Math.max(0, waterLevel.elevation - 80)}m 상승)
+                  </span>
                 </span>
               </div>
 
@@ -3073,24 +3121,26 @@ export const ControlPanel: React.FC = () => {
               />
 
               <div className="flex justify-between text-[9px] text-slate-400 font-mono">
-                <span>EL. 50m (저지대)</span>
+                <span>하천기준 EL. 70m</span>
                 <span>EL. 175m</span>
-                <span>EL. 300m (고지대)</span>
+                <span>EL. 300m (홍수 고지대)</span>
               </div>
 
-              {/* 수위 퀵 프리셋 버튼 */}
-              <div className="grid grid-cols-4 gap-1 pt-0.5">
+              {/* 수위 상승분 퀵 프리셋 버튼 (+1m ~ +30m) */}
+              <div className="grid grid-cols-6 gap-1 pt-0.5">
                 {[
-                  { label: '하천 70m', el: 70 },
-                  { label: '평지 120m', el: 120 },
-                  { label: '만수 180m', el: 180 },
-                  { label: '홍수 240m', el: 240 },
+                  { label: '+1m', el: 81 },
+                  { label: '+3m', el: 83 },
+                  { label: '+5m', el: 85 },
+                  { label: '+10m', el: 90 },
+                  { label: '+20m', el: 100 },
+                  { label: '+30m', el: 110 },
                 ].map((item) => (
                   <button
                     key={item.el}
                     type="button"
                     onClick={() => setWaterLevel({ elevation: item.el })}
-                    className={`py-1 px-1 rounded text-[9.5px] font-semibold transition-all border ${
+                    className={`py-1 px-0.5 rounded text-[9px] font-mono font-bold transition-all border text-center ${
                       waterLevel.elevation === item.el
                         ? 'bg-sky-600 border-sky-400 text-white shadow-sm'
                         : 'bg-[#13222d] border-sky-800/40 text-sky-300 hover:bg-[#1a2d3b]'
@@ -3101,8 +3151,77 @@ export const ControlPanel: React.FC = () => {
                 ))}
               </div>
 
-              <div className="text-[9.5px] text-sky-200/80 bg-sky-950/40 p-2 rounded border border-sky-800/30 leading-relaxed">
-                💡 실시간 3D 심도 테스트로 표고 이하의 저지대 지형에 반투명 에메랄드 블루(#0284C7) 수면 메쉬가 실시간 렌더링됩니다.
+              {/* [실시간 침수 위험 건물 자동 집계 카드] */}
+              <div className="p-2.5 rounded-lg bg-[#07131b] border border-sky-800/60 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-sky-300 flex items-center gap-1">
+                    <AlertTriangle
+                      className={`w-3.5 h-3.5 ${
+                        waterLevel.floodRiskLevel === '심각'
+                          ? 'text-rose-400'
+                          : waterLevel.floodRiskLevel === '경보'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    />
+                    실시간 침수 위험 건물 자동 집계
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                      waterLevel.floodRiskLevel === '심각'
+                        ? 'bg-rose-950 text-rose-300 border-rose-700'
+                        : waterLevel.floodRiskLevel === '경보'
+                        ? 'bg-amber-950 text-amber-300 border-amber-700'
+                        : waterLevel.floodRiskLevel === '주의'
+                        ? 'bg-yellow-950 text-yellow-300 border-yellow-700'
+                        : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                    }`}
+                  >
+                    {waterLevel.floodRiskLevel || '안전'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="p-1.5 rounded bg-sky-950/60 border border-sky-800/40">
+                    <span className="text-slate-400 block text-[9px]">침수 위험 건물 수</span>
+                    <span className="font-mono font-bold text-rose-400 text-sm">
+                      {waterLevel.floodedBuildingCount ?? 0}
+                      <span className="text-[10px] text-slate-300 font-normal">
+                        {' '}
+                        / {waterLevel.totalBuildingCount ?? 1280}동
+                      </span>
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-sky-950/60 border border-sky-800/40">
+                    <span className="text-slate-400 block text-[9px]">유역 침수율</span>
+                    <span className="font-mono font-bold text-sky-300 text-sm">
+                      {waterLevel.floodRatio ?? 0}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1 text-[9px] text-center font-mono">
+                  <div className="p-1 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 font-semibold">
+                    심각(≥3m): {waterLevel.criticalCount ?? 0}동
+                  </div>
+                  <div className="p-1 rounded bg-amber-950/40 border border-amber-900/60 text-amber-300 font-semibold">
+                    경보(1~3m): {waterLevel.alertCount ?? 0}동
+                  </div>
+                  <div className="p-1 rounded bg-yellow-950/40 border border-yellow-900/60 text-yellow-300 font-semibold">
+                    주의(&lt;1m): {waterLevel.warningCount ?? 0}동
+                  </div>
+                </div>
+
+                <div className="text-[9.5px] text-sky-200/90 bg-sky-950/40 p-1.5 rounded border border-sky-800/30 flex items-center justify-between">
+                  <span className="text-slate-400">🌊 취약 하천 유역:</span>
+                  <span className="font-bold text-sky-300">
+                    {waterLevel.primaryBasin || '원주천 및 섬강 유역 저지대'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-sky-200/80 bg-sky-950/30 p-1.5 rounded border border-sky-800/30 leading-relaxed">
+                💡 실시간 3D 심도 버퍼로 표고 이하의 저지대 지형에 반투명 에메랄드 블루(#0284C7) 수면 메쉬가 실시간 렌더링됩니다.
               </div>
             </div>
           )}
@@ -3137,6 +3256,16 @@ export const ControlPanel: React.FC = () => {
 
           {cutFill.enabled && (
             <div className="space-y-2.5 pt-1 border-t border-emerald-900/50 animate-fade-in">
+              {/* 분석 대상 부지 표시 */}
+              <div className="flex items-center justify-between text-[10.5px] p-2 rounded bg-[#09150e] border border-emerald-900/60">
+                <span className="text-slate-400">분석 대상 부지:</span>
+                <span className="font-bold text-emerald-300">
+                  {completedPolygon
+                    ? `사용자 드로잉 부지 (${(polygonArea?.sqm || 0).toLocaleString()}㎡)`
+                    : '원주 1군지사 이전부지 (310,000㎡)'}
+                </span>
+              </div>
+
               {/* 정밀 격자 크기 선택 (5m vs 10m) */}
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-300 font-medium text-[11px]">샘플링 격자 해상도</span>
@@ -3589,25 +3718,43 @@ export const ControlPanel: React.FC = () => {
           </div>
 
           {/* [Phase 2 신규] 브이월드 국토계획법 용도지역지구 토글 */}
-          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <div className="flex items-center space-x-2">
-              <Palette className="w-3.5 h-3.5 text-emerald-400" />
-              <div>
-                <span className="text-slate-200 font-medium">용도지역지구 (국토계획법)</span>
-                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
-                  (주거·상업·공업·녹지)
-                </span>
+          <div className="space-y-1.5 p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Palette className="w-3.5 h-3.5 text-emerald-400" />
+                <div>
+                  <span className="text-slate-200 font-medium">용도지역지구 (국토계획법)</span>
+                  <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                    (주거·상업·공업·녹지)
+                  </span>
+                </div>
               </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.zoning}
+                  onChange={() => handleToggleLayer('zoning')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={layers.zoning}
-                onChange={() => handleToggleLayer('zoning')}
-                className="sr-only peer"
-              />
-              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
-            </label>
+            {layers.zoning && (
+              <div className="grid grid-cols-4 gap-1 pt-1 border-t border-[#29352c] text-[9px] text-center font-bold">
+                <div className="p-1 rounded bg-[#fbbf24]/20 border border-[#fbbf24]/50 text-[#fbbf24]">
+                  주거지역
+                </div>
+                <div className="p-1 rounded bg-[#ef4444]/20 border border-[#ef4444]/50 text-[#ef4444]">
+                  상업지역
+                </div>
+                <div className="p-1 rounded bg-[#a855f7]/20 border border-[#a855f7]/50 text-[#a855f7]">
+                  공업지역
+                </div>
+                <div className="p-1 rounded bg-[#22c55e]/20 border border-[#22c55e]/50 text-[#22c55e]">
+                  녹지지역
+                </div>
+              </div>
+            )}
           </div>
 
           {/* [접경 안보 관제] 군사분계선/민통선 표시 수동 토글 */}
