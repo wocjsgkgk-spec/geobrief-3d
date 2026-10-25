@@ -174,16 +174,19 @@ export function buildPoiFeatureCollection(
     for (let i = 0; i < dynamicBuildings.length; i++) {
       const feat = dynamicBuildings[i];
       const props = feat.properties || {};
-      const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '').trim();
+      const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || props.bldNm || '').trim();
       if (!name || name.length < 2 || seenNames.has(name)) continue;
 
+      const hasRealName = Boolean(props.bldNm || props.is_real_measured || props.source === 'molit_hub_api' || props.source === 'vworld_local' || props.source === 'vworld_wfs_fusion');
       const isApt = name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
                     name.includes('에버빌') || name.includes('청솔') || name.includes('주공') ||
-                    name.includes('휴플러스') || name.includes('아이파크') || name.includes('푸르지오');
+                    name.includes('휴플러스') || name.includes('아이파크') || name.includes('푸르지오') ||
+                    name.includes('골드') || name.includes('타워') || name.includes('코아루') || name.includes('동');
       const isSchool = name.includes('초등') || name.includes('중학') || name.includes('고등') || name.includes('대학') || name.includes('학교');
-      const isPublic = name.includes('센터') || name.includes('시청') || name.includes('병원') || name.includes('공원');
+      const isPublic = name.includes('센터') || name.includes('시청') || name.includes('병원') || name.includes('공원') || name.includes('청사');
+      const isCommercial = name.includes('빌딩') || name.includes('상가') || name.includes('프라자') || name.includes('플라자') || name.includes('마트') || name.includes('농협') || name.includes('축협') || name.includes('은행');
 
-      if (!isApt && !isSchool && !isPublic) continue;
+      if (!hasRealName && !isApt && !isSchool && !isPublic && !isCommercial) continue;
 
       // 중심점 계산
       let centerLng = 0, centerLat = 0, ptCount = 0;
@@ -213,8 +216,8 @@ export function buildPoiFeatureCollection(
         properties: {
           id: `dyn-poi-${i}`,
           name,
-          category: isApt ? 'apt' : isSchool ? 'school' : isPublic ? 'public' : 'dong',
-          elevationOffset: isApt ? 55 : 30,
+          category: isApt ? 'apt' : isSchool ? 'school' : isPublic ? 'public' : isCommercial ? 'commercial' : 'dong',
+          elevationOffset: props.height && props.height > 10 ? Math.min(100, props.height + 6) : isApt ? 55 : 30,
         },
         geometry: {
           type: 'Point',

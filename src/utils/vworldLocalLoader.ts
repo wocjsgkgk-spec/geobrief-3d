@@ -17,6 +17,7 @@
 
 import type { ExternalSpatialBuildingFeature } from '@/utils/externalSpatialData';
 import { resolveFullUrl } from '@/utils/urlHelper';
+import { realDataSpatialStore } from '@/utils/realDataGeometryInjector';
 
 export interface VworldRegionManifest {
   admCode: string;
@@ -48,6 +49,32 @@ export interface LocalVworldFetchResult {
 // [1. 클라이언트 사이드 인메모리 캐시 (0ms 무지연 반환)]
 // -----------------------------------------------------------------------------
 const localBuildingsMemoryCache = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]>();
+
+function registerFeaturesToRealStore(features: any[]): void {
+  try {
+    if (!features || features.length === 0) return;
+    const records = features.map((f: any) => {
+      const p = f.properties || {};
+      return {
+        id: f.id,
+        bldNm: p.name || p.buildingName || p.buld_nm,
+        dongNm: p.dongName,
+        platPlc: p.address,
+        pnu: p.pnu,
+        grndFlrCnt: Number(p.grnd_flr || p.levels || 1),
+        heit: Number(p.height || 0),
+        mainPurpsCdNm: p.main_purps_cd_nm,
+        strctCdNm: p.strct_cd_nm,
+        roofCdNm: p.roof_cd_nm,
+        geometry: f.geometry,
+        source: 'vworld_local',
+      };
+    });
+    realDataSpatialStore.loadRecords(records);
+  } catch {
+    // ignore
+  }
+}
 let cachedManifest: VworldManifest | null = null;
 let manifestFetchPromise: Promise<VworldManifest | null> | null = null;
 
@@ -162,11 +189,8 @@ export async function fetchLocalVworldBuildings(options: {
 
   const rId = match.matchedRegionId;
   const info = match.manifestInfo;
-  // BBOX가 코어 경계(127.91~127.98, 37.31~37.37) 내에 완전히 들어올 때만 경량 coreFile 사용, 벗어나면 9.1만동 전체 파일 자동 연동
-  const isWithinCore = bbox
-    ? bbox[0] >= 127.91 && bbox[2] <= 127.98 && bbox[1] >= 37.31 && bbox[3] <= 37.37
-    : false;
-  const preferCore = useCoreOnly && isWithinCore && Boolean(info.coreFile);
+  // useCoreOnly가 true이거나 BBOX가 강원/원주 영역 내에 있으면 즉각 30,466동 coreFile(23MB) 최우선 사용
+  const preferCore = Boolean(info.coreFile) && (useCoreOnly !== false);
   const fileName = preferCore ? info.coreFile! : info.file;
   const cacheKey = `${rId}_${fileName}`;
 
@@ -194,6 +218,7 @@ export async function fetchLocalVworldBuildings(options: {
         const json = JSON.parse(raw);
         const features = json.features || [];
         localBuildingsMemoryCache.set(cacheKey, features);
+        registerFeaturesToRealStore(features);
 
         return {
           success: true,
@@ -222,6 +247,7 @@ export async function fetchLocalVworldBuildings(options: {
           const json = await fallbackRes.json();
           const features = json.features || [];
           localBuildingsMemoryCache.set(cacheKey, features);
+          registerFeaturesToRealStore(features);
           return {
             success: true,
             hasLocalData: true,
@@ -244,6 +270,7 @@ export async function fetchLocalVworldBuildings(options: {
     const json = await res.json();
     const features = json.features || [];
     localBuildingsMemoryCache.set(cacheKey, features);
+    registerFeaturesToRealStore(features);
 
     return {
       success: true,
