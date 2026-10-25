@@ -134,8 +134,8 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // 0-B. 콘크리트 교량 상판 슬래브 레이어 (road-bridge-deck)
-    // - 요구사항 1: brunnel === 'bridge' 도로 선형을 따라 지형 DEM에 밀착된 콘크리트 상판(#e2e8f0)
+    // 0-B. 교량 도로 상판 포장 레이어 (road-bridge-deck)
+    // - brunnel === 'bridge' 도로 선형을 따라 지형 DEM에 밀착된 자연스러운 아스팔트 포장(#475569)
     // -------------------------------------------------------------------------
     {
       id: 'road-bridge-deck',
@@ -146,8 +146,8 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: bridgeFilter,
       paint: {
-        'line-color': '#e2e8f0', // 콘크리트 교량 상판
-        'line-opacity': 1.0,
+        'line-color': '#475569', // 자연스러운 아스팔트 교량 도로 상판
+        'line-opacity': 0.95,
         'line-width': [
           'interpolate',
           ['exponential', 1.5],

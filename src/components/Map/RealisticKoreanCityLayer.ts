@@ -893,14 +893,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             let wallUV: UVRect = uvAptCream;
 
-            if (classified.type === 'apartment') {
-              // 긴 변은 발코니 창호 격자(크림 아이보리/베이지/웜그레이), 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
+            if (classified.type === 'apartment' || height >= 28.0) {
+              // 긴 변은 발코니 창호 격자(크림 화이트/소프트 아이보리/웜 베이지), 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
               const isLongFacade = edgeLen > minEdgeLen * 1.3 || edgeLen > 16.0;
               if (isLongFacade) {
                 wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-                // [60fps LOD 최적화] 아파트 전면부: 적정 베이 x 층 티어 분할 (과도한 버텍스 폭증 방지)
-                const numFloors = Math.min(3, Math.max(1, Math.round(height / 16.0)));
-                const numBays = Math.min(4, Math.max(1, Math.round(edgeLen / 16.0)));
+                // [요구사항 1] 밝은 아이보리 외벽 위에 3m 층고마다 선명한 차콜 슬레이트(#1e293b) 베란다 유리창 격자 패턴 1:1 매핑
+                const floorHeight = 3.3; // 한국 아파트 표준 층고 3.3m
+                const numFloors = Math.max(1, Math.round(height / floorHeight));
+                const bayWidth = 7.5; // 베이 폭 7.5m
+                const numBays = Math.max(1, Math.round(edgeLen / bayWidth));
                 const dH = height / numFloors;
 
                 for (let f = 0; f < numFloors; f++) {
@@ -922,7 +924,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                   }
                 }
               } else {
-                // [LOD 최적화] 아파트 측벽: 단일 쿼드로 경량화 (창문 없는 단색 측벽)
+                // 아파트 측벽: 단일 쿼드로 경량화 (창문 없는 단색 측벽)
                 wallUV = uvAptSide;
                 addQuad(
                   [p1.x, baseElev, p1.z],
@@ -933,10 +935,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                   wallUV
                 );
               }
-            } else if (classified.type === 'commercial' || classified.type === 'public') {
-              // 시내 상가 및 공공청사 (1층 쇼윈도 기단부 + 상층부 화강석/커튼월 2단 쿼드 구성)
+            } else if (classified.type === 'commercial' || classified.type === 'public' || (height >= 11.0 && height < 28.0)) {
+              // 중층 시내 상가·오피스 블록 (높이 11m ~ 28m):
+              // 1층(0~3.8m)은 짙은 화강석 쇼윈도 기단부(#334155), 2층 이상은 밝은 화강석/커튼월/모던그레이 층별 창문 줄눈
               const podiumH = 3.8;
-              if (height > podiumH + 2.0) {
+              if (height > podiumH + 1.5) {
                 const podiumTop = baseElev + podiumH;
                 const pBL: [number, number, number] = [p1.x, baseElev, p1.z];
                 const pBR: [number, number, number] = [p2.x, baseElev, p2.z];
@@ -945,14 +948,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 addQuad(pBL, pBR, pPodTR, pPodTL, [nx, 0, nz], uvCommShop);
 
                 const upperUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-                addQuad(
-                  pPodTL,
-                  pPodTR,
-                  [p2.x, topElev, p2.z],
-                  [p1.x, topElev, p1.z],
-                  [nx, 0, nz],
-                  upperUV
-                );
+                const upperH = height - podiumH;
+                const numUpperFloors = Math.max(1, Math.round(upperH / 3.3));
+                const dUH = upperH / numUpperFloors;
+
+                for (let f = 0; f < numUpperFloors; f++) {
+                  const y0 = podiumTop + f * dUH;
+                  const y1 = podiumTop + (f + 1) * dUH;
+                  addQuad(
+                    [p1.x, y0, p1.z],
+                    [p2.x, y0, p2.z],
+                    [p2.x, y1, p2.z],
+                    [p1.x, y1, p1.z],
+                    [nx, 0, nz],
+                    upperUV
+                  );
+                }
               } else {
                 addQuad(
                   [p1.x, baseElev, p1.z],
@@ -975,7 +986,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 wallUV
               );
             } else if (classified.type === 'military') {
-              // 군 영내 막사: 단일 쿼드 외벽
+              // 군 영내 막사: 크림색 회벽
               wallUV = uvMilitary;
               addQuad(
                 [p1.x, baseElev, p1.z],
@@ -986,7 +997,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                 wallUV
               );
             } else {
-              // 다세대 빌라 & 단독주택가: 단일 쿼드로 60fps 극대화
+              // 저층 단독주택 & 다세대 빌라 (높이 11m 미만: 따뜻한 적벽돌 #9a4632 및 크림색 회벽 #f0ead6)
               wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
               addQuad(
                 [p1.x, baseElev, p1.z],
@@ -1082,14 +1093,30 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               }
             }
           } else {
-            // [V-World 3대 옥상 실사 황금비율]: 우레탄 방수 딥그린 40%, 노후 콘크리트 35%, 적갈색 기와 25%
+            // [브이월드 3단계 지붕 정밀 배분]:
+            // 1) 고층 아파트 단지 (28m 이상): 차분한 콘크리트 그레이(#6e6a64)
+            // 2) 중층 상가·오피스 (11m ~ 28m): ① 우레탄 45%(#3b7a57), ② 시멘트 회색 35%(#8c8881), ③ 다크 차콜 20%(#475569)
+            // 3) 저층 주택·빌라·막사 (<11m): 적갈색 기와(#7c3f2c), 청색 강판(#285580), 세이지 그린(#3b7a57)
             const seedVal = classified.seed;
-            if (seedVal < 40) {
-              roofUV = uvRoofUrethane; // 우레탄 방수 딥그린 40% (#32694f)
-            } else if (seedVal < 75) {
-              roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete; // 노후 콘크리트 슬래브 35% (#736f68)
+            if (height >= 28.0 || isApt) {
+              roofUV = uvRoofAptSlab;
+            } else if (height >= 11.0) {
+              if (seedVal < 45) {
+                roofUV = uvRoofUrethane;
+              } else if (seedVal < 80) {
+                roofUV = uvRoofConcrete;
+              } else {
+                roofUV = uvRoofAsphalt;
+              }
             } else {
-              roofUV = uvRoofTile; // 적갈색 기와/슁글 25% (#7c3829)
+              const rPick = seedVal % 3;
+              if (rPick === 0) {
+                roofUV = uvRoofTile;
+              } else if (rPick === 1) {
+                roofUV = uvRoofZinc;
+              } else {
+                roofUV = uvRoofUrethane;
+              }
             }
           }
 
