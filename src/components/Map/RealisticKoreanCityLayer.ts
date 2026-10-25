@@ -52,6 +52,10 @@ import {
 } from '@/lib/vendor/buildingClassifier';
 import { extractRenderedVectorBuildings } from '@/utils/spatialDataFetcher';
 import { updateVworldPoisWithBuildings } from '@/utils/koreanPoiLayer';
+import {
+  createPhotorealisticPbrMaterial,
+  updatePhotorealisticPbrUniforms,
+} from '@/lib/vendor/photorealisticPbrShader';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -171,22 +175,24 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
       this.scene.add(this.hemisphereLight);
 
-      // 2. 2048x2048 실사 Canvas 아틀라스 기반 Three.js PBR 재질 초기화
+      // 2. [GeoBrief 3D 2단계] 24종 아틀라스 & RMA 연동 PBR 실사 셰이더 메터리얼 초기화
       const atlasTex = getPhotorealisticCityAtlasTexture();
-      this.masterMaterial = new THREE.MeshStandardMaterial({
-        map: atlasTex || undefined,
-        roughness: 0.40,
-        metalness: 0.05,
+      this.masterMaterial = createPhotorealisticPbrMaterial({
+        map: atlasTex || null,
+        roughness: 0.85, // 콘크리트 무광 베이스 (창문 영역은 RMA 맵 및 PBR 인젝션으로 0.15로 동적 전환)
+        metalness: 0.04, // (창문 영역은 0.85로 동적 전환)
         side: THREE.DoubleSide,
+        sunDirection: this.sunLight?.position,
       });
 
-      this.rooftopMaterial = new THREE.MeshStandardMaterial({
-        map: atlasTex || undefined,
-        roughness: 0.40,
+      this.rooftopMaterial = createPhotorealisticPbrMaterial({
+        map: atlasTex || null,
+        roughness: 0.70,
         metalness: 0.05,
         transparent: true,
         opacity: 0.0,
         side: THREE.DoubleSide,
+        sunDirection: this.sunLight?.position,
       });
 
       // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
@@ -541,17 +547,23 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       let posBuf = new Float32Array(estimatedFloats);
       let normBuf = new Float32Array(estimatedFloats);
       let uvBuf = new Float32Array(Math.floor((estimatedFloats / 3) * 2));
+      let heightBuf = new Float32Array(Math.floor(estimatedFloats / 3));
 
       let posIdx = 0;
       let uvIdx = 0;
+      let heightIdx = 0;
 
       // 1-B. [3단계 신규] 줌 14.5 ~ 15.5 페이드인을 위한 옥상 난간 및 옥탑 코어 분리 버퍼
       const estRooftopFloats = Math.min(features.length * 120, 1200000);
       let rooftopPosBuf = new Float32Array(estRooftopFloats);
       let rooftopNormBuf = new Float32Array(estRooftopFloats);
       let rooftopUvBuf = new Float32Array(Math.floor((estRooftopFloats / 3) * 2));
+      let rooftopHeightBuf = new Float32Array(Math.floor(estRooftopFloats / 3));
       let rooftopPosIdx = 0;
       let rooftopUvIdx = 0;
+      let rooftopHeightIdx = 0;
+
+      let currentBuildingBaseElev = 0;
 
       const ensureCapacity = (additionalVertices: number) => {
         const neededFloats = posIdx + additionalVertices * 3;
@@ -560,12 +572,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const newPos = new Float32Array(newSize);
           const newNorm = new Float32Array(newSize);
           const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
+          const newHeight = new Float32Array(Math.floor(newSize / 3));
           newPos.set(posBuf);
           newNorm.set(normBuf);
           newUv.set(uvBuf);
+          newHeight.set(heightBuf);
           posBuf = newPos;
           normBuf = newNorm;
           uvBuf = newUv;
+          heightBuf = newHeight;
         }
       };
 
@@ -576,12 +591,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const newPos = new Float32Array(newSize);
           const newNorm = new Float32Array(newSize);
           const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
+          const newHeight = new Float32Array(Math.floor(newSize / 3));
           newPos.set(rooftopPosBuf);
           newNorm.set(rooftopNormBuf);
           newUv.set(rooftopUvBuf);
+          newHeight.set(rooftopHeightBuf);
           rooftopPosBuf = newPos;
           rooftopNormBuf = newNorm;
           rooftopUvBuf = newUv;
+          rooftopHeightBuf = newHeight;
         }
       };
 
@@ -605,6 +623,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         normBuf[posIdx + 2] = norm[2];
         uvBuf[uvIdx] = uv0[0];
         uvBuf[uvIdx + 1] = uv0[1];
+        heightBuf[heightIdx] = Math.max(0, p0[1] - currentBuildingBaseElev);
 
         // v1
         posBuf[posIdx + 3] = p1[0];
@@ -615,6 +634,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         normBuf[posIdx + 5] = norm[2];
         uvBuf[uvIdx + 2] = uv1[0];
         uvBuf[uvIdx + 3] = uv1[1];
+        heightBuf[heightIdx + 1] = Math.max(0, p1[1] - currentBuildingBaseElev);
 
         // v2
         posBuf[posIdx + 6] = p2[0];
@@ -625,9 +645,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         normBuf[posIdx + 8] = norm[2];
         uvBuf[uvIdx + 4] = uv2[0];
         uvBuf[uvIdx + 5] = uv2[1];
+        heightBuf[heightIdx + 2] = Math.max(0, p2[1] - currentBuildingBaseElev);
 
         posIdx += 9;
         uvIdx += 6;
+        heightIdx += 3;
       };
 
       const addQuad = (
@@ -679,6 +701,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         rooftopNormBuf[rooftopPosIdx + 2] = norm[2];
         rooftopUvBuf[rooftopUvIdx] = uv0[0];
         rooftopUvBuf[rooftopUvIdx + 1] = uv0[1];
+        rooftopHeightBuf[rooftopHeightIdx] = Math.max(0, p0[1] - currentBuildingBaseElev);
 
         rooftopPosBuf[rooftopPosIdx + 3] = p1[0];
         rooftopPosBuf[rooftopPosIdx + 4] = p1[1];
@@ -688,18 +711,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         rooftopNormBuf[rooftopPosIdx + 5] = norm[2];
         rooftopUvBuf[rooftopUvIdx + 2] = uv1[0];
         rooftopUvBuf[rooftopUvIdx + 3] = uv1[1];
+        rooftopHeightBuf[rooftopHeightIdx + 1] = Math.max(0, p1[1] - currentBuildingBaseElev);
 
         rooftopPosBuf[rooftopPosIdx + 6] = p2[0];
         rooftopPosBuf[rooftopPosIdx + 7] = p2[1];
         rooftopPosBuf[rooftopPosIdx + 8] = p2[2];
         rooftopNormBuf[rooftopPosIdx + 6] = norm[0];
-        rooftopNormBuf[rooftopPosIdx + 7] = norm[1];
-        rooftopNormBuf[rooftopPosIdx + 8] = norm[2];
+        rooftopNormBuf[rooftopPosIdx + 1] = norm[1];
+        rooftopNormBuf[rooftopPosIdx + 2] = norm[2];
         rooftopUvBuf[rooftopUvIdx + 4] = uv2[0];
         rooftopUvBuf[rooftopUvIdx + 5] = uv2[1];
+        rooftopHeightBuf[rooftopHeightIdx + 2] = Math.max(0, p2[1] - currentBuildingBaseElev);
 
         rooftopPosIdx += 9;
         rooftopUvIdx += 6;
+        rooftopHeightIdx += 3;
       };
 
       const addRooftopQuad = (
@@ -846,6 +872,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             elevationCache.getFromMap(map, [cLng, cLat]) ||
             (map.queryTerrainElevation ? map.queryTerrainElevation([cLng, cLat]) || 0 : 0);
           const baseElev = rawElev - this.clampedAltitude;
+          currentBuildingBaseElev = baseElev;
           const topElev = baseElev + height;
 
           // -------------------------------------------------------------------
@@ -997,6 +1024,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const memo = getMemoizedBuilding(bldId);
           const directRoofType = (feat.properties as any)?.roofType || memo?.roofColor?.roofType;
           const directRoofCol = (feat.properties as any)?.roofColour || (feat.properties as any)?.roofColor || memo?.roofColor?.hex;
+          const roofCdNm = String((feat.properties as any)?.roofCdNm || (feat.properties as any)?.roof_cd_nm || '').toLowerCase();
 
           if (memo?.roofColor?.slotId !== undefined) {
             roofUV = getPhotorealisticSlotUV(memo.roofColor.slotId);
@@ -1011,22 +1039,58 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (slotMap[directRoofType]) {
               roofUV = getPhotorealisticSlotUV(slotMap[directRoofType]);
             }
+          } else if (roofCdNm) {
+            if (roofCdNm.includes('우레탄') || roofCdNm.includes('방수')) {
+              roofUV = uvRoofUrethane;
+            } else if (roofCdNm.includes('기와') || roofCdNm.includes('슁글') || roofCdNm.includes('적갈')) {
+              roofUV = uvRoofTile;
+            } else if (roofCdNm.includes('슬래브') || roofCdNm.includes('콘크리트') || roofCdNm.includes('평지붕')) {
+              roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete;
+            } else if (roofCdNm.includes('강판') || roofCdNm.includes('징크') || roofCdNm.includes('철골')) {
+              roofUV = uvRoofZinc;
+            } else {
+              const seedVal = classified.seed;
+              if (seedVal < 40) {
+                roofUV = uvRoofUrethane; // 우레탄 방수 딥그린 (40%)
+              } else if (seedVal < 75) {
+                roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete; // 노후 콘크리트 슬래브 (35%)
+              } else {
+                roofUV = uvRoofTile; // 적갈색 기와/슁글 (25%)
+              }
+            }
           } else if (directRoofCol) {
             const low = String(directRoofCol).toLowerCase();
-            if (low.includes('green') || low === '#15803d' || low === '#357a56' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
-              roofUV = getPhotorealisticSlotUV('roof_urethane_sage');
+            if (low.includes('green') || low === '#15803d' || low === '#357a56' || low === '#32694f' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
+              roofUV = uvRoofUrethane;
             } else if (low.includes('blue') || low === '#254e7a' || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68') {
-              roofUV = getPhotorealisticSlotUV('roof_zinc_blue');
-            } else if (low.includes('red') || low === '#7c3a27' || low === '#6e3222' || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
-              roofUV = getPhotorealisticSlotUV('roof_terracotta_tile');
+              roofUV = uvRoofZinc;
+            } else if (low.includes('red') || low === '#7c3a27' || low === '#7c3829' || low === '#6e3222' || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
+              roofUV = uvRoofTile;
             } else if (low === '#57534e') {
               roofUV = uvRoofAptSlab;
-            } else if (low === '#78716c' || low === '#94a3b8') {
-              roofUV = getPhotorealisticSlotUV('roof_concrete_warmgray');
+            } else if (low === '#78716c' || low === '#736f68' || low === '#94a3b8') {
+              roofUV = uvRoofConcrete;
             } else if (low === '#64748b' || low === '#334155' || low === '#1e293b') {
-              roofUV = getPhotorealisticSlotUV('roof_asphalt_charcoal');
+              roofUV = uvRoofAsphalt;
             } else {
-              roofUV = isApt ? uvRoofAptSlab : getPhotorealisticSlotUV('roof_concrete_warmgray');
+              const seedVal = classified.seed;
+              if (seedVal < 40) {
+                roofUV = uvRoofUrethane;
+              } else if (seedVal < 75) {
+                roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete;
+              } else {
+                roofUV = uvRoofTile;
+              }
+            }
+          } else {
+            // [V-World 3대 옥상 실사 황금비율]: 우레탄 방수 딥그린 40%, 노후 콘크리트 35%, 적갈색 기와 25%
+            const seedVal = classified.seed;
+            if (seedVal < 40) {
+              roofUV = uvRoofUrethane; // 우레탄 방수 딥그린 40% (#32694f)
+            } else if (seedVal < 75) {
+              roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete; // 노후 콘크리트 슬래브 35% (#736f68)
+            } else {
+              roofUV = uvRoofTile; // 적갈색 기와/슁글 25% (#7c3829)
             }
           }
 
@@ -1186,11 +1250,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const finalPositions = posBuf.subarray(0, posIdx);
         const finalNormals = normBuf.subarray(0, posIdx);
         const finalUvs = uvBuf.subarray(0, uvIdx);
+        const finalHeights = heightBuf.subarray(0, heightIdx);
 
         const newGeometry = new THREE.BufferGeometry();
         newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPositions, 3));
         newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormals, 3));
         newGeometry.setAttribute('uv', new THREE.BufferAttribute(finalUvs, 2));
+        newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalHeights, 1));
         newGeometry.computeBoundingSphere();
 
         const newMesh = new THREE.Mesh(newGeometry, this.masterMaterial);
@@ -1218,11 +1284,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const finalRooftopPositions = rooftopPosBuf.subarray(0, rooftopPosIdx);
         const finalRooftopNormals = rooftopNormBuf.subarray(0, rooftopPosIdx);
         const finalRooftopUvs = rooftopUvBuf.subarray(0, rooftopUvIdx);
+        const finalRooftopHeights = rooftopHeightBuf.subarray(0, rooftopHeightIdx);
 
         const newRooftopGeometry = new THREE.BufferGeometry();
         newRooftopGeometry.setAttribute('position', new THREE.BufferAttribute(finalRooftopPositions, 3));
         newRooftopGeometry.setAttribute('normal', new THREE.BufferAttribute(finalRooftopNormals, 3));
         newRooftopGeometry.setAttribute('uv', new THREE.BufferAttribute(finalRooftopUvs, 2));
+        newRooftopGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalRooftopHeights, 1));
         newRooftopGeometry.computeBoundingSphere();
 
         const newRooftopMesh = new THREE.Mesh(newRooftopGeometry, this.rooftopMaterial);
@@ -1425,6 +1493,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       this.camera.projectionMatrix.copy(this.renderMatrix).multiply(this.localMatrix);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+
+      // [GeoBrief 3D 2단계] 카메라 시점 및 태양광 물리 반사(PBR Specular & Sky Reflection) 프레임 동기화
+      if (this.masterMaterial) {
+        updatePhotorealisticPbrUniforms(this.masterMaterial, this.camera, this.sunLight);
+      }
+      if (this.rooftopMaterial) {
+        updatePhotorealisticPbrUniforms(this.rooftopMaterial, this.camera, this.sunLight);
+      }
 
       if (gl) {
         gl.enable(gl.DEPTH_TEST);

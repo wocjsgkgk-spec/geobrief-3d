@@ -263,8 +263,8 @@ function drawRealisticWindowGlass(
  * Slot 0: 아파트 Type A (밝은 크림 아이보리 #f5f2eb + 선명한 차콜 #1e293b 창호 격자)
  */
 function drawAptWarmIvory(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 1. 베이스 웜 아이보리 외벽 (한국 브이월드 도심 실사 색감 #f5f2eb)
-  ctx.fillStyle = '#f5f2eb';
+  // 1. 베이스 웜 크림 아이보리 외벽 (한국 브이월드 도심 실사 색감 #f6f3eb)
+  ctx.fillStyle = '#f6f3eb';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브 & 빗물 드립선
@@ -892,12 +892,12 @@ function drawRoofBaseGutterAndAO(
 }
 
 /**
- * Slot 14: 콘크리트 그레이 옥상 (#78716c)
+ * Slot 14: 노후 콘크리트 슬래브 옥상 (#736f68)
  */
 function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#8d8680');
-  grad.addColorStop(1, '#78716c');
+  grad.addColorStop(0, '#86827b');
+  grad.addColorStop(1, '#736f68');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -929,12 +929,12 @@ function drawRoofConcreteWarmGray(ctx: CanvasRenderingContext2D, x: number, y: n
 }
 
 /**
- * Slot 17: 우레탄 방수 에메랄드/세이지 그린 (#357a56)
+ * Slot 17: 우레탄 방수 딥그린 옥상 (#32694f)
  */
 function drawRoofUrethaneSage(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#448d67');
-  grad.addColorStop(1, '#357a56');
+  grad.addColorStop(0, '#3d7a5e');
+  grad.addColorStop(1, '#32694f');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
@@ -989,12 +989,12 @@ function drawRoofAsphaltCharcoal(ctx: CanvasRenderingContext2D, x: number, y: nu
 }
 
 /**
- * Slot 16: 테라코타 적갈색/브라운 & 기와 지붕 (#7c3a27 / #6e3222)
+ * Slot 16: 테라코타 적갈색 기와/슁글 (#7c3829)
  */
 function drawRoofTerracottaTile(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#8f4430');
-  grad.addColorStop(1, '#7c3a27');
+  grad.addColorStop(0, '#8d4232');
+  grad.addColorStop(1, '#7c3829');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
