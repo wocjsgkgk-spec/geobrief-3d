@@ -2179,6 +2179,23 @@ export const useMapStore = create<MapStoreState>()(
       }),
       onRehydrateStorage: () => (state) => {
         try {
+          if (state) {
+            if (!state.layers) {
+              state.layers = {
+                buildings3D: true,
+                roads: true,
+                demContours: false,
+                cadastral: false,
+                zoning: false,
+                bridgeTunnel: true,
+                ssaoPostProcessing: false,
+                firstLogisticsSmartCity: false,
+                proceduralTrees: false,
+              };
+            } else {
+              state.layers.roads = true;
+            }
+          }
           if (state && state.completedPolygon && state.polygonCenter) {
             state.defenseAnalysisResult = analyzeDefenseRegulations(
               state.completedPolygon,

@@ -57,6 +57,10 @@ import {
   createPhotorealisticPbrMaterial,
   updatePhotorealisticPbrUniforms,
 } from '@/lib/vendor/photorealisticPbrShader';
+import {
+  buildAuthenticBridgeMeshGroup,
+  WONJU_AUTHENTIC_BRIDGES,
+} from '@/utils/authenticBridgeBuilder';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -139,6 +143,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
       this.rooftopMesh.visible = visible && t > 0.01;
     }
+    this.bridgeGroup.visible = visible && this.isBridgeTunnelVisible;
+    this.tunnelGroup.visible = visible && this.isBridgeTunnelVisible;
   }
 
   public setBridgeTunnelVisible(visible: boolean): void {
@@ -1467,6 +1473,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
     const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
     const metersPerLat = (Math.PI / 180) * 6378137;
+
+    // -------------------------------------------------------------------------
+    // [1단계: 하천·도로 횡단 '대교(Bridge)' 실제 도로 선형 기반 3D 입체 구조물 생성]
+    // - Streets-GL 벤더링: 실제 하천(원주천, 섬강 등)을 건너는 교량 선형(LineString)을 따라
+    //   다크 아스팔트 상판(#26292e), 1.6m 거더(#64748b), 1.2m 방호벽(#e2e8f0), 30m 간격 교각(#94a3b8)
+    // -------------------------------------------------------------------------
+    const getTerrainElev = (p: [number, number]) => {
+      if (!this.map) return 0;
+      return (
+        elevationCache.getFromMap(this.map, p) ||
+        (this.map.queryTerrainElevation ? this.map.queryTerrainElevation(p) || 0 : 0)
+      );
+    };
+
+    const authenticBridgesMeshGroup = buildAuthenticBridgeMeshGroup(
+      WONJU_AUTHENTIC_BRIDGES,
+      this.originLngLat,
+      getTerrainElev
+    );
+    this.bridgeGroup.add(authenticBridgesMeshGroup);
 
     for (const item of this.bridgesAndTunnelsData) {
       if (!item.coordinates || !Array.isArray(item.coordinates) || item.coordinates.length < 2) continue;

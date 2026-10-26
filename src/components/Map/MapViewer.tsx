@@ -31,6 +31,7 @@ import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
 import { LOD2BuildingEngine } from './LOD2BuildingEngine';
 import { RealisticKoreanCityLayer } from './RealisticKoreanCityLayer';
 import { setupVworldPoiLayer, updateVworldPoisWithBuildings, VWORLD_POI_LAYER_ID } from '@/utils/koreanPoiLayer';
+import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import {
@@ -2744,15 +2745,18 @@ export const MapViewer: React.FC = () => {
           'crosswalks-source'
         );
 
-        const initialRoadVis = layers.roads ? 'visible' : 'none';
+        const initialRoadVis = layers?.roads === false ? 'none' : 'visible';
 
         for (const rLayer of roadLayerDefs) {
           if (!map.getLayer(rLayer.id)) {
+            const isWater =
+              rLayer.id.startsWith('korean-water') ||
+              rLayer.id.startsWith('korean-riverbank');
             const configuredLayer: any = {
               ...rLayer,
               layout: {
                 ...(rLayer.layout || {}),
-                visibility: initialRoadVis,
+                visibility: isWater ? 'visible' : initialRoadVis,
               },
             };
             map.addLayer(configuredLayer, beforeRoads);
@@ -3124,6 +3128,9 @@ export const MapViewer: React.FC = () => {
 
         // [3단계 신규]: 브이월드 스타일 노란 핀 + 한글 건물/지역 명칭(POI) 심볼 레이어 등록
         setupVworldPoiLayer(map);
+
+        // [2단계 신규]: 원주천·섬강 등 하천 횡단 대교 국토부 제원 뱃지 라벨 레이어 등록
+        setupBridgeLabelsLayer(map);
       } catch (rcErr) {
         console.warn('[RealisticKoreanCityLayer] Registration warning:', rcErr);
       }
@@ -3916,12 +3923,24 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const roadVis = layers.roads ? 'visible' : 'none';
+    const roadVis = layers?.roads === false ? 'none' : 'visible';
 
     for (const lid of KOREAN_ROAD_LAYER_IDS) {
       if (map.getLayer(lid)) {
-        map.setLayoutProperty(lid, 'visibility', roadVis);
+        if (lid.startsWith('korean-water') || lid.startsWith('korean-riverbank')) {
+          map.setLayoutProperty(lid, 'visibility', 'visible');
+        } else {
+          map.setLayoutProperty(lid, 'visibility', roadVis);
+        }
       }
+    }
+
+    if (map.getLayer('bridge-labels-symbol')) {
+      map.setLayoutProperty('bridge-labels-symbol', 'visibility', roadVis);
+    }
+
+    if (realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.setBridgeTunnelVisible(layers.roads);
     }
 
     if (lod2BuildingEngineRef.current) {

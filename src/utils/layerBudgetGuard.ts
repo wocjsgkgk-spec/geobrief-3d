@@ -7,7 +7,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-export const MAX_ACTIVE_LAYERS_LIMIT = 60;
+export const MAX_ACTIVE_LAYERS_LIMIT = 120;
 
 /**
  * 절대 숨기면 안 되는 핵심 필수 레이어 접두사 목록
@@ -16,6 +16,10 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'satellite-base',
   'clean-layer',
   'streetsgl-road',
+  'road-',
+  'korean-',
+  'complex-',
+  'bridge-',
   'realistic-korean',
   'vworld-poi',
   'vworld-zoning',
