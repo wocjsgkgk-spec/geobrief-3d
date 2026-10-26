@@ -60,6 +60,8 @@ import {
   Focus,
   Edit3,
   Target,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -171,6 +173,8 @@ export const ControlPanel: React.FC = () => {
     polygonCenter,
     sunHour,
     setSunHour,
+    isSunPlaying,
+    toggleSunPlaying,
     // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
     waterLevel,
     setWaterLevel,
@@ -397,10 +401,25 @@ export const ControlPanel: React.FC = () => {
                 <Sun className="w-4 h-4 text-amber-400" />
                 시간대별 일조·태양광 시뮬레이션
               </h2>
-              <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
-                <Clock className="w-3 h-3 text-amber-400" />
-                {sunInfo?.label ?? `${Math.floor(safeHour)}:00`}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={toggleSunPlaying}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 transition-all ${
+                    isSunPlaying
+                      ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md animate-pulse'
+                      : 'bg-[#18231c] text-amber-300 border-amber-700/60 hover:bg-[#203126]'
+                  }`}
+                  title="태양 궤적 타임라인 자동 재생/정지"
+                >
+                  {isSunPlaying ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                  <span>{isSunPlaying ? '정지' : '자동재생'}</span>
+                </button>
+                <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-amber-400" />
+                  {sunInfo?.label ?? `${Math.floor(safeHour)}:00`}
+                </span>
+              </div>
             </div>
 
             {/* 태양광 시간 슬라이더 */}

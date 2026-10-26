@@ -297,6 +297,15 @@ interface MapStoreState {
   isOrbiting: boolean;
   toggleOrbiting: () => void;
 
+  // 1인칭 보행자(스트리트) 뷰 모드
+  isStreetView: boolean;
+  streetViewTarget: [number, number] | null;
+  toggleStreetView: (coords?: [number, number]) => void;
+
+  // 태양 궤적 타임라인 자동 재생 모드
+  isSunPlaying: boolean;
+  toggleSunPlaying: () => void;
+
   // 부지 드로잉 및 Turf.js 정량 면적 상태
   isDrawingMode: boolean;
   drawingPoints: [number, number][];
@@ -730,6 +739,17 @@ export const useMapStore = create<MapStoreState>()(
 
       isOrbiting: false,
       toggleOrbiting: () => set((state) => ({ isOrbiting: !state.isOrbiting })),
+
+      isStreetView: false,
+      streetViewTarget: null,
+      toggleStreetView: (coords) =>
+        set((state) => ({
+          isStreetView: !state.isStreetView,
+          streetViewTarget: coords || (state.isStreetView ? null : state.polygonCenter),
+        })),
+
+      isSunPlaying: false,
+      toggleSunPlaying: () => set((state) => ({ isSunPlaying: !state.isSunPlaying })),
 
       isDrawingMode: false,
       drawingPoints: [],

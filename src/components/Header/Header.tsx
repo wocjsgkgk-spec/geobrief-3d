@@ -33,6 +33,12 @@ import {
   Target,
   MapPin,
   Building2,
+  User,
+  Sun,
+  Play,
+  Pause,
+  Printer,
+  Camera,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -101,6 +107,12 @@ export const Header: React.FC = () => {
     resetLosAnalysis,
     buildingTheme,
     setBuildingTheme,
+    isStreetView,
+    toggleStreetView,
+    isSunPlaying,
+    toggleSunPlaying,
+    sunHour,
+    setSunHour,
   } = useMapStore();
 
   const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
@@ -478,13 +490,52 @@ export const Header: React.FC = () => {
               >
                 <div className="flex items-center gap-2">
                   <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isOrbiting ? 'animate-spin' : ''}`} />
-                  <span>360도 파노라마 3D 투어</span>
+                  <span>드론 360° 오빗 3D 투어</span>
                 </div>
                 {isOrbiting && (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 animate-pulse border border-emerald-700">
                     회전 중
                   </span>
                 )}
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleStreetView();
+                  setActiveDropdown(null);
+                }}
+                className={`w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors ${
+                  isStreetView ? 'bg-amber-600/25 border border-amber-400/60 text-amber-200' : ''
+                }`}
+                title="지상 눈높이(피치 80도) 1인칭 보행자 뷰 전환"
+              >
+                <div className="flex items-center gap-2">
+                  <User className="w-3.5 h-3.5 text-amber-400" />
+                  <span>1인칭 보행자(스트리트) 뷰</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                  {isStreetView ? '피치 80° 활성' : '지상 눈높이'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  toggleSunPlaying();
+                  setActiveDropdown(null);
+                }}
+                className={`w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors ${
+                  isSunPlaying ? 'bg-amber-600/30 border border-amber-400/80 text-amber-200 shadow-md ring-1 ring-amber-400/40' : ''
+                }`}
+                title="주야간 태양 궤적 타임라인 슬라이더 자동 재생(Play/Pause)"
+              >
+                <div className="flex items-center gap-2">
+                  <Sun className={`w-3.5 h-3.5 text-amber-400 ${isSunPlaying ? 'animate-spin' : ''}`} />
+                  <span>태양 궤적 일조 시뮬레이션</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1">
+                  {isSunPlaying ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                  {isSunPlaying ? '재생 중' : `${sunHour.toFixed(1)}시`}
+                </span>
               </button>
 
               <button
@@ -887,6 +938,42 @@ export const Header: React.FC = () => {
                 </div>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-300 border border-emerald-700">
                   {slidePackProgress.isExporting ? '생성 중' : 'PPTX'}
+                </span>
+              </button>
+
+              {/* [신규] 고해상도 브리핑 보고서 이미지 (PNG) */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('geobrief-export-png'));
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+                title="3D 캔버스, 표제란, 범례가 포함된 고해상도 브리핑 보고서 PNG 즉시 저장"
+              >
+                <div className="flex items-center gap-2">
+                  <Camera className="w-3.5 h-3.5 text-teal-400" />
+                  <span>고해상도 브리핑 이미지 (PNG)</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-800">
+                  PNG 저장
+                </span>
+              </button>
+
+              {/* [신규] 브리핑 보고서 인쇄 및 PDF 저장 */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('geobrief-export-pdf'));
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+                title="도정·국방 브리핑 보고서 인쇄 및 PDF 문서 출력"
+              >
+                <div className="flex items-center gap-2">
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>브리핑 보고서 인쇄 및 PDF</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                  PDF 인쇄
                 </span>
               </button>
 

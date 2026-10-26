@@ -31,6 +31,10 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'fusion-buildings',
   'custom-water-level',
   'tactical-defense',
+  'building-highlight',
+  'selected-parcel',
+  'viewshed-',
+  'buffer-500m',
 ];
 
 /**
