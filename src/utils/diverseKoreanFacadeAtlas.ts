@@ -158,6 +158,7 @@ export interface DiverseUVRect {
   u1: number;
   v1: number;
 }
+export type UVRect = DiverseUVRect;
 
 /**
  * 36 슬롯 UV 좌표 반환 (Three.js flipY = true)
@@ -178,6 +179,8 @@ export function getDiverseFacadeSlotUV(slot: number | string): DiverseUVRect {
   const v0 = 1.0 - (row + 1) / 6.0;
   return { u0, v0, u1, v1 };
 }
+
+export const getPhotorealisticSlotUV = getDiverseFacadeSlotUV;
 
 // =============================================================================
 // [공통 드로잉 헬퍼]
@@ -283,8 +286,8 @@ function drawIndividualWindow(
 
 // --- 프리셋 A~D (한국형 아파트 4종) ---
 function drawPresetA(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ① 크림 화이트(#f5f2eb) 외벽 (70% 벽면)
-  ctx.fillStyle = '#f5f2eb';
+  // ① 크림 아이보리(#f4f0e6) 외벽 (70% 벽면)
+  ctx.fillStyle = '#f4f0e6';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브 & 층간 줄눈
@@ -297,16 +300,16 @@ function drawPresetA(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.fillRect(x, y, 24, h);
   ctx.fillRect(x + w - 24, y, 24, h);
 
-  // 중앙 거실 대형 베란다 창 (면적 비율 ~30%)
+  // 중앙 거실 대형 베란다 창 (직사각형 발코니 유리창 #1e293b + 흰색 창틀 프레임)
   const winW = Math.round(w * 0.52);
   const winH = Math.round(h * 0.46);
   const winX = x + Math.round((w - winW) * 0.5);
   const winY = y + 42;
 
   drawIndividualWindow(ctx, winX, winY, winW, winH, {
-    frameColor: '#1e293b',
-    glassColor1: '#243246',
-    glassColor2: '#0e1624',
+    frameColor: '#ffffff', // 백색 PVC 프레임
+    glassColor1: '#1e293b',
+    glassColor2: '#0f172a',
     hasBalconyRailing: true,
     hasLouverGrill: true,
   });
@@ -315,13 +318,13 @@ function drawPresetA(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetB(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ② 소프트 샌드 베이지(#e6dec8) + 브라운(#8c6247) 투톤
-  ctx.fillStyle = '#e6dec8';
+  // ② 샌드 베이지(#e6dfd3) + 브라운(#78523a) 투톤
+  ctx.fillStyle = '#e6dfd3';
   ctx.fillRect(x, y, w, h);
 
   // 하단 30% 브라운 투톤 악센트
   const btmH = Math.round(h * 0.30);
-  ctx.fillStyle = '#8c6247';
+  ctx.fillStyle = '#78523a';
   ctx.fillRect(x, y + h - btmH, w, btmH);
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(x, y + h - btmH - 2, w, 2);
@@ -333,8 +336,8 @@ function drawPresetB(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   const winY = y + 38;
 
   drawIndividualWindow(ctx, winX, winY, winW, winH, {
-    frameColor: '#26292e',
-    glassColor1: '#2a384c',
+    frameColor: '#ffffff',
+    glassColor1: '#1e293b',
     glassColor2: '#111827',
     hasBalconyRailing: true,
     hasLouverGrill: false,
@@ -343,8 +346,8 @@ function drawPresetB(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   const win2W = Math.round(w * 0.30);
   const win2X = winX + winW + 16;
   drawIndividualWindow(ctx, win2X, winY, win2W, winH, {
-    frameColor: '#26292e',
-    glassColor1: '#1f2937',
+    frameColor: '#ffffff',
+    glassColor1: '#1e293b',
     glassColor2: '#0f172a',
     hasBalconyRailing: false,
     hasLouverGrill: true,
@@ -354,8 +357,8 @@ function drawPresetB(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetC(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ③ 웜 그레이(#d6d3cd) + 세로 강조선 아파트
-  ctx.fillStyle = '#d6d3cd';
+  // ③ 라이트 웜그레이(#dcd9d2) + 세로 강조선 아파트
+  ctx.fillStyle = '#dcd9d2';
   ctx.fillRect(x, y, w, h);
 
   // 좌측 다크 슬레이트 버티컬 컬러 밴드
@@ -373,8 +376,8 @@ function drawPresetC(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   const winY = y + 40;
 
   drawIndividualWindow(ctx, winX, winY, winW, winH, {
-    frameColor: '#1e293b',
-    glassColor1: '#263344',
+    frameColor: '#ffffff',
+    glassColor1: '#1e293b',
     glassColor2: '#0d131d',
     hasBalconyRailing: true,
     hasLouverGrill: true,
@@ -384,13 +387,13 @@ function drawPresetC(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetD(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ④ 테라코타/벽돌색 기단부 + 맑은 아이보리(#f7f4ed) 상층부
-  ctx.fillStyle = '#f7f4ed';
+  // ④ 테라코타(#8c3b2b) 기단부 + 크림 아이보리(#f4f0e6) 상층부
+  ctx.fillStyle = '#f4f0e6';
   ctx.fillRect(x, y, w, h);
 
   // 하단 25% 테라코타 벽돌 기단부
   const btmH = Math.round(h * 0.25);
-  ctx.fillStyle = '#8b3a27';
+  ctx.fillStyle = '#8c3b2b';
   ctx.fillRect(x, y + h - btmH, w, btmH);
   ctx.fillStyle = '#f8fafc';
   for (let py = y + h - btmH + 12; py < y + h; py += 14) {
@@ -404,7 +407,7 @@ function drawPresetD(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
   drawIndividualWindow(ctx, winX, winY, winW, winH, {
     frameColor: '#ffffff', // 백색 PVC 프레임
-    glassColor1: '#1f2d3d',
+    glassColor1: '#1e293b',
     glassColor2: '#0a1017',
     hasBalconyRailing: true,
     hasLouverGrill: false,
@@ -415,20 +418,51 @@ function drawPresetD(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
 // --- 측벽 슬롯 4 ---
 function drawAptSideWall(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 매끈한 크림 아이보리(#f5f2eb) 콘크리트 측벽 (창문 없음!)
-  ctx.fillStyle = '#f5f2eb';
+  // 매끈한 크림 아이보리(#f4f0e6) 콘크리트 측벽 (창문 일절 없음!)
+  ctx.fillStyle = '#f4f0e6';
   ctx.fillRect(x, y, w, h);
 
-  // 중앙 수직 브랜드 악센트 스트라이프
-  const barW = Math.round(w * 0.16);
+  // 층간 슬래브 미세 홈선
+  ctx.strokeStyle = '#e2ded5';
+  ctx.lineWidth = 1;
+  const flrH = Math.round(h / 8);
+  for (let fy = y + flrH; fy < y + h; fy += flrH) {
+    ctx.beginPath();
+    ctx.moveTo(x, fy);
+    ctx.lineTo(x + w, fy);
+    ctx.stroke();
+  }
+
+  // 단지별 브랜드 액센트 수직 컬러 밴드 (브라운, 딥 네이비, 테라코타, 포레스트 그린)
+  const barW = Math.round(w * 0.20);
   const barX = x + Math.round((w - barW) * 0.5);
-  ctx.fillStyle = '#334155';
+  const brandGrad = ctx.createLinearGradient(barX, y, barX + barW, y);
+  brandGrad.addColorStop(0, '#1e3a8a'); // 딥 네이비
+  brandGrad.addColorStop(0.5, '#2563eb');
+  brandGrad.addColorStop(1, '#1e3a8a');
+  ctx.fillStyle = brandGrad;
   ctx.fillRect(barX, y, barW, h);
 
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(barX + 4, y + 60, barW - 8, 40);
+  // 상단 단지 동 번호 그래픽 박스 (예: 101, 102동)
+  const badgeY = y + Math.round(h * 0.12);
+  const badgeH = 44;
+  const badgeW = Math.round(w * 0.55);
+  const badgeX = x + Math.round((w - badgeW) * 0.5);
 
-  applyNoise(ctx, x, y, w, h, 0.02);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+  ctx.strokeStyle = '#1e3a8a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
+
+  // 동 번호 '101' 그래픽
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('101동', x + Math.round(w * 0.5), badgeY + Math.round(badgeH * 0.5));
+
+  applyNoise(ctx, x, y, w, h, 0.015);
 }
 
 // --- 프리셋 E~H (시내 상업·오피스 빌딩 4종) ---
@@ -805,37 +839,64 @@ function drawPenthouseWall(ctx: CanvasRenderingContext2D, x: number, y: number, 
 }
 
 function drawGroundShopShowcase(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 1층 통유리 상가 쇼윈도 + 간판 밴드
-  ctx.fillStyle = '#334155'; // 짙은 화강석 기단
+  // [1층]: 0m ~ 3.8m 어두운 화강석 프레임 (#1c1917, #292524)
+  ctx.fillStyle = '#1c1917';
   ctx.fillRect(x, y, w, h);
 
-  // 간판 띠장
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(x + 12, y + 14, w - 24, 38);
+  // 1층 상단 정돈된 한국형 가로 간판 블록 띠 (Signboard Band)
+  const signH = Math.round(h * 0.22);
+  const signY = y + 10;
+  const signW = w - 16;
+  const signX = x + 8;
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(signX, signY, signW, signH);
   ctx.strokeStyle = '#64748b';
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(x + 12, y + 14, w - 24, 38);
+  ctx.strokeRect(signX, signY, signW, signH);
 
-  // 어두운 통유리 쇼윈도
-  const shopY = y + 60;
-  const shopH = h - 75;
-  const shopW = w - 24;
-  const shopX = x + 12;
+  // 다채로운 한국형 상호 간판 블록 (청색, 주황색, 녹색 간판)
+  const bW = Math.round((signW - 12) / 3);
+  const colors = ['#1d4ed8', '#c2410c', '#15803d'];
+  for (let k = 0; k < 3; k++) {
+    const kX = signX + 3 + k * (bW + 3);
+    ctx.fillStyle = colors[k % colors.length];
+    ctx.fillRect(kX, signY + 3, bW, signH - 6);
+    // 흰색 한글 상호 텍스트 실루엣 블록
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(kX + 8, signY + Math.round(signH * 0.35), bW - 16, 5);
+    ctx.fillRect(kX + 14, signY + Math.round(signH * 0.55), bW - 28, 4);
+  }
 
-  const shopGrad = ctx.createLinearGradient(shopX, shopY, shopX, shopY + shopH);
-  shopGrad.addColorStop(0, '#111827');
-  shopGrad.addColorStop(1, '#000000');
-  ctx.fillStyle = shopGrad;
+  // 밝은 상가 통유리 쇼윈도 (#e0f2fe ~ #0284c7)
+  const shopY = signY + signH + 8;
+  const shopH = h - shopY - 10;
+  const shopW = w - 20;
+  const shopX = x + 10;
+
+  // 통유리 내부 조명 및 쇼윈도
+  const glassGrad = ctx.createLinearGradient(shopX, shopY, shopX, shopY + shopH);
+  glassGrad.addColorStop(0, '#e0f2fe');
+  glassGrad.addColorStop(0.35, '#bae6fd');
+  glassGrad.addColorStop(1, '#0369a1');
+  ctx.fillStyle = glassGrad;
   ctx.fillRect(shopX, shopY, shopW, shopH);
 
-  // 자동문 프레임
-  const doorW = Math.round(shopW * 0.36);
+  // 어두운 화강석/알루미늄 창틀 프레임 (#334155)
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(shopX, shopY, shopW, shopH);
+
+  // 중앙 자동문 출입구 프레임
+  const doorW = Math.round(shopW * 0.34);
   const doorX = shopX + Math.round((shopW - doorW) * 0.5);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(doorX, shopY, doorW, shopH);
   ctx.strokeStyle = '#94a3b8';
   ctx.lineWidth = 2;
   ctx.strokeRect(doorX, shopY + 2, doorW, shopH - 2);
 
-  applyNoise(ctx, x, y, w, h, 0.04);
+  applyNoise(ctx, x, y, w, h, 0.02);
 }
 
 // --- [2단계 신규] 랜드마크 전용 슬롯 (24 ~ 35) ---
