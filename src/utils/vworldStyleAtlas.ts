@@ -936,31 +936,31 @@ function drawAptPilotisLobby(ctx: CanvasRenderingContext2D, x: number, y: number
 
 // =============================================================================
 import {
-  createPhotorealisticCityAtlasCanvas,
-  getPhotorealisticCityAtlasTexture,
-  disposePhotorealisticCityAtlas,
-  PHOTOREALISTIC_ATLAS_SIZE,
-  PHOTOREALISTIC_COLS,
-  PHOTOREALISTIC_ROWS,
-  PHOTOREALISTIC_CELL_W,
-  PHOTOREALISTIC_CELL_H,
-  getPhotorealisticSlotUV,
-} from './photorealisticCityAtlas';
+  createDiverseKoreanFacadeAtlasCanvas,
+  getDiverseKoreanFacadeAtlasTexture,
+  disposeDiverseKoreanFacadeAtlas,
+  DIVERSE_ATLAS_SIZE,
+  DIVERSE_ATLAS_COLS,
+  DIVERSE_ATLAS_ROWS,
+  DIVERSE_CELL_W,
+  DIVERSE_CELL_H,
+  getDiverseFacadeSlotUV,
+} from './diverseKoreanFacadeAtlas';
 
 // 아틀라스 캔버스 생성 및 Three.js Texture 싱글톤 관리
 // =============================================================================
 
 export function createVWorldAtlasCanvas(): HTMLCanvasElement {
-  return createPhotorealisticCityAtlasCanvas();
+  return createDiverseKoreanFacadeAtlasCanvas();
 }
 
 /**
  * Three.js 고성능 CanvasTexture 반환 (anisotropy: 16, mipmaps: true, LinearMipmapLinearFilter)
  */
 export function getVWorldAtlasTexture(): THREE.CanvasTexture | null {
-  return getPhotorealisticCityAtlasTexture();
+  return getDiverseKoreanFacadeAtlasTexture();
 }
 
 export function disposeVWorldAtlas(): void {
-  disposePhotorealisticCityAtlas();
+  disposeDiverseKoreanFacadeAtlas();
 }

@@ -399,17 +399,24 @@ export function classifyBuildingWithVendor(
     case 'apartment': {
       floors = 14 + (seed % 11); // 14층 ~ 24층
       height = 42.0 + (seed % 31) * 1.0; // 42m ~ 72m 고층 아파트 스카이라인
-      if (seed % 5 < 3) {
-        wallColor = '#f4efe6'; // 크림 아이보리 (60%)
-        atlasWallSlot = 'apt_warm_cream';
+      const aptPick = seed % 4;
+      if (aptPick === 0) {
+        wallColor = '#f5f2eb'; // 프리셋 A: 크림 화이트
+        atlasWallSlot = 'apt_preset_a';
+      } else if (aptPick === 1) {
+        wallColor = '#e6dec8'; // 프리셋 B: 소프트 샌드 베이지 브라운 투톤
+        atlasWallSlot = 'apt_preset_b';
+      } else if (aptPick === 2) {
+        wallColor = '#d6d3cd'; // 프리셋 C: 웜 그레이 세로 강조선
+        atlasWallSlot = 'apt_preset_c';
       } else {
-        wallColor = '#e8e0d2'; // 소프트 베이지 (40%)
-        atlasWallSlot = 'apt_sand_beige';
+        wallColor = '#e2dbd0'; // 프리셋 D: 테라코타 기단부 + 아이보리 판상형
+        atlasWallSlot = 'apt_preset_d';
       }
 
       if (seed % 10 < 8) {
-        roofColor = '#57534e'; // 짙은 콘크리트 슬래브 (80%)
-        atlasRoofSlot = 'roof_apt_slab';
+        roofColor = '#57534e'; // 콘크리트 슬래브 (80%)
+        atlasRoofSlot = 'roof_concrete_warmgray';
         isGabledRoof = false;
       } else {
         roofColor = '#6b3426'; // 박공 지붕 캡 (20%)
@@ -428,8 +435,13 @@ export function classifyBuildingWithVendor(
     case 'industrial': {
       height = 8.0 + (seed % 7) * 1.0; // 8m ~ 14m
       floors = Math.max(1, Math.round(height / 4.0));
-      wallColor = seed % 2 === 0 ? '#cbd5e1' : '#d1d5db';
-      atlasWallSlot = 'facility_panel';
+      if (seed % 2 === 0) {
+        wallColor = '#3b82f6'; // 프리셋 M: 블루/실버 골강판
+        atlasWallSlot = 'fac_preset_m';
+      } else {
+        wallColor = '#64748b'; // 프리셋 P: 그레이 산업플랜트
+        atlasWallSlot = 'fac_preset_p';
+      }
 
       if (seed % 10 < 6) {
         roofColor = '#1d4ed8'; // 코발트 블루 박공 (60%)
@@ -461,16 +473,19 @@ export function classifyBuildingWithVendor(
         height = 14.0 + (seed % 10) * 1.0; // 14m ~ 23m
       }
 
-      const wallPick = seed % 3;
-      if (wallPick === 0) {
-        wallColor = '#8c3f2b'; // 실제 한국 도심 상가 특유의 붉은 벽돌
-        atlasWallSlot = 'comm_red_brick';
-      } else if (wallPick === 1) {
-        wallColor = '#9a6b4c'; // 황토색/갈색 타일
-        atlasWallSlot = 'comm_granite_beige';
+      const commPick = seed % 4;
+      if (commPick === 0) {
+        wallColor = '#ece8df'; // 프리셋 E: 밝은 베이지 화강석 타일 (1층 쇼윈도 포함)
+        atlasWallSlot = 'comm_preset_e';
+      } else if (commPick === 1) {
+        wallColor = '#93c5fd'; // 프리셋 F: 스카이 블루 반사 커튼월
+        atlasWallSlot = 'comm_preset_f';
+      } else if (commPick === 2) {
+        wallColor = '#6ee7b7'; // 프리셋 G: 에메랄드 틴티드 유리
+        atlasWallSlot = 'comm_preset_g';
       } else {
-        wallColor = '#78716c'; // 화강암 석재 회색
-        atlasWallSlot = 'comm_dark_metal';
+        wallColor = '#334155'; // 프리셋 H: 다크 차콜 알루미늄 복합패널
+        atlasWallSlot = 'comm_preset_h';
       }
 
       // 옥상 분포: 선명한 에메랄드 우레탄 50%, 테라코타 25%, 시멘트 25%
@@ -491,20 +506,25 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 4 [소형 필지 단독주택·다세대 빌라] (무조건 6.5m ~ 11.5m, 2층~3.5층)
-    // 외벽: 붉은 벽돌(#7f3222), 살구색/베이지(#d6c7b2)
-    // 지붕: 적갈색 기와(#6e2c1b, 40%), 청색 슬레이트(#254e7a, 30%), 녹색 우레탄(#356854, 30%)
+    // 유형 4 [소형 필지 단독주택·다세대 빌라]
     // -------------------------------------------------------------------------
     case 'residential': {
       floors = 2 + (seed % 2); // 2층 ~ 3층
-      height = 6.5 + (seed % 6) * 1.0; // 6.5m ~ 11.5m (무조건 2층 ~ 3.5층!)
+      height = 8.0 + (seed % 6) * 1.0; // 8.0m ~ 13.0m
 
-      if (seed % 2 === 0) {
-        wallColor = '#7f3222'; // 붉은 벽돌
-        atlasWallSlot = 'villa_red_brick';
+      const resPick = seed % 4;
+      if (resPick === 0) {
+        wallColor = '#9a3b26'; // 프리셋 I: 붉은 치장벽돌 + 백색 창틀
+        atlasWallSlot = 'villa_preset_i';
+      } else if (resPick === 1) {
+        wallColor = '#6e473b'; // 프리셋 J: 갈색 파벽돌 상가주택
+        atlasWallSlot = 'villa_preset_j';
+      } else if (resPick === 2) {
+        wallColor = '#f3eee3'; // 프리셋 K: 밝은 아이보리 스타코 + 박공
+        atlasWallSlot = 'villa_preset_k';
       } else {
-        wallColor = '#d6c7b2'; // 살구색/베이지
-        atlasWallSlot = 'house_cream';
+        wallColor = '#d8d2c4'; // 프리셋 L: 투톤 화강석 필로티 원룸
+        atlasWallSlot = 'villa_preset_l';
       }
 
       // 지붕: 적갈색 기와 박공(40%), 청색 슬레이트 박공(30%), 우레탄 평지붕(30%)
@@ -533,8 +553,13 @@ export function classifyBuildingWithVendor(
     case 'public': {
       floors = 4 + (seed % 5); // 4층 ~ 8층
       height = 15.0 + (seed % 5) * 2.5; // 15m ~ 26m
-      wallColor = '#dfd9ce';
-      atlasWallSlot = 'comm_granite_beige';
+      if (seed % 2 === 0) {
+        wallColor = '#f8fafc'; // 프리셋 O: 화이트 R&D 연구동
+        atlasWallSlot = 'fac_preset_o';
+      } else {
+        wallColor = '#ece8df'; // 프리셋 E: 밝은 베이지 화강석
+        atlasWallSlot = 'comm_preset_e';
+      }
 
       if (seed < 45) {
         roofColor = '#3b7a57';
@@ -544,7 +569,7 @@ export function classifyBuildingWithVendor(
         atlasRoofSlot = 'roof_concrete_warmgray';
       } else {
         roofColor = '#475569';
-        atlasRoofSlot = 'roof_asphalt_charcoal';
+        atlasRoofSlot = 'roof_concrete_warmgray';
       }
       hasParapet = true;
       hasPenthouseCore = true;
@@ -553,13 +578,13 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 6 [군 주둔지 영내 막사] (1층~3층, 4.5m~9.3m)
+    // 유형 6 [군 주둔지 영내 막사]
     // -------------------------------------------------------------------------
     case 'military': {
       floors = 1 + (seed % 3);
-      height = 4.5 + (seed % 5) * 1.2;
-      wallColor = '#f0ead6';
-      atlasWallSlot = 'public_military';
+      height = 6.5 + (seed % 5) * 1.2;
+      wallColor = '#ebe3d5'; // 프리셋 N: 샌드 베이지 통합막사
+      atlasWallSlot = 'fac_preset_n';
 
       const roofPick = seed % 3;
       if (roofPick === 0) {
@@ -620,10 +645,10 @@ export function classifyBuildingWithVendor(
   // 어떤 건물이든 건물 바닥의 짧은 변 폭(minWidth) 대비 높이가 3.5배를 넘을 수 없음!
   // ---------------------------------------------------------------------------
   const minWidth = Math.max(1, metrics.minWidth || Math.sqrt(areaSqm));
-  const maxAllowedBySlenderness = minWidth * 3.5;
+  const maxAllowedBySlenderness = Math.max(8.0, minWidth * 3.5);
   if (height > maxAllowedBySlenderness) {
-    height = Math.min(height, Math.max(6.5, maxAllowedBySlenderness));
-    floors = Math.max(1, Math.round(height / 3.3));
+    height = Math.min(height, Math.max(8.0, maxAllowedBySlenderness));
+    floors = Math.max(2, Math.round(height / 3.3));
   }
 
   // ---------------------------------------------------------------------------
@@ -632,7 +657,7 @@ export function classifyBuildingWithVendor(
   // ---------------------------------------------------------------------------
   if (areaSqm < 280) {
     if (height > 15.0) {
-      height = Math.min(15.0, areaSqm < 220 ? (6.5 + (seed % 6) * 1.0) : (11.0 + (seed % 5) * 0.9));
+      height = Math.min(15.0, areaSqm < 220 ? (8.0 + (seed % 6) * 1.0) : (11.0 + (seed % 5) * 0.9));
       floors = Math.max(2, Math.round(height / 3.3));
     }
     if (bType === 'apartment') {
@@ -642,11 +667,13 @@ export function classifyBuildingWithVendor(
   }
 
   // ---------------------------------------------------------------------------
-  // [절대 규칙 3: 바닥 면적 220㎡ 미만 소형 필지는 무조건 6.5m ~ 11.5m (2~3.5층)]
+  // [절대 규칙 3: 바닥 면적 220㎡ 미만 소형 필지는 8.0m ~ 13.5m (2~4층)]
   // ---------------------------------------------------------------------------
   if (areaSqm < 220) {
-    height = Math.min(height, 6.5 + (seed % 6) * 1.0);
-    floors = 2 + (seed % 2);
+    if (height > 15.0) {
+      height = 8.0 + (seed % 6) * 1.0;
+      floors = 2 + (seed % 2);
+    }
     if (bType === 'apartment') {
       bType = 'residential';
       typeName = '소형 단독주택·다가구';
@@ -673,11 +700,20 @@ export function classifyBuildingWithVendor(
     }
   }
 
-  // 최소 볼륨 보장 (0% Flat 납작화 방지: 일반 건물 6.5m, 부속 건물 4.0m)
-  const minFloorCeiling = isAuxiliaryInApt ? 4.0 : 6.5;
+  // [3단계: 소형 건물(50㎡ ~ 250㎡) 무실동 등 입체 복원 의무 규격: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
+  if (areaSqm >= 50 && areaSqm <= 250 && !isAuxiliaryInApt) {
+    const minSmallH = 8.0 + (seed % 8) * 1.0; // 8.0m ~ 15.0m
+    if (height < minSmallH) {
+      height = minSmallH;
+      floors = Math.max(2, Math.round(height / 3.3));
+    }
+  }
+
+  // 일반 건물 최소 볼륨 보장 (0% Flat 납작화 방지: 일반 건물 6.5m, 부속 건물 4.0m)
+  const minFloorCeiling = isAuxiliaryInApt ? 4.0 : (areaSqm >= 50 && areaSqm <= 250 ? 8.0 : 6.5);
   if (height < minFloorCeiling) {
     height = minFloorCeiling + (seed % 4) * 0.8;
-    floors = Math.max(1, Math.round(height / 3.3));
+    floors = Math.max(2, Math.round(height / 3.3));
   }
 
   // ---------------------------------------------------------------------------
@@ -685,20 +721,42 @@ export function classifyBuildingWithVendor(
   // ---------------------------------------------------------------------------
   if (bType === 'apartment' && height >= 25.0 && areaSqm >= 450) {
     typeName = '고층 아파트 단지';
-    const wallPick = seed % 3;
-    wallColor = wallPick === 0 ? '#f5f2eb' : (wallPick === 1 ? '#ebe5d8' : '#e2dbd0');
-    atlasWallSlot = wallPick === 0 ? 'apt_warm_cream' : (wallPick === 1 ? 'apt_sand_beige' : 'apt_warm_gray');
+    const aptPick = seed % 4;
+    if (aptPick === 0) {
+      wallColor = '#f5f2eb';
+      atlasWallSlot = 'apt_preset_a';
+    } else if (aptPick === 1) {
+      wallColor = '#e6dec8';
+      atlasWallSlot = 'apt_preset_b';
+    } else if (aptPick === 2) {
+      wallColor = '#d6d3cd';
+      atlasWallSlot = 'apt_preset_c';
+    } else {
+      wallColor = '#e2dbd0';
+      atlasWallSlot = 'apt_preset_d';
+    }
     roofColor = '#6e6a64';
-    atlasRoofSlot = 'roof_apt_slab';
+    atlasRoofSlot = 'roof_concrete_warmgray';
     hasParapet = true;
     hasPenthouseCore = true;
     isGabledRoof = false;
   } else if (bType === 'commercial' || (height >= 11.0 && bType !== 'public' && bType !== 'military')) {
     typeName = isAuxiliaryInApt ? '단지 부속 근린상가' : '시내 중층 상가·오피스 블록';
     bType = 'commercial';
-    const wallPick = seed % 3;
-    wallColor = wallPick === 0 ? '#8c3f2b' : (wallPick === 1 ? '#dfd9ce' : '#9a6b4c');
-    atlasWallSlot = wallPick === 0 ? 'comm_red_brick' : (wallPick === 1 ? 'comm_granite_beige' : 'comm_dark_metal');
+    const commPick = seed % 4;
+    if (commPick === 0) {
+      wallColor = '#ece8df';
+      atlasWallSlot = 'comm_preset_e';
+    } else if (commPick === 1) {
+      wallColor = '#93c5fd';
+      atlasWallSlot = 'comm_preset_f';
+    } else if (commPick === 2) {
+      wallColor = '#6ee7b7';
+      atlasWallSlot = 'comm_preset_g';
+    } else {
+      wallColor = '#334155';
+      atlasWallSlot = 'comm_preset_h';
+    }
     if (seed < 50) {
       roofColor = '#2e6f4e'; // 우레탄 초록
       atlasRoofSlot = 'roof_urethane_sage';
@@ -706,7 +764,7 @@ export function classifyBuildingWithVendor(
       roofColor = '#7c3626'; // 테라코타
       atlasRoofSlot = 'roof_terracotta_tile';
     } else {
-      roofColor = '#64748b'; // 시멘트
+      roofColor = '#64748b'; // 콘크리트 슬래브
       atlasRoofSlot = 'roof_concrete_warmgray';
     }
     hasParapet = true;
@@ -714,15 +772,20 @@ export function classifyBuildingWithVendor(
     isGabledRoof = false;
   } else if (bType === 'military') {
     typeName = '군 주둔지 영내 막사';
-    wallColor = '#f0ead6';
-    atlasWallSlot = 'public_military';
+    wallColor = '#ebe3d5';
+    atlasWallSlot = 'fac_preset_n';
     isGabledRoof = true;
     hasParapet = false;
     hasPenthouseCore = false;
   } else if (bType === 'public') {
     typeName = '학교·병원·관공서';
-    wallColor = '#dfd9ce';
-    atlasWallSlot = 'comm_granite_beige';
+    if (seed % 2 === 0) {
+      wallColor = '#f8fafc';
+      atlasWallSlot = 'fac_preset_o';
+    } else {
+      wallColor = '#ece8df';
+      atlasWallSlot = 'comm_preset_e';
+    }
     hasParapet = true;
     hasPenthouseCore = true;
     isGabledRoof = false;
@@ -730,9 +793,20 @@ export function classifyBuildingWithVendor(
     // 저층 단독주택·다세대 빌라 (height < 11.0m)
     bType = 'residential';
     typeName = '저층 단독주택·빌라';
-    const wallPick = seed % 2;
-    wallColor = wallPick === 0 ? '#9a4632' : '#f0ead6';
-    atlasWallSlot = wallPick === 0 ? 'villa_red_brick' : 'house_cream';
+    const resPick = seed % 4;
+    if (resPick === 0) {
+      wallColor = '#9a3b26';
+      atlasWallSlot = 'villa_preset_i';
+    } else if (resPick === 1) {
+      wallColor = '#6e473b';
+      atlasWallSlot = 'villa_preset_j';
+    } else if (resPick === 2) {
+      wallColor = '#f3eee3';
+      atlasWallSlot = 'villa_preset_k';
+    } else {
+      wallColor = '#d8d2c4';
+      atlasWallSlot = 'villa_preset_l';
+    }
 
     const roofPick = seed % 10;
     if (roofPick < 4) {
