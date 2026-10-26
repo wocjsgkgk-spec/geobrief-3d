@@ -224,7 +224,7 @@ export async function GET(request: NextRequest) {
   // LT_C_SPBD: 건축물일반공간정보 (V-World Data 2.0 규격: geomFilter=BOX(minX,minY,maxX,maxY))
   const preferredDomain = process.env.VWORLD_DOMAIN || 'localhost';
   const maxFeaturesParam = searchParams.get('maxFeatures');
-  const maxFeatures = Math.min(5000, Math.max(100, parseInt(maxFeaturesParam || '5000', 10)));
+  const maxFeatures = Math.min(25000, Math.max(100, parseInt(maxFeaturesParam || '25000', 10)));
   const perCellLimit = Math.max(500, Math.ceil(maxFeatures / subCells.length));
 
   const rawFeatures: any[] = [];

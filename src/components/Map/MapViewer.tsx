@@ -2811,6 +2811,10 @@ export const MapViewer: React.FC = () => {
         // - 1층 화강석 기단부 + 중층 실감 외벽 + 실사 창문 패턴 + 옥상 슬래브 파라펫 4단
         // ---------------------------------------------------------------------
         ensureBuildingPatterns(map);
+        // [상호 배타적 3D 렌더러 가시성 동기화]: renderMode3D가 'facade'일 때는 GPU 다층 레이어를 초기 숨김('none')하여 이중 겹침 원천 차단
+        const initRenderMode = useMapStore.getState().renderMode3D;
+        const initialGpuVis = (initRenderMode === 'native' && !!layers.buildings3D) ? 'visible' : 'none';
+
         const gpuLayers = createGpuBuildingStackLayers('openmaptiles-vector', 'building');
         gpuLayers.forEach((layerDef) => {
           if (!map.getLayer(layerDef.id)) {
@@ -2818,7 +2822,7 @@ export const MapViewer: React.FC = () => {
               ...layerDef,
               layout: {
                 ...(layerDef.layout || {}),
-                visibility: layers.buildings3D ? 'visible' : 'none',
+                visibility: initialGpuVis,
               },
             };
             map.addLayer(configured);
@@ -2845,7 +2849,7 @@ export const MapViewer: React.FC = () => {
               ...layerDef,
               layout: {
                 ...(layerDef.layout || {}),
-                visibility: layers.buildings3D ? 'visible' : 'none',
+                visibility: initialGpuVis,
               },
             };
             map.addLayer(configured);
@@ -2861,7 +2865,7 @@ export const MapViewer: React.FC = () => {
                 ...layerDef,
                 layout: {
                   ...(layerDef.layout || {}),
-                  visibility: layers.buildings3D ? 'visible' : 'none',
+                  visibility: initialGpuVis,
                 },
               };
               map.addLayer(configured);
@@ -4022,6 +4026,7 @@ export const MapViewer: React.FC = () => {
       }
     } else if (renderMode3D === 'facade') {
       // 2. 모드 B: 실감 파사드 모드 (Three.js 단일 버퍼 실사 파사드 + 입체 지붕)
+      // [이중 겹침 100% 제거] RealisticKoreanCityLayer만 표출하고 모든 fill-extrusion 레이어는 완전 숨김('none')
       if (deck3DTilesManagerRef.current) {
         deck3DTilesManagerRef.current.detachFromMap();
       }
@@ -4036,16 +4041,25 @@ export const MapViewer: React.FC = () => {
         threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
       }
       setGpuBuildingLayersVisibility(map, false, bldgVis);
+      if (map.getLayer('3d-buildings')) {
+        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+      }
       if (bldgVis) {
         promoteBuildingLayersToTop(map);
       }
     } else if (renderMode3D === 'tiles3d') {
       // 3. 모드 C: 고정밀 3D 타일셋 스트리밍
-      // [치명적 버그 수정] 외부 타일 로드 여부와 무관하게 3D 건물 레이어는 상시 100% 유지 (절대 건물 소실 없음)
+      // [이중 겹침 방지] 단 하나의 3D 메쉬 엔진(RealisticKoreanCityLayer)만 폴백으로 유지
+      if (lod2BuildingEngineRef.current) {
+        lod2BuildingEngineRef.current.setVisible(false);
+      }
       if (realisticKoreanCityLayerRef.current) {
         realisticKoreanCityLayerRef.current.setVisible(bldgVis);
       }
-      setGpuBuildingLayersVisibility(map, bldgVis);
+      setGpuBuildingLayersVisibility(map, false, bldgVis);
+      if (map.getLayer('3d-buildings')) {
+        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+      }
       setGpuBuildingLayersMode(map, 'tiles3d');
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setLodMode('lod2');
@@ -6557,9 +6571,9 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('cadastral-parcels-line')) {
           map.setLayoutProperty('cadastral-parcels-line', 'visibility', 'none');
         }
-        // 3D 건축물 및 비행안전 천장 표시
+        // 3D 건축물 및 비행안전 천장 표시 (활성 모드에 따라 단일 렌더러만 표시)
         if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
+          map.setLayoutProperty('3d-buildings', 'visibility', renderMode3D === 'native' ? 'visible' : 'none');
         }
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
@@ -6675,13 +6689,15 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty('building-mass-edges', 'visibility', massVis);
         }
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
-        setGpuBuildingLayersVisibility(map, layers.buildings3D);
+        setGpuBuildingLayersVisibility(map, renderMode3D === 'native' && layers.buildings3D);
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }
-        // [요구사항 반영] '건축물 3D 돌출' 레이어가 항상 표출 및 최상단 렌더링
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+        }
+        if (realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(renderMode3D === 'facade' && layers.buildings3D);
         }
         if (bldgVis === 'visible') {
           promoteBuildingLayersToTop(map);

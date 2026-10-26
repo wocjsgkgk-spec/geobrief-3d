@@ -523,7 +523,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
       const metersPerLat = (Math.PI / 180) * 6378137;
 
-      const maxLimit = this.options.maxBuildings || 15000;
+      const maxLimit = this.options.maxBuildings || 35000;
       const features = rawFeatures.slice(0, maxLimit);
 
       // 슬롯별 UV 사전 캐싱
@@ -855,22 +855,74 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           // 가장 긴 변과 짧은 변 계산 (판상형 아파트 vs 단독주택 기하 판별)
           let maxEdgeLen = 0;
           let minEdgeLen = Infinity;
+          const edgeLens: number[] = [];
           for (let i = 0; i < ptCount; i++) {
             const j = (i + 1) % ptCount;
             const elen = Math.hypot(pts2D[j].x - pts2D[i].x, pts2D[j].z - pts2D[i].z);
+            edgeLens.push(elen);
             if (elen > maxEdgeLen) maxEdgeLen = elen;
             if (elen < minEdgeLen) minEdgeLen = elen;
           }
 
+          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+          for (const p of pts2D) {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.z < minZ) minZ = p.z;
+            if (p.z > maxZ) maxZ = p.z;
+          }
+          const spanX = Math.max(1, maxX - minX);
+          const spanZ = Math.max(1, maxZ - minZ);
+          const minWidth = Math.min(spanX, spanZ);
+          const maxLength = Math.max(spanX, spanZ);
+          const polyAspectRatio = maxLength / Math.max(1, minWidth);
+
           // [벤더링 6대 분류기 적용] 좌표 시드 및 면적·형상 기반 절대 실패 없는 한국형 실측 분류
           const classified = classifyBuildingWithVendor(rawCoords, featProps);
-          const height = classified.height;
+          let height = classified.height;
           if (height <= 0) {
             continue;
           }
-          const isApt = classified.type === 'apartment';
+
+          // [절대 규칙 1: 세장비 제한 (Slenderness Ratio Limit)]
+          // 어떤 건물이든 건물 바닥의 짧은 변 폭(minWidth) 대비 높이가 3.5배를 넘을 수 없음!
+          const maxAllowedSlenderH = minWidth * 3.5;
+          if (height > maxAllowedSlenderH) {
+            height = Math.min(height, Math.max(6.5, maxAllowedSlenderH));
+          }
+
+          // [절대 규칙 2: 바닥 면적 280㎡ 미만 소형 건물은 절대로 고층(15m 이상) 불가!]
+          // 주변에 아파트 POI가 있더라도 무조건 15m 이하로 엄격 제한!
+          if (areaSqm < 280 && height > 15.0) {
+            height = Math.min(15.0, areaSqm < 220 ? (6.5 + (classified.seed % 6) * 1.0) : (11.0 + (classified.seed % 5) * 0.9));
+          }
+
+          // [절대 규칙 3: 바닥 면적 220㎡ 미만 소형 필지는 무조건 6.5m ~ 11.5m (2~3.5층)]
+          if (areaSqm < 220) {
+            height = Math.min(height, 6.5 + (classified.seed % 6) * 1.0);
+          } else if (areaSqm < 550 && height > 18.0 && (classified.type !== 'apartment' || polyAspectRatio < 2.2)) {
+            height = 11.0 + (classified.seed % 8) * 1.0;
+          }
+
+          // [진짜 아파트 동 판정] 바닥면적 450㎡ 이상 & 고층(25m 이상)
+          const isTrueHighRiseApt = classified.type === 'apartment' && height >= 25.0 && areaSqm >= 450;
+          const isApt = isTrueHighRiseApt;
           const isComm = classified.type === 'commercial';
           const isMilitary = classified.type === 'military';
+
+          // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
+          const sideWallEdgeIndices = new Set<number>();
+          if (isTrueHighRiseApt && ptCount >= 4) {
+            const sortedEdges = edgeLens
+              .map((len, idx) => ({ idx, len }))
+              .sort((a, b) => a.len - b.len);
+            for (const item of sortedEdges) {
+              if (sideWallEdgeIndices.size >= 2) break;
+              if (item.len < maxEdgeLen * 0.75) {
+                sideWallEdgeIndices.add(item.idx);
+              }
+            }
+          }
 
           // 지형 표고 캐시 확인 및 안착 (clampedAltitude 기준 상대 표고)
           const rawElev =
@@ -890,7 +942,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             const dx = p2.x - p1.x;
             const dz = p2.z - p1.z;
-            const edgeLen = Math.hypot(dx, dz);
+            const edgeLen = edgeLens[i];
             if (edgeLen < 0.2) continue;
 
             // 외벽 법선 벡터
@@ -899,12 +951,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             let wallUV: UVRect = uvAptCream;
 
-            if (classified.type === 'apartment' || height >= 24.0) {
-              // 긴 변은 발코니 통유리 창호 격자(크림 아이보리/소프트 베이지), 짧은 변(edgeLength < 14m)은 무창 콘크리트 측벽 브랜드 밴드
-              const isLongFacade = edgeLen >= 14.0 && (edgeLen > minEdgeLen * 1.25 || edgeLen > 18.0);
-              if (isLongFacade) {
+            if (isTrueHighRiseApt) {
+              const isSideGableWall = sideWallEdgeIndices.has(i);
+              if (isSideGableWall) {
+                // [아파트 측벽] 오직 높이 25m 이상 고층 아파트의 가장 짧은 양 끝단 2개 변에만 적용: 매끈한 크림 콘크리트에 세로형 포인트 브랜드 컬러 스트라이프
+                wallUV = uvAptSide;
+                addQuad(
+                  [p1.x, baseElev, p1.z],
+                  [p2.x, baseElev, p2.z],
+                  [p2.x, topElev, p2.z],
+                  [p1.x, topElev, p1.z],
+                  [nx, 0, nz],
+                  wallUV
+                );
+              } else {
+                // [아파트 정면·후면] 밝은 아이보리 외벽 위에 3.3m 층고마다 차콜 슬레이트 베란다 통유리창 격자 패턴 1:1 매핑
                 wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-                // [요구사항 1] 밝은 아이보리 외벽 위에 3m 층고마다 선명한 차콜 슬레이트(#1e293b) 베란다 통유리창 격자 패턴 1:1 매핑
                 const floorHeight = 3.3; // 한국 아파트 표준 층고 3.3m
                 const numFloors = Math.max(1, Math.round(height / floorHeight));
                 const bayWidth = 7.5; // 베이 폭 7.5m
@@ -929,19 +991,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                     );
                   }
                 }
-              } else {
-                // 아파트 측벽(edgeLength < 14m): 창문 100% 없음! 매끈한 크림 콘크리트에 세로형 포인트 브랜드 컬러 스트라이프
-                wallUV = uvAptSide;
-                addQuad(
-                  [p1.x, baseElev, p1.z],
-                  [p2.x, baseElev, p2.z],
-                  [p2.x, topElev, p2.z],
-                  [p1.x, topElev, p1.z],
-                  [nx, 0, nz],
-                  wallUV
-                );
               }
-            } else if (classified.type === 'commercial' || classified.type === 'public' || (height >= 10.0 && height < 24.0)) {
+            } else if (classified.type === 'commercial' || classified.type === 'public' || height >= 11.0) {
               // 중층 시내 상가·원룸·오피스 블록 (10m <= H < 24m):
               // 1층(0~3.8m)은 짙은 화강석 쇼윈도 기단부(#334155), 2층 이상은 붉은 벽돌/황토 타일/화강암 석재
               const podiumH = 3.8;
@@ -1020,17 +1071,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           // B. 윗면(Roof) earcut 삼각분할 및 항공사진 실사 색감 매핑
           // -------------------------------------------------------------------
           const flatCoords: number[] = [];
-          let minX = Infinity,
-            maxX = -Infinity,
-            minZ = Infinity,
-            maxZ = -Infinity;
-
           for (let i = 0; i < ptCount; i++) {
             flatCoords.push(pts2D[i].x, pts2D[i].z);
-            if (pts2D[i].x < minX) minX = pts2D[i].x;
-            if (pts2D[i].x > maxX) maxX = pts2D[i].x;
-            if (pts2D[i].z < minZ) minZ = pts2D[i].z;
-            if (pts2D[i].z > maxZ) maxZ = pts2D[i].z;
           }
 
           // [분류기 기반 한국 실제 지붕 재질 UV 즉시 할당 & 위성 실시간 색상 연동]

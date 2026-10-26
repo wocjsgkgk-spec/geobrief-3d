@@ -231,7 +231,7 @@ async function fetchOsmBuildings(
   const timeoutId = setTimeout(() => controller.abort(), 4000);
 
   try {
-    const ql = `[out:json][timeout:4];(way["building"](${minLat},${minLng},${maxLat},${maxLng}););out geom 120;`;
+    const ql = `[out:json][timeout:6];(way["building"](${minLat},${minLng},${maxLat},${maxLng}););out geom 10000;`;
     const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`;
 
     const res = await fetch(overpassUrl, {

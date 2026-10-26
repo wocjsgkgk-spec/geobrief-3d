@@ -70,7 +70,14 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     0,
 
-    // 1. 이미 실측 높이(>= 10.0m)가 선언되어 있다면 우선 적용 (실제 지상층수 grnd_flr * 3.3m 100% 직결)
+    // [절대 규칙 1 & 2: 소형 필지 면적 280㎡ 미만은 절대로 고층 불가 - 6.5m~11.5m 제한]
+    ['<', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 999], 999], 220],
+    ['+', 6.5, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 5]],
+
+    ['<', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 999], 999], 280],
+    ['+', 8.0, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 6]],
+
+    // 1. 이미 실측 높이(>= 10.0m)가 선언되어 있다면 우선 적용 (단, 면적 280㎡ 미만은 위에서 사전 필터링)
     ['>=', ['var', 'declaredHeight'], 10.0],
     ['var', 'declaredHeight'],
 
@@ -611,6 +618,10 @@ export function setGpuBuildingLayersVisibility(
     'bldg-tier3-pattern',
     'bldg-tier4-roofcap',
     'bldg-tier5-roofdetail',
+    '3d-buildings',
+    '3d-buildings-roof',
+    'fusion-buildings-3d',
+    'fusion-buildings-roof',
   ];
 
   extrusionLayers.forEach((id) => {

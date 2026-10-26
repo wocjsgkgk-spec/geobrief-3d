@@ -189,13 +189,15 @@ export function extractRenderedVectorBuildings(
         name.includes('호반') || name.includes('중흥') || name.includes('센트럴') ||
         usageType.includes('apartment');
 
-      // (c) 아파트 기하학적 형태 판정 (한국형 판상형: 폭 10~18m, 길이 32~95m / ㄱ자·ㄷ자형 단지)
+      // (c) 아파트 기하학적 형태 판정 (한국형 판상형: 폭 10~18m, 길이 32~95m, 바닥면적 450㎡ 이상, 세장비 2.2 이상)
       const isAptByGeometry =
         !isMilitary &&
-        ((dimMin >= 9.0 && dimMin <= 20.0 && dimMax >= 32.0 && approxArea >= 320 && aspectRatio >= 1.8) ||
-         (dimMin >= 12.0 && dimMax >= 30.0 && approxArea >= 380));
+        approxArea >= 450 &&
+        ((dimMin >= 9.0 && dimMin <= 24.0 && dimMax >= 32.0 && aspectRatio >= 2.2) ||
+         (dimMin >= 12.0 && dimMax >= 35.0 && approxArea >= 500));
 
-      const isApartment = isAptByName || isAptByGeometry;
+      // 소형 필지(area < 280㎡)는 절대로 아파트 불가!
+      const isApartment = approxArea >= 280 && (isAptByName && approxArea >= 400 || isAptByGeometry);
 
       // (d) 중대형 상업/오피스 판정
       const isCommercialName =
@@ -203,7 +205,7 @@ export function extractRenderedVectorBuildings(
         name.includes('상가') || name.includes('마트') || name.includes('병원') ||
         name.includes('의원') || name.includes('스퀘어') || name.includes('프라자') ||
         name.includes('호텔') || usageType.includes('commercial') || usageType.includes('office');
-      const isCommercialByGeometry = !isMilitary && !isApartment && (approxArea >= 320 && aspectRatio < 2.0 || approxArea >= 550);
+      const isCommercialByGeometry = !isMilitary && !isApartment && ((approxArea >= 220 && approxArea < 550) || approxArea >= 550);
       const isCommercial = isCommercialName || isCommercialByGeometry;
 
       // 실측 속성값 확인
@@ -218,26 +220,39 @@ export function extractRenderedVectorBuildings(
       const isRealMeasured = props.is_real_measured === true || Boolean(props.mgmBldrgstPk);
       let renderHeight = (isRealMeasured && rawHei >= 3.0) || rawHei >= 10.0 ? rawHei : (rawFlr >= 3 ? rawFlr * 3.3 : 0);
 
-      // [강원권 전 건물 강제 입체화 규칙]: 단 하나의 건물도 바닥에 납작한 스티커처럼 깔리지 않게 100% 입체화
-      if (!renderHeight || renderHeight < 8.0) {
+      // [소형 주택·상가 세장비 및 면적 기준 정밀 높이 배분]
+      if (approxArea < 220) {
+        // 소형 필지 (단독주택·다가구·소형상가): 무조건 6.5m ~ 11.5m (2층 ~ 3.5층)
+        const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
+        renderHeight = 6.5 + seed * 5.0; // 6.5m ~ 11.5m
+      } else if (approxArea < 280) {
+        // 280㎡ 미만 소형 건물: 절대로 15m 이상 불가
+        const seed = Math.abs(Math.sin(cLng * 73.1 + cLat * 163.7 + approxArea)) % 1;
+        renderHeight = Math.min(15.0, 8.0 + seed * 6.0); // 8m ~ 14m
+      } else if (!renderHeight || renderHeight < 8.0) {
         if (isMilitary) {
           // 군 표준 병영막사: 1층~3층 (4.5m~9.5m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
           renderHeight = 4.5 + seed * 4.5;
-        } else if (isApartment) {
-          // 한국형 아파트 단지(청솔, 동보렉스, 중앙하이츠, 단구아이파크 등): 16층~25층 (48m~75m)
+        } else if (isApartment && approxArea >= 450) {
+          // 진짜 아파트 단지 동: 14층~24층 (42m~72m)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
-          const aptStories = Math.round(16 + seed * 9);
-          renderHeight = 48.0 + seed * 27.0; // 48m ~ 75m
-        } else if (isCommercial) {
-          // 시내 상가·오피스 블록: 4층~8층 (14m~26m)
+          renderHeight = 42.0 + seed * 30.0; // 42m ~ 72m
+        } else if (isCommercial || (approxArea >= 220 && approxArea < 550)) {
+          // 중형 시가지 상가·원룸: 3층~5층 (11m~18m)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
-          renderHeight = 14.0 + seed * 12.0; // 14m ~ 26m
+          renderHeight = 11.0 + seed * 7.0; // 11m ~ 18m
         } else {
-          // 일반 주택가 및 다세대 빌라: 2.5층~4층 (8m~13m)
+          // 일반 주택가: 6.5m ~ 11.5m
           const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-          renderHeight = 8.0 + seed * 5.0; // 8m ~ 13m
+          renderHeight = 6.5 + seed * 5.0;
         }
+      }
+
+      // 세장비 절대 규칙: 단축 대비 3.5배 초과 차단
+      const maxAllowedH = dimMin * 3.5;
+      if (renderHeight > maxAllowedH) {
+        renderHeight = Math.min(renderHeight, Math.max(6.5, maxAllowedH));
       }
 
       const levels = rawFlr >= 1 ? rawFlr : Math.max(1, Math.round(renderHeight / 3.2));
@@ -352,7 +367,7 @@ export async function fetchOverpassEnrichment(
   way["building"](${minLat},${minLng},${maxLat},${maxLng});
   way["highway"](${minLat},${minLng},${maxLat},${maxLng});
 );
-out geom 5000;`;
+out geom 25000;`;
 
   const endpoints = [
     `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,

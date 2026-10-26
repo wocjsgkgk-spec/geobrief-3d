@@ -314,7 +314,7 @@ function mapBuildingAttributes(
 export async function fetchVworldBulkBuildings(
   bbox: [number, number, number, number],
   signal?: AbortSignal,
-  maxTotal = 5000
+  maxTotal = 25000
 ): Promise<ExternalSpatialBuildingFeature[]> {
   const cells = splitBboxToCompliantCells(bbox);
   const results: ExternalSpatialBuildingFeature[] = [];
@@ -375,7 +375,7 @@ export async function fetchVworldBulkBuildings(
 export async function fetchOverpassBulkBuildings(
   bbox: [number, number, number, number],
   signal?: AbortSignal,
-  maxTotal = 5000
+  maxTotal = 25000
 ): Promise<ExternalSpatialBuildingFeature[]> {
   const [minLng, minLat, maxLng, maxLat] = bbox;
 
@@ -481,8 +481,8 @@ export async function loadGangwonRealDataBulk(
 
   // 2) 브이월드(V-World) WFS + OSM Overpass 벌크 병렬 수집
   const [vworldRes, overpassRes] = await Promise.allSettled([
-    fetchVworldBulkBuildings(bbox, options?.signal, options?.maxFeatures || 5000),
-    fetchOverpassBulkBuildings(bbox, options?.signal, options?.maxFeatures || 5000),
+    fetchVworldBulkBuildings(bbox, options?.signal, options?.maxFeatures || 25000),
+    fetchOverpassBulkBuildings(bbox, options?.signal, options?.maxFeatures || 25000),
   ]);
 
   const vworldFeatures = vworldRes.status === 'fulfilled' ? vworldRes.value : [];
