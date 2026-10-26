@@ -910,6 +910,10 @@ export const MapViewer: React.FC = () => {
     (mapInstance: maplibregl.Map) => {
       if (!mapInstance) return;
       if (!useMapStore.getState().layers.buildings3D) return;
+      // [카메라 이동 중 연산 완전 잠금(Interaction Lock)]
+      if (isInteractingRef.current || mapInstance.isMoving() || mapInstance.isRotating() || mapInstance.isZooming()) {
+        return;
+      }
 
       if (syncDebounceTimerRef.current) {
         clearTimeout(syncDebounceTimerRef.current);
@@ -917,6 +921,9 @@ export const MapViewer: React.FC = () => {
 
       syncDebounceTimerRef.current = setTimeout(() => {
         try {
+          if (!mapInstance || isInteractingRef.current || mapInstance.isMoving() || mapInstance.isRotating() || mapInstance.isZooming()) {
+            return;
+          }
           const bounds = mapInstance.getBounds();
           const bbox: [number, number, number, number] = [
             bounds.getWest(),
@@ -1025,7 +1032,7 @@ export const MapViewer: React.FC = () => {
         } catch (e) {
           // ignore
         }
-      }, 150);
+      }, 300);
     },
     [mergeIntoPersistentBuildingCache, setVworldDiagnostic, selectedRegionId]
   );
@@ -2335,6 +2342,16 @@ export const MapViewer: React.FC = () => {
       proceduralTreesLayerRef.current?.setInteracting(true);
       deck3DTilesManagerRef.current?.setInteracting(true);
 
+      // [카메라 이동 중 모든 비동기 API 및 건물 지오메트리 동기화 즉시 취소]
+      if (syncAbortControllerRef.current) {
+        syncAbortControllerRef.current.abort();
+        syncAbortControllerRef.current = null;
+      }
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+        syncDebounceTimerRef.current = null;
+      }
+
       if (moveEndThrottleTimer) {
         clearTimeout(moveEndThrottleTimer);
         moveEndThrottleTimer = null;
@@ -2420,7 +2437,7 @@ export const MapViewer: React.FC = () => {
       });
     };
 
-    // [1단계: 인터랙션 종료 - 350ms 디바운스 후 인터랙션 락 해제]
+    // [1단계: 인터랙션 종료 - 300ms 디바운스 후 인터랙션 락 해제]
     const handleInteractionEnd = () => {
       if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       moveEndThrottleTimer = setTimeout(() => {
@@ -2451,7 +2468,7 @@ export const MapViewer: React.FC = () => {
 
         // [GPU 다층 슬라이싱 엔진 가동으로 메인 스레드 JS 6,985동 루프 중단]
         updateRealtimeMetrics();
-      }, 350);
+      }, 300);
     };
 
     // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
@@ -2527,7 +2544,7 @@ export const MapViewer: React.FC = () => {
         });
         syncExternalSpatialBuildings(map);
         updateRealtimeMetrics();
-      }, 350);
+      }, 300);
     };
     map.on('moveend', handleViewportMoveEnd);
 

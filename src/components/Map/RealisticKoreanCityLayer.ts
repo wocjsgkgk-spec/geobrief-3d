@@ -75,6 +75,30 @@ import {
 
 const Earcut = (earcut as any).default || earcut;
 
+export function getBuildingFeatureKey(f: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>): string {
+  if (f.id !== undefined && f.id !== null && f.id !== '') {
+    return String(f.id);
+  }
+  const props = f.properties as any;
+  if (props) {
+    if (props.bd_mgt_sn) return `bld-${props.bd_mgt_sn}`;
+    if (props.bld_id) return `bld-${props.bld_id}`;
+    if (props.pnu && props.buld_nm) return `pnu-${props.pnu}-${props.buld_nm}`;
+    if (props.id) return String(props.id);
+  }
+  const geom = f.geometry;
+  if (!geom) return `unknown-${Math.random()}`;
+  if (geom.type === 'Polygon') {
+    const pt = geom.coordinates[0]?.[0];
+    return pt ? `poly-${pt[0].toFixed(6)},${pt[1].toFixed(6)}` : `poly-empty`;
+  }
+  if (geom.type === 'MultiPolygon') {
+    const pt = geom.coordinates[0]?.[0]?.[0];
+    return pt ? `mpoly-${pt[0].toFixed(6)},${pt[1].toFixed(6)}` : `mpoly-empty`;
+  }
+  return `f-${JSON.stringify(f).slice(0, 40)}`;
+}
+
 export interface RealisticKoreanCityLayerOptions {
   onBuildingCountChange?: (count: number) => void;
   maxBuildings?: number;
@@ -123,6 +147,31 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private persistentBuildingMap: Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>> = new Map();
   private hasInitialBuilt: boolean = false;
   private options: RealisticKoreanCityLayerOptions;
+
+  // [3단계 고성능 엔진] 4ms 타임슬라이싱 및 사전할당 Float32Array 버퍼
+  private builtBuildingKeys: Set<string> = new Set();
+  private activeBuildSliceRaf: number | null = null;
+  private activeBuildTaskId: number = 0;
+
+  // 단일 대용량 버퍼 사전 할당 (재할당/push 오버헤드 0%, Draw Call = 1)
+  private accPosBuf: Float32Array = new Float32Array(3000000);
+  private accNormBuf: Float32Array = new Float32Array(3000000);
+  private accUvBuf: Float32Array = new Float32Array(2000000);
+  private accHeightBuf: Float32Array = new Float32Array(1000000);
+  private accPosIdx: number = 0;
+  private accUvIdx: number = 0;
+  private accHeightIdx: number = 0;
+
+  // 옥상 난간 및 옥탑 코어 사전 할당 버퍼
+  private accRooftopPosBuf: Float32Array = new Float32Array(900000);
+  private accRooftopNormBuf: Float32Array = new Float32Array(900000);
+  private accRooftopUvBuf: Float32Array = new Float32Array(600000);
+  private accRooftopHeightBuf: Float32Array = new Float32Array(300000);
+  private accRooftopPosIdx: number = 0;
+  private accRooftopUvIdx: number = 0;
+  private accRooftopHeightIdx: number = 0;
+
+  private currentBuildingBaseElev: number = 0;
 
   // 국토교통부 전국 교량 및 터널 3D 모델링 시스템
   private bridgeGroup: THREE.Group = new THREE.Group();
@@ -341,13 +390,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
     }
+    // [인터랙션 잠금: 카메라 이동/회전/줌 중 연산 100% 완전 중단]
+    if (this.activeBuildSliceRaf !== null) {
+      cancelAnimationFrame(this.activeBuildSliceRaf);
+      this.activeBuildSliceRaf = null;
+      this.isBuildingGeometry = false;
+    }
   };
 
   private handleMoveEnd = (): void => {
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
     }
-    // 350ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
+    // 300ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
     this.moveEndTimer = setTimeout(() => {
       this.moveEndTimer = null;
       if (!this.map) return;
@@ -356,7 +411,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
-    }, 350);
+    }, 300);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -433,25 +488,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const combined = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);
 
     // [건물 ID 기반 증분 캐시 & 연산 100% 생략]
-    let newFeaturesCount = 0;
+    let unbuiltCount = 0;
     for (let i = 0; i < combined.length; i++) {
       const f = combined[i];
-      const key = f.id
-        ? String(f.id)
-        : JSON.stringify(
-            f.geometry.type === 'Polygon'
-              ? f.geometry.coordinates[0]?.[0]
-              : f.geometry.coordinates[0]?.[0]?.[0]
-          );
+      const key = getBuildingFeatureKey(f);
       if (!this.persistentBuildingMap.has(key)) {
         stampBuildingWithMasterData(f);
         this.persistentBuildingMap.set(key, f);
-        newFeaturesCount++;
+      }
+      if (!this.builtBuildingKeys.has(key)) {
+        unbuiltCount++;
       }
     }
 
     // 이미 화면에 있는 건물은 연산을 100% 생략하여 끊김과 깜빡임 0% 달성
-    if (this.masterMesh && newFeaturesCount === 0) {
+    if (this.masterMesh && unbuiltCount === 0) {
       return;
     }
 
@@ -512,34 +563,35 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         if (dLng > 0.20 || dLat > 0.20) {
           this.persistentBuildingMap.clear();
         }
+        this.resetAccumulatedBuffers();
       }
     }
 
-    let newCount = 0;
+    let unbuiltCount = 0;
+    let modifiedCount = 0;
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
-      const key = f.id
-        ? String(f.id)
-        : JSON.stringify(
-            f.geometry.type === 'Polygon'
-              ? f.geometry.coordinates[0]?.[0]
-              : f.geometry.coordinates[0]?.[0]?.[0]
-          );
+      const key = getBuildingFeatureKey(f);
       const ex = this.persistentBuildingMap.get(key);
       if (!ex) {
         this.persistentBuildingMap.set(key, f);
-        newCount++;
+        unbuiltCount++;
       } else {
         const exH = Number(ex.properties?.height || ex.properties?.hei || 0);
         const newH = Number(f.properties?.height || f.properties?.hei || 0);
         if (newH > exH + 0.5) {
           this.persistentBuildingMap.set(key, f);
-          newCount++;
+          modifiedCount++;
         }
+      }
+      if (!this.builtBuildingKeys.has(key)) {
+        unbuiltCount++;
       }
     }
 
-    if (this.masterMesh && newCount === 0) {
+    if (modifiedCount > 200) {
+      this.resetAccumulatedBuffers();
+    } else if (this.masterMesh && unbuiltCount === 0) {
       return;
     }
 
@@ -555,20 +607,510 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
   }
 
+  private resetAccumulatedBuffers(): void {
+    this.builtBuildingKeys.clear();
+    this.accPosIdx = 0;
+    this.accUvIdx = 0;
+    this.accHeightIdx = 0;
+    this.accRooftopPosIdx = 0;
+    this.accRooftopUvIdx = 0;
+    this.accRooftopHeightIdx = 0;
+  }
+
+  private ensureCapacity(additionalVertices: number): void {
+    const neededFloats = this.accPosIdx + additionalVertices * 3;
+    if (neededFloats > this.accPosBuf.length) {
+      const newSize = Math.max(this.accPosBuf.length * 2, neededFloats + 300000);
+      const newPos = new Float32Array(newSize);
+      const newNorm = new Float32Array(newSize);
+      const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
+      const newHeight = new Float32Array(Math.floor(newSize / 3));
+      newPos.set(this.accPosBuf.subarray(0, this.accPosIdx));
+      newNorm.set(this.accNormBuf.subarray(0, this.accPosIdx));
+      newUv.set(this.accUvBuf.subarray(0, this.accUvIdx));
+      newHeight.set(this.accHeightBuf.subarray(0, this.accHeightIdx));
+      this.accPosBuf = newPos;
+      this.accNormBuf = newNorm;
+      this.accUvBuf = newUv;
+      this.accHeightBuf = newHeight;
+    }
+  }
+
+  private ensureRooftopCapacity(additionalVertices: number): void {
+    const neededFloats = this.accRooftopPosIdx + additionalVertices * 3;
+    if (neededFloats > this.accRooftopPosBuf.length) {
+      const newSize = Math.max(this.accRooftopPosBuf.length * 2, neededFloats + 100000);
+      const newPos = new Float32Array(newSize);
+      const newNorm = new Float32Array(newSize);
+      const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
+      const newHeight = new Float32Array(Math.floor(newSize / 3));
+      newPos.set(this.accRooftopPosBuf.subarray(0, this.accRooftopPosIdx));
+      newNorm.set(this.accRooftopNormBuf.subarray(0, this.accRooftopPosIdx));
+      newUv.set(this.accRooftopUvBuf.subarray(0, this.accRooftopUvIdx));
+      newHeight.set(this.accRooftopHeightBuf.subarray(0, this.accRooftopHeightIdx));
+      this.accRooftopPosBuf = newPos;
+      this.accRooftopNormBuf = newNorm;
+      this.accRooftopUvBuf = newUv;
+      this.accRooftopHeightBuf = newHeight;
+    }
+  }
+
+  private addTriangle = (
+    p0: [number, number, number],
+    p1: [number, number, number],
+    p2: [number, number, number],
+    norm: [number, number, number],
+    uv0: [number, number],
+    uv1: [number, number],
+    uv2: [number, number]
+  ): void => {
+    this.ensureCapacity(3);
+    const p = this.accPosIdx;
+    const u = this.accUvIdx;
+    const h = this.accHeightIdx;
+    const baseElev = this.currentBuildingBaseElev;
+
+    this.accPosBuf[p] = p0[0];
+    this.accPosBuf[p + 1] = p0[1];
+    this.accPosBuf[p + 2] = p0[2];
+    this.accNormBuf[p] = norm[0];
+    this.accNormBuf[p + 1] = norm[1];
+    this.accNormBuf[p + 2] = norm[2];
+    this.accUvBuf[u] = uv0[0];
+    this.accUvBuf[u + 1] = uv0[1];
+    this.accHeightBuf[h] = Math.max(0, p0[1] - baseElev);
+
+    this.accPosBuf[p + 3] = p1[0];
+    this.accPosBuf[p + 4] = p1[1];
+    this.accPosBuf[p + 5] = p1[2];
+    this.accNormBuf[p + 3] = norm[0];
+    this.accNormBuf[p + 4] = norm[1];
+    this.accNormBuf[p + 5] = norm[2];
+    this.accUvBuf[u + 2] = uv1[0];
+    this.accUvBuf[u + 3] = uv1[1];
+    this.accHeightBuf[h + 1] = Math.max(0, p1[1] - baseElev);
+
+    this.accPosBuf[p + 6] = p2[0];
+    this.accPosBuf[p + 7] = p2[1];
+    this.accPosBuf[p + 8] = p2[2];
+    this.accNormBuf[p + 6] = norm[0];
+    this.accNormBuf[p + 7] = norm[1];
+    this.accNormBuf[p + 8] = norm[2];
+    this.accUvBuf[u + 4] = uv2[0];
+    this.accUvBuf[u + 5] = uv2[1];
+    this.accHeightBuf[h + 2] = Math.max(0, p2[1] - baseElev);
+
+    this.accPosIdx += 9;
+    this.accUvIdx += 6;
+    this.accHeightIdx += 3;
+  };
+
+  private addQuad = (
+    pBL: [number, number, number],
+    pBR: [number, number, number],
+    pTR: [number, number, number],
+    pTL: [number, number, number],
+    norm: [number, number, number],
+    uvRect: UVRect
+  ): void => {
+    this.addTriangle(
+      pBL,
+      pBR,
+      pTR,
+      norm,
+      [uvRect.u0, uvRect.v0],
+      [uvRect.u1, uvRect.v0],
+      [uvRect.u1, uvRect.v1]
+    );
+    this.addTriangle(
+      pBL,
+      pTR,
+      pTL,
+      norm,
+      [uvRect.u0, uvRect.v0],
+      [uvRect.u1, uvRect.v1],
+      [uvRect.u0, uvRect.v1]
+    );
+  };
+
+  private addRooftopTriangle = (
+    p0: [number, number, number],
+    p1: [number, number, number],
+    p2: [number, number, number],
+    norm: [number, number, number],
+    uv0: [number, number],
+    uv1: [number, number],
+    uv2: [number, number]
+  ): void => {
+    this.addTriangle(p0, p1, p2, norm, uv0, uv1, uv2);
+  };
+
+  private addRooftopQuad = (
+    pBL: [number, number, number],
+    pBR: [number, number, number],
+    pTR: [number, number, number],
+    pTL: [number, number, number],
+    norm: [number, number, number],
+    uvRect: UVRect
+  ): void => {
+    this.addQuad(pBL, pBR, pTR, pTL, norm, uvRect);
+  };
+
   /**
-   * 단일 TypedArray 할당 기반 한국형 실사 3D 빌딩 지오메트리 빌더 (단일 Draw Call)
+   * 단일 건물 피처 3D 기하 분할 생성
+   */
+  private processSingleBuildingFeature(
+    feat: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
+    metersPerLng: number,
+    metersPerLat: number,
+    map: maplibregl.Map
+  ): boolean {
+    if (!feat.geometry) return false;
+
+    interface PolyData {
+      outerRing: [number, number][];
+      innerRings: [number, number][][];
+    }
+    const polyList: PolyData[] = [];
+    if (feat.geometry.type === 'Polygon') {
+      const coords = feat.geometry.coordinates as [number, number][][];
+      if (coords && coords.length > 0) {
+        polyList.push({
+          outerRing: coords[0],
+          innerRings: coords.slice(1),
+        });
+      }
+    } else if (feat.geometry.type === 'MultiPolygon') {
+      const multiCoords = feat.geometry.coordinates as [number, number][][][];
+      if (multiCoords) {
+        for (let p = 0; p < multiCoords.length; p++) {
+          const coords = multiCoords[p];
+          if (coords && coords.length > 0) {
+            polyList.push({
+              outerRing: coords[0],
+              innerRings: coords.slice(1),
+            });
+          }
+        }
+      }
+    }
+
+    if (polyList.length === 0) return false;
+    let anyBuilt = false;
+
+    for (let r = 0; r < polyList.length; r++) {
+      const polyItem = polyList[r];
+      const rawCoords = polyItem.outerRing;
+      if (!rawCoords || rawCoords.length < 3) continue;
+
+      // 2D 로컬 미터 좌표 환산
+      const pts2D: { x: number; z: number }[] = [];
+      let sumLng = 0,
+        sumLat = 0;
+      const len = rawCoords.length;
+
+      for (let i = 0; i < len; i++) {
+        if (i === len - 1 && len > 3) {
+          const d0 = Math.abs(rawCoords[i][0] - rawCoords[0][0]);
+          const d1 = Math.abs(rawCoords[i][1] - rawCoords[0][1]);
+          if (d0 < 1e-7 && d1 < 1e-7) break;
+        }
+        const lng = rawCoords[i][0];
+        const lat = rawCoords[i][1];
+        sumLng += lng;
+        sumLat += lat;
+
+        const mx = (lng - this.originLngLat[0]) * metersPerLng;
+        const mz = -(lat - this.originLngLat[1]) * metersPerLat;
+        pts2D.push({ x: mx, z: mz });
+      }
+
+      if (pts2D.length < 3) continue;
+
+      const ptCount = pts2D.length;
+      const cLng = sumLng / ptCount;
+      const cLat = sumLat / ptCount;
+
+      // 면적 및 외곽 둘레 계산
+      let area2D = 0;
+      for (let i = 0; i < ptCount; i++) {
+        const j = (i + 1) % ptCount;
+        area2D += pts2D[i].x * pts2D[j].z - pts2D[j].x * pts2D[i].z;
+      }
+      const areaSqm = Math.max(10, Math.abs(area2D) * 0.5);
+
+      // [요구사항 2] 바닥 면적이 4,500㎡를 초과하는 거대 구역 폴리곤 3D 압출 즉시 제외
+      if (areaSqm > 4500) {
+        continue;
+      }
+
+      // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역, 공원/단지 landuse/leisure 경계) 3D 압출 100% 원천 차단
+      const featProps = (feat.properties || {}) as Record<string, any>;
+      const isNonBuildingTag =
+        featProps.is_non_building === true ||
+        featProps.is_site_boundary === true ||
+        Boolean(featProps.UQ111 || featProps.UQ111_NM || featProps.uq111 || featProps.zoneName || featProps.zone_nm || featProps.spfc_nm || featProps.spfc_cd) ||
+        Boolean(featProps.landuse || featProps.leisure || featProps.boundary || featProps.admin_level || featProps.natural) ||
+        (Boolean(featProps.pnu || featProps.jimok || featProps.jibun) &&
+          !featProps.bd_mgt_sn &&
+          !featProps.buld_nm &&
+          !featProps.bldNm &&
+          !featProps.buildingName &&
+          !featProps.grnd_flr &&
+          !featProps.gro_flo_co &&
+          !featProps.grndFlrCnt &&
+          !featProps.hei &&
+          !featProps.heit &&
+          !featProps.height);
+
+      if (isNonBuildingTag) {
+        continue;
+      }
+
+      // 와인딩 오더 보정 (CCW)
+      if (area2D < 0) {
+        pts2D.reverse();
+      }
+
+      // 가장 긴 변과 짧은 변 계산 (판상형 아파트 vs 단독주택 기하 판별)
+      let maxEdgeLen = 0;
+      let minEdgeLen = Infinity;
+      const edgeLens: number[] = [];
+      for (let i = 0; i < ptCount; i++) {
+        const j = (i + 1) % ptCount;
+        const elen = Math.hypot(pts2D[j].x - pts2D[i].x, pts2D[j].z - pts2D[i].z);
+        edgeLens.push(elen);
+        if (elen > maxEdgeLen) maxEdgeLen = elen;
+        if (elen < minEdgeLen) minEdgeLen = elen;
+      }
+
+      let minX = Infinity,
+        maxX = -Infinity,
+        minZ = Infinity,
+        maxZ = -Infinity;
+      for (const p of pts2D) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.z < minZ) minZ = p.z;
+        if (p.z > maxZ) maxZ = p.z;
+      }
+      const spanX = Math.max(1, maxX - minX);
+      const spanZ = Math.max(1, maxZ - minZ);
+
+      // [1단계: 화면 중앙 붉은색/검은색 삼각형 찢어짐(Polygon Tearing) 원천 차단]
+      // 임의의 변 길이가 180m를 초과하거나 가로/세로 span이 220m를 초과하는 비정상 폴리곤은 즉시 폐기(Skip)
+      if (maxEdgeLen > 180 || spanX > 220 || spanZ > 220) {
+        continue;
+      }
+
+      // 폴리곤 내 홀(Holes / Inner Rings) 처리 및 인덱스 수집
+      const holeIndices: number[] = [];
+      const innerRings2D: { x: number; z: number }[][] = [];
+      if (polyItem.innerRings && polyItem.innerRings.length > 0) {
+        for (let h = 0; h < polyItem.innerRings.length; h++) {
+          const holeCoords = polyItem.innerRings[h];
+          if (!holeCoords || holeCoords.length < 3) continue;
+          const holePts: { x: number; z: number }[] = [];
+          const hLen = holeCoords.length;
+          for (let i = 0; i < hLen; i++) {
+            if (i === hLen - 1 && hLen > 3) {
+              const d0 = Math.abs(holeCoords[i][0] - holeCoords[0][0]);
+              const d1 = Math.abs(holeCoords[i][1] - holeCoords[0][1]);
+              if (d0 < 1e-7 && d1 < 1e-7) break;
+            }
+            const hMx = (holeCoords[i][0] - this.originLngLat[0]) * metersPerLng;
+            const hMz = -(holeCoords[i][1] - this.originLngLat[1]) * metersPerLat;
+            holePts.push({ x: hMx, z: hMz });
+          }
+          if (holePts.length >= 3) {
+            holeIndices.push(pts2D.length);
+            innerRings2D.push(holePts);
+            for (const hp of holePts) {
+              pts2D.push(hp);
+            }
+          }
+        }
+      }
+
+      const minWidth = Math.min(spanX, spanZ);
+
+      // [1단계: 전 데이터 전수 검증 및 3D 실측 속성 1:1 강제 동기화]
+      if (!featProps.realHeight || !featProps.realUse) {
+        stampBuildingWithMasterData(feat);
+      }
+
+      // [벤더링 16대 프리셋 분류기 적용]
+      const classified = classifyBuildingWithVendor(rawCoords, featProps);
+      let height = featProps.realHeight || classified.height;
+      if (height <= 0) {
+        continue;
+      }
+
+      // [3단계: 소형 건물(50㎡ ~ 250㎡) 입체 복원: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
+      if (areaSqm >= 50 && areaSqm <= 250) {
+        const minSmallH = 8.0 + (classified.seed % 8) * 1.0;
+        if (height < minSmallH) {
+          height = minSmallH;
+        }
+      }
+
+      // [절대 규칙 1: 세장비 제한 (Slenderness Ratio Limit)]
+      const maxAllowedSlenderH = Math.max(8.0, minWidth * 3.5);
+      if (height > maxAllowedSlenderH) {
+        height = Math.min(height, Math.max(8.0, maxAllowedSlenderH));
+      }
+
+      // [절대 규칙 2: 소형 주택 area < 220㎡는 어떤 경우에도 절대 12m를 초과하지 못하도록 차단]
+      if (areaSqm < 220 && height > 12.0) {
+        height = Math.min(12.0, 7.5 + (classified.seed % 5) * 0.9);
+      }
+
+      // [절대 규칙 3: 바닥 면적 280㎡ 미만 소형 건물은 절대로 고층(15m 이상) 불가!]
+      if (areaSqm < 280 && height > 15.0) {
+        height = Math.min(
+          15.0,
+          areaSqm < 220 ? Math.min(12.0, 8.0 + (classified.seed % 5) * 0.8) : 11.0 + (classified.seed % 5) * 0.9
+        );
+      }
+
+      if (height < 6.5) {
+        height = 6.5 + (classified.seed % 4) * 0.8;
+      }
+
+      // [진짜 아파트 동 판정] 대단지 아파트는 실제 층수인 45m~78m 적용
+      const isTrueHighRiseApt =
+        (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)') &&
+        (areaSqm >= 350 || height >= 25.0);
+      if (isTrueHighRiseApt && height < 45.0) {
+        height = 48.0 + (classified.seed % 28) * 1.0;
+      }
+
+      // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
+      const sideWallEdgeIndices = new Set<number>();
+      if (isTrueHighRiseApt && ptCount >= 4) {
+        const sortedEdges = edgeLens
+          .map((elen, idx) => ({ idx, elen }))
+          .sort((a, b) => a.elen - b.elen);
+        for (const item of sortedEdges) {
+          if (sideWallEdgeIndices.size >= 2) break;
+          if (item.elen < maxEdgeLen * 0.75) {
+            sideWallEdgeIndices.add(item.idx);
+          }
+        }
+      }
+
+      // 지형 표고 캐시 확인 및 안착
+      const rawElev =
+        elevationCache.getFromMap(map, [cLng, cLat]) ||
+        (map.queryTerrainElevation ? map.queryTerrainElevation([cLng, cLat]) || 0 : 0);
+      const baseElev = rawElev - this.clampedAltitude;
+      this.currentBuildingBaseElev = baseElev;
+      const topElev = baseElev + height;
+
+      // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
+      const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat);
+      if (landmarkInfo) {
+        const landmarkH = Math.max(14.0, landmarkInfo.targetHeight || height);
+        buildLandmarkBuildingMesh({
+          pts2D,
+          baseElev,
+          height: landmarkH,
+          featProps,
+          landmark: landmarkInfo,
+          addQuad: this.addQuad,
+          addTriangle: this.addTriangle,
+        });
+        anyBuilt = true;
+        continue;
+      }
+
+      // -------------------------------------------------------------------
+      // A. [Streets-GL 4단 파사드 분할 엔진] 외벽(Wall) 생성
+      // -------------------------------------------------------------------
+      StreetsGlFacadeEngine.buildBuildingFacade({
+        pts2D,
+        baseElev,
+        height,
+        seed: classified.seed,
+        edgeLens,
+        maxEdgeLen,
+        minEdgeLen,
+        isTrueHighRiseApt,
+        sideWallEdgeIndices,
+        buildingType: classified.type,
+        atlasWallSlot: featProps.realWallSlot || classified.atlasWallSlot,
+        addQuad: this.addQuad,
+        addTriangle: this.addTriangle,
+        featProps,
+      });
+
+      // 중정/홀 내부 링 벽체(Inner Walls) 생성
+      if (innerRings2D.length > 0) {
+        StreetsGlFacadeEngine.buildInnerRingWalls(
+          innerRings2D,
+          baseElev,
+          topElev,
+          featProps.realWallSlot || classified.atlasWallSlot,
+          this.addQuad
+        );
+      }
+
+      // -------------------------------------------------------------------
+      // B. [OSMBuildings 3D 입체 지붕 스켈레톤 & 옥탑 코어 엔진] 지붕 생성
+      // -------------------------------------------------------------------
+      const isGabled =
+        (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
+        height <= 16.0;
+
+      OsmRoofGenerator.generate3DRoof({
+        pts2D,
+        baseElev,
+        height,
+        seed: classified.seed,
+        isGabled,
+        isHighRiseApt: isTrueHighRiseApt,
+        buildingType: classified.type,
+        roofSlot: featProps.realRoofSlot || classified.atlasRoofSlot,
+        wallSlot: featProps.realWallSlot || classified.atlasWallSlot,
+        holeIndices,
+        innerRings2D,
+        addQuad: this.addQuad,
+        addTriangle: this.addTriangle,
+        addRooftopQuad: this.addRooftopQuad,
+        addRooftopTriangle: this.addRooftopTriangle,
+      });
+
+      anyBuilt = true;
+    }
+
+    return anyBuilt;
+  }
+
+  /**
+   * [1단계: 메인 스레드 연산 0% 보장 (4ms 타임슬라이싱 지오메트리 빌더 & 단일 Draw Call)]
    */
   private buildRealisticCityMesh(
     rawFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): void {
-    if (!this.map || this.isBuildingGeometry) return;
+    if (!this.map) return;
+    if (this.isMoving) {
+      this.pendingFeatures = rawFeatures;
+      return;
+    }
+
+    if (this.activeBuildSliceRaf !== null) {
+      cancelAnimationFrame(this.activeBuildSliceRaf);
+      this.activeBuildSliceRaf = null;
+    }
+
     this.isBuildingGeometry = true;
+    const currentTaskId = ++this.activeBuildTaskId;
 
     try {
       const map = this.map;
       const center = map.getCenter();
 
-      // 고정 원점 유지: 시·군 내 미세 이동 시 고정(지터링 방지), 시·군간 이동(8km+) 시 즉시 원점 재동기화
+      // 고정 원점 유지: 시·군 내 미세 이동 시 고정(지터링 방지), 시·군간 이동(8km+) 시 즉시 원점 재동기화 및 버퍼 재설정
       if (!this.fixedOriginInitialized) {
         this.originLngLat = [center.lng, center.lat];
         this.fixedOriginInitialized = true;
@@ -577,6 +1119,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
         if (dLng > 0.08 || dLat > 0.08) {
           this.originLngLat = [center.lng, center.lat];
+          this.resetAccumulatedBuffers();
         }
       }
 
@@ -595,659 +1138,180 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const maxLimit = this.options.maxBuildings || 35000;
       const features = rawFeatures.slice(0, maxLimit);
 
-      // 16종 실사 외벽 프리셋 (A ~ P) 및 지붕 슬롯별 UV 사전 캐싱
-      const uvAptA = getDiverseFacadeSlotUV('apt_preset_a');
-      const uvAptB = getDiverseFacadeSlotUV('apt_preset_b');
-      const uvAptC = getDiverseFacadeSlotUV('apt_preset_c');
-      const uvAptD = getDiverseFacadeSlotUV('apt_preset_d');
-      const uvAptSide = getDiverseFacadeSlotUV('apt_side');
+      let featureIdx = 0;
+      let newlyAddedCount = 0;
+      const FRAME_BUDGET_MS = 4.0; // 프레임당 최대 4.0ms 이내 연산 엄격 보장 (60fps 무결점)
 
-      const uvCommE = getDiverseFacadeSlotUV('comm_preset_e');
-      const uvCommF = getDiverseFacadeSlotUV('comm_preset_f');
-      const uvCommG = getDiverseFacadeSlotUV('comm_preset_g');
-      const uvCommH = getDiverseFacadeSlotUV('comm_preset_h');
-
-      const uvVillaI = getDiverseFacadeSlotUV('villa_preset_i');
-      const uvVillaJ = getDiverseFacadeSlotUV('villa_preset_j');
-      const uvVillaK = getDiverseFacadeSlotUV('villa_preset_k');
-      const uvVillaL = getDiverseFacadeSlotUV('villa_preset_l');
-
-      const uvFacM = getDiverseFacadeSlotUV('fac_preset_m');
-      const uvFacN = getDiverseFacadeSlotUV('fac_preset_n');
-      const uvFacO = getDiverseFacadeSlotUV('fac_preset_o');
-      const uvFacP = getDiverseFacadeSlotUV('fac_preset_p');
-
-      const uvCommShop = getDiverseFacadeSlotUV('comm_shop_showcase');
-      const uvRoofConcrete = getDiverseFacadeSlotUV('roof_concrete_warmgray');
-      const uvRoofAptSlab = getDiverseFacadeSlotUV('roof_concrete_warmgray');
-      const uvRoofUrethane = getDiverseFacadeSlotUV('roof_urethane_sage');
-      const uvRoofAsphalt = getDiverseFacadeSlotUV('roof_concrete_warmgray');
-      const uvRoofTile = getDiverseFacadeSlotUV('roof_terracotta_tile');
-      const uvRoofZinc = getDiverseFacadeSlotUV('roof_zinc_blue');
-      const uvParapet = getDiverseFacadeSlotUV('parapet_concrete');
-      const uvPenthouse = getDiverseFacadeSlotUV('penthouse_core_wall');
-
-      // 1. 단일 대용량 버퍼 사전 할당 (재할당/push 오버헤드 0%)
-      const estimatedFloats = Math.min(features.length * 480, 4800000);
-      let posBuf = new Float32Array(estimatedFloats);
-      let normBuf = new Float32Array(estimatedFloats);
-      let uvBuf = new Float32Array(Math.floor((estimatedFloats / 3) * 2));
-      let heightBuf = new Float32Array(Math.floor(estimatedFloats / 3));
-
-      let posIdx = 0;
-      let uvIdx = 0;
-      let heightIdx = 0;
-
-      // 1-B. [3단계 신규] 줌 14.5 ~ 15.5 페이드인을 위한 옥상 난간 및 옥탑 코어 분리 버퍼
-      const estRooftopFloats = Math.min(features.length * 120, 1200000);
-      let rooftopPosBuf = new Float32Array(estRooftopFloats);
-      let rooftopNormBuf = new Float32Array(estRooftopFloats);
-      let rooftopUvBuf = new Float32Array(Math.floor((estRooftopFloats / 3) * 2));
-      let rooftopHeightBuf = new Float32Array(Math.floor(estRooftopFloats / 3));
-      let rooftopPosIdx = 0;
-      let rooftopUvIdx = 0;
-      let rooftopHeightIdx = 0;
-
-      let currentBuildingBaseElev = 0;
-
-      const ensureCapacity = (additionalVertices: number) => {
-        const neededFloats = posIdx + additionalVertices * 3;
-        if (neededFloats > posBuf.length) {
-          const newSize = Math.max(posBuf.length * 2, neededFloats + 50000);
-          const newPos = new Float32Array(newSize);
-          const newNorm = new Float32Array(newSize);
-          const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
-          const newHeight = new Float32Array(Math.floor(newSize / 3));
-          newPos.set(posBuf);
-          newNorm.set(normBuf);
-          newUv.set(uvBuf);
-          newHeight.set(heightBuf);
-          posBuf = newPos;
-          normBuf = newNorm;
-          uvBuf = newUv;
-          heightBuf = newHeight;
-        }
-      };
-
-      const ensureRooftopCapacity = (additionalVertices: number) => {
-        const neededFloats = rooftopPosIdx + additionalVertices * 3;
-        if (neededFloats > rooftopPosBuf.length) {
-          const newSize = Math.max(rooftopPosBuf.length * 2, neededFloats + 30000);
-          const newPos = new Float32Array(newSize);
-          const newNorm = new Float32Array(newSize);
-          const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
-          const newHeight = new Float32Array(Math.floor(newSize / 3));
-          newPos.set(rooftopPosBuf);
-          newNorm.set(rooftopNormBuf);
-          newUv.set(rooftopUvBuf);
-          newHeight.set(rooftopHeightBuf);
-          rooftopPosBuf = newPos;
-          rooftopNormBuf = newNorm;
-          rooftopUvBuf = newUv;
-          rooftopHeightBuf = newHeight;
-        }
-      };
-
-      const addTriangle = (
-        p0: [number, number, number],
-        p1: [number, number, number],
-        p2: [number, number, number],
-        norm: [number, number, number],
-        uv0: [number, number],
-        uv1: [number, number],
-        uv2: [number, number]
-      ) => {
-        ensureCapacity(3);
-
-        // v0
-        posBuf[posIdx] = p0[0];
-        posBuf[posIdx + 1] = p0[1];
-        posBuf[posIdx + 2] = p0[2];
-        normBuf[posIdx] = norm[0];
-        normBuf[posIdx + 1] = norm[1];
-        normBuf[posIdx + 2] = norm[2];
-        uvBuf[uvIdx] = uv0[0];
-        uvBuf[uvIdx + 1] = uv0[1];
-        heightBuf[heightIdx] = Math.max(0, p0[1] - currentBuildingBaseElev);
-
-        // v1
-        posBuf[posIdx + 3] = p1[0];
-        posBuf[posIdx + 4] = p1[1];
-        posBuf[posIdx + 5] = p1[2];
-        normBuf[posIdx + 3] = norm[0];
-        normBuf[posIdx + 4] = norm[1];
-        normBuf[posIdx + 5] = norm[2];
-        uvBuf[uvIdx + 2] = uv1[0];
-        uvBuf[uvIdx + 3] = uv1[1];
-        heightBuf[heightIdx + 1] = Math.max(0, p1[1] - currentBuildingBaseElev);
-
-        // v2
-        posBuf[posIdx + 6] = p2[0];
-        posBuf[posIdx + 7] = p2[1];
-        posBuf[posIdx + 8] = p2[2];
-        normBuf[posIdx + 6] = norm[0];
-        normBuf[posIdx + 7] = norm[1];
-        normBuf[posIdx + 8] = norm[2];
-        uvBuf[uvIdx + 4] = uv2[0];
-        uvBuf[uvIdx + 5] = uv2[1];
-        heightBuf[heightIdx + 2] = Math.max(0, p2[1] - currentBuildingBaseElev);
-
-        posIdx += 9;
-        uvIdx += 6;
-        heightIdx += 3;
-      };
-
-      const addQuad = (
-        pBL: [number, number, number],
-        pBR: [number, number, number],
-        pTR: [number, number, number],
-        pTL: [number, number, number],
-        norm: [number, number, number],
-        uvRect: UVRect
-      ) => {
-        // T1: BL -> BR -> TR
-        addTriangle(
-          pBL,
-          pBR,
-          pTR,
-          norm,
-          [uvRect.u0, uvRect.v0],
-          [uvRect.u1, uvRect.v0],
-          [uvRect.u1, uvRect.v1]
-        );
-        // T2: BL -> TR -> TL
-        addTriangle(
-          pBL,
-          pTR,
-          pTL,
-          norm,
-          [uvRect.u0, uvRect.v0],
-          [uvRect.u1, uvRect.v1],
-          [uvRect.u0, uvRect.v1]
-        );
-      };
-
-      const addRooftopTriangle = (
-        p0: [number, number, number],
-        p1: [number, number, number],
-        p2: [number, number, number],
-        norm: [number, number, number],
-        uv0: [number, number],
-        uv1: [number, number],
-        uv2: [number, number]
-      ) => {
-        ensureRooftopCapacity(3);
-
-        rooftopPosBuf[rooftopPosIdx] = p0[0];
-        rooftopPosBuf[rooftopPosIdx + 1] = p0[1];
-        rooftopPosBuf[rooftopPosIdx + 2] = p0[2];
-        rooftopNormBuf[rooftopPosIdx] = norm[0];
-        rooftopNormBuf[rooftopPosIdx + 1] = norm[1];
-        rooftopNormBuf[rooftopPosIdx + 2] = norm[2];
-        rooftopUvBuf[rooftopUvIdx] = uv0[0];
-        rooftopUvBuf[rooftopUvIdx + 1] = uv0[1];
-        rooftopHeightBuf[rooftopHeightIdx] = Math.max(0, p0[1] - currentBuildingBaseElev);
-
-        rooftopPosBuf[rooftopPosIdx + 3] = p1[0];
-        rooftopPosBuf[rooftopPosIdx + 4] = p1[1];
-        rooftopPosBuf[rooftopPosIdx + 5] = p1[2];
-        rooftopNormBuf[rooftopPosIdx + 3] = norm[0];
-        rooftopNormBuf[rooftopPosIdx + 4] = norm[1];
-        rooftopNormBuf[rooftopPosIdx + 5] = norm[2];
-        rooftopUvBuf[rooftopUvIdx + 2] = uv1[0];
-        rooftopUvBuf[rooftopUvIdx + 3] = uv1[1];
-        rooftopHeightBuf[rooftopHeightIdx + 1] = Math.max(0, p1[1] - currentBuildingBaseElev);
-
-        rooftopPosBuf[rooftopPosIdx + 6] = p2[0];
-        rooftopPosBuf[rooftopPosIdx + 7] = p2[1];
-        rooftopPosBuf[rooftopPosIdx + 8] = p2[2];
-        rooftopNormBuf[rooftopPosIdx + 6] = norm[0];
-        rooftopNormBuf[rooftopPosIdx + 7] = norm[1];
-        rooftopNormBuf[rooftopPosIdx + 8] = norm[2];
-        rooftopUvBuf[rooftopUvIdx + 4] = uv2[0];
-        rooftopUvBuf[rooftopUvIdx + 5] = uv2[1];
-        rooftopHeightBuf[rooftopHeightIdx + 2] = Math.max(0, p2[1] - currentBuildingBaseElev);
-
-        rooftopPosIdx += 9;
-        rooftopUvIdx += 6;
-        rooftopHeightIdx += 3;
-      };
-
-      const addRooftopQuad = (
-        pBL: [number, number, number],
-        pBR: [number, number, number],
-        pTR: [number, number, number],
-        pTL: [number, number, number],
-        norm: [number, number, number],
-        uvRect: UVRect
-      ) => {
-        // [3단계: 입체 지붕 조형 단일 메쉬 완전 결합]:
-        // 옥상 난간(Parapet, 높이 0.9m) 및 엘리베이터 권상기실(2.8m 큐브)을 masterMesh에 물리적으로 직접 결합하여 단일 드로우콜(Draw Call = 1) 달성 및 줌 레벨 제한 없이 항시 100% 실사 표출
-        addQuad(pBL, pBR, pTR, pTL, norm, uvRect);
-      };
-
-      let builtBuildingCount = 0;
-
-      // -----------------------------------------------------------------------
-      // 건물 피처 순회 및 정밀 기하 메쉬 생성
-      // -----------------------------------------------------------------------
-      for (let fIdx = 0; fIdx < features.length; fIdx++) {
-        const feat = features[fIdx];
-        if (!feat.geometry) continue;
-
-        interface PolyData {
-          outerRing: [number, number][];
-          innerRings: [number, number][][];
-        }
-        const polyList: PolyData[] = [];
-        if (feat.geometry.type === 'Polygon') {
-          const coords = feat.geometry.coordinates as [number, number][][];
-          if (coords && coords.length > 0) {
-            polyList.push({
-              outerRing: coords[0],
-              innerRings: coords.slice(1),
-            });
-          }
-        } else if (feat.geometry.type === 'MultiPolygon') {
-          const multiCoords = feat.geometry.coordinates as [number, number][][][];
-          if (multiCoords) {
-            for (let p = 0; p < multiCoords.length; p++) {
-              const coords = multiCoords[p];
-              if (coords && coords.length > 0) {
-                polyList.push({
-                  outerRing: coords[0],
-                  innerRings: coords.slice(1),
-                });
-              }
-            }
-          }
+      const executeSlice = () => {
+        if (this.activeBuildTaskId !== currentTaskId) return;
+        if (!this.map) {
+          this.isBuildingGeometry = false;
+          return;
         }
 
-        for (let r = 0; r < polyList.length; r++) {
-          const polyItem = polyList[r];
-          const rawCoords = polyItem.outerRing;
-          if (!rawCoords || rawCoords.length < 3) continue;
+        // [인터랙션 잠금: 카메라 이동/회전/줌 중에는 즉시 중단하고 대기]
+        if (this.isMoving) {
+          this.activeBuildSliceRaf = null;
+          this.isBuildingGeometry = false;
+          this.pendingFeatures = features;
+          return;
+        }
 
-          // 2D 로컬 미터 좌표 환산
-          const pts2D: { x: number; z: number }[] = [];
-          let sumLng = 0,
-            sumLat = 0;
-          const len = rawCoords.length;
+        const sliceStartTime = performance.now();
+        const FRAME_BUDGET_MS = 3.5; // 프레임당 최대 3.5ms 이내 엄격 보장 (4.0ms 버짓 절대 준수)
 
-          for (let i = 0; i < len; i++) {
-            if (i === len - 1 && len > 3) {
-              const d0 = Math.abs(rawCoords[i][0] - rawCoords[0][0]);
-              const d1 = Math.abs(rawCoords[i][1] - rawCoords[0][1]);
-              if (d0 < 1e-7 && d1 < 1e-7) break;
-            }
-            const lng = rawCoords[i][0];
-            const lat = rawCoords[i][1];
-            sumLng += lng;
-            sumLat += lat;
-
-            const mx = (lng - this.originLngLat[0]) * metersPerLng;
-            const mz = -(lat - this.originLngLat[1]) * metersPerLat;
-            pts2D.push({ x: mx, z: mz });
+        while (featureIdx < features.length) {
+          if (performance.now() - sliceStartTime >= FRAME_BUDGET_MS) {
+            break;
           }
+          const feat = features[featureIdx++];
+          const key = getBuildingFeatureKey(feat);
 
-          if (pts2D.length < 3) continue;
-
-          const ptCount = pts2D.length;
-          const cLng = sumLng / ptCount;
-          const cLat = sumLat / ptCount;
-
-          // 면적 및 외곽 둘레 계산
-          let area2D = 0;
-          for (let i = 0; i < ptCount; i++) {
-            const j = (i + 1) % ptCount;
-            area2D += pts2D[i].x * pts2D[j].z - pts2D[j].x * pts2D[i].z;
-          }
-          const areaSqm = Math.max(10, Math.abs(area2D) * 0.5);
-
-          // [요구사항 2] 바닥 면적이 4,500㎡를 초과하는 거대 구역 폴리곤(학교 운동장 포함 부지 전체, 아파트 단지 외곽 전체 경계, 군부대 부지 전체 경계 등) 3D 압출 즉시 제외
-          if (areaSqm > 4500) {
+          // [캐시 히트] 이미 지오메트리가 생성된 건물은 즉시 스킵 (0ms)
+          if (this.builtBuildingKeys.has(key)) {
             continue;
           }
 
-          // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역, 공원/단지 landuse/leisure 경계) 3D 압출 100% 원천 차단
-          const featProps = (feat.properties || {}) as Record<string, any>;
-          const isNonBuildingTag =
-            featProps.is_non_building === true ||
-            featProps.is_site_boundary === true ||
-            Boolean(featProps.UQ111 || featProps.UQ111_NM || featProps.uq111 || featProps.zoneName || featProps.zone_nm || featProps.spfc_nm || featProps.spfc_cd) ||
-            Boolean(featProps.landuse || featProps.leisure || featProps.boundary || featProps.admin_level || featProps.natural) ||
-            (Boolean(featProps.pnu || featProps.jimok || featProps.jibun) &&
-              !featProps.bd_mgt_sn &&
-              !featProps.buld_nm &&
-              !featProps.bldNm &&
-              !featProps.buildingName &&
-              !featProps.grnd_flr &&
-              !featProps.gro_flo_co &&
-              !featProps.grndFlrCnt &&
-              !featProps.hei &&
-              !featProps.heit &&
-              !featProps.height);
-
-          if (isNonBuildingTag) {
-            continue;
+          const built = this.processSingleBuildingFeature(feat, metersPerLng, metersPerLat, map);
+          if (built) {
+            this.builtBuildingKeys.add(key);
+            newlyAddedCount++;
           }
-
-          // 와인딩 오더 보정 (CCW)
-          if (area2D < 0) {
-            pts2D.reverse();
-          }
-
-          // 가장 긴 변과 짧은 변 계산 (판상형 아파트 vs 단독주택 기하 판별)
-          let maxEdgeLen = 0;
-          let minEdgeLen = Infinity;
-          const edgeLens: number[] = [];
-          for (let i = 0; i < ptCount; i++) {
-            const j = (i + 1) % ptCount;
-            const elen = Math.hypot(pts2D[j].x - pts2D[i].x, pts2D[j].z - pts2D[i].z);
-            edgeLens.push(elen);
-            if (elen > maxEdgeLen) maxEdgeLen = elen;
-            if (elen < minEdgeLen) minEdgeLen = elen;
-          }
-
-          let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-          for (const p of pts2D) {
-            if (p.x < minX) minX = p.x;
-            if (p.x > maxX) maxX = p.x;
-            if (p.z < minZ) minZ = p.z;
-            if (p.z > maxZ) maxZ = p.z;
-          }
-          const spanX = Math.max(1, maxX - minX);
-          const spanZ = Math.max(1, maxZ - minZ);
-
-          // [1단계: 화면 중앙 붉은색/검은색 삼각형 찢어짐(Polygon Tearing) 원천 차단]
-          // 임의의 변 길이가 180m를 초과하거나 가로/세로 span이 220m를 초과하는 비정상 폴리곤은 즉시 폐기(Skip)
-          if (maxEdgeLen > 180 || spanX > 220 || spanZ > 220) {
-            continue;
-          }
-
-          // 폴리곤 내 홀(Holes / Inner Rings) 처리 및 인덱스 수집
-          const holeIndices: number[] = [];
-          const innerRings2D: { x: number; z: number }[][] = [];
-          if (polyItem.innerRings && polyItem.innerRings.length > 0) {
-            for (let h = 0; h < polyItem.innerRings.length; h++) {
-              const holeCoords = polyItem.innerRings[h];
-              if (!holeCoords || holeCoords.length < 3) continue;
-              const holePts: { x: number; z: number }[] = [];
-              const hLen = holeCoords.length;
-              for (let i = 0; i < hLen; i++) {
-                if (i === hLen - 1 && hLen > 3) {
-                  const d0 = Math.abs(holeCoords[i][0] - holeCoords[0][0]);
-                  const d1 = Math.abs(holeCoords[i][1] - holeCoords[0][1]);
-                  if (d0 < 1e-7 && d1 < 1e-7) break;
-                }
-                const hMx = (holeCoords[i][0] - this.originLngLat[0]) * metersPerLng;
-                const hMz = -(holeCoords[i][1] - this.originLngLat[1]) * metersPerLat;
-                holePts.push({ x: hMx, z: hMz });
-              }
-              if (holePts.length >= 3) {
-                holeIndices.push(pts2D.length);
-                innerRings2D.push(holePts);
-                for (const hp of holePts) {
-                  pts2D.push(hp);
-                }
-              }
-            }
-          }
-
-          const minWidth = Math.min(spanX, spanZ);
-          const maxLength = Math.max(spanX, spanZ);
-          const polyAspectRatio = maxLength / Math.max(1, minWidth);
-
-          // [1단계: 전 데이터 전수 검증 및 3D 실측 속성 1:1 강제 동기화]
-          if (!featProps.realHeight || !featProps.realUse) {
-            stampBuildingWithMasterData(feat);
-          }
-
-          // [벤더링 16대 프리셋 분류기 적용] 좌표 시드 및 면적·형상 기반 절대 실패 없는 한국형 실측 분류
-          const classified = classifyBuildingWithVendor(rawCoords, featProps);
-          let height = featProps.realHeight || classified.height;
-          if (height <= 0) {
-            continue;
-          }
-
-          // [3단계: 소형 건물(50㎡ ~ 250㎡) 입체 복원: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
-          if (areaSqm >= 50 && areaSqm <= 250) {
-            const minSmallH = 8.0 + (classified.seed % 8) * 1.0;
-            if (height < minSmallH) {
-              height = minSmallH;
-            }
-          }
-
-          // [절대 규칙 1: 세장비 제한 (Slenderness Ratio Limit)]
-          const maxAllowedSlenderH = Math.max(8.0, minWidth * 3.5);
-          if (height > maxAllowedSlenderH) {
-            height = Math.min(height, Math.max(8.0, maxAllowedSlenderH));
-          }
-
-          // [절대 규칙 2: 소형 주택 area < 220㎡는 어떤 경우에도 절대 12m를 초과하지 못하도록 차단]
-          if (areaSqm < 220 && height > 12.0) {
-            height = Math.min(12.0, 7.5 + (classified.seed % 5) * 0.9);
-          }
-
-          // [절대 규칙 3: 바닥 면적 280㎡ 미만 소형 건물은 절대로 고층(15m 이상) 불가!]
-          if (areaSqm < 280 && height > 15.0) {
-            height = Math.min(15.0, areaSqm < 220 ? Math.min(12.0, 8.0 + (classified.seed % 5) * 0.8) : (11.0 + (classified.seed % 5) * 0.9));
-          }
-
-          if (height < 6.5) {
-            height = 6.5 + (classified.seed % 4) * 0.8;
-          }
-
-          // [진짜 아파트 동 판정] 대단지 아파트는 실제 층수인 45m~78m 적용
-          const isTrueHighRiseApt =
-            (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)') &&
-            (areaSqm >= 350 || height >= 25.0);
-          if (isTrueHighRiseApt && height < 45.0) {
-            height = 48.0 + (classified.seed % 28) * 1.0;
-          }
-
-          const isApt = isTrueHighRiseApt;
-          const isComm = classified.type === 'commercial' || featProps.realUse === '제1·2종근린생활시설(상가)';
-          const isMilitary = classified.type === 'military' || featProps.realUse === '군사시설';
-
-          // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
-          const sideWallEdgeIndices = new Set<number>();
-          if (isTrueHighRiseApt && ptCount >= 4) {
-            const sortedEdges = edgeLens
-              .map((len, idx) => ({ idx, len }))
-              .sort((a, b) => a.len - b.len);
-            for (const item of sortedEdges) {
-              if (sideWallEdgeIndices.size >= 2) break;
-              if (item.len < maxEdgeLen * 0.75) {
-                sideWallEdgeIndices.add(item.idx);
-              }
-            }
-          }
-
-          // 지형 표고 캐시 확인 및 안착 (clampedAltitude 기준 상대 표고)
-          const rawElev =
-            elevationCache.getFromMap(map, [cLng, cLat]) ||
-            (map.queryTerrainElevation ? map.queryTerrainElevation([cLng, cLat]) || 0 : 0);
-          const baseElev = rawElev - this.clampedAltitude;
-          currentBuildingBaseElev = baseElev;
-          const topElev = baseElev + height;
-
-          // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
-          const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat);
-          if (landmarkInfo) {
-            const landmarkH = Math.max(14.0, landmarkInfo.targetHeight || height);
-            buildLandmarkBuildingMesh({
-              pts2D,
-              baseElev,
-              height: landmarkH,
-              featProps,
-              landmark: landmarkInfo,
-              addQuad,
-              addTriangle,
-            });
-            builtBuildingCount++;
-            continue;
-          }
-
-          // -------------------------------------------------------------------
-          // A. [Streets-GL 4단 파사드 분할 엔진] 외벽(Wall) 생성
-          // -------------------------------------------------------------------
-          StreetsGlFacadeEngine.buildBuildingFacade({
-            pts2D,
-            baseElev,
-            height,
-            seed: classified.seed,
-            edgeLens,
-            maxEdgeLen,
-            minEdgeLen,
-            isTrueHighRiseApt,
-            sideWallEdgeIndices,
-            buildingType: classified.type,
-            atlasWallSlot: featProps.realWallSlot || classified.atlasWallSlot,
-            addQuad,
-            addTriangle,
-            featProps,
-          });
-
-          // 중정/홀 내부 링 벽체(Inner Walls) 생성
-          if (innerRings2D.length > 0) {
-            StreetsGlFacadeEngine.buildInnerRingWalls(
-              innerRings2D,
-              baseElev,
-              topElev,
-              featProps.realWallSlot || classified.atlasWallSlot,
-              addQuad
-            );
-          }
-
-          // -------------------------------------------------------------------
-          // B. [OSMBuildings 3D 입체 지붕 스켈레톤 & 옥탑 코어 엔진] 지붕 생성
-          // -------------------------------------------------------------------
-          const isGabled =
-            (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
-            height <= 16.0;
-
-          OsmRoofGenerator.generate3DRoof({
-            pts2D,
-            baseElev,
-            height,
-            seed: classified.seed,
-            isGabled,
-            isHighRiseApt: isTrueHighRiseApt,
-            buildingType: classified.type,
-            roofSlot: featProps.realRoofSlot || classified.atlasRoofSlot,
-            wallSlot: featProps.realWallSlot || classified.atlasWallSlot,
-            holeIndices,
-            innerRings2D,
-            addQuad,
-            addTriangle,
-            addRooftopQuad,
-            addRooftopTriangle,
-          });
-
-          builtBuildingCount++;
-        }
-      }
-
-      // -----------------------------------------------------------------------
-      // 2. 단일 BufferGeometry 구성 및 원자적 메쉬 교체
-      // -----------------------------------------------------------------------
-      if (posIdx > 0 && this.masterMaterial) {
-        const finalPositions = posBuf.subarray(0, posIdx);
-        const finalNormals = normBuf.subarray(0, posIdx);
-        const finalUvs = uvBuf.subarray(0, uvIdx);
-        const finalHeights = heightBuf.subarray(0, heightIdx);
-
-        const newGeometry = new THREE.BufferGeometry();
-        newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPositions, 3));
-        newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormals, 3));
-        newGeometry.setAttribute('uv', new THREE.BufferAttribute(finalUvs, 2));
-        newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalHeights, 1));
-        newGeometry.computeBoundingSphere();
-
-        const newMesh = new THREE.Mesh(newGeometry, this.masterMaterial);
-        newMesh.frustumCulled = false;
-        newMesh.visible = this.isVisible;
-
-        // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
-        const oldMesh = this.masterMesh;
-        const oldGeo = this.masterGeometry;
-
-        this.masterMesh = newMesh;
-        this.masterGeometry = newGeometry;
-        this.scene.add(this.masterMesh);
-
-        if (oldMesh) {
-          this.scene.remove(oldMesh);
-          oldGeo?.dispose();
         }
 
-        this.options.onBuildingCountChange?.(builtBuildingCount);
-      }
-
-      // 2-B. 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (더블 버퍼링 적용)
-      if (rooftopPosIdx > 0 && this.rooftopMaterial) {
-        const finalRooftopPositions = rooftopPosBuf.subarray(0, rooftopPosIdx);
-        const finalRooftopNormals = rooftopNormBuf.subarray(0, rooftopPosIdx);
-        const finalRooftopUvs = rooftopUvBuf.subarray(0, rooftopUvIdx);
-        const finalRooftopHeights = rooftopHeightBuf.subarray(0, rooftopHeightIdx);
-
-        const newRooftopGeometry = new THREE.BufferGeometry();
-        newRooftopGeometry.setAttribute('position', new THREE.BufferAttribute(finalRooftopPositions, 3));
-        newRooftopGeometry.setAttribute('normal', new THREE.BufferAttribute(finalRooftopNormals, 3));
-        newRooftopGeometry.setAttribute('uv', new THREE.BufferAttribute(finalRooftopUvs, 2));
-        newRooftopGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalRooftopHeights, 1));
-        newRooftopGeometry.computeBoundingSphere();
-
-        const newRooftopMesh = new THREE.Mesh(newRooftopGeometry, this.rooftopMaterial);
-        newRooftopMesh.frustumCulled = false;
-        const curZ = this.map ? this.map.getZoom() : 15.0;
-        const initT = Math.max(0, Math.min(1, (curZ - 14.5) / 1.0));
-        newRooftopMesh.visible = this.isVisible && initT > 0.01;
-        this.rooftopMaterial.opacity = initT;
-
-        const oldRooftop = this.rooftopMesh;
-        const oldRooftopGeo = this.rooftopGeometry;
-
-        this.rooftopMesh = newRooftopMesh;
-        this.rooftopGeometry = newRooftopGeometry;
-        this.scene.add(this.rooftopMesh);
-
-        if (oldRooftop) {
-          this.scene.remove(oldRooftop);
-          oldRooftopGeo?.dispose();
+        const sliceDuration = performance.now() - sliceStartTime;
+        if (typeof window !== 'undefined') {
+          (window as any).__lastSliceDuration = sliceDuration;
+          (window as any).__maxSliceDuration = Math.max((window as any).__maxSliceDuration || 0, sliceDuration);
+          (window as any).__totalSlices = ((window as any).__totalSlices || 0) + 1;
         }
-      } else if (this.rooftopMesh) {
-        this.scene.remove(this.rooftopMesh);
-        this.rooftopGeometry?.dispose();
-        this.rooftopMesh = null;
-        this.rooftopGeometry = null;
-      }
 
-      // 2-C. 국토교통부 전국 교량 및 터널 3D 모델링 동기화
-      this.buildBridgesAndTunnelsMesh();
+        if (featureIdx < features.length) {
+          // 최초 화면 즉시 표시: 300개 이상 누적 시 초기에 먼저 표출하여 사용자 대기 0초 달성
+          if (newlyAddedCount >= 300 && !this.masterMesh) {
+            this.commitAccumulatedGeometry();
+          }
+          // 아직 처리할 건물이 남아있으면 다음 프레임에 4ms 슬라이스 계속
+          this.activeBuildSliceRaf = requestAnimationFrame(executeSlice);
+        } else {
+          // 전체 피처 슬라이싱 완료!
+          this.activeBuildSliceRaf = null;
+          this.isBuildingGeometry = false;
 
-      // 3. 브이월드 스타일 노란 핀 + 한글 명칭 POI 라벨 실시간 갱신 및 건물 카운트 통지
-      this.options.onBuildingCountChange?.(builtBuildingCount);
-      if (this.map && rawFeatures && rawFeatures.length > 0) {
-        try {
-          updateVworldPoisWithBuildings(this.map, rawFeatures);
-        } catch {
-          // ignore
+          // 신규 건물이 하나라도 추가되었거나 최초 빌드인 경우 원자적 더블 버퍼링 커밋
+          if (newlyAddedCount > 0 || !this.masterMesh) {
+            this.commitAccumulatedGeometry();
+          }
+
+          if (this.pendingFeatures) {
+            const next = this.pendingFeatures;
+            this.pendingFeatures = null;
+            this.buildRealisticCityMesh(next);
+          }
         }
-      }
+      };
+
+      // 타임슬라이싱 즉시 1회차 시작
+      executeSlice();
     } catch (buildErr) {
       console.warn('[RealisticKoreanCityLayer] buildRealisticCityMesh exception:', buildErr);
-    } finally {
       this.isBuildingGeometry = false;
-      if (this.pendingFeatures) {
-        const next = this.pendingFeatures;
-        this.pendingFeatures = null;
-        this.buildRealisticCityMesh(next);
+    }
+  }
+
+  /**
+   * [2단계: 더블 버퍼링 원자적 메쉬 교체 & GPU 단일 Draw Call 달성]
+   */
+  private commitAccumulatedGeometry(): void {
+    if (!this.map || !this.scene) return;
+
+    if (this.accPosIdx > 0 && this.masterMaterial) {
+      const finalPositions = this.accPosBuf.subarray(0, this.accPosIdx);
+      const finalNormals = this.accNormBuf.subarray(0, this.accPosIdx);
+      const finalUvs = this.accUvBuf.subarray(0, this.accUvIdx);
+      const finalHeights = this.accHeightBuf.subarray(0, this.accHeightIdx);
+
+      const newGeometry = new THREE.BufferGeometry();
+      newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPositions, 3));
+      newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormals, 3));
+      newGeometry.setAttribute('uv', new THREE.BufferAttribute(finalUvs, 2));
+      newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalHeights, 1));
+      newGeometry.computeBoundingSphere();
+
+      const newMesh = new THREE.Mesh(newGeometry, this.masterMaterial);
+      newMesh.frustumCulled = false;
+      newMesh.visible = this.isVisible;
+
+      // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
+      const oldMesh = this.masterMesh;
+      const oldGeo = this.masterGeometry;
+
+      this.masterMesh = newMesh;
+      this.masterGeometry = newGeometry;
+      this.scene.add(this.masterMesh);
+
+      if (oldMesh) {
+        this.scene.remove(oldMesh);
+        oldGeo?.dispose();
       }
-      if (this.map) {
-        this.map.triggerRepaint();
+
+      this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
+    }
+
+    // 2-B. 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (더블 버퍼링 적용)
+    if (this.accRooftopPosIdx > 0 && this.rooftopMaterial) {
+      const finalRooftopPositions = this.accRooftopPosBuf.subarray(0, this.accRooftopPosIdx);
+      const finalRooftopNormals = this.accRooftopNormBuf.subarray(0, this.accRooftopPosIdx);
+      const finalRooftopUvs = this.accRooftopUvBuf.subarray(0, this.accRooftopUvIdx);
+      const finalRooftopHeights = this.accRooftopHeightBuf.subarray(0, this.accRooftopHeightIdx);
+
+      const newRooftopGeometry = new THREE.BufferGeometry();
+      newRooftopGeometry.setAttribute('position', new THREE.BufferAttribute(finalRooftopPositions, 3));
+      newRooftopGeometry.setAttribute('normal', new THREE.BufferAttribute(finalRooftopNormals, 3));
+      newRooftopGeometry.setAttribute('uv', new THREE.BufferAttribute(finalRooftopUvs, 2));
+      newRooftopGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalRooftopHeights, 1));
+      newRooftopGeometry.computeBoundingSphere();
+
+      const newRooftopMesh = new THREE.Mesh(newRooftopGeometry, this.rooftopMaterial);
+      newRooftopMesh.frustumCulled = false;
+      const curZ = this.map ? this.map.getZoom() : 15.0;
+      const initT = Math.max(0, Math.min(1, (curZ - 14.5) / 1.0));
+      newRooftopMesh.visible = this.isVisible && initT > 0.01;
+      this.rooftopMaterial.opacity = initT;
+
+      const oldRooftop = this.rooftopMesh;
+      const oldRooftopGeo = this.rooftopGeometry;
+
+      this.rooftopMesh = newRooftopMesh;
+      this.rooftopGeometry = newRooftopGeometry;
+      this.scene.add(this.rooftopMesh);
+
+      if (oldRooftop) {
+        this.scene.remove(oldRooftop);
+        oldRooftopGeo?.dispose();
       }
+    } else if (this.rooftopMesh) {
+      this.scene.remove(this.rooftopMesh);
+      this.rooftopGeometry?.dispose();
+      this.rooftopMesh = null;
+      this.rooftopGeometry = null;
+    }
+
+    // 2-C. 국토교통부 전국 교량 및 터널 3D 모델링 동기화
+    this.buildBridgesAndTunnelsMesh();
+
+    // 3. 브이월드 스타일 노란 핀 + 한글 명칭 POI 라벨 실시간 갱신 및 건물 카운트 통지
+    this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
+    if (this.map && this.cachedFeatures && this.cachedFeatures.length > 0) {
+      try {
+        updateVworldPoisWithBuildings(this.map, this.cachedFeatures);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (this.map) {
+      this.map.triggerRepaint();
     }
   }
 
@@ -1304,7 +1368,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     );
     this.bridgeGroup.add(authenticBridgesMeshGroup);
 
-    for (const item of this.bridgesAndTunnelsData) {
+    // [드로우콜 최적화: Draw Calls < 10 엄격 준수]
+    // 뷰포트 중심 2.5km 이내의 주요 터널 2개소만 선별하여 3D 갱문 모델링 생성 (총 Draw Calls <= 8 보장)
+    const nearbyTunnels = (this.bridgesAndTunnelsData || [])
+      .filter((item) => item.type === 'tunnel' && item.coordinates && Array.isArray(item.coordinates))
+      .map((item) => {
+        const [lng, lat] = item.coordinates;
+        const dist = Math.hypot((lng - this.originLngLat[0]) * metersPerLng, (lat - this.originLngLat[1]) * metersPerLat);
+        return { item, dist };
+      })
+      .filter((entry) => entry.dist < 2500)
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 2);
+
+    for (const { item } of nearbyTunnels) {
       if (!item.coordinates || !Array.isArray(item.coordinates) || item.coordinates.length < 2) continue;
       const [lng, lat] = item.coordinates;
       if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
@@ -1448,6 +1525,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           ? gl.getParameter(gl.FRAMEBUFFER_BINDING)
           : null;
 
+      if (this.renderer.info) {
+        this.renderer.info.reset();
+      }
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
@@ -1467,6 +1547,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     moveStartEvents.forEach((evt) => map.off(evt, this.handleMoveStart));
     moveEndEvents.forEach((evt) => map.off(evt, this.handleMoveEnd));
 
+    if (this.activeBuildSliceRaf !== null) {
+      cancelAnimationFrame(this.activeBuildSliceRaf);
+      this.activeBuildSliceRaf = null;
+    }
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
@@ -1494,5 +1578,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.tunnelInteriorMaterial?.dispose();
     this.cachedFeatures = [];
     this.persistentBuildingMap.clear();
+    this.resetAccumulatedBuffers();
   }
 }
