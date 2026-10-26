@@ -259,9 +259,9 @@ export function calculateSafeRooftopCore(
   polygon: [number, number][],
   buildingHeight: number,
   baseElevation = 0,
-  minInscribedRadius = 4.0
+  minInscribedRadius = 2.4
 ): SafeRooftopCore | null {
-  if (buildingHeight < 15.0 || !polygon || polygon.length < 3) {
+  if (buildingHeight < 11.0 || !polygon || polygon.length < 3) {
     return null;
   }
 

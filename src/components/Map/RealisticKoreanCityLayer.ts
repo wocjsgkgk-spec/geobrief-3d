@@ -741,24 +741,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         norm: [number, number, number],
         uvRect: UVRect
       ) => {
-        addRooftopTriangle(
-          pBL,
-          pBR,
-          pTR,
-          norm,
-          [uvRect.u0, uvRect.v0],
-          [uvRect.u1, uvRect.v0],
-          [uvRect.u1, uvRect.v1]
-        );
-        addRooftopTriangle(
-          pBL,
-          pTR,
-          pTL,
-          norm,
-          [uvRect.u0, uvRect.v0],
-          [uvRect.u1, uvRect.v1],
-          [uvRect.u0, uvRect.v1]
-        );
+        // [3단계: 입체 지붕 조형 단일 메쉬 완전 결합]:
+        // 옥상 난간(Parapet, 높이 0.9m) 및 엘리베이터 권상기실(2.8m 큐브)을 masterMesh에 물리적으로 직접 결합하여 단일 드로우콜(Draw Call = 1) 달성 및 줌 레벨 제한 없이 항시 100% 실사 표출
+        addQuad(pBL, pBR, pTR, pTL, norm, uvRect);
       };
 
       let builtBuildingCount = 0;
@@ -1171,7 +1156,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           if (isGabled) {
             // [1. 단독주택·다세대 빌라·군부대 막사: 장축을 따라 솟아오른 ㅅ자형 박공지붕(Gabled Roof)]
             // - 직사각형 평면의 장축을 따라 능선이 올라오는 실제 ㅅ자형 박공지붕 정점 생성
-            // - 슬로프: 적갈색 기와(#7c3829) / 청회색 강판(#254e7a)
+            // - 슬로프: 적갈색 기와(#7c3829, 60%) / 청회색 강판/슬레이트(#254e7a, 40%)
             // - 박공벽: 건물 외벽과 1:1 매칭되는 마감 텍스처
             const obb = calculateOBB(poly2D);
             const halfLen = obb.length / 2;
@@ -1183,6 +1168,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             const ridgeH = Math.max(1.8, Math.min(3.4, obb.width * 0.40));
             const topY = topElev;
             const ridgeY = topElev + ridgeH;
+
+            // 기와 색상: 적갈색 기와(60%) / 청회색 강판·슬레이트(40%)
+            const gPick = classified.seed % 10;
+            const gabledRoofUV = gPick < 6 ? uvRoofTile : uvRoofZinc;
 
             // 4개 처마 모서리점 (Eaves) at topY
             const e00: [number, number, number] = [ox - halfLen * ux - halfWid * vx, topY, oz - halfLen * uz - halfWid * vz];
@@ -1201,11 +1190,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             // 경사면 1 (-V 방향 슬로프): 법선 (-vx * sinA, cosA, -vz * sinA)
             const n1: [number, number, number] = [-vx * sinA, cosA, -vz * sinA];
-            addQuad(e00, e10, r1, r0, n1, roofUV);
+            addQuad(e00, e10, r1, r0, n1, gabledRoofUV);
 
             // 경사면 2 (+V 방향 슬로프): 법선 (vx * sinA, cosA, vz * sinA)
             const n2: [number, number, number] = [vx * sinA, cosA, vz * sinA];
-            addQuad(r0, r1, e11, e01, n2, roofUV);
+            addQuad(r0, r1, e11, e01, n2, gabledRoofUV);
 
             // 박공벽 1 (-U 방향 끝단 박공 삼각형)
             const bldWallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
@@ -1268,7 +1257,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             }
 
             // B. 옥상 테두리 3D 돌출 난간 (두께 0.35m, 높이 0.9m)
-            const parapetH = classified.hasParapet ? 0.9 : 0.0;
+            const parapetH = (classified.hasParapet || isApt || classified.type === 'commercial' || height >= 11.0) ? 0.9 : 0.0;
             const parapetW = 0.35; // 0.35m 실측 두께
 
             if (parapetH > 0.0) {
@@ -1354,10 +1343,25 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               }
             } else {
               // 단일 중심 코어 (아파트 소형동 또는 중대형 상업 빌딩)
-              const safeCore = calculateSafeRooftopCore(poly2D, height, topElev, 2.4);
+              const safeCore = calculateSafeRooftopCore(poly2D, height, topElev, 2.0);
+              let cX0 = 0, cX1 = 0, cZ0 = 0, cZ1 = 0;
+              let hasCore = false;
+
               if (safeCore) {
-                const [cX0, cZ0] = safeCore.box2D[0];
-                const [cX1, cZ1] = safeCore.box2D[2];
+                [cX0, cZ0] = safeCore.box2D[0];
+                [cX1, cZ1] = safeCore.box2D[2];
+                hasCore = true;
+              } else if (obb.width >= 7.0 && obb.length >= 7.0) {
+                const halfW = 2.0;
+                const halfD = 1.8;
+                cX0 = obb.origin[0] - halfW;
+                cX1 = obb.origin[0] + halfW;
+                cZ0 = obb.origin[1] - halfD;
+                cZ1 = obb.origin[1] + halfD;
+                hasCore = true;
+              }
+
+              if (hasCore) {
                 const coreTopY = topElev + coreHeight;
 
                 addRooftopQuad([cX0, topElev, cZ0], [cX1, topElev, cZ0], [cX1, coreTopY, cZ0], [cX0, coreTopY, cZ0], [0, 0, -1], uvPenthouse);
@@ -1442,6 +1446,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.scene.remove(oldRooftop);
           oldRooftopGeo?.dispose();
         }
+      } else if (this.rooftopMesh) {
+        this.scene.remove(this.rooftopMesh);
+        this.rooftopGeometry?.dispose();
+        this.rooftopMesh = null;
+        this.rooftopGeometry = null;
       }
 
       // 2-C. 국토교통부 전국 교량 및 터널 3D 모델링 동기화
