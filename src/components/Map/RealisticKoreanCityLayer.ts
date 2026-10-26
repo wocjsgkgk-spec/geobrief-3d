@@ -45,6 +45,7 @@ import {
   getMemoizedBuilding,
   parseAndClassifyBuilding,
 } from '@/utils/gangwonSpatialAggregator';
+import { stampBuildingWithMasterData } from '@/utils/masterDataSynchronizer';
 import {
   calculateOBB,
   calculateSafeRooftopCore,
@@ -168,6 +169,45 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (!items || items.length === 0) return;
     this.bridgesAndTunnelsData = items;
     this.buildBridgesAndTunnelsMesh();
+  }
+
+  public getCachedFeatures(): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] {
+    return this.cachedFeatures.length > 0
+      ? this.cachedFeatures
+      : Array.from(this.persistentBuildingMap.values());
+  }
+
+  public findBuildingNear(
+    lng: number,
+    lat: number,
+    maxDistM: number = 30
+  ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null {
+    const list = this.getCachedFeatures();
+    if (!list || list.length === 0) return null;
+
+    let closest: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null;
+    let minDist = maxDistM;
+
+    for (const feat of list) {
+      if (!feat.geometry) continue;
+      const geom = feat.geometry;
+      let samplePt: [number, number] | null = null;
+      if (geom.type === 'Polygon') {
+        samplePt = geom.coordinates[0]?.[0] as [number, number];
+      } else if (geom.type === 'MultiPolygon') {
+        samplePt = geom.coordinates[0]?.[0]?.[0] as [number, number];
+      }
+      if (!samplePt) continue;
+
+      const dx = (lng - samplePt[0]) * 111000 * Math.cos((lat * Math.PI) / 180);
+      const dy = (lat - samplePt[1]) * 111000;
+      const d = Math.hypot(dx, dy);
+      if (d < minDist) {
+        minDist = d;
+        closest = feat;
+      }
+    }
+    return closest;
   }
 
   public onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
@@ -402,6 +442,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               : f.geometry.coordinates[0]?.[0]?.[0]
           );
       if (!this.persistentBuildingMap.has(key)) {
+        stampBuildingWithMasterData(f);
         this.persistentBuildingMap.set(key, f);
         newFeaturesCount++;
       }
@@ -415,6 +456,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
     if (this.cachedFeatures.length === 0) {
       this.cachedFeatures = (SAMPLE_BUILDINGS?.features as any[]) || [];
+      this.cachedFeatures.forEach((f) => stampBuildingWithMasterData(f));
     }
 
     if (this.cachedFeatures.length > 0) {
@@ -954,14 +996,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const maxLength = Math.max(spanX, spanZ);
           const polyAspectRatio = maxLength / Math.max(1, minWidth);
 
+          // [1단계: 전 데이터 전수 검증 및 3D 실측 속성 1:1 강제 동기화]
+          if (!featProps.realHeight || !featProps.realUse) {
+            stampBuildingWithMasterData(feat);
+          }
+
           // [벤더링 16대 프리셋 분류기 적용] 좌표 시드 및 면적·형상 기반 절대 실패 없는 한국형 실측 분류
           const classified = classifyBuildingWithVendor(rawCoords, featProps);
-          let height = classified.height;
+          let height = featProps.realHeight || classified.height;
           if (height <= 0) {
             continue;
           }
 
-          // [3단계: 소형 건물(50㎡ ~ 250㎡) 무실동 등 입체 복원: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
+          // [3단계: 소형 건물(50㎡ ~ 250㎡) 입체 복원: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
           if (areaSqm >= 50 && areaSqm <= 250) {
             const minSmallH = 8.0 + (classified.seed % 8) * 1.0;
             if (height < minSmallH) {
@@ -975,28 +1022,31 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             height = Math.min(height, Math.max(8.0, maxAllowedSlenderH));
           }
 
-          // [절대 규칙 2: 바닥 면적 280㎡ 미만 소형 건물은 절대로 고층(15m 이상) 불가!]
-          if (areaSqm < 280 && height > 15.0) {
-            height = Math.min(15.0, areaSqm < 220 ? (8.0 + (classified.seed % 6) * 1.0) : (11.0 + (classified.seed % 5) * 0.9));
+          // [절대 규칙 2: 소형 주택 area < 220㎡는 어떤 경우에도 절대 12m를 초과하지 못하도록 차단]
+          if (areaSqm < 220 && height > 12.0) {
+            height = Math.min(12.0, 7.5 + (classified.seed % 5) * 0.9);
           }
 
-          // [절대 규칙 3: 바닥 면적 220㎡ 미만 소형 필지는 8.0m ~ 13.5m (2~4층)]
-          if (areaSqm < 220) {
-            if (height < 8.0) height = 8.0 + (classified.seed % 6) * 1.0;
-            else if (height > 15.0) height = 8.0 + (classified.seed % 7) * 1.0;
-          } else if (areaSqm < 550 && height > 18.0 && (classified.type !== 'apartment' || polyAspectRatio < 2.2)) {
-            height = 11.0 + (classified.seed % 8) * 1.0;
+          // [절대 규칙 3: 바닥 면적 280㎡ 미만 소형 건물은 절대로 고층(15m 이상) 불가!]
+          if (areaSqm < 280 && height > 15.0) {
+            height = Math.min(15.0, areaSqm < 220 ? Math.min(12.0, 8.0 + (classified.seed % 5) * 0.8) : (11.0 + (classified.seed % 5) * 0.9));
           }
 
           if (height < 6.5) {
             height = 6.5 + (classified.seed % 4) * 0.8;
           }
 
-          // [진짜 아파트 동 판정] 바닥면적 450㎡ 이상 & 고층(25m 이상)
-          const isTrueHighRiseApt = classified.type === 'apartment' && height >= 25.0 && areaSqm >= 450;
+          // [진짜 아파트 동 판정] 대단지 아파트는 실제 층수인 45m~78m 적용
+          const isTrueHighRiseApt =
+            (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)') &&
+            (areaSqm >= 350 || height >= 25.0);
+          if (isTrueHighRiseApt && height < 45.0) {
+            height = 48.0 + (classified.seed % 28) * 1.0;
+          }
+
           const isApt = isTrueHighRiseApt;
-          const isComm = classified.type === 'commercial';
-          const isMilitary = classified.type === 'military';
+          const isComm = classified.type === 'commercial' || featProps.realUse === '제1·2종근린생활시설(상가)';
+          const isMilitary = classified.type === 'military' || featProps.realUse === '군사시설';
 
           // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
           const sideWallEdgeIndices = new Set<number>();
@@ -1211,8 +1261,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
             height <= 16.0;
 
-          // [분류기 기반 한국 실제 지붕 재질 UV 즉시 할당 & 위성 실시간 색상 연동]
-          let roofUV = getPhotorealisticSlotUV(classified.atlasRoofSlot);
+          // [2. 위성 항공사진 실제 지붕 색감 실시간 샘플링 결합]
+          let roofUV = featProps.realRoofSlot
+            ? getPhotorealisticSlotUV(featProps.realRoofSlot)
+            : getPhotorealisticSlotUV(classified.atlasRoofSlot);
 
           const bldId = String(feat.id || (feat.properties as any)?.buld_id || `${cLng.toFixed(5)}_${cLat.toFixed(5)}`);
           const memo = getMemoizedBuilding(bldId);
@@ -1220,7 +1272,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const directRoofCol = (feat.properties as any)?.roofColour || (feat.properties as any)?.roofColor || memo?.roofColor?.hex;
           const roofCdNm = String((feat.properties as any)?.roofCdNm || (feat.properties as any)?.roof_cd_nm || '').toLowerCase();
 
-          if (memo?.roofColor?.slotId !== undefined) {
+          if (featProps.realRoofSlot) {
+            roofUV = getPhotorealisticSlotUV(featProps.realRoofSlot);
+          } else if (memo?.roofColor?.slotId !== undefined) {
             roofUV = getPhotorealisticSlotUV(memo.roofColor.slotId);
           } else if (directRoofType) {
             const slotMap: Record<string, string> = {
@@ -1361,11 +1415,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             // 기와 색상: 적갈색 기와(50%) / 코발트 블루 강판(30%) / 슬레이트 그레이(20%)
             const gPick = classified.seed % 10;
-            let gabledRoofUV = uvRoofTile;
-            if (gPick >= 5 && gPick < 8) {
-              gabledRoofUV = uvRoofZinc; // 코발트 블루 강판 (#1e40af, 30%)
-            } else if (gPick >= 8) {
-              gabledRoofUV = uvRoofConcrete; // 슬레이트 그레이 경사 박공지붕 (#8c8881, 20%)
+            let gabledRoofUV = featProps.realRoofSlot
+              ? getPhotorealisticSlotUV(featProps.realRoofSlot)
+              : uvRoofTile;
+            if (!featProps.realRoofSlot) {
+              if (gPick >= 5 && gPick < 8) {
+                gabledRoofUV = uvRoofZinc; // 코발트 블루 강판 (#1e40af, 30%)
+              } else if (gPick >= 8) {
+                gabledRoofUV = uvRoofConcrete; // 슬레이트 그레이 경사 박공지붕 (#8c8881, 20%)
+              }
             }
 
             // 4개 처마 모서리점 (Eaves) at topY

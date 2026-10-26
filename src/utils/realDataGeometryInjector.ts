@@ -22,6 +22,11 @@ import { updateVworldPoisWithBuildings } from '@/utils/koreanPoiLayer';
 import type { RealisticKoreanCityLayer } from '@/components/Map/RealisticKoreanCityLayer';
 import { resolveFullUrl } from '@/utils/urlHelper';
 import { isNearApartmentAnchor, APT_KEYWORDS } from '@/lib/vendor/buildingClassifier';
+import {
+  stampBuildingWithMasterData,
+  resolveGangwonDistrictByCoords,
+  masterDataSynchronizer,
+} from '@/utils/masterDataSynchronizer';
 
 export function sanitizeGeoJsonForMapLibre<T extends GeoJSON.FeatureCollection<any>>(fc: T, prefix = 'bld'): T {
   if (!fc || !fc.features || !Array.isArray(fc.features)) return fc;
@@ -485,7 +490,6 @@ export function injectRealDataIntoFeatures(
   enrichedFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
   matchedCount: number;
 } {
-  const matchedRecordIds = new Set<string | number>();
   let matchedCount = 0;
 
   const baseFeatures = features || [];
@@ -497,116 +501,11 @@ export function injectRealDataIntoFeatures(
     if (!centroid) return feat;
 
     const match = store.findMatch(centroid[0], centroid[1], props);
-
     if (match) {
       matchedCount++;
-      const rec = match.record;
-      if (rec.id !== undefined) matchedRecordIds.add(rec.id);
-      if (rec.mgmBldrgstPk) matchedRecordIds.add(rec.mgmBldrgstPk);
-      if (rec.pnu) matchedRecordIds.add(rec.pnu);
-
-      // 1. 실측 지상층수(grndFlrCnt) 기반 높이 강제 재계산 (기존 임의 높이 100% 무시)
-      // grndFlrCnt * 3.3m
-      const rawFloors = Number(rec.grndFlrCnt || (rec as any).grnd_flr || 0);
-      const floors = rawFloors > 0 ? rawFloors : Math.max(1, Math.round(Number(rec.heit || props.height || 10) / 3.3));
-      const height = rec.heit && rec.heit >= 3.0 ? Math.round(rec.heit * 10) / 10 : Math.round(floors * 3.3 * 10) / 10;
-
-      props.grndFlrCnt = floors;
-      props.grnd_flr = floors;
-      props.gro_flo_co = String(floors);
-      props.levels = floors;
-      props.height = height;
-      props.render_height = height;
-      props.hei = height;
-      props.heit = height;
-      props.is_real_measured = true;
-
-      // 2. 주구조(strctCdNm) & 주용도(mainPurpsCdNm) 기반 외벽/지붕 실사 아틀라스 재질 ID 개별 할당
-      const mainPurps = rec.mainPurpsCdNm || props.main_purps_cd_nm || props.bdtyp_cd || '';
-      const strct = rec.strctCdNm || props.strct_cd_nm || '철근콘크리트구조';
-      const bldName = rec.bldNm || props.name || props.buld_nm || '';
-
-      const mat = determineMaterialSlots(mainPurps, strct, bldName);
-      props.mainPurpsCdNm = mainPurps;
-      props.strctCdNm = strct;
-      props.atlasWallSlot = mat.atlasWallSlot;
-      props.atlasRoofSlot = mat.atlasRoofSlot;
-      props.bld_category = mat.bldCategory;
-      props.roofShape = mat.roofShape;
-      props.color = mat.wallColorHex;
-      props.roofColor = mat.roofColorHex;
-      props.roofColour = mat.roofColorHex;
-
-      // 3. 건물명(bldNm) 및 동명칭(dongNm) 노란색 핀 라벨(V-World POI) 동기화
-      if (rec.bldNm) {
-        const dongPart = rec.dongNm && !rec.bldNm.includes(rec.dongNm) ? ` ${rec.dongNm}` : '';
-        const fullTitle = `${rec.bldNm}${dongPart}`.trim();
-        props.name = fullTitle;
-        props.name_ko = fullTitle;
-        props.buld_nm = fullTitle;
-        props.bldNm = fullTitle;
-        props.buildingName = fullTitle;
-      }
-
-      if (rec.platPlc) {
-        props.address = rec.platPlc;
-      }
-      if (rec.pnu) {
-        props.pnu = rec.pnu;
-      }
-    } else {
-      // [1단계: 미매칭 건물 100% 입체화 및 높이 수식 강제 교정]
-      // OpenFreeMap의 1~3m 기본값 무시: POI 반경, 명칭, 형상 결합
-      const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '').toLowerCase();
-      const usage = String(props.usageType || props.bld_category || props.type || props.class || props.building || '').toLowerCase();
-      const seed = Math.abs(Math.floor(centroid[0] * 100000 + centroid[1] * 100000)) % 100;
-
-      const isNearApt = isNearApartmentAnchor(centroid[0], centroid[1]);
-      const isAptKw = APT_KEYWORDS.some((kw) => name.includes(kw));
-      const isApt = isNearApt || isAptKw || usage.includes('apartment') || usage.includes('apartments');
-
-      const isComm = usage.includes('commercial') || usage.includes('retail') || usage.includes('office') ||
-        name.includes('상가') || name.includes('빌딩') || name.includes('타워') || name.includes('마트') || name.includes('프라자');
-
-      let height = Number(props.height || props.render_height || props.hei || props.heit || 0);
-
-      if (height < 10.0) {
-        if (isApt) {
-          // 청솔아파트, 동보렉스, 중앙하이츠, 단구아이파크, 성일아파트 등 16층~25층 (48m ~ 75m)
-          height = 48.0 + (seed % 28) * 1.0;
-          props.grndFlrCnt = 16 + (seed % 10);
-        } else if (isComm) {
-          // 시내 상가·오피스 블록: 4층~8층 (14m ~ 26m)
-          height = 14.0 + (seed % 13) * 1.0;
-          props.grndFlrCnt = 4 + (seed % 5);
-        } else {
-          // 일반 주택가 및 다세대 빌라: 2.5층~4층 (8m ~ 13m)
-          height = 8.0 + (seed % 6) * 1.0;
-          props.grndFlrCnt = 2 + (seed % 3);
-        }
-      }
-
-      props.height = height;
-      props.render_height = height;
-      props.hei = height;
-      props.heit = height;
-      props.levels = props.grndFlrCnt || Math.max(2, Math.round(height / 3.3));
-      props.grnd_flr = props.levels;
-
-      const mat = determineMaterialSlots(isApt ? '아파트' : isComm ? '근린생활시설' : '단독주택', '철근콘크리트', name);
-      props.atlasWallSlot = mat.atlasWallSlot;
-      props.atlasRoofSlot = mat.atlasRoofSlot;
-      props.bld_category = mat.bldCategory;
-      props.roofShape = mat.roofShape;
-      props.color = mat.wallColorHex;
-      props.roofColor = mat.roofColorHex;
-      props.roofColour = mat.roofColorHex;
     }
 
-    return {
-      ...feat,
-      properties: props,
-    };
+    return stampBuildingWithMasterData(feat, match ? match.record : null);
   });
 
   // 4. 저장소 전체 30,000건 루프 전면 제거 (렉/버벅거림 원천 차단):
@@ -695,11 +594,16 @@ export async function fetchAndInjectViewportRealData(
   const maxLng = bounds.getEast();
   const maxLat = bounds.getNorth();
 
+  const center = map.getCenter();
+  const district = resolveGangwonDistrictByCoords(center.lng, center.lat);
+
   const fetchedRecords: BuildingRegistryRecord[] = [];
 
-  // A. 국토교통부 건축HUB 표제부 API 호출
+  // A. 국토교통부 건축HUB 표제부 API 호출 (강원 18개 시·군 신/구코드 동적 바인딩)
   try {
-    const hubUrl = resolveFullUrl(`/api/molit-hub?service=building-register&sigunguCd=51130`);
+    const hubUrl = resolveFullUrl(
+      `/api/molit-hub?service=building-register&sigunguCd=${district.admCode}&sigunguName=${encodeURIComponent(district.name)}`
+    );
     const hubRes = await fetch(hubUrl, {
       signal: AbortSignal.timeout(6000),
       headers: { Accept: 'application/json' },
@@ -762,8 +666,9 @@ export async function fetchAndInjectViewportRealData(
     // ignore
   }
 
-  // C. 공간 인덱스(RBush)에 적재
+  // C. 공간 인덱스(RBush & MasterDataSynchronizer)에 적재
   realDataSpatialStore.loadRecords(fetchedRecords);
+  masterDataSynchronizer.ingestRecords(fetchedRecords as any);
 
   // D. 건물 피처들에 실측 데이터 1:1 강제 주입
   const baseFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] =

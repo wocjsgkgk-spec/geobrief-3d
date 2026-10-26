@@ -76,39 +76,44 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
   const isBridgeOrTunnel = raw.type === 'bridge' || raw.type === 'tunnel' || raw['시설구분'];
 
   const titleName =
-    cadastralReport?.buildingReport?.buildingName &&
+    raw.realName ||
+    (cadastralReport?.buildingReport?.buildingName &&
     cadastralReport.buildingReport.buildingName !== '일반 건축물' &&
     cadastralReport.buildingReport.buildingName !== '미등기/나대지'
       ? cadastralReport.buildingReport.buildingName
-      : selectedBuilding?.name || cadastralReport?.target?.address || '공간정보 객체';
+      : selectedBuilding?.name || cadastralReport?.target?.address || '공간정보 객체');
 
   const categoryLabel =
+    raw.realUse ||
     selectedBuilding?.category ||
     cadastralReport?.buildingReport?.mainPurpose ||
     cadastralReport?.zoningReport?.zoneName ||
     '건축물·토지';
 
   const regionName = cadastralReport?.target?.regionName || '강원특별자치도 원주시';
-  const address = cadastralReport?.target?.address || raw.rd_nm || raw.address || '-';
-  const pnu = cadastralReport?.target?.pnu || raw.pnu || '-';
+  const address = cadastralReport?.target?.address || raw.realAddress || raw.rd_nm || raw.address || '-';
+  const pnu = cadastralReport?.target?.pnu || raw.realPnu || raw.pnu || '-';
   const jimok = cadastralReport?.target?.jimok || raw.jimok || '대';
 
-  const levels = selectedBuilding?.levels || cadastralReport?.buildingReport?.groundFloors || 3;
+  const levels = raw.realLevels || selectedBuilding?.levels || cadastralReport?.buildingReport?.groundFloors || 3;
   const underLevels = cadastralReport?.buildingReport?.undergroundFloors || 0;
-  const height = selectedBuilding?.height || cadastralReport?.buildingReport?.heightM || Math.round(levels * 3.2);
+  const height = raw.realHeight || selectedBuilding?.height || cadastralReport?.buildingReport?.heightM || Math.round(levels * 3.2);
 
   const mainStructure =
+    raw.realStruct ||
     cadastralReport?.buildingReport?.structure ||
     raw.strctCdNm ||
     raw['상부구조 / 형식'] ||
-    '철근콘크리트구조';
+    '철근콘크리트조';
 
   const roofType =
+    raw.realRoof ||
     cadastralReport?.buildingReport?.roofType ||
     raw.roofCdNm ||
-    (height >= 25 ? '평슬래브 / 옥탑 코어' : '박공기와 / 평슬래브');
+    (height >= 25 ? '슬래브지붕' : '기와지붕');
 
   const mainPurpose =
+    raw.realUse ||
     cadastralReport?.buildingReport?.mainPurpose ||
     raw.main_purps_cd_nm ||
     raw['시설구분'] ||

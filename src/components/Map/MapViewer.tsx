@@ -15,6 +15,11 @@ import { ExportProgressModal } from '../Modal/ExportProgressModal';
 import { generateSlidePackPptx } from '@/utils/pptxExportEngine';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
+import {
+  stampBuildingWithMasterData,
+  resolveGangwonDistrictByCoords,
+  masterDataSynchronizer,
+} from '@/utils/masterDataSynchronizer';
 import { BUILDING_MASS_PRESETS } from '@/types/map';
 import { isVworldConfigured, fetchVworldBuildings } from '@/services/vworldService';
 import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
@@ -4852,8 +4857,6 @@ export const MapViewer: React.FC = () => {
       '3d-buildings',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
-    if (buildingLayers.length === 0) return;
-
     // 마우스 호버 커서 처리
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (
@@ -4867,8 +4870,9 @@ export const MapViewer: React.FC = () => {
         losAnalysis.isActive
       )
         return;
-      const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
-      map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
+      const features = buildingLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: buildingLayers }) : [];
+      const hasRealisticBldg = features.length === 0 && realisticKoreanCityLayerRef.current ? Boolean(realisticKoreanCityLayerRef.current.findBuildingNear(e.lngLat.lng, e.lngLat.lat, 20)) : false;
+      map.getCanvas().style.cursor = (features.length > 0 || hasRealisticBldg) ? 'pointer' : '';
     };
 
     // 건물 클릭 처리
@@ -4894,7 +4898,15 @@ export const MapViewer: React.FC = () => {
       )
         return;
 
-      const features = map.queryRenderedFeatures(e.point, { layers: buildingLayers });
+      let features = buildingLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: buildingLayers }) : [];
+
+      // [실사 3D 도시 레이어 피처 매칭]
+      if (features.length === 0 && realisticKoreanCityLayerRef.current) {
+        const nearBldg = realisticKoreanCityLayerRef.current.findBuildingNear(e.lngLat.lng, e.lngLat.lat, 25);
+        if (nearBldg) {
+          features = [nearBldg as any];
+        }
+      }
       if (features.length === 0) {
         // [3단계] 건물이 없는 지점 클릭 시 연속지적도 + 용도지역 4대 실측 분석 자동 트리거
         fetchCadastralAnalysis(e.lngLat.lat, e.lngLat.lng, selectedRegionId);
@@ -4959,7 +4971,13 @@ export const MapViewer: React.FC = () => {
       const feature = features[0];
       const props = (feature.properties || {}) as Record<string, any>;
 
+      // [1단계: 5대 실측 속성 강제 확인 및 각인]
+      if (!props.realHeight || !props.realUse) {
+        stampBuildingWithMasterData(feature);
+      }
+
       const bldName =
+        props.realName ||
         props.buildingName ||
         props.name ||
         props.bld_nm ||
@@ -4984,23 +5002,24 @@ export const MapViewer: React.FC = () => {
       }
 
       const rawLevels = parseInt(
-        String(props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.levels || props.grnd_flr_cnt || '3'),
+        String(props.realLevels || props.grnd_flr || props.GRND_FLR || props.gro_flo_co || props.GRO_FLO_CO || props.levels || props.grnd_flr_cnt || '3'),
         10
       );
       const levels = Math.max(1, isNaN(rawLevels) ? 3 : rawLevels);
-      const rawHei = parseFloat(props.hei || props.HEI || props.height);
+      const rawHei = parseFloat(props.realHeight || props.hei || props.HEI || props.height);
       const height = !isNaN(rawHei) && rawHei > 0 ? rawHei : Math.round(levels * 3.2 * 10) / 10;
 
       const category =
+        props.realUse ||
         props.main_purps_cd_nm ||
         props.usage_nm ||
         props.bld_category_label ||
         (props.usageType === 'residential' || props.bld_category === 'apartment'
-          ? '공동주택·아파트'
+          ? '공동주택(아파트)'
           : props.usageType === 'military_public' || props.bld_category === 'public_military' || props.isMilitaryOrPublic
-          ? '공공청사·군사시설'
+          ? '군사시설'
           : props.usageType === 'commercial' || props.bld_category === 'commercial'
-          ? '상업·업무시설'
+          ? '제1·2종근린생활시설(상가)'
           : '일반 건축물');
 
       const clickCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
@@ -5038,7 +5057,15 @@ export const MapViewer: React.FC = () => {
         height: Math.round(height * 10) / 10,
         center: centerCoords,
         screenPos: { x: projected.x, y: projected.y },
-        rawProperties: props,
+        rawProperties: {
+          ...props,
+          '건물명': bldName,
+          '주용도': category,
+          '주구조': props.realStruct || props.strctCdNm || '철근콘크리트조',
+          '지붕형식': props.realRoof || props.roofCdNm || '슬래브지붕',
+          '실측높이': `${Math.round(height * 10) / 10}m`,
+          '지상층수': `${levels}층`,
+        },
       });
 
       // [브이월드 스타일] 3D 건물 클릭 시 해당 실측 속성을 4대 분석 리포트 카드에 즉시 동기화
@@ -5047,10 +5074,10 @@ export const MapViewer: React.FC = () => {
         grndFlr: levels,
         hei: Math.round(height * 10) / 10,
         usage: category,
-        strct: props.strctCdNm,
-        roof: props.roofCdNm,
-        pnu: props.pnu,
-        address: props.rd_nm || props.address,
+        strct: props.realStruct || props.strctCdNm,
+        roof: props.realRoof || props.roofCdNm,
+        pnu: props.realPnu || props.pnu,
+        address: props.realAddress || props.rd_nm || props.address,
       });
     };
 
