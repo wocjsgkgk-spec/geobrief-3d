@@ -14,6 +14,7 @@ import { AccessibilityTableOverlay } from './AccessibilityTableOverlay';
 import { ExportProgressModal } from '../Modal/ExportProgressModal';
 import { generateSlidePackPptx } from '@/utils/pptxExportEngine';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
+import { getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
 import { BUILDING_MASS_PRESETS } from '@/types/map';
 import { isVworldConfigured, fetchVworldBuildings } from '@/services/vworldService';
 import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
@@ -4574,8 +4575,10 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const sggCd = selectedRegionId === 'chuncheon' ? '51110' : '51130';
-    fetch(`/api/molit-hub?service=all&sigunguCd=${sggCd}`)
+    const regPreset = getGangwonRegionByIdOrName(selectedRegionId || 'wonju');
+    const sggCd = regPreset?.admCode || '51130';
+    const sigunguName = regPreset?.name || '원주시';
+    fetch(`/api/molit-hub?service=all&sigunguCd=${sggCd}&sigunguName=${encodeURIComponent(sigunguName)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {

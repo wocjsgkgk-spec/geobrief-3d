@@ -457,6 +457,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (!features || features.length === 0) return;
     this.externalFeatures = features;
 
+    // [강원 18개 시·군 전역 원점 재설정] 시군간 이동 시 기준 원점 동적 재앵커링
+    if (newOriginLngLat && Array.isArray(newOriginLngLat) && newOriginLngLat.length === 2) {
+      const dLng = Math.abs(newOriginLngLat[0] - this.originLngLat[0]);
+      const dLat = Math.abs(newOriginLngLat[1] - this.originLngLat[1]);
+      if (dLng > 0.08 || dLat > 0.08 || !this.fixedOriginInitialized) {
+        this.originLngLat = [newOriginLngLat[0], newOriginLngLat[1]];
+        this.fixedOriginInitialized = true;
+        // 다른 시·군으로 원거리 이동 시(20km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
+        if (dLng > 0.20 || dLat > 0.20) {
+          this.persistentBuildingMap.clear();
+        }
+      }
+    }
+
     let newCount = 0;
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
@@ -510,14 +524,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const map = this.map;
       const center = map.getCenter();
 
-      // 고정 원점 유지: 35km 이내 이동/회전 시 원점을 고정하여 버텍스 지터링 및 좌표 튐 원천 방지
+      // 고정 원점 유지: 시·군 내 미세 이동 시 고정(지터링 방지), 시·군간 이동(8km+) 시 즉시 원점 재동기화
       if (!this.fixedOriginInitialized) {
         this.originLngLat = [center.lng, center.lat];
         this.fixedOriginInitialized = true;
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
-        if (dLng > 0.35 || dLat > 0.35) {
+        if (dLng > 0.08 || dLat > 0.08) {
           this.originLngLat = [center.lng, center.lat];
         }
       }
@@ -1193,6 +1207,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             flatCoords.push(pts2D[i].x, pts2D[i].z);
           }
 
+          const isGabled =
+            (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
+            height <= 16.0;
+
           // [분류기 기반 한국 실제 지붕 재질 UV 즉시 할당 & 위성 실시간 색상 연동]
           let roofUV = getPhotorealisticSlotUV(classified.atlasRoofSlot);
 
@@ -1226,61 +1244,100 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               roofUV = uvRoofZinc;
             } else {
               const seedVal = classified.seed;
-              if (seedVal < 40) {
-                roofUV = uvRoofUrethane; // 우레탄 방수 딥그린 (40%)
-              } else if (seedVal < 75) {
-                roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete; // 노후 콘크리트 슬래브 (35%)
+              if (isApt) {
+                // [GeoBrief 3D 3단계] 아파트 단지: 단지별 차별화된 브라운/테라코타 지붕 캡 & 시멘트 슬래브
+                const aptSeed = (seedVal + Math.floor(bldId.length)) % 10;
+                if (aptSeed < 4) {
+                  roofUV = uvRoofConcrete; // 밝은 시멘트 슬래브 (40%)
+                } else if (aptSeed < 7) {
+                  roofUV = uvRoofTile; // 브라운/테라코타 경사형 지붕 캡 (30%)
+                } else {
+                  roofUV = uvRoofUrethane; // 에메랄드 우레탄 방수 (30%)
+                }
+              } else if (isGabled) {
+                // 단독주택·농어촌·군 막사: 적갈색 기와(50%), 코발트 블루 강판(30%), 슬레이트 그레이(20%)
+                const gPick = seedVal % 10;
+                if (gPick < 5) roofUV = uvRoofTile;
+                else if (gPick < 8) roofUV = uvRoofZinc;
+                else roofUV = uvRoofConcrete;
               } else {
-                roofUV = uvRoofTile; // 적갈색 기와/슁글 (25%)
+                // 도심 상가·원룸 블록: 에메랄드/세이지 그린(45%) + 밝은 시멘트 슬래브(30%) + 테라코타(25%)
+                if (seedVal < 45) {
+                  roofUV = uvRoofUrethane; // 45%
+                } else if (seedVal < 75) {
+                  roofUV = uvRoofConcrete; // 30%
+                } else {
+                  roofUV = uvRoofTile; // 25%
+                }
               }
             }
           } else if (directRoofCol) {
             const low = String(directRoofCol).toLowerCase();
-            if (low.includes('green') || low === '#15803d' || low === '#357a56' || low === '#32694f' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c') {
+            if (low.includes('green') || low === '#15803d' || low === '#357a56' || low === '#32694f' || low === '#356854' || low === '#3d6b58' || low === '#3b6e5c' || low === '#2d6a4f') {
               roofUV = uvRoofUrethane;
-            } else if (low.includes('blue') || low === '#254e7a' || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68') {
+            } else if (low.includes('blue') || low === '#254e7a' || low === '#2b5b84' || low === '#1e3a8a' || low === '#2563eb' || low === '#334e68' || low === '#1e40af') {
               roofUV = uvRoofZinc;
-            } else if (low.includes('red') || low === '#7c3a27' || low === '#7c3829' || low === '#6e3222' || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32') {
+            } else if (low.includes('red') || low === '#7c3a27' || low === '#7c3829' || low === '#6e3222' || low === '#8c3b2b' || low === '#991b1b' || low === '#a84a32' || low === '#7c3626' || low === '#7f3222') {
               roofUV = uvRoofTile;
-            } else if (low === '#57534e') {
-              roofUV = uvRoofAptSlab;
-            } else if (low === '#78716c' || low === '#736f68' || low === '#94a3b8') {
+            } else if (low === '#57534e' || low === '#78716c' || low === '#736f68' || low === '#94a3b8' || low === '#8c8881') {
               roofUV = uvRoofConcrete;
             } else if (low === '#64748b' || low === '#334155' || low === '#1e293b') {
               roofUV = uvRoofAsphalt;
             } else {
               const seedVal = classified.seed;
-              if (seedVal < 40) {
-                roofUV = uvRoofUrethane;
-              } else if (seedVal < 75) {
-                roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete;
+              if (isApt) {
+                const aptSeed = (seedVal + Math.floor(bldId.length)) % 10;
+                if (aptSeed < 4) roofUV = uvRoofConcrete;
+                else if (aptSeed < 7) roofUV = uvRoofTile;
+                else roofUV = uvRoofUrethane;
+              } else if (isGabled) {
+                const gPick = seedVal % 10;
+                if (gPick < 5) roofUV = uvRoofTile;
+                else if (gPick < 8) roofUV = uvRoofZinc;
+                else roofUV = uvRoofConcrete;
               } else {
-                roofUV = uvRoofTile;
+                if (seedVal < 45) roofUV = uvRoofUrethane;
+                else if (seedVal < 75) roofUV = uvRoofConcrete;
+                else roofUV = uvRoofTile;
               }
             }
           } else {
-            // [V-World 옥상 실사화 40% : 35% : 25% 엄격 배분]:
-            // 건물 고유 해시와 대장 지붕코드 미지정 시 도시 전역 1:1 매핑:
-            // 1) 우레탄 방수 딥그린 (#32694f, 40%): seedVal < 40
-            // 2) 노후 콘크리트 슬래브 (#736f68, 35%): seedVal < 75
-            // 3) 적갈색 기와/슁글 (#7c3829, 25%): seedVal >= 75
+            // [GeoBrief 3D 3단계: 브이월드 항공사진 1:1 동기화 옥상 배분]
             const seedVal = classified.seed;
-            if (seedVal < 40) {
-              roofUV = uvRoofUrethane; // ① 우레탄 방수 딥그린 (40%)
-            } else if (seedVal < 75) {
-              roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete; // ② 노후 콘크리트 슬래브 (35%)
+            if (isApt) {
+              // 아파트 단지: 밝은 시멘트 슬래브 (40%) + 브라운/테라코타 캡 (30%) + 우레탄 방수 (30%)
+              const aptSeed = (seedVal + Math.floor(bldId.length)) % 10;
+              if (aptSeed < 4) {
+                roofUV = uvRoofConcrete;
+              } else if (aptSeed < 7) {
+                roofUV = uvRoofTile;
+              } else {
+                roofUV = uvRoofUrethane;
+              }
+            } else if (isGabled) {
+              // 단독주택·농어촌·군 영내 막사: 적갈색 기와(50%), 코발트 블루 강판(30%), 슬레이트 그레이(20%)
+              const gPick = seedVal % 10;
+              if (gPick < 5) roofUV = uvRoofTile;
+              else if (gPick < 8) roofUV = uvRoofZinc;
+              else roofUV = uvRoofConcrete;
             } else {
-              roofUV = uvRoofTile; // ③ 적갈색 기와/슁글 (25%)
+              // 도심 상가·원룸 블록:
+              // 1) 에메랄드/세이지 그린 우레탄 방수 옥상 (#2d6a4f, 45%): seedVal < 45
+              // 2) 밝은 시멘트 슬래브 (#8c8881, 30%): seedVal >= 45 && seedVal < 75
+              // 3) 테라코타 적갈색 (#7c3626, 25%): seedVal >= 75
+              if (seedVal < 45) {
+                roofUV = uvRoofUrethane;
+              } else if (seedVal < 75) {
+                roofUV = uvRoofConcrete;
+              } else {
+                roofUV = uvRoofTile;
+              }
             }
           }
 
           // -------------------------------------------------------------------
           // B & C. [GeoBrief 3D 3단계] 실제 입체 지붕 조형 다각화 (옥탑 코어 & 박공지붕 & 3D 난간)
           // -------------------------------------------------------------------
-          const isGabled =
-            (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
-            height <= 16.0;
-
           const poly2D: [number, number][] = [];
           for (let i = 0; i < ptCount; i++) {
             poly2D.push([pts2D[i].x, pts2D[i].z]);
@@ -1289,7 +1346,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           if (isGabled) {
             // [1. 단독주택·다세대 빌라·군부대 막사: 장축을 따라 솟아오른 ㅅ자형 박공지붕(Gabled Roof)]
             // - 직사각형 평면의 장축을 따라 능선이 올라오는 실제 ㅅ자형 박공지붕 정점 생성
-            // - 슬로프: 적갈색 기와(#7c3829, 60%) / 청회색 강판/슬레이트(#254e7a, 40%)
+            // - 슬로프: 적갈색 기와(#7f3222, 50%) / 코발트 블루 강판(#1e40af, 30%) / 슬레이트 그레이(#8c8881, 20%)
             // - 박공벽: 건물 외벽과 1:1 매칭되는 마감 텍스처
             const obb = calculateOBB(poly2D);
             const halfLen = obb.length / 2;
@@ -1302,9 +1359,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             const topY = topElev;
             const ridgeY = topElev + ridgeH;
 
-            // 기와 색상: 적갈색 기와(60%) / 청회색 강판·슬레이트(40%)
+            // 기와 색상: 적갈색 기와(50%) / 코발트 블루 강판(30%) / 슬레이트 그레이(20%)
             const gPick = classified.seed % 10;
-            const gabledRoofUV = gPick < 6 ? uvRoofTile : uvRoofZinc;
+            let gabledRoofUV = uvRoofTile;
+            if (gPick >= 5 && gPick < 8) {
+              gabledRoofUV = uvRoofZinc; // 코발트 블루 강판 (#1e40af, 30%)
+            } else if (gPick >= 8) {
+              gabledRoofUV = uvRoofConcrete; // 슬레이트 그레이 경사 박공지붕 (#8c8881, 20%)
+            }
 
             // 4개 처마 모서리점 (Eaves) at topY
             const e00: [number, number, number] = [ox - halfLen * ux - halfWid * vx, topY, oz - halfLen * uz - halfWid * vz];

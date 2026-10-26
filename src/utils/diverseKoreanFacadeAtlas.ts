@@ -712,15 +712,16 @@ function drawPresetP(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
 // --- 옥상 슬롯 (17, 18, 19, 20) & 부속 슬롯 (21, 22, 23) ---
 function drawRoofUrethane(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 우레탄 방수 딥그린 (#32694f, 40%)
-  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#3e7e60');
-  grad.addColorStop(1, '#32694f');
+  // [GeoBrief 3D 3단계] 에메랄드/세이지 그린 우레탄 방수 옥상 (#2d6a4f, 도심 상가 45%)
+  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.08, x + w * 0.5, y + h * 0.5, w * 0.72);
+  grad.addColorStop(0, '#387a5c'); // 하이라이트 세이지 그린
+  grad.addColorStop(0.7, '#2d6a4f'); // 에메랄드 우레탄 방수
+  grad.addColorStop(1, '#245640'); // 코너 AO 음영
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
-  // 방수 줄눈
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.20)';
+  // 십자형 방수 조인트 줄눈
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
   for (let px = x; px < x + w; px += 36) ctx.fillRect(px, y, 1.5, h);
   for (let py = y; py < y + h; py += 36) ctx.fillRect(x, py, w, 1.5);
 
@@ -729,22 +730,23 @@ function drawRoofUrethane(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 20, y + 20, w - 40, h - 40);
 
-  applyNoise(ctx, x, y, w, h, 0.04);
+  applyNoise(ctx, x, y, w, h, 0.03);
 }
 
 function drawRoofConcrete(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 노후 콘크리트 슬래브 (#736f68, 35%)
-  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#868179');
-  grad.addColorStop(1, '#736f68');
+  // [GeoBrief 3D 3단계] 밝은 시멘트 슬래브 (#8c8881, 도심 상가 30%, 단독주택 20%)
+  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.08, x + w * 0.5, y + h * 0.5, w * 0.72);
+  grad.addColorStop(0, '#9c978f'); // 밝은 시멘트 슬래브 중앙
+  grad.addColorStop(0.7, '#8c8881'); // 표준 시멘트 슬래브
+  grad.addColorStop(1, '#7a7670'); // 테두리 AO
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
   for (let px = x; px < x + w; px += 48) ctx.fillRect(px, y, 1.5, h);
   for (let py = y; py < y + h; py += 48) ctx.fillRect(x, py, w, 1.5);
 
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 20, y + 20, w - 40, h - 40);
 
@@ -752,30 +754,33 @@ function drawRoofConcrete(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 function drawRoofTerracotta(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 적갈색 기와/슁글 (#7c3829, 25%)
-  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#924534');
-  grad.addColorStop(1, '#7c3829');
+  // [GeoBrief 3D 3단계] 테라코타 적갈색 기와 (#7c3626 / #7f3222, 상가 25%, 박공 50%)
+  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.08, x + w * 0.5, y + h * 0.5, w * 0.72);
+  grad.addColorStop(0, '#954231');
+  grad.addColorStop(0.65, '#7c3626');
+  grad.addColorStop(1, '#662b1e');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
-  // 기와 골 줄무늬
-  ctx.fillStyle = 'rgba(94, 46, 32, 0.45)';
+  // 기와 골 줄무늬 (타일 리지)
+  ctx.fillStyle = 'rgba(68, 25, 17, 0.45)';
   for (let py = y; py < y + h; py += 16) ctx.fillRect(x, py, w, 3);
 
-  applyNoise(ctx, x, y, w, h, 0.04);
+  applyNoise(ctx, x, y, w, h, 0.03);
 }
 
 function drawRoofZinc(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 청회색 징크 강판 (#254e7a)
-  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.1, x + w * 0.5, y + h * 0.5, w * 0.75);
-  grad.addColorStop(0, '#315f91');
-  grad.addColorStop(1, '#254e7a');
+  // [GeoBrief 3D 3단계] 코발트 블루 강판 (#1e40af, 박공 30%)
+  const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.08, x + w * 0.5, y + h * 0.5, w * 0.72);
+  grad.addColorStop(0, '#2563eb');
+  grad.addColorStop(0.7, '#1e40af');
+  grad.addColorStop(1, '#172554');
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 
+  // 징크 골 (Standing seams)
   ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
-  for (let px = x; px < x + w; px += 24) ctx.fillRect(px, y, 2, h);
+  for (let px = x; px < x + w; px += 20) ctx.fillRect(px, y, 2, h);
 
   applyNoise(ctx, x, y, w, h, 0.03);
 }
