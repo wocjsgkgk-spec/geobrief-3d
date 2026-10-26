@@ -173,7 +173,7 @@ export function determineMaterialSlots(
       atlasRoofSlot: 'roof_apt_slab',
       bldCategory: 'apartment',
       roofShape: 'flat',
-      wallColorHex: '#f5f2eb', // 웜 아이보리
+      wallColorHex: '#f4efe6', // 웜 아이보리
       roofColorHex: '#57534e', // 다크 그레이 슬래브
     };
   }
@@ -198,18 +198,18 @@ export function determineMaterialSlots(
         atlasRoofSlot: 'roof_urethane_sage',
         bldCategory: 'commercial',
         roofShape: 'flat',
-        wallColorHex: '#0284c7', // 커튼월 블루
-        roofColorHex: '#357a56', // 우레탄 세이지 그린
+        wallColorHex: '#78716c', // 화강암 석재 회색
+        roofColorHex: '#2e6f4e', // 에메랄드 우레탄
       };
     }
     if (strct.includes('벽돌') || strct.includes('연와')) {
       return {
         atlasWallSlot: 'comm_red_brick',
-        atlasRoofSlot: 'roof_concrete_warmgray',
+        atlasRoofSlot: 'roof_terracotta_tile',
         bldCategory: 'commercial',
         roofShape: 'flat',
         wallColorHex: '#8c3f2b', // 적벽돌
-        roofColorHex: '#78716c',
+        roofColorHex: '#7c3626', // 테라코타
       };
     }
     return {
@@ -217,8 +217,8 @@ export function determineMaterialSlots(
       atlasRoofSlot: 'roof_urethane_sage',
       bldCategory: 'commercial',
       roofShape: 'flat',
-      wallColorHex: '#dfd9ce', // 밝은 화강석
-      roofColorHex: '#357a56', // 우레탄 세이지 그린
+      wallColorHex: '#9a6b4c', // 황토색/갈색 타일
+      roofColorHex: '#2e6f4e', // 에메랄드 우레탄
     };
   }
 
@@ -239,7 +239,7 @@ export function determineMaterialSlots(
       bldCategory: 'industrial',
       roofShape: 'gabled',
       wallColorHex: '#cbd5e1', // 실버/베이지 판넬
-      roofColorHex: '#254e7a', // 청색 강판
+      roofColorHex: '#1d4ed8', // 코발트 블루
     };
   }
 
@@ -258,8 +258,8 @@ export function determineMaterialSlots(
       atlasRoofSlot: 'roof_concrete_warmgray',
       bldCategory: 'public_military',
       roofShape: 'gabled',
-      wallColorHex: '#ece7de', // 군 막사 베이지
-      roofColorHex: '#6e3222', // 적갈색 기와 박공
+      wallColorHex: '#d1d5db',
+      roofColorHex: '#6b3426',
     };
   }
 
@@ -280,8 +280,8 @@ export function determineMaterialSlots(
       atlasRoofSlot: 'roof_urethane_sage',
       bldCategory: 'public_military',
       roofShape: 'flat',
-      wallColorHex: '#f5f2eb',
-      roofColorHex: '#357a56',
+      wallColorHex: '#9a6b4c',
+      roofColorHex: '#2e6f4e',
     };
   }
 
@@ -299,8 +299,8 @@ export function determineMaterialSlots(
         atlasRoofSlot: 'roof_terracotta_tile',
         bldCategory: 'residential',
         roofShape: 'gabled',
-        wallColorHex: '#8c3f2b',
-        roofColorHex: '#6e3222',
+        wallColorHex: '#7f3222',
+        roofColorHex: '#6e2c1b',
       };
     }
     return {
@@ -308,8 +308,8 @@ export function determineMaterialSlots(
       atlasRoofSlot: 'roof_urethane_sage',
       bldCategory: 'residential',
       roofShape: 'flat',
-      wallColorHex: '#dfd9ce',
-      roofColorHex: '#357a56',
+      wallColorHex: '#d6c7b2',
+      roofColorHex: '#356854',
     };
   }
 
@@ -320,8 +320,8 @@ export function determineMaterialSlots(
       atlasRoofSlot: 'roof_terracotta_tile',
       bldCategory: 'residential',
       roofShape: 'gabled',
-      wallColorHex: '#8c3f2b',
-      roofColorHex: '#6e3222',
+      wallColorHex: '#7f3222',
+      roofColorHex: '#6e2c1b',
     };
   }
 
@@ -330,8 +330,8 @@ export function determineMaterialSlots(
     atlasRoofSlot: 'roof_terracotta_tile',
     bldCategory: 'residential',
     roofShape: 'gabled',
-    wallColorHex: '#f5f2eb',
-    roofColorHex: '#6e3222',
+    wallColorHex: '#d6c7b2',
+    roofColorHex: '#6e2c1b',
   };
 }
 

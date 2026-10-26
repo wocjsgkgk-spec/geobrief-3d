@@ -364,49 +364,52 @@ export function classifyBuildingWithVendor(
 
   switch (bType) {
     // -------------------------------------------------------------------------
-    // 유형 1 [한국형 대단지 아파트] (16층~25층, 48m~75m 우뚝 솟은 스카이라인)
-    // 외벽: 크림 화이트(#f5f2eb), 소프트 아이보리(#ebe5d8), 웜 베이지(#e2dbd0)
-    // 지붕: 차분한 콘크리트 그레이 슬래브(#6e6a64) + 2.8m 옥탑 엘리베이터 코어
+    // 유형 1 [한국형 대단지 아파트] (16층~25층, 48m~75m 고층 스카이라인)
+    // 외벽: 크림 아이보리(#f4efe6) 60%, 소프트 베이지(#e8e0d2) 40%
+    // 지붕: 짙은 콘크리트 슬래브(#57534e) 80%, 박공 캡(#6b3426) 20% + 2.8m 옥탑 엘리베이터 코어
     // -------------------------------------------------------------------------
     case 'apartment': {
       floors = 16 + (seed % 10); // 16층 ~ 25층
       height = 48.0 + (seed % 28) * 1.0; // 48m ~ 75m 고층 아파트 스카이라인
-      const wallPick = seed % 3;
-      if (wallPick === 0) {
-        wallColor = '#f5f2eb'; // 크림 화이트
+      if (seed % 5 < 3) {
+        wallColor = '#f4efe6'; // 크림 아이보리 (60%)
         atlasWallSlot = 'apt_warm_cream';
-      } else if (wallPick === 1) {
-        wallColor = '#ebe5d8'; // 소프트 아이보리
-        atlasWallSlot = 'apt_sand_beige';
       } else {
-        wallColor = '#e2dbd0'; // 웜 베이지
-        atlasWallSlot = 'apt_warm_gray';
+        wallColor = '#e8e0d2'; // 소프트 베이지 (40%)
+        atlasWallSlot = 'apt_sand_beige';
       }
-      roofColor = '#6e6a64'; // 차분한 콘크리트 그레이 슬래브
-      atlasRoofSlot = 'roof_apt_slab';
-      hasParapet = true;
+
+      if (seed % 10 < 8) {
+        roofColor = '#57534e'; // 짙은 콘크리트 슬래브 (80%)
+        atlasRoofSlot = 'roof_apt_slab';
+        isGabledRoof = false;
+      } else {
+        roofColor = '#6b3426'; // 박공 지붕 캡 (20%)
+        atlasRoofSlot = 'roof_terracotta_tile';
+        isGabledRoof = true;
+      }
+      hasParapet = !isGabledRoof;
       hasPenthouseCore = true; // 2.8m 엘리베이터/권상기실 옥탑 코어
-      isGabledRoof = false;
       break;
     }
 
     // -------------------------------------------------------------------------
     // 유형 2 [산업단지·군수창고·대형공장]
     // 높이: 8m~14m
-    // 외벽: 메탈 판넬(#e2e8f0, facility_panel)
-    // 지붕: 청색 강판(#285580, 60%), 라이트 실버(#cbd5e1, 40%)
+    // 외벽: 베이지/연회색 샌드위치 판넬(#cbd5e1, #d1d5db)
+    // 지붕: 코발트 블루(#1d4ed8, 60%), 은색 징크(#cbd5e1, 40%)
     // -------------------------------------------------------------------------
     case 'industrial': {
       height = 8.0 + (seed % 7) * 1.0; // 8m ~ 14m
       floors = Math.max(1, Math.round(height / 4.0));
-      wallColor = '#e2e8f0'; // 밝은 실버/베이지 메탈 판넬
+      wallColor = seed % 2 === 0 ? '#cbd5e1' : '#d1d5db';
       atlasWallSlot = 'facility_panel';
 
       if (seed % 10 < 6) {
-        roofColor = '#285580'; // 청색 강판 지붕
+        roofColor = '#1d4ed8'; // 코발트 블루 박공 (60%)
         atlasRoofSlot = 'roof_zinc_blue';
       } else {
-        roofColor = '#cbd5e1'; // 라이트 실버
+        roofColor = '#cbd5e1'; // 은색 징크 패널 (40%)
         atlasRoofSlot = 'roof_concrete_warmgray';
       }
       hasParapet = false;
@@ -416,39 +419,36 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 3 [시내 중·저층 상가·오피스 블록] (4층~8층, 14m~26m)
-    // 외벽: 밝은 화강석 베이지(#dfd9ce), 스카이 블루 유리(#93c5fd), 모던 라이트 그레이(#d4d4d8)
-    // 지붕: 실제 한국 상가 옥상 비율
-    //   ① 에메랄드/세이지 그린 우레탄 방수 옥상 (#3b7a57, 45%)
-    //   ② 밝은 시멘트 회색 슬래브 (#8c8881, 35%)
-    //   ③ 다크 차콜 슬래브 (#475569, 20%)
+    // 유형 3 [시내 중·저층 상가·원룸·오피스 블록] (4층~8층, 14m~24m)
+    // 외벽: 붉은 벽돌(#8c3f2b), 황토색 타일(#9a6b4c), 화강암 석재 회색(#78716c)
+    // 옥상: 에메랄드 우레탄(#2e6f4e, 50%), 적갈색 테라코타(#7c3626, 25%), 오래된 시멘트(#64748b, 25%)
     // -------------------------------------------------------------------------
     case 'commercial': {
       floors = 4 + (seed % 5);   // 4층 ~ 8층
-      height = 14.0 + (seed % 13) * 1.0; // 14m ~ 26m
+      height = 14.0 + (seed % 11) * 1.0; // 14m ~ 24m
 
       const wallPick = seed % 3;
       if (wallPick === 0) {
-        wallColor = '#dfd9ce'; // 밝은 화강석 베이지
-        atlasWallSlot = 'comm_granite_beige';
+        wallColor = '#8c3f2b'; // 실제 한국 도심 상가 특유의 붉은 벽돌
+        atlasWallSlot = 'comm_red_brick';
       } else if (wallPick === 1) {
-        wallColor = '#93c5fd'; // 스카이 블루 유리
-        atlasWallSlot = 'comm_curtainwall';
+        wallColor = '#9a6b4c'; // 황토색/갈색 타일
+        atlasWallSlot = 'comm_granite_beige';
       } else {
-        wallColor = '#d4d4d8'; // 모던 라이트 그레이
+        wallColor = '#78716c'; // 화강암 석재 회색
         atlasWallSlot = 'comm_dark_metal';
       }
 
-      // 옥상 분포 정밀 반영: 우레탄 45%, 콘크리트 슬래브 35%, 다크 차콜 20%
-      if (seed < 45) {
-        roofColor = '#3b7a57'; // ① 우레탄 방수 에메랄드/세이지 그린 (45%)
+      // 옥상 분포 정밀 반영: 선명한 에메랄드 우레탄 50%, 테라코타 25%, 시멘트 25%
+      if (seed < 50) {
+        roofColor = '#2e6f4e'; // ① 선명한 에메랄드 우레탄 방수초록색 (50%)
         atlasRoofSlot = 'roof_urethane_sage';
-      } else if (seed < 80) {
-        roofColor = '#8c8881'; // ② 밝은 시멘트 회색 슬래브 (35%)
-        atlasRoofSlot = 'roof_concrete_warmgray';
+      } else if (seed < 75) {
+        roofColor = '#7c3626'; // ② 적갈색 테라코타 (25%)
+        atlasRoofSlot = 'roof_terracotta_tile';
       } else {
-        roofColor = '#475569'; // ③ 다크 차콜 슬래브 (20%)
-        atlasRoofSlot = 'roof_asphalt_charcoal';
+        roofColor = '#64748b'; // ③ 오래된 시멘트 회색 (25%)
+        atlasRoofSlot = 'roof_concrete_warmgray';
       }
       hasParapet = true;
       hasPenthouseCore = true; // 옥상 0.9m 난간 & 2.8m 엘리베이터/계단실 옥탑
@@ -457,35 +457,34 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 4 [단독주택·다세대 빌라·주거] (2.5층~4층, 8m~13m)
-    // 외벽: 따뜻한 적벽돌(#9a4632), 크림색 회벽(#f0ead6)
-    // 지붕: 적갈색 기와(#7c3f2c, 40%), 청색 강판(#285580, 30%), 세이지 그린(#3b7a57, 30%)
+    // 유형 4 [단독주택·다세대 빌라·주거] (2층~3층, 7.5m~10m)
+    // 외벽: 붉은 벽돌(#7f3222), 살구색/베이지(#d6c7b2)
+    // 지붕: 적갈색 기와(#6e2c1b, 40%), 청색 슬레이트(#254e7a, 30%), 녹색 우레탄(#356854, 30%)
     // -------------------------------------------------------------------------
     case 'residential': {
-      floors = 2 + (seed % 3);   // 2.5층 ~ 4층
-      height = 8.0 + (seed % 3) * 1.0; // 8m ~ 10m
+      floors = 2 + (seed % 2);   // 2층 ~ 3층
+      height = 7.5 + (seed % 3) * 1.0; // 7.5m ~ 9.5m
 
-      const wallPick = seed % 2;
-      if (wallPick === 0) {
-        wallColor = '#9a4632'; // 따뜻한 적벽돌
+      if (seed % 2 === 0) {
+        wallColor = '#7f3222'; // 붉은 벽돌
         atlasWallSlot = 'villa_red_brick';
       } else {
-        wallColor = '#f0ead6'; // 크림색 회벽
+        wallColor = '#d6c7b2'; // 살구색/베이지
         atlasWallSlot = 'house_cream';
       }
 
-      // 지붕: 적갈색 기와 박공(40%), 청색 강판 박공(30%), 우레탄 평지붕(30%)
-      const roofPick = seed % 3;
-      if (roofPick === 0) {
-        roofColor = '#7c3f2c'; // 적갈색 기와 지붕
+      // 지붕: 적갈색 기와 박공(40%), 청색 슬레이트 박공(30%), 우레탄 평지붕(30%)
+      const roofPick = seed % 10;
+      if (roofPick < 4) {
+        roofColor = '#6e2c1b'; // 적갈색 기와 지붕 (40%)
         atlasRoofSlot = 'roof_terracotta_tile';
         isGabledRoof = true;
-      } else if (roofPick === 1) {
-        roofColor = '#285580'; // 청색 강판 지붕
+      } else if (roofPick < 7) {
+        roofColor = '#254e7a'; // 청색 슬레이트 지붕 (30%)
         atlasRoofSlot = 'roof_zinc_blue';
         isGabledRoof = true;
       } else {
-        roofColor = '#3b7a57'; // 세이지 그린 옥상
+        roofColor = '#356854'; // 녹색 우레탄 방수 옥상 (30%)
         atlasRoofSlot = 'roof_urethane_sage';
         isGabledRoof = false;
       }

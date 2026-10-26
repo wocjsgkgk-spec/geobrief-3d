@@ -893,12 +893,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
             let wallUV: UVRect = uvAptCream;
 
-            if (classified.type === 'apartment' || height >= 28.0) {
-              // 긴 변은 발코니 창호 격자(크림 화이트/소프트 아이보리/웜 베이지), 짧은 변은 무창 콘크리트 측벽 브랜드 밴드
-              const isLongFacade = edgeLen > minEdgeLen * 1.3 || edgeLen > 16.0;
+            if (classified.type === 'apartment' || height >= 24.0) {
+              // 긴 변은 발코니 통유리 창호 격자(크림 아이보리/소프트 베이지), 짧은 변(edgeLength < 14m)은 무창 콘크리트 측벽 브랜드 밴드
+              const isLongFacade = edgeLen >= 14.0 && (edgeLen > minEdgeLen * 1.25 || edgeLen > 18.0);
               if (isLongFacade) {
                 wallUV = getPhotorealisticSlotUV(classified.atlasWallSlot);
-                // [요구사항 1] 밝은 아이보리 외벽 위에 3m 층고마다 선명한 차콜 슬레이트(#1e293b) 베란다 유리창 격자 패턴 1:1 매핑
+                // [요구사항 1] 밝은 아이보리 외벽 위에 3m 층고마다 선명한 차콜 슬레이트(#1e293b) 베란다 통유리창 격자 패턴 1:1 매핑
                 const floorHeight = 3.3; // 한국 아파트 표준 층고 3.3m
                 const numFloors = Math.max(1, Math.round(height / floorHeight));
                 const bayWidth = 7.5; // 베이 폭 7.5m
@@ -924,7 +924,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                   }
                 }
               } else {
-                // 아파트 측벽: 단일 쿼드로 경량화 (창문 없는 단색 측벽)
+                // 아파트 측벽(edgeLength < 14m): 창문 100% 없음! 매끈한 크림 콘크리트에 세로형 포인트 브랜드 컬러 스트라이프
                 wallUV = uvAptSide;
                 addQuad(
                   [p1.x, baseElev, p1.z],
@@ -935,9 +935,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
                   wallUV
                 );
               }
-            } else if (classified.type === 'commercial' || classified.type === 'public' || (height >= 11.0 && height < 28.0)) {
-              // 중층 시내 상가·오피스 블록 (높이 11m ~ 28m):
-              // 1층(0~3.8m)은 짙은 화강석 쇼윈도 기단부(#334155), 2층 이상은 밝은 화강석/커튼월/모던그레이 층별 창문 줄눈
+            } else if (classified.type === 'commercial' || classified.type === 'public' || (height >= 10.0 && height < 24.0)) {
+              // 중층 시내 상가·원룸·오피스 블록 (10m <= H < 24m):
+              // 1층(0~3.8m)은 짙은 화강석 쇼윈도 기단부(#334155), 2층 이상은 붉은 벽돌/황토 타일/화강암 석재
               const podiumH = 3.8;
               if (height > podiumH + 1.5) {
                 const podiumTop = baseElev + podiumH;
@@ -1093,29 +1093,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               }
             }
           } else {
-            // [브이월드 3단계 지붕 정밀 배분]:
-            // 1) 고층 아파트 단지 (28m 이상): 차분한 콘크리트 그레이(#6e6a64)
-            // 2) 중층 상가·오피스 (11m ~ 28m): ① 우레탄 45%(#3b7a57), ② 시멘트 회색 35%(#8c8881), ③ 다크 차콜 20%(#475569)
-            // 3) 저층 주택·빌라·막사 (<11m): 적갈색 기와(#7c3f2c), 청색 강판(#285580), 세이지 그린(#3b7a57)
+            // [브이월드 4대 구역 지붕 정밀 배분]:
+            // 1) 고층 아파트 단지 (H >= 24m): 짙은 콘크리트 슬래브(#57534e, 80%) / 박공 캡(#6b3426, 20%)
+            // 2) 중층 상가·오피스 (10m <= H < 24m): ① 선명한 에메랄드 우레탄 50%(#2e6f4e), ② 적갈색 테라코타 25%(#7c3626), ③ 오래된 시멘트 회색 25%(#64748b)
+            // 3) 저층 주택·빌라 (H < 10m): 적갈색 기와 40%(#6e2c1b), 청색 슬레이트 30%(#254e7a), 녹색 우레탄 30%(#356854)
             const seedVal = classified.seed;
-            if (height >= 28.0 || isApt) {
-              roofUV = uvRoofAptSlab;
-            } else if (height >= 11.0) {
-              if (seedVal < 45) {
-                roofUV = uvRoofUrethane;
-              } else if (seedVal < 80) {
-                roofUV = uvRoofConcrete;
+            if (height >= 24.0 || isApt) {
+              roofUV = (seedVal % 10 < 8) ? uvRoofAptSlab : uvRoofTile;
+            } else if (height >= 10.0) {
+              if (seedVal < 50) {
+                roofUV = uvRoofUrethane; // ① 선명한 에메랄드 우레탄 (50%)
+              } else if (seedVal < 75) {
+                roofUV = uvRoofTile;     // ② 적갈색 테라코타 (25%)
               } else {
-                roofUV = uvRoofAsphalt;
+                roofUV = uvRoofConcrete; // ③ 오래된 시멘트 회색 (25%)
               }
             } else {
-              const rPick = seedVal % 3;
-              if (rPick === 0) {
-                roofUV = uvRoofTile;
-              } else if (rPick === 1) {
-                roofUV = uvRoofZinc;
+              const rPick = seedVal % 10;
+              if (rPick < 4) {
+                roofUV = uvRoofTile;     // 적갈색 기와지붕 (40%)
+              } else if (rPick < 7) {
+                roofUV = uvRoofZinc;     // 청색 슬레이트 (30%)
               } else {
-                roofUV = uvRoofUrethane;
+                roofUV = uvRoofUrethane; // 녹색 우레탄 (30%)
               }
             }
           }
