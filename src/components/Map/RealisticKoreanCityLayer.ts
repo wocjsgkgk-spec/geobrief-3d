@@ -64,6 +64,11 @@ import {
   buildAuthenticBridgeMeshGroup,
   WONJU_AUTHENTIC_BRIDGES,
 } from '@/utils/authenticBridgeBuilder';
+import {
+  detectLandmarkType,
+  buildLandmarkBuildingMesh,
+  LandmarkInfo,
+} from '@/utils/landmarkBuildingBuilder';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -1000,6 +1005,23 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           const baseElev = rawElev - this.clampedAltitude;
           currentBuildingBaseElev = baseElev;
           const topElev = baseElev + height;
+
+          // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
+          const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat);
+          if (landmarkInfo) {
+            const landmarkH = Math.max(14.0, landmarkInfo.targetHeight || height);
+            buildLandmarkBuildingMesh({
+              pts2D,
+              baseElev,
+              height: landmarkH,
+              featProps,
+              landmark: landmarkInfo,
+              addQuad,
+              addTriangle,
+            });
+            builtBuildingCount++;
+            continue;
+          }
 
           // -------------------------------------------------------------------
           // A. 건물 외벽(Wall) 쿼드 생성 (한국 도심 실사 색감 매핑)
