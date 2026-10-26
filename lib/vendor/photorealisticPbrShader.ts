@@ -153,7 +153,7 @@ export function getOrCreatePbrRmaTexture(diffuseCanvas?: HTMLCanvasElement): THR
         ctx.fillStyle = 'rgb(45, 200, 220)';
         ctx.fillRect(wX, wY, wW, wH);
       } else if (slotId === 17) {
-        // [옥상: 우레탄 방수 세이지 그린]: 약간의 광택 Satin Sheen (Roughness 0.35 = 89, Metalness 0.08 = 20)
+        // [옥상: 우레탄 방수 세이지/딥그린]: 약간의 광택 Satin Sheen (Roughness 0.35 = 89, Metalness 0.08 = 20)
         ctx.fillStyle = 'rgb(89, 20, 230)';
         ctx.fillRect(x, y, cellW, cellH);
         // 난간 내측 그림자 Corner AO
@@ -180,6 +180,26 @@ export function getOrCreatePbrRmaTexture(diffuseCanvas?: HTMLCanvasElement): THR
         // [옥상: 청색 징크 강판]: 금속성 (Roughness 0.38 = 97, Metalness 0.70 = 178)
         ctx.fillStyle = 'rgb(97, 178, 240)';
         ctx.fillRect(x, y, cellW, cellH);
+      } else if (slotId === 20) {
+        // [옥상 옥탑/냉각탑 메탈 루버]: 금속성 0.80, 거칠기 0.35
+        ctx.fillStyle = 'rgb(89, 204, 230)';
+        ctx.fillRect(x, y, cellW, cellH);
+      } else if (slotId === 22) {
+        // [아파트 1층 필로티 현관 로비 유리창]: 거칠기 0.15, 금속성 0.85
+        const winY = y + 40;
+        const winH = cellH - 80;
+        const winW = cellW - 50;
+        const winX = x + 25;
+        ctx.fillStyle = 'rgb(38, 217, 220)';
+        ctx.fillRect(winX, winY, winW, winH);
+      } else if (slotId === 23) {
+        // [공공청사 / 군부대 막사 규격 사각 창호]: 거칠기 0.15, 금속성 0.85
+        const winX = x + 24;
+        const winW = cellW - 48;
+        const winY = y + 36;
+        const winH = Math.round(cellH * 0.50);
+        ctx.fillStyle = 'rgb(38, 217, 220)';
+        ctx.fillRect(winX, winY, winW, winH);
       }
     }
   }
@@ -280,6 +300,7 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   // 2. [물리 반사 연산]: 시점 각도(View Dir) 및 태양광(Sun Dir)에 반응하는 Specular & Sky Reflection
   vec3 V = normalize(uCameraPosition - vWorldPositionVec);
   vec3 N = normalize(vWorldNormalVec);
+  if (!gl_FrontFacing) N = -N;
   vec3 L = normalize(uSunDirection);
   vec3 H = normalize(L + V);
 
@@ -416,11 +437,16 @@ export function updatePhotorealisticPbrUniforms(
   // 1. 카메라 위치 추출 (projectionMatrixInverse 기반 로컬 시점 계산)
   try {
     const inv = camera.projectionMatrixInverse;
-    const v4 = new THREE.Vector4(0, 0, -1, 1).applyMatrix4(inv);
-    if (Math.abs(v4.w) > 1e-6) {
+    const v4 = new THREE.Vector4(0, 0, -1, 0).applyMatrix4(inv);
+    if (Math.abs(v4.w) > 1e-9) {
       pbr.uCameraPosition.value.set(v4.x / v4.w, v4.y / v4.w, v4.z / v4.w);
     } else {
-      pbr.uCameraPosition.value.set(0, 500, 500);
+      const v4Alt = new THREE.Vector4(0, 0, -1, 1).applyMatrix4(inv);
+      if (Math.abs(v4Alt.w) > 1e-9) {
+        pbr.uCameraPosition.value.set(v4Alt.x / v4Alt.w, v4Alt.y / v4Alt.w, v4Alt.z / v4Alt.w);
+      } else {
+        pbr.uCameraPosition.value.set(0, 500, 500);
+      }
     }
   } catch {
     pbr.uCameraPosition.value.copy(camera.position);

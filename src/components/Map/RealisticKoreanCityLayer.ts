@@ -1141,30 +1141,18 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               }
             }
           } else {
-            // [브이월드 4대 구역 지붕 정밀 배분]:
-            // 1) 고층 아파트 단지 (H >= 24m): 짙은 콘크리트 슬래브(#57534e, 80%) / 박공 캡(#6b3426, 20%)
-            // 2) 중층 상가·오피스 (10m <= H < 24m): ① 선명한 에메랄드 우레탄 50%(#2e6f4e), ② 적갈색 테라코타 25%(#7c3626), ③ 오래된 시멘트 회색 25%(#64748b)
-            // 3) 저층 주택·빌라 (H < 10m): 적갈색 기와 40%(#6e2c1b), 청색 슬레이트 30%(#254e7a), 녹색 우레탄 30%(#356854)
+            // [V-World 옥상 실사화 40% : 35% : 25% 엄격 배분]:
+            // 건물 고유 해시와 대장 지붕코드 미지정 시 도시 전역 1:1 매핑:
+            // 1) 우레탄 방수 딥그린 (#32694f, 40%): seedVal < 40
+            // 2) 노후 콘크리트 슬래브 (#736f68, 35%): seedVal < 75
+            // 3) 적갈색 기와/슁글 (#7c3829, 25%): seedVal >= 75
             const seedVal = classified.seed;
-            if (height >= 24.0 || isApt) {
-              roofUV = (seedVal % 10 < 8) ? uvRoofAptSlab : uvRoofTile;
-            } else if (height >= 10.0) {
-              if (seedVal < 50) {
-                roofUV = uvRoofUrethane; // ① 선명한 에메랄드 우레탄 (50%)
-              } else if (seedVal < 75) {
-                roofUV = uvRoofTile;     // ② 적갈색 테라코타 (25%)
-              } else {
-                roofUV = uvRoofConcrete; // ③ 오래된 시멘트 회색 (25%)
-              }
+            if (seedVal < 40) {
+              roofUV = uvRoofUrethane; // ① 우레탄 방수 딥그린 (40%)
+            } else if (seedVal < 75) {
+              roofUV = isApt ? uvRoofAptSlab : uvRoofConcrete; // ② 노후 콘크리트 슬래브 (35%)
             } else {
-              const rPick = seedVal % 10;
-              if (rPick < 4) {
-                roofUV = uvRoofTile;     // 적갈색 기와지붕 (40%)
-              } else if (rPick < 7) {
-                roofUV = uvRoofZinc;     // 청색 슬레이트 (30%)
-              } else {
-                roofUV = uvRoofUrethane; // 녹색 우레탄 (30%)
-              }
+              roofUV = uvRoofTile; // ③ 적갈색 기와/슁글 (25%)
             }
           }
 
