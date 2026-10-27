@@ -106,15 +106,19 @@ export async function fetchSatelliteTileData(
   }
 
   const vworldKey =
-    process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62';
+    (typeof window !== 'undefined' ? localStorage.getItem('vworld_api_key') : null) ||
+    process.env.NEXT_PUBLIC_VWORLD_API_KEY ||
+    '';
 
   const tileUrls = [
     // 1순위: 국토부 브이월드(V-World) 공식 균일 항공위성 (CORS 지원)
     `https://xdworld.vworld.kr/2d/Satellite/service/${zoom}/${tileX}/${tileY}.jpeg`,
     // 2순위: Esri World Imagery (보조 폴백)
     `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`,
-    // 3순위: V-World WMTS 고해상도 항공위성
-    `https://api.vworld.kr/req/wmts/1.0.0/${vworldKey}/Satellite/${zoom}/${tileY}/${tileX}.jpeg`,
+    // 3순위: V-World WMTS 고해상도 항공위성 (API 키가 제공된 경우에만 활성화)
+    ...(vworldKey && vworldKey.length >= 16
+      ? [`https://api.vworld.kr/req/wmts/1.0.0/${vworldKey}/Satellite/${zoom}/${tileY}/${tileX}.jpeg`]
+      : []),
     // 4순위: Google Satellite 래스터 타일
     `https://mt1.google.com/vt/lyrs=s&x=${tileX}&y=${tileY}&z=${zoom}`,
   ];

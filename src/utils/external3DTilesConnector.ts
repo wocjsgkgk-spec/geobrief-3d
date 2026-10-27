@@ -43,7 +43,7 @@ export interface External3DTilesConfig {
 }
 
 /**
- * Google Maps API 키 획득 (LocalStorage > .env.local)
+ * Google Maps API 키 획득 (LocalStorage > 환경변수)
  */
 export function getEffectiveGoogleMapsKey(): string | null {
   let customKey: string | null = null;
@@ -78,7 +78,7 @@ export function saveGoogleMapsKey(key: string): void {
 }
 
 /**
- * Cesium Ion Token 획득 (LocalStorage > .env.local)
+ * Cesium Ion Token 획득 (LocalStorage > 환경변수)
  */
 export function getEffectiveCesiumIonToken(): string | null {
   let customToken: string | null = null;

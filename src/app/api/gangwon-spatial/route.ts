@@ -17,6 +17,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 import { findGangwonRegionByCoords, getGangwonRegionByIdOrName, GangwonRegionPreset } from '@/constants/gangwon18Regions';
 import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
 
@@ -141,9 +142,11 @@ async function fetchVworldDataLayer(
 
   const cleanKey = apiKey.replace(/['"`]/g, '').trim();
   const domain = process.env.VWORLD_DOMAIN || 'localhost';
-  const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=${layerName}&key=${encodeURIComponent(
-    cleanKey
-  )}&domain=${encodeURIComponent(domain)}&geomFilter=BOX(${minLng},${minLat},${maxLng},${maxLat})&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+  const url = assertSafeUpstreamUrl(
+    `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=${layerName}&key=${encodeURIComponent(
+      cleanKey
+    )}&domain=${encodeURIComponent(domain)}&geomFilter=BOX(${minLng},${minLat},${maxLng},${maxLat})&crs=EPSG:4326&size=1000&geometry=true&attribute=true`
+  );
 
   try {
     const res = await fetch(url, {
@@ -192,9 +195,9 @@ async function fetchOverpassInfra(
 out geom 5000;`;
 
   const endpoints = [
-    `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,
-    `https://overpass.kumi.systems/api/interpreter?data=${encodeURIComponent(ql)}`,
-    `https://lz4.overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`,
+    assertSafeUpstreamUrl(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`),
+    assertSafeUpstreamUrl(`https://overpass.kumi.systems/api/interpreter?data=${encodeURIComponent(ql)}`),
+    assertSafeUpstreamUrl(`https://lz4.overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`),
   ];
 
   const result = {

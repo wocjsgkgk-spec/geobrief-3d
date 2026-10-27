@@ -93,7 +93,7 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
         if (!token) {
           setTestResult({
             success: false,
-            message: '⚠️ Cesium Ion Access Token을 먼저 입력해주세요.',
+            message: '⚠️ Cesium Ion API 토큰을 먼저 입력해주세요.',
           });
           setIsTesting(false);
           return;
@@ -300,11 +300,11 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
             <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-700/50 space-y-1.5 animate-in fade-in duration-150">
               <label className="text-[11px] font-bold text-cyan-200 flex items-center justify-between">
                 <span>Google Map Tiles API Key</span>
-                <span className="text-[10px] font-mono text-cyan-400">.env.local 또는 UI 즉시 저장</span>
+                <span className="text-[10px] font-mono text-cyan-400">환경변수 또는 UI 즉시 저장</span>
               </label>
               <input
                 type="password"
-                placeholder="AIzaSy... (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)"
+                placeholder="Google Maps API Key 입력"
                 value={googleApiKey}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -325,12 +325,12 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
           {selectedPreset === 'cesium_osm' && (
             <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-700/50 space-y-1.5 animate-in fade-in duration-150">
               <label className="text-[11px] font-bold text-cyan-200 flex items-center justify-between">
-                <span>Cesium Ion Access Token</span>
-                <span className="text-[10px] font-mono text-cyan-400">.env.local 또는 UI 즉시 저장</span>
+                <span>Cesium Ion API Token</span>
+                <span className="text-[10px] font-mono text-cyan-400">환경변수 또는 UI 즉시 저장</span>
               </label>
               <input
                 type="password"
-                placeholder="eyJhbGciOi... (NEXT_PUBLIC_CESIUM_ION_TOKEN)"
+                placeholder="Cesium Ion Token 입력"
                 value={cesiumToken}
                 onChange={(e) => {
                   const val = e.target.value;

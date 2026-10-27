@@ -24,24 +24,13 @@ import {
 } from '@/constants/gangwon18Regions';
 import fs from 'fs';
 import path from 'path';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function getVworldKey(): string {
-  let key = process.env.NEXT_PUBLIC_VWORLD_API_KEY || process.env.VWORLD_API_KEY || '';
-  if (!key) {
-    try {
-      const envPath = path.join(process.cwd(), '.env.local');
-      if (fs.existsSync(envPath)) {
-        const text = fs.readFileSync(envPath, 'utf8');
-        const m = text.match(/NEXT_PUBLIC_VWORLD_API_KEY=["']?([^"'\r\n]+)["']?/);
-        if (m && m[1]) key = m[1];
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const key = process.env.VWORLD_API_KEY || process.env.NEXT_PUBLIC_VWORLD_API_KEY || '';
   return key.trim().replace(/^["']|["']$/g, '');
 }
 
@@ -183,9 +172,11 @@ export async function GET(req: NextRequest) {
       const vSearchTypes = ['PLACE', 'ADDRESS'];
       const vPromises = vSearchTypes.map(async (stype) => {
         const cat = stype === 'ADDRESS' ? '&category=ROAD' : '';
-        const url = `https://api.vworld.kr/req/search?service=search&request=search&version=2.0&crs=EPSG:4326&size=8&page=1&query=${encodeURIComponent(
-          q
-        )}&type=${stype}${cat}&format=json&key=${encodeURIComponent(vKey)}&domain=localhost`;
+        const url = assertSafeUpstreamUrl(
+          `https://api.vworld.kr/req/search?service=search&request=search&version=2.0&crs=EPSG:4326&size=8&page=1&query=${encodeURIComponent(
+            q
+          )}&type=${stype}${cat}&format=json&key=${encodeURIComponent(vKey)}&domain=localhost`
+        );
 
         const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
         if (!res.ok) return [];

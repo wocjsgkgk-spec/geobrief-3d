@@ -1494,13 +1494,11 @@ export const MapViewer: React.FC = () => {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
           },
-          // [2단계 신규: 국토지리정보원 / 브이월드 등고선 WMS 래스터 소스]
+          // [2단계: 국토지리정보원 / 브이월드 등고선 WMS 래스터 소스 (서버 보안 프록시 경유)]
           'vworld-contour-wms': {
             type: 'raster',
             tiles: [
-              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=dt_d002,lt_l_toisdepcntah&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&KEY=${
-                process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
-              }&DOMAIN=localhost`,
+              '/api/vworld/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=dt_d002,lt_l_toisdepcntah&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE',
             ],
             tileSize: 256,
             maxzoom: 19,
@@ -2689,16 +2687,14 @@ export const MapViewer: React.FC = () => {
       }
 
       // ---------------------------------------------------------------------
-      // [외부 데이터 독립 분리 1] 브이월드 연속지적도(필지선) WMS 안전 주입
+      // [외부 데이터 독립 분리 1] 브이월드 연속지적도(필지선) WMS (서버 보안 프록시 경유)
       // ---------------------------------------------------------------------
       try {
         if (!map.getSource('vworld-cadastral-wms')) {
           map.addSource('vworld-cadastral-wms', {
             type: 'raster',
             tiles: [
-              `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun&STYLES=lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&BGCOLOR=0xFFFFFF&EXCEPTIONS=text/xml&KEY=${
-                process.env.NEXT_PUBLIC_VWORLD_API_KEY || 'CEB52025-E065-364C-9DBA-44D8863B9B62'
-              }&DOMAIN=localhost`,
+              '/api/vworld/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun&STYLES=lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&BGCOLOR=0xFFFFFF&EXCEPTIONS=text/xml',
             ],
             tileSize: 256,
             maxzoom: 20,

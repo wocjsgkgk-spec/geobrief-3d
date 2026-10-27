@@ -178,7 +178,7 @@ export const VworldKeyModal: React.FC<VworldKeyModalProps> = ({
       const masked = getMaskedVworldKey() || '****';
       setVworldDiagnostic({
         status: 'connected',
-        message: '환경 변수(.env.local) 키로 복원됨',
+        message: '기본 시스템 환경 변수 키로 복원됨',
         maskedKey: masked,
       });
     } else {

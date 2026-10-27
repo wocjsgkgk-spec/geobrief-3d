@@ -22,6 +22,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -347,9 +348,11 @@ async function fetchVworldZoningLayer(
 
   const cleanKey = apiKey.replace(/['"`]/g, '').trim();
   const domain = process.env.VWORLD_DOMAIN || 'localhost';
-  const url = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=${layerName}&key=${encodeURIComponent(
-    cleanKey
-  )}&domain=${encodeURIComponent(domain)}&geomFilter=BOX(${minLng},${minLat},${maxLng},${maxLat})&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+  const url = assertSafeUpstreamUrl(
+    `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=${layerName}&key=${encodeURIComponent(
+      cleanKey
+    )}&domain=${encodeURIComponent(domain)}&geomFilter=BOX(${minLng},${minLat},${maxLng},${maxLat})&crs=EPSG:4326&size=1000&geometry=true&attribute=true`
+  );
 
   try {
     const res = await fetch(url, {

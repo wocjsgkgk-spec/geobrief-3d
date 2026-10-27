@@ -1,7 +1,7 @@
 /**
  * 국토교통부 브이월드 (V-World) 공간정보 서비스 연동 모듈
  * - Next.js 내부 API 프록시(/api/vworld/buildings)를 통해 CORS/도메인 불일치 에러 원천 차단
- * - .env.local 환경변수 및 UI 직접 입력기(LocalStorage) 다중 우선순위 지원
+ * - 시스템 환경변수 및 UI 직접 입력기(LocalStorage) 다중 우선순위 지원
  * - 키 앞뒤 따옴표/공백 자동 trim() 및 마스킹 보안 처리
  * - API 키 미등록 또는 호출 실패 시 기존 오픈 벡터 타일로의 자동 폴백(Fallback) 보장
  */
@@ -68,7 +68,8 @@ export function getEffectiveVworldKey(): string | null {
   if (
     !clean ||
     clean === 'your_vworld_api_key_here' ||
-    clean === 'CEB52025-E065-364C-9DBA-44D8863B9B62'
+    clean.toLowerCase().includes('sample') ||
+    clean.length < 16
   ) {
     return null;
   }
@@ -233,7 +234,7 @@ export async function fetchVworldBuildings(
       success: false,
       status: 'unconfigured',
       featureCount: 0,
-      message: 'API 키 미등록 (UI 직접 설정 또는 .env.local 등록 가능)',
+      message: 'API 키 미등록 (UI 직접 설정 또는 환경변수 등록 가능)',
     };
   }
 

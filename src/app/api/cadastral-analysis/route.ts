@@ -20,24 +20,13 @@ import fs from 'fs';
 import path from 'path';
 import * as turf from '@turf/turf';
 import { findGangwonRegionByCoords, getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function getVworldKey(): string {
-  let key = process.env.NEXT_PUBLIC_VWORLD_API_KEY || process.env.VWORLD_API_KEY || '';
-  if (!key) {
-    try {
-      const envPath = path.join(process.cwd(), '.env.local');
-      if (fs.existsSync(envPath)) {
-        const text = fs.readFileSync(envPath, 'utf8');
-        const m = text.match(/NEXT_PUBLIC_VWORLD_API_KEY=["']?([^"'\r\n]+)["']?/);
-        if (m && m[1]) key = m[1];
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const key = process.env.VWORLD_API_KEY || process.env.NEXT_PUBLIC_VWORLD_API_KEY || '';
   return key.trim().replace(/^["']|["']$/g, '');
 }
 
@@ -153,9 +142,11 @@ export async function GET(req: NextRequest) {
       const timeoutId = setTimeout(() => controller.abort(), 3200);
 
       // POINT 필터 우선 질의
-      const pointUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${encodeURIComponent(
-        vKey
-      )}&domain=localhost&geomFilter=POINT(${lng},${lat})&crs=EPSG:4326&size=5&geometry=true&attribute=true`;
+      const pointUrl = assertSafeUpstreamUrl(
+        `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${encodeURIComponent(
+          vKey
+        )}&domain=localhost&geomFilter=POINT(${lng},${lat})&crs=EPSG:4326&size=5&geometry=true&attribute=true`
+      );
 
       const res = await fetch(pointUrl, { signal: controller.signal, cache: 'no-store' });
       clearTimeout(timeoutId);
@@ -180,9 +171,11 @@ export async function GET(req: NextRequest) {
       const timeoutId = setTimeout(() => controller.abort(), 2500);
 
       const d = 0.0004; // 약 40m 반경
-      const boxUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${encodeURIComponent(
-        vKey
-      )}&domain=localhost&geomFilter=BOX(${lng - d},${lat - d},${lng + d},${lat + d})&crs=EPSG:4326&size=5&geometry=true&attribute=true`;
+      const boxUrl = assertSafeUpstreamUrl(
+        `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LP_PA_CBND_BUBUN&key=${encodeURIComponent(
+          vKey
+        )}&domain=localhost&geomFilter=BOX(${lng - d},${lat - d},${lng + d},${lat + d})&crs=EPSG:4326&size=5&geometry=true&attribute=true`
+      );
 
       const res = await fetch(boxUrl, { signal: controller.signal, cache: 'no-store' });
       clearTimeout(timeoutId);
@@ -262,9 +255,11 @@ export async function GET(req: NextRequest) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2600);
 
-      const zUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_UQ111&key=${encodeURIComponent(
-        vKey
-      )}&domain=localhost&geomFilter=POINT(${lng},${lat})&crs=EPSG:4326&size=1&geometry=false&attribute=true`;
+      const zUrl = assertSafeUpstreamUrl(
+        `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_UQ111&key=${encodeURIComponent(
+          vKey
+        )}&domain=localhost&geomFilter=POINT(${lng},${lat})&crs=EPSG:4326&size=1&geometry=false&attribute=true`
+      );
 
       const zRes = await fetch(zUrl, { signal: controller.signal, cache: 'no-store' });
       clearTimeout(timeoutId);

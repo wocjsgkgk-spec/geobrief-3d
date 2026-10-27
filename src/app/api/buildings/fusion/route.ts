@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 /**
  * 건물 용도 및 명칭을 바탕으로 표준 용도 카테고리와 국방/공공 플래그를 판별합니다.
@@ -232,7 +233,9 @@ async function fetchOsmBuildings(
 
   try {
     const ql = `[out:json][timeout:6];(way["building"](${minLat},${minLng},${maxLat},${maxLng}););out geom 10000;`;
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`;
+    const overpassUrl = assertSafeUpstreamUrl(
+      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(ql)}`
+    );
 
     const res = await fetch(overpassUrl, {
       signal: controller.signal,
@@ -320,9 +323,11 @@ async function fetchPublicDataBuildingRegistry(
 
   try {
     // 국토교통부 오픈데이터 연동 규격
-    const url = `http://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${encodeURIComponent(
-      apiKey
-    )}&numOfRows=100&pageNo=1&_type=json`;
+    const url = assertSafeUpstreamUrl(
+      `https://apis.data.go.kr/1613000/BldRgstService_v2/getBrTitleInfo?serviceKey=${encodeURIComponent(
+        apiKey
+      )}&numOfRows=100&pageNo=1&_type=json`
+    );
 
     const res = await fetch(url, {
       signal: controller.signal,
@@ -453,11 +458,13 @@ export async function GET(request: NextRequest) {
 
   // 3. 다중 소스 병렬 비동기 수신 (V-World WFS + OSM 태그 + 국토교통부 공공데이터)
   const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
-  const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
-    cleanVworldKey
-  )}&domain=${encodeURIComponent(domain)}&geomFilter=${encodeURIComponent(
-    geomFilter
-  )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+  const vworldUrl = assertSafeUpstreamUrl(
+    `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+      cleanVworldKey
+    )}&domain=${encodeURIComponent(domain)}&geomFilter=${encodeURIComponent(
+      geomFilter
+    )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`
+  );
 
   const vworldController = new AbortController();
   const vworldTimeout = setTimeout(() => vworldController.abort(), 7000);

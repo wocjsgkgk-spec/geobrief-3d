@@ -498,7 +498,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
               <div className="p-3.5 rounded-lg bg-[#0b111a] border border-slate-800 text-xs text-slate-400 space-y-1">
                 <span className="font-semibold text-slate-300 block">
-                  필요한 환경 변수 (.env.local 또는 Vercel 대시보드):
+                  필요한 환경 변수 (시스템 설정 또는 호스팅 대시보드):
                 </span>
                 <p className="font-mono text-[11px] text-blue-300">
                   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co

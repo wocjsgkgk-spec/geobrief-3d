@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveFullUrl } from '@/utils/urlHelper';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 interface VerificationResult {
   success: boolean;
@@ -33,12 +34,14 @@ export async function GET(request: NextRequest) {
         success: false,
         provider: 'google',
         status: 400,
-        message: 'Google Maps API Key가 등록되지 않았습니다 (.env.local 또는 UI 입력 필요)',
+        message: 'Google Maps API Key가 등록되지 않았습니다 (환경변수 또는 UI 입력 필요)',
         detail: 'Google Cloud Console에서 "Map Tiles API"가 활성화된 키를 입력해주세요.',
       };
     } else {
       const startTime = performance.now();
-      const testUrl = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(googleKey)}`;
+      const testUrl = assertSafeUpstreamUrl(
+        `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(googleKey)}`
+      );
       try {
         const res = await fetch(testUrl, {
           method: 'GET',
@@ -103,13 +106,13 @@ export async function GET(request: NextRequest) {
         success: false,
         provider: 'cesium',
         status: 400,
-        message: 'Cesium Ion Access Token이 등록되지 않았습니다 (.env.local 또는 UI 입력 필요)',
-        detail: 'cesium.com/ion 계정에서 발급받은 Access Token (assets:read 권한)을 입력해주세요.',
+        message: 'Cesium Ion 토큰이 등록되지 않았습니다 (환경변수 또는 UI 입력 필요)',
+        detail: 'cesium.com/ion 계정에서 발급받은 API 토큰 (assets:read 권한)을 입력해주세요.',
       };
     } else {
       const startTime = performance.now();
       const assetId = 96188; // Cesium OSM Buildings
-      const testUrl = `https://api.cesium.com/v1/assets/${assetId}/endpoint`;
+      const testUrl = assertSafeUpstreamUrl(`https://api.cesium.com/v1/assets/${assetId}/endpoint`);
       try {
         const res = await fetch(testUrl, {
           method: 'GET',
@@ -142,7 +145,7 @@ export async function GET(request: NextRequest) {
           const errMsg = errBody?.message || res.statusText || '인증 실패';
           let detail = `HTTP ${res.status}: ${errMsg}`;
           if (res.status === 401) {
-            detail = '유효하지 않은 토큰입니다. cesium.com/ion > Access Tokens 메뉴에서 토큰 값을 다시 복사해주세요.';
+            detail = '유효하지 않은 토큰입니다. cesium.com/ion > API Tokens 메뉴에서 토큰 값을 다시 복사해주세요.';
           } else if (res.status === 403 || res.status === 404) {
             detail = `Asset ID ${assetId}에 대한 접근 권한이 없거나 자산이 존재하지 않습니다.`;
           }

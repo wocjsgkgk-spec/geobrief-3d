@@ -16,8 +16,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,35 +31,12 @@ function getNormalizedDataGoKrKey(serviceType?: 'building' | 'transport'): strin
       process.env.TRANSPORT_DB_API_KEY ||
       process.env.DATA_GO_KR_TRANSPORT_KEY ||
       process.env.DATA_GO_KR_API_KEY ||
-      process.env.NEXT_PUBLIC_DATA_GO_KR_KEY ||
       '';
   } else {
     envKey =
       process.env.DATA_GO_KR_BUILDING_KEY ||
       process.env.DATA_GO_KR_API_KEY ||
-      process.env.NEXT_PUBLIC_DATA_GO_KR_KEY ||
       '';
-  }
-
-  // Node 프로덕션 환경에서 .env.local이 자동 로드되지 않는 경우 파일 직접 파싱 폴백
-  if (!envKey || envKey === 'your_public_data_portal_key_here') {
-    try {
-      const envPath = path.join(process.cwd(), '.env.local');
-      if (fs.existsSync(envPath)) {
-        const content = fs.readFileSync(envPath, 'utf8');
-        const match =
-          serviceType === 'transport'
-            ? content.match(/TRANSPORT_DB_API_KEY=["']?([^"'\r\n]+)["']?/) ||
-              content.match(/DATA_GO_KR_API_KEY=["']?([^"'\r\n]+)["']?/)
-            : content.match(/DATA_GO_KR_BUILDING_KEY=["']?([^"'\r\n]+)["']?/) ||
-              content.match(/DATA_GO_KR_API_KEY=["']?([^"'\r\n]+)["']?/);
-        if (match && match[1]) {
-          envKey = match[1];
-        }
-      }
-    } catch {
-      // ignore
-    }
   }
 
   let clean = envKey.trim().replace(/^["']|["']$/g, '').trim();
@@ -732,7 +708,7 @@ async function fetchMolitBldRgstHub(
       if (bun) params.append('bun', bun.padStart(4, '0'));
       if (ji) params.append('ji', ji.padStart(4, '0'));
 
-      const url = `https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?${params.toString()}`;
+      const url = assertSafeUpstreamUrl(`https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo?${params.toString()}`);
 
       const res = await fetch(url, {
         signal: controller.signal,
@@ -854,9 +830,11 @@ async function fetchMolitBridgeTunnel(apiKey: string, sigunguName = '원주시')
     const timeoutId = setTimeout(() => controller.abort(), 4500);
 
     // 1) 교량 목록 호출 (btiData/getBrdgList)
-    const brdgUrl = `https://apis.data.go.kr/1613000/btiData/getBrdgList?serviceKey=${encodeURIComponent(
-      normKey
-    )}&numOfRows=100&pageNo=1`;
+    const brdgUrl = assertSafeUpstreamUrl(
+      `https://apis.data.go.kr/1613000/btiData/getBrdgList?serviceKey=${encodeURIComponent(
+        normKey
+      )}&numOfRows=100&pageNo=1`
+    );
 
     const brdgRes = await fetch(brdgUrl, {
       signal: controller.signal,
@@ -877,9 +855,11 @@ async function fetchMolitBridgeTunnel(apiKey: string, sigunguName = '원주시')
     }
 
     // 2) 터널 목록 호출 (btiData/getTunlList)
-    const tunlUrl = `https://apis.data.go.kr/1613000/btiData/getTunlList?serviceKey=${encodeURIComponent(
-      normKey
-    )}&numOfRows=50&pageNo=1`;
+    const tunlUrl = assertSafeUpstreamUrl(
+      `https://apis.data.go.kr/1613000/btiData/getTunlList?serviceKey=${encodeURIComponent(
+        normKey
+      )}&numOfRows=50&pageNo=1`
+    );
 
     const tunlRes = await fetch(tunlUrl, {
       signal: controller.signal,

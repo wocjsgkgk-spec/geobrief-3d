@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 
 /**
  * 건물 용도 및 명칭을 바탕으로 브이월드 스타일 3D 색상과 카테고리를 판별합니다.
@@ -128,7 +129,7 @@ export async function GET(request: NextRequest) {
   const bboxParam = searchParams.get('bbox');
   const customKey = searchParams.get('customKey');
 
-  // 1. API 키 판별 (Custom Key > .env VWORLD_API_KEY > .env NEXT_PUBLIC_VWORLD_API_KEY)
+  // 1. API 키 판별 (Custom Key > 환경변수 VWORLD_API_KEY)
   const rawKey =
     customKey ||
     process.env.VWORLD_API_KEY ||
@@ -143,7 +144,7 @@ export async function GET(request: NextRequest) {
         success: false,
         status: 'unconfigured',
         featureCount: 0,
-        message: 'V-World API 키가 등록되지 않았습니다 (.env.local 또는 UI 설정)',
+        message: 'V-World API 키가 등록되지 않았습니다 (환경변수 또는 UI 설정 필요)',
       },
       { status: 200 }
     );
@@ -237,11 +238,13 @@ export async function GET(request: NextRequest) {
     const cellFetches = subCells.map(async (cell) => {
       const [cMinLng, cMinLat, cMaxLng, cMaxLat] = cell;
       const geomFilter = `BOX(${cMinLng},${cMinLat},${cMaxLng},${cMaxLat})`;
-      const vworldUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
-        cleanKey
-      )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
-        geomFilter
-      )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`;
+      const vworldUrl = assertSafeUpstreamUrl(
+        `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+          cleanKey
+        )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
+          geomFilter
+        )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`
+      );
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -262,11 +265,13 @@ export async function GET(request: NextRequest) {
         const totalRecords = parseInt(data.response?.page?.record || data.response?.page?.total || '0', 10);
 
         if (totalRecords > 1000 && items.length < perCellLimit) {
-          const pageUrl = `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
-            cleanKey
-          )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
-            geomFilter
-          )}&crs=EPSG:4326&size=1000&page=2&geometry=true&attribute=true`;
+          const pageUrl = assertSafeUpstreamUrl(
+            `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+              cleanKey
+            )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
+              geomFilter
+            )}&crs=EPSG:4326&size=1000&page=2&geometry=true&attribute=true`
+          );
           try {
             const pageRes = await fetch(pageUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' });
             if (pageRes.ok) {
