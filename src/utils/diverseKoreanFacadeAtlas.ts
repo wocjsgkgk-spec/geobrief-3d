@@ -286,12 +286,12 @@ function drawIndividualWindow(
 
 // --- 프리셋 A~D (한국형 아파트 4종) ---
 function drawPresetA(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ① 크림 아이보리(#f4f0e6) 외벽 (70% 벽면)
-  ctx.fillStyle = '#f4f0e6';
+  // ① 크림 아이보리(#f4efe6) 외벽 (70% 벽면)
+  ctx.fillStyle = '#f4efe6';
   ctx.fillRect(x, y, w, h);
 
   // 상단 슬래브 & 층간 줄눈
-  ctx.fillStyle = '#e8e2d8';
+  ctx.fillStyle = '#e8e0d2';
   ctx.fillRect(x, y, w, 24);
   ctx.fillRect(x, y + 22, w, 2);
 
@@ -318,8 +318,8 @@ function drawPresetA(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetB(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ② 샌드 베이지(#e6dfd3) + 브라운(#78523a) 투톤
-  ctx.fillStyle = '#e6dfd3';
+  // ② 샌드 베이지(#e8e0d2) + 브라운(#78523a) 투톤
+  ctx.fillStyle = '#e8e0d2';
   ctx.fillRect(x, y, w, h);
 
   // 하단 30% 브라운 투톤 악센트
@@ -357,8 +357,8 @@ function drawPresetB(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetC(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ③ 라이트 웜그레이(#dcd9d2) + 세로 강조선 아파트
-  ctx.fillStyle = '#dcd9d2';
+  // ③ 라이트 웜그레이(#dcd8d0) + 세로 강조선 아파트
+  ctx.fillStyle = '#dcd8d0';
   ctx.fillRect(x, y, w, h);
 
   // 좌측 다크 슬레이트 버티컬 컬러 밴드
@@ -467,12 +467,12 @@ function drawAptSideWall(ctx: CanvasRenderingContext2D, x: number, y: number, w:
 
 // --- 프리셋 E~H (시내 상업·오피스 빌딩 4종) ---
 function drawPresetE(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ⑤ 밝은 베이지 화강석 석재 타일 빌딩 (#ede5d8)
-  ctx.fillStyle = '#ede5d8';
+  // ⑤ 밝은 베이지 화강석 석재 타일 빌딩 (#dcd4c6)
+  ctx.fillStyle = '#dcd4c6';
   ctx.fillRect(x, y, w, h);
 
   // 석재 타일 줄눈 그리드 (Stone Grout Joints)
-  ctx.fillStyle = 'rgba(180, 168, 155, 0.45)';
+  ctx.fillStyle = 'rgba(160, 150, 138, 0.45)';
   for (let px = x; px < x + w; px += 44) ctx.fillRect(px, y, 1.5, h);
   for (let py = y; py < y + h; py += 32) ctx.fillRect(x, py, w, 1.5);
 
@@ -492,8 +492,8 @@ function drawPresetE(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetF(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ⑥ 스카이 블루 반사 유리 커튼월 오피스
-  ctx.fillStyle = '#d1d5db'; // 실버 알루미늄 외곽 프레임
+  // ⑥ 스카이 블루 반사 유리 커튼월 오피스 (#64748b)
+  ctx.fillStyle = '#64748b'; // 스카이 블루 / 슬레이트 외곽 프레임
   ctx.fillRect(x, y, w, h);
 
   const glassW = w - 24;
@@ -543,12 +543,12 @@ function drawPresetG(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 }
 
 function drawPresetH(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ⑧ 다크 차콜 알루미늄 복합패널 모던 상가 (#272e3b)
-  ctx.fillStyle = '#272e3b';
+  // ⑧ 모던 차콜 메탈 패널 (#475569)
+  ctx.fillStyle = '#475569';
   ctx.fillRect(x, y, w, h);
 
   // 실버 패널 줄눈
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = '#94a3b8';
   for (let px = x; px < x + w; px += 56) ctx.fillRect(px, y, 2, h);
   for (let py = y; py < y + h; py += 42) ctx.fillRect(x, py, w, 2);
 
@@ -568,8 +568,8 @@ function drawPresetH(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
 // --- 프리셋 I~L (저층 상가주택·원룸·빌라 4종) ---
 function drawPresetI(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // ⑨ 붉은 치장벽돌(#9a3b26) + 백색 창틀 빌라
-  ctx.fillStyle = '#9a3b26';
+  // ⑨ 붉은 치장벽돌(#8c3b2b) + 백색 창틀 빌라
+  ctx.fillStyle = '#8c3b2b';
   ctx.fillRect(x, y, w, h);
 
   // 백색 몰탈 줄눈
@@ -746,11 +746,11 @@ function drawPresetP(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
 
 // --- 옥상 슬롯 (17, 18, 19, 20) & 부속 슬롯 (21, 22, 23) ---
 function drawRoofUrethane(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // [GeoBrief 3D 3단계] 에메랄드/세이지 그린 우레탄 방수 옥상 (#2d6a4f, 도심 상가 45%)
+  // [GeoBrief 3D 3단계] 에메랄드/세이지 그린 우레탄 방수 옥상 (#2e6f4e, 도심 상가 45%)
   const grad = ctx.createRadialGradient(x + w * 0.5, y + h * 0.5, w * 0.08, x + w * 0.5, y + h * 0.5, w * 0.72);
-  grad.addColorStop(0, '#387a5c'); // 하이라이트 세이지 그린
-  grad.addColorStop(0.7, '#2d6a4f'); // 에메랄드 우레탄 방수
-  grad.addColorStop(1, '#245640'); // 코너 AO 음영
+  grad.addColorStop(0, '#3d8262'); // 하이라이트 세이지 그린
+  grad.addColorStop(0.7, '#2e6f4e'); // 에메랄드 우레탄 방수 (#2e6f4e)
+  grad.addColorStop(1, '#1e4b37'); // 코너 AO 음영
   ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, h);
 

@@ -399,27 +399,24 @@ export function classifyBuildingWithVendor(
     case 'apartment': {
       floors = 14 + (seed % 11); // 14층 ~ 24층
       height = 42.0 + (seed % 31) * 1.0; // 42m ~ 72m 고층 아파트 스카이라인
-      const aptPick = seed % 4;
+      const aptPick = seed % 3;
       if (aptPick === 0) {
-        wallColor = '#f5f2eb'; // 프리셋 A: 크림 화이트
+        wallColor = '#f4efe6'; // 크림 아이보리 (#f4efe6)
         atlasWallSlot = 'apt_preset_a';
       } else if (aptPick === 1) {
-        wallColor = '#e6dec8'; // 프리셋 B: 소프트 샌드 베이지 브라운 투톤
+        wallColor = '#e8e0d2'; // 샌드 베이지 (#e8e0d2)
         atlasWallSlot = 'apt_preset_b';
-      } else if (aptPick === 2) {
-        wallColor = '#d6d3cd'; // 프리셋 C: 웜 그레이 세로 강조선
-        atlasWallSlot = 'apt_preset_c';
       } else {
-        wallColor = '#e2dbd0'; // 프리셋 D: 테라코타 기단부 + 아이보리 판상형
-        atlasWallSlot = 'apt_preset_d';
+        wallColor = '#dcd8d0'; // 라이트 웜그레이 (#dcd8d0)
+        atlasWallSlot = 'apt_preset_c';
       }
 
       if (seed % 10 < 8) {
-        roofColor = '#57534e'; // 콘크리트 슬래브 (80%)
+        roofColor = '#8c8881'; // 콘크리트 슬래브 (80%)
         atlasRoofSlot = 'roof_concrete_warmgray';
         isGabledRoof = false;
       } else {
-        roofColor = '#6b3426'; // 박공 지붕 캡 (20%)
+        roofColor = '#7c3626'; // 박공 지붕 캡 (20%)
         atlasRoofSlot = 'roof_terracotta_tile';
         isGabledRoof = true;
       }
@@ -444,10 +441,10 @@ export function classifyBuildingWithVendor(
       }
 
       if (seed % 10 < 6) {
-        roofColor = '#1d4ed8'; // 코발트 블루 박공 (60%)
+        roofColor = '#1e40af'; // 코발트 블루 강판 (60%)
         atlasRoofSlot = 'roof_zinc_blue';
       } else {
-        roofColor = '#cbd5e1'; // 은색 징크 패널 (40%)
+        roofColor = '#8c8881'; // 은색 징크 패널 (40%)
         atlasRoofSlot = 'roof_concrete_warmgray';
       }
       hasParapet = false;
@@ -460,6 +457,7 @@ export function classifyBuildingWithVendor(
     // 유형 3 [시내 중·저층 상가·원룸·오피스 블록]
     // - 단지 부속 건물(상가동, 경비실, 어린이집 area < 400㎡): 4m ~ 9m (1~2층)
     // - 중형 시가지 건물 (220㎡ <= area < 550㎡): 11m ~ 18m (3~5층)
+    // - 5대 외벽 소재 불규칙 배분 (붉은 치장벽돌, 갈색 파벽돌, 화강석, 차콜 메탈, 반사 유리)
     // -------------------------------------------------------------------------
     case 'commercial': {
       if (isAuxiliaryInApt) {
@@ -473,31 +471,35 @@ export function classifyBuildingWithVendor(
         height = 14.0 + (seed % 10) * 1.0; // 14m ~ 23m
       }
 
-      const commPick = seed % 4;
+      const commPick = seed % 5;
       if (commPick === 0) {
-        wallColor = '#ece8df'; // 프리셋 E: 밝은 베이지 화강석 타일 (1층 쇼윈도 포함)
-        atlasWallSlot = 'comm_preset_e';
+        wallColor = '#8c3b2b'; // ① 붉은 치장벽돌 (#8c3b2b)
+        atlasWallSlot = 'villa_red_brick';
       } else if (commPick === 1) {
-        wallColor = '#93c5fd'; // 프리셋 F: 스카이 블루 반사 커튼월
-        atlasWallSlot = 'comm_preset_f';
+        wallColor = '#6e473b'; // ② 갈색 파벽돌 (#6e473b)
+        atlasWallSlot = 'villa_brown_brick';
       } else if (commPick === 2) {
-        wallColor = '#6ee7b7'; // 프리셋 G: 에메랄드 틴티드 유리
-        atlasWallSlot = 'comm_preset_g';
+        wallColor = '#dcd4c6'; // ③ 밝은 화강석 베이지 타일 (#dcd4c6)
+        atlasWallSlot = 'comm_granite_tile';
+      } else if (commPick === 3) {
+        wallColor = '#475569'; // ④ 모던 차콜 메탈 (#475569)
+        atlasWallSlot = 'comm_charcoal_panel';
       } else {
-        wallColor = '#334155'; // 프리셋 H: 다크 차콜 알루미늄 복합패널
-        atlasWallSlot = 'comm_preset_h';
+        wallColor = '#64748b'; // ⑤ 스카이 블루 반사 유리 (#64748b)
+        atlasWallSlot = 'comm_sky_curtain';
       }
 
-      // 옥상 분포: 선명한 에메랄드 우레탄 50%, 테라코타 25%, 시멘트 25%
-      if (seed < 50) {
-        roofColor = '#2e6f4e'; // ① 선명한 에메랄드 우레탄 방수초록색 (50%)
+      // 옥상 분포: 에메랄드/세이지 그린 우레탄 45%, 밝은 콘크리트 회색 35%, 테라코타 적갈색 20%
+      const commRoofSeed = seed % 100;
+      if (commRoofSeed < 45) {
+        roofColor = '#2e6f4e'; // ① 에메랄드 우레탄 방수초록색 (45%)
         atlasRoofSlot = 'roof_urethane_sage';
-      } else if (seed < 75) {
-        roofColor = '#7c3626'; // ② 적갈색 테라코타 (25%)
-        atlasRoofSlot = 'roof_terracotta_tile';
-      } else {
-        roofColor = '#64748b'; // ③ 오래된 시멘트 회색 (25%)
+      } else if (commRoofSeed < 80) {
+        roofColor = '#8c8881'; // ② 밝은 시멘트 회색 (35%)
         atlasRoofSlot = 'roof_concrete_warmgray';
+      } else {
+        roofColor = '#7c3626'; // ③ 적갈색 테라코타 (20%)
+        atlasRoofSlot = 'roof_terracotta_tile';
       }
       hasParapet = true;
       hasPenthouseCore = height >= 11.0;
@@ -514,33 +516,33 @@ export function classifyBuildingWithVendor(
 
       const resPick = seed % 4;
       if (resPick === 0) {
-        wallColor = '#9a3b26'; // 프리셋 I: 붉은 치장벽돌 + 백색 창틀
+        wallColor = '#8c3b2b'; // 프리셋 I: 붉은 치장벽돌 (#8c3b2b) + 백색 창틀
         atlasWallSlot = 'villa_preset_i';
       } else if (resPick === 1) {
-        wallColor = '#6e473b'; // 프리셋 J: 갈색 파벽돌 상가주택
+        wallColor = '#6e473b'; // 프리셋 J: 갈색 파벽돌 (#6e473b)
         atlasWallSlot = 'villa_preset_j';
       } else if (resPick === 2) {
-        wallColor = '#f3eee3'; // 프리셋 K: 밝은 아이보리 스타코 + 박공
+        wallColor = '#f5f0e6'; // 프리셋 K: 밝은 아이보리 스타코 + 박공
         atlasWallSlot = 'villa_preset_k';
       } else {
-        wallColor = '#d8d2c4'; // 프리셋 L: 투톤 화강석 필로티 원룸
+        wallColor = '#dfd8cc'; // 프리셋 L: 투톤 화강석 필로티 원룸
         atlasWallSlot = 'villa_preset_l';
       }
 
-      // 지붕: 적갈색 기와 박공(40%), 청색 슬레이트 박공(30%), 우레탄 평지붕(30%)
-      const roofPick = seed % 10;
-      if (roofPick < 4) {
-        roofColor = '#6e2c1b'; // 적갈색 기와 지붕 (40%)
+      // 지붕: 적갈색 기와 박공(50%), 청색 강판 박공(30%), 슬레이트 그레이(20%)
+      const resRoofSeed = seed % 100;
+      if (resRoofSeed < 50) {
+        roofColor = '#7c3626'; // 적갈색 기와 지붕 (50%)
         atlasRoofSlot = 'roof_terracotta_tile';
         isGabledRoof = true;
-      } else if (roofPick < 7) {
-        roofColor = '#254e7a'; // 청색 슬레이트 지붕 (30%)
+      } else if (resRoofSeed < 80) {
+        roofColor = '#1e40af'; // 청색 강판 지붕 (30%)
         atlasRoofSlot = 'roof_zinc_blue';
         isGabledRoof = true;
       } else {
-        roofColor = '#356854'; // 녹색 우레탄 방수 옥상 (30%)
-        atlasRoofSlot = 'roof_urethane_sage';
-        isGabledRoof = false;
+        roofColor = '#475569'; // 슬레이트 그레이 (20%)
+        atlasRoofSlot = 'comm_charcoal_panel';
+        isGabledRoof = true;
       }
       hasParapet = !isGabledRoof;
       hasPenthouseCore = false;

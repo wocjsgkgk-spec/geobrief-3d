@@ -53,6 +53,8 @@ import {
 } from '@/lib/vendor/safeGeoAlgorithms';
 import { StreetsGlFacadeEngine } from '@/lib/vendor/streetsGlFacadeEngine';
 import { OsmRoofGenerator } from '@/lib/vendor/osmRoofGenerator';
+import { VworldRealisticFacadeEngine } from '@/lib/vendor/vworldRealisticFacade';
+import { Vworld3DRenderEngine } from '@/lib/vendor/vworld3DRenderEngine';
 import {
   classifyBuildingWithVendor,
   ClassifiedBuildingInfo,
@@ -1025,9 +1027,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // -------------------------------------------------------------------
-      // A. [Streets-GL 4단 파사드 분할 엔진] 외벽(Wall) 생성
+      // A. [브이월드(V-World) LOD2+ 4단 입체 건축물 메쉬 + 실사 포토 아틀라스]
+      // [1층 기단부(Base) + 기준층 본동(Wall) + 옥상 난간(Parapet) + 지붕 구조물(Roof & Penthouse)]
       // -------------------------------------------------------------------
-      StreetsGlFacadeEngine.buildBuildingFacade({
+      Vworld3DRenderEngine.buildFullBuildingLOD2({
         pts2D,
         baseElev,
         height,
@@ -1039,45 +1042,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         sideWallEdgeIndices,
         buildingType: classified.type,
         atlasWallSlot: featProps.realWallSlot || classified.atlasWallSlot,
-        addQuad: this.addQuad,
-        addTriangle: this.addTriangle,
-        featProps,
-      });
-
-      // 중정/홀 내부 링 벽체(Inner Walls) 생성
-      if (innerRings2D.length > 0) {
-        StreetsGlFacadeEngine.buildInnerRingWalls(
-          innerRings2D,
-          baseElev,
-          topElev,
-          featProps.realWallSlot || classified.atlasWallSlot,
-          this.addQuad
-        );
-      }
-
-      // -------------------------------------------------------------------
-      // B. [OSMBuildings 3D 입체 지붕 스켈레톤 & 옥탑 코어 엔진] 지붕 생성
-      // -------------------------------------------------------------------
-      const isGabled =
-        (classified.type === 'residential' || classified.type === 'military' || classified.isGabledRoof) &&
-        height <= 16.0;
-
-      OsmRoofGenerator.generate3DRoof({
-        pts2D,
-        baseElev,
-        height,
-        seed: classified.seed,
-        isGabled,
-        isHighRiseApt: isTrueHighRiseApt,
-        buildingType: classified.type,
-        roofSlot: featProps.realRoofSlot || classified.atlasRoofSlot,
-        wallSlot: featProps.realWallSlot || classified.atlasWallSlot,
+        atlasRoofSlot: featProps.realRoofSlot || classified.atlasRoofSlot,
         holeIndices,
         innerRings2D,
         addQuad: this.addQuad,
         addTriangle: this.addTriangle,
         addRooftopQuad: this.addRooftopQuad,
         addRooftopTriangle: this.addRooftopTriangle,
+        featProps,
       });
 
       anyBuilt = true;
