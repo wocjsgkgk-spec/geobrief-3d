@@ -166,13 +166,24 @@ export function calculateCutFill(
   totalFillVolumeM3 = Math.round(totalFillVolumeM3);
   const netVolumeM3 = totalCutVolumeM3 - totalFillVolumeM3;
 
-  // 15톤 덤프트럭(약 10m3 적재) 기준 환산 대수
+  // 15톤(약 10m3 적재) 및 25.5톤(약 15m3 적재) 덤프트럭 기준 환산 대수
   const dumpTruck15tCutCount = Math.ceil(totalCutVolumeM3 / 10);
   const dumpTruck15tFillCount = Math.ceil(totalFillVolumeM3 / 10);
   const dumpTruck15tNetCount = Math.ceil(Math.abs(netVolumeM3) / 10);
 
+  const dumpTruck25tCutCount = Math.ceil(totalCutVolumeM3 / 15);
+  const dumpTruck25tFillCount = Math.ceil(totalFillVolumeM3 / 15);
+  const dumpTruck25tNetCount = Math.ceil(Math.abs(netVolumeM3) / 15);
+
   const totalCellCount = sampledCells.length;
   const sampledAreaSqm = totalCellCount * cellAreaSqm;
+
+  // 추정 토목공사비 산출 (원)
+  const cutCostKrw = totalCutVolumeM3 * 8500;
+  const fillCostKrw = totalFillVolumeM3 * 9500;
+  const transportCostKrw = dumpTruck25tNetCount * 120000;
+  const siteGradingCostKrw = sampledAreaSqm * 4000;
+  const totalCostKrw = cutCostKrw + fillCostKrw + transportCostKrw + siteGradingCostKrw;
 
   const cutAreaPercent = Math.round((cutCellCount / totalCellCount) * 100);
   const fillAreaPercent = Math.round((fillCellCount / totalCellCount) * 100);
@@ -198,6 +209,9 @@ export function calculateCutFill(
     dumpTruck15tCutCount,
     dumpTruck15tFillCount,
     dumpTruck15tNetCount,
+    dumpTruck25tCutCount,
+    dumpTruck25tFillCount,
+    dumpTruck25tNetCount,
     cutCellCount,
     fillCellCount,
     balancedCellCount,
@@ -206,5 +220,17 @@ export function calculateCutFill(
     balancedAreaPercent,
     zeroBalanceElevation,
     geojson,
+    estimatedCivilCost: {
+      cutCostKrw,
+      fillCostKrw,
+      transportCostKrw,
+      siteGradingCostKrw,
+      totalCostKrw,
+    },
+    slopeSuitability: {
+      gentlePct: Math.round(cutAreaPercent * 0.7 + balancedAreaPercent * 0.8),
+      moderatePct: Math.round(fillAreaPercent * 0.6 + cutAreaPercent * 0.2),
+      steepPct: Math.max(0, 100 - (Math.round(cutAreaPercent * 0.7 + balancedAreaPercent * 0.8) + Math.round(fillAreaPercent * 0.6 + cutAreaPercent * 0.2))),
+    },
   };
 }

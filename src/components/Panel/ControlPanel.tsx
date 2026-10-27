@@ -62,6 +62,7 @@ import {
   Target,
   Play,
   Pause,
+  Ruler,
 } from 'lucide-react';
 import { calculateSunLight } from '@/utils/sunLightCalculator';
 import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
@@ -171,6 +172,14 @@ export const ControlPanel: React.FC = () => {
     // [신규] 전략 군 유휴지 실증 프리셋
     selectedIdleSiteId,
     selectIdleSite,
+    // [다목적 3D 측정기]
+    isMeasureMode,
+    measureSubtype,
+    measureResult,
+    measurePoints,
+    toggleMeasureMode,
+    setMeasureSubtype,
+    clearMeasure,
     // [신규] 토목·지형 경사도 & 고도 단면 프로파일 분석
     showSlopeAnalysis,
     toggleSlopeAnalysis,
@@ -182,6 +191,10 @@ export const ControlPanel: React.FC = () => {
     setSunHour,
     isSunPlaying,
     toggleSunPlaying,
+    sunSeason,
+    setSunSeason,
+    continuousDaylightResult,
+    siteFeasibilityResult,
     // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
     waterLevel,
     setWaterLevel,
@@ -393,129 +406,165 @@ export const ControlPanel: React.FC = () => {
         </section>
       )}
 
-      {/* 2. [시간대별 일조·태양광 시뮬레이션 (지형/인프라 탭)] */}
+      {/* 2. [3D 일조권 및 시간대별 그림자 침해 시뮬레이터 (mourner/suncalc 연동)] */}
       {activeSidebarTab === 'terrain_infra' &&
         (() => {
           const centerLat = polygonCenter ? polygonCenter[1] : (viewport?.latitude ?? 37.342);
           const centerLng = polygonCenter ? polygonCenter[0] : (viewport?.longitude ?? 127.925);
-          const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(9, Math.min(18, sunHour)) : 12;
+          const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(6, Math.min(19, sunHour)) : 12;
           const sunInfo = calculateSunLight(safeHour, centerLat, centerLng);
 
           return (
             <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111913]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <Sun className="w-4 h-4 text-amber-400" />
-                시간대별 일조·태양광 시뮬레이션
-              </h2>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={toggleSunPlaying}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 transition-all ${
-                    isSunPlaying
-                      ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md animate-pulse'
-                      : 'bg-[#18231c] text-amber-300 border-amber-700/60 hover:bg-[#203126]'
-                  }`}
-                  title="태양 궤적 타임라인 자동 재생/정지"
-                >
-                  {isSunPlaying ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
-                  <span>{isSunPlaying ? '정지' : '자동재생'}</span>
-                </button>
-                <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  {sunInfo?.label ?? `${Math.floor(safeHour)}:00`}
-                </span>
-              </div>
-            </div>
-
-            {/* 태양광 시간 슬라이더 */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-[11px] text-slate-300">
-                <span className="font-semibold flex items-center gap-1 text-[10.5px]">
-                  <Sunrise className="w-3 h-3 text-orange-400" /> 09:00
-                </span>
-                <span className="font-bold text-amber-300 font-mono text-xs">
-                  {Math.floor(safeHour).toString().padStart(2, '0')}:
-                  {Math.round((safeHour % 1) * 60).toString().padStart(2, '0')}
-                </span>
-                <span className="font-semibold flex items-center gap-1 text-[10.5px]">
-                  18:00 <Sunset className="w-3 h-3 text-rose-400" />
-                </span>
-              </div>
-              <input
-                type="range"
-                min="9"
-                max="18"
-                step="0.25"
-                value={sunHour}
-                onChange={(e) => setSunHour(parseFloat(e.target.value))}
-                className="w-full h-2 bg-[#1b261e] rounded-lg appearance-none cursor-pointer accent-amber-400"
-              />
-            </div>
-
-            {/* 원클릭 시간대 프리셋 버튼 */}
-            <div className="grid grid-cols-4 gap-1.5 pt-0.5">
-              {[
-                { h: 9.5, label: '아침 사광', icon: '🌅' },
-                { h: 12.5, label: '정오 직사', icon: '☀️' },
-                { h: 15.0, label: '오후 일조', icon: '🌤️' },
-                { h: 17.5, label: '석양 노을', icon: '🌆' },
-              ].map((preset) => {
-                const isActive = Math.abs(sunHour - preset.h) < 0.8;
-                return (
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  3D 일조권 & 그림자 침해 시뮬레이터
+                </h2>
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={preset.label}
                     type="button"
-                    onClick={() => setSunHour(preset.h)}
-                    className={`py-1.5 px-1 rounded text-[10.5px] font-medium border flex flex-col items-center gap-0.5 transition-all ${
-                      isActive
-                        ? 'bg-amber-500/20 border-amber-400 text-amber-200 font-bold ring-1 ring-amber-400/50'
-                        : 'bg-[#162019] border-[#293b2d] text-slate-300 hover:bg-[#1f2e23]'
+                    onClick={toggleSunPlaying}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 transition-all ${
+                      isSunPlaying
+                        ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md animate-pulse'
+                        : 'bg-[#18231c] text-amber-300 border-amber-700/60 hover:bg-[#203126]'
                     }`}
+                    title="태양 궤적 타임라인 자동 재생/정지"
                   >
-                    <span className="text-xs">{preset.icon}</span>
-                    <span className="whitespace-nowrap">{preset.label}</span>
+                    {isSunPlaying ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                    <span>{isSunPlaying ? '정지' : '재생'}</span>
                   </button>
-                );
-              })}
-            </div>
+                  <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-amber-400" />
+                    {sunInfo?.label ?? `${Math.floor(safeHour)}:00`}
+                  </span>
+                </div>
+              </div>
 
-            {/* 실시간 태양 천문 궤적 지표 카드 */}
-            <div className="grid grid-cols-3 gap-1.5 text-[10px] bg-[#0c130e] p-2 rounded-lg border border-[#1f2f22]">
-              <div>
-                <span className="text-slate-400 block">태양 방위각</span>
-                <span className="font-bold text-slate-200 font-mono">
-                  {sunInfo?.azimuthDeg ?? 180}°
-                </span>
+              {/* 동지/춘분/하지 절기 선택 (건축법 법적 기준) */}
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 font-semibold block">일조 분석 절기 (태양 적위)</span>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'winter_solstice' as const, label: '❄️ 동지 (12/22)', badge: '법적 기준' },
+                    { id: 'equinox' as const, label: '🌸 춘분 (3/21)', badge: '표준 일조' },
+                    { id: 'summer_solstice' as const, label: '☀️ 하지 (6/21)', badge: '최장 일조' },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSunSeason(s.id)}
+                      className={`py-1.5 px-1 rounded text-center transition-all border flex flex-col items-center gap-0.5 ${
+                        sunSeason === s.id
+                          ? 'bg-amber-500/30 border-amber-400 text-amber-200 font-bold shadow-sm'
+                          : 'bg-[#142017] border-[#25382a] text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span className="text-[10px] font-semibold">{s.label}</span>
+                      <span className="text-[8.5px] opacity-75">{s.badge}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400 block">태양 고도각</span>
-                <span className="font-bold text-amber-300 font-mono">
-                  {Math.max(-90, Math.min(90, sunInfo?.altitudeDeg ?? 45))}°
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 block">조도 강도</span>
-                <span className="font-bold text-emerald-400 font-mono">
-                  {Math.round((sunInfo?.intensity ?? 0.65) * 100)}%
-                </span>
-              </div>
-            </div>
 
-            {/* 실시간 렌더링 셰이딩 상태 */}
-            <div className="flex items-center justify-between text-[10px] text-slate-400 bg-[#090f0b] px-2 py-1.5 rounded border border-[#1b2b1e]">
-              <span className="flex items-center gap-1.5 text-slate-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                2048x2048 캐스케이드 섀도우 & 심도 안개 연동
-              </span>
-              <span className="font-mono text-indigo-300 font-semibold">
-                {layers.ssaoPostProcessing ? 'SSAO On' : 'SSAO Off'}
-              </span>
-            </div>
-          </section>
-        );
-      })()}
+              {/* 태양광 시간 슬라이더 (06:00 ~ 19:00 확장) */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-[11px] text-slate-300">
+                  <span className="font-semibold flex items-center gap-1 text-[10.5px]">
+                    <Sunrise className="w-3 h-3 text-orange-400" /> 06:00
+                  </span>
+                  <span className="font-bold text-amber-300 font-mono text-xs">
+                    {Math.floor(safeHour).toString().padStart(2, '0')}:
+                    {Math.round((safeHour % 1) * 60).toString().padStart(2, '0')}
+                  </span>
+                  <span className="font-semibold flex items-center gap-1 text-[10.5px]">
+                    19:00 <Sunset className="w-3 h-3 text-rose-400" />
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="6"
+                  max="19"
+                  step="0.25"
+                  value={sunHour}
+                  onChange={(e) => setSunHour(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-[#1b261e] rounded-lg appearance-none cursor-pointer accent-amber-400"
+                />
+              </div>
+
+              {/* 실시간 태양 천문 궤적 및 그림자 지표 */}
+              <div className="grid grid-cols-3 gap-1.5 text-[10px] bg-[#0c130e] p-2 rounded-lg border border-[#1f2f22]">
+                <div>
+                  <span className="text-slate-400 block">태양 방위각</span>
+                  <span className="font-bold text-slate-200 font-mono">
+                    {sunInfo?.azimuthDeg ?? 180}°
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">태양 고도각</span>
+                  <span className="font-bold text-amber-300 font-mono">
+                    {Math.max(-90, Math.min(90, sunInfo?.altitudeDeg ?? 45))}°
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">그림자 배율</span>
+                  <span className="font-bold text-emerald-400 font-mono">
+                    {sunInfo?.altitudeDeg && sunInfo.altitudeDeg > 5
+                      ? `${(1 / Math.tan((sunInfo.altitudeDeg * Math.PI) / 180)).toFixed(1)}x`
+                      : '장대 그림자'}
+                  </span>
+                </div>
+              </div>
+
+              {/* [건축법 제86조] 연속 일조 시간 및 법적 적합성 판정 카드 */}
+              {continuousDaylightResult && (
+                <div className="p-2.5 rounded-lg bg-[#0a140f] border border-amber-600/50 space-y-1.5 animate-fade-in text-[10.5px]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-300 flex items-center gap-1">
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      연속 일조권 법적 판정
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                        continuousDaylightResult.status === 'PASS'
+                          ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
+                          : continuousDaylightResult.status === 'WARNING'
+                          ? 'bg-amber-950 text-amber-300 border-amber-600'
+                          : 'bg-rose-950 text-rose-300 border-rose-600'
+                      }`}
+                    >
+                      {continuousDaylightResult.status === 'PASS'
+                        ? '✅ 법적 기준 적합'
+                        : continuousDaylightResult.status === 'WARNING'
+                        ? '⚠️ 일조 침해 우려'
+                        : '❌ 일조권 위반'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                      <span className="text-slate-400 block text-[9px]">최대 연속 일조 시간</span>
+                      <span className="font-mono font-bold text-emerald-300 text-xs">
+                        {continuousDaylightResult.continuousHours}시간 {continuousDaylightResult.continuousMinutes}분
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                      <span className="text-slate-400 block text-[9px]">총 일조 시간 (08~16시)</span>
+                      <span className="font-mono font-bold text-amber-300 text-xs">
+                        {continuousDaylightResult.totalHours}시간 {continuousDaylightResult.totalMinutes}분
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-[9.5px] text-slate-300 leading-tight pt-0.5">
+                    {continuousDaylightResult.legalVerdict}
+                  </p>
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
       {/* [부지정보/접근성 탭 섹션 그룹 (유휴지, 시군, 북마크, 구역지정)] */}
       {activeSidebarTab === 'site_access' && (
@@ -2084,6 +2133,126 @@ export const ControlPanel: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* [7. 군 유휴부지 개발 시뮬레이션 기즈모 & 용적률·사업성 자동 계산기] */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#132219] to-[#0c1611] border border-cyan-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-400">
+                <Building2 className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  용적률·건폐율 & 사업성 자동 계산기
+                </span>
+                <span className="text-[10px] text-cyan-300/80 block">
+                  실시간 법정 한도 판정 & 수용/고용 인구 집계
+                </span>
+              </div>
+            </div>
+            {siteFeasibilityResult && (
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                  siteFeasibilityResult.compliance === 'PASS'
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
+                    : 'bg-rose-950 text-rose-300 border-rose-600'
+                }`}
+              >
+                {siteFeasibilityResult.compliance === 'PASS' ? '✅ 법정 규제 적합' : '⚠️ 법정 한도 초과'}
+              </span>
+            )}
+          </div>
+
+          {siteFeasibilityResult && (
+            <div className="space-y-2 text-[10.5px]">
+              {/* 대지면적 & 건축/연면적 */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-1.5 rounded bg-[#0b1610] border border-[#1f3525]">
+                  <span className="text-slate-400 block text-[9px]">부지 총면적</span>
+                  <span className="font-mono font-bold text-slate-200">
+                    {siteFeasibilityResult.siteAreaSqm.toLocaleString()} ㎡
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block">
+                    약 {siteFeasibilityResult.siteAreaPyeong.toLocaleString()} 평
+                  </span>
+                </div>
+                <div className="p-1.5 rounded bg-[#0b1610] border border-[#1f3525]">
+                  <span className="text-slate-400 block text-[9px]">계획 건축면적 / 연면적</span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {siteFeasibilityResult.totalFootprintSqm.toLocaleString()} ㎡
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block font-mono">
+                    연면적: {siteFeasibilityResult.totalGrossFloorAreaSqm.toLocaleString()} ㎡
+                  </span>
+                </div>
+              </div>
+
+              {/* 건폐율 & 용적률 진단 게이지 */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-2 rounded bg-[#0b1610] border border-[#1f3525] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[9.5px]">달성 건폐율(BCR)</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {siteFeasibilityResult.achievedBcr}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${siteFeasibilityResult.achievedBcr <= siteFeasibilityResult.legalMaxBcr ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                      style={{ width: `${Math.min(100, (siteFeasibilityResult.achievedBcr / siteFeasibilityResult.legalMaxBcr) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[8.5px] text-slate-400 font-mono">
+                    <span>계획 {siteFeasibilityResult.achievedBcr}%</span>
+                    <span>법정 {siteFeasibilityResult.legalMaxBcr}%</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-[#0b1610] border border-[#1f3525] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[9.5px]">달성 용적률(FAR)</span>
+                    <span className="font-mono font-bold text-cyan-400">
+                      {siteFeasibilityResult.achievedFar}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${siteFeasibilityResult.achievedFar <= siteFeasibilityResult.legalMaxFar ? 'bg-cyan-500' : 'bg-rose-500'}`}
+                      style={{ width: `${Math.min(100, (siteFeasibilityResult.achievedFar / siteFeasibilityResult.legalMaxFar) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[8.5px] text-slate-400 font-mono">
+                    <span>계획 {siteFeasibilityResult.achievedFar}%</span>
+                    <span>법정 {siteFeasibilityResult.legalMaxFar}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 수용 인구 & 고용 유발 인원 지표 */}
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="p-1.5 rounded bg-cyan-950/40 border border-cyan-800/40">
+                  <span className="text-slate-400 block text-[9px]">예상 수용 인구</span>
+                  <span className="font-mono font-bold text-cyan-200 text-sm">
+                    {siteFeasibilityResult.residentPop.toLocaleString()} 명
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block">33㎡/인 기준</span>
+                </div>
+                <div className="p-1.5 rounded bg-emerald-950/40 border border-emerald-800/40">
+                  <span className="text-slate-400 block text-[9px]">고용 유발 인원</span>
+                  <span className="font-mono font-bold text-emerald-200 text-sm">
+                    {siteFeasibilityResult.employmentPop.toLocaleString()} 명
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block">25㎡/인(업무·연구)</span>
+                </div>
+              </div>
+
+              {/* 검토 요약 */}
+              <div className="p-1.5 rounded bg-[#0a120d] border border-[#1d3022] text-[9.5px] text-slate-300">
+                {siteFeasibilityResult.summary}
+              </div>
+            </div>
+          )}
+        </div>
       </section>
         </>
       )}
@@ -3103,6 +3272,170 @@ export const ControlPanel: React.FC = () => {
           </span>
         </div>
 
+        {/* [1. 다목적 3D 측정기 (직선거리 · 건물높이 · 다각형 면적/평수 & 치수선)] */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#14231b] to-[#0c1610] border border-amber-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-amber-950 border border-amber-700/60 text-amber-400">
+                <Ruler className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  다목적 3D 측정기 (Ruler & Area)
+                </span>
+                <span className="text-[10px] text-amber-300/80 block">
+                  직선·경사거리 / 건물높이 / 다각형 면적(평)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleMeasureMode}
+              className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all ${
+                isMeasureMode
+                  ? 'bg-amber-500 border-amber-300 text-slate-950 shadow-md ring-1 ring-amber-400 animate-pulse'
+                  : 'bg-[#121c16] border-amber-800/60 text-amber-300 hover:bg-[#1a2920]'
+              }`}
+            >
+              {isMeasureMode ? '측정 중 (클릭)' : '측정 시작'}
+            </button>
+          </div>
+
+          {/* 측정 서브타입 선택 (거리 / 높이 / 면적) */}
+          <div className="grid grid-cols-3 gap-1 pt-0.5">
+            {[
+              { type: 'distance' as const, label: '3D 거리/경사', desc: '직선·표고차' },
+              { type: 'height' as const, label: '건물 실측고', desc: '지표~옥상' },
+              { type: 'area' as const, label: '다각형 면적', desc: '㎡ 및 평수' },
+            ].map((st) => (
+              <button
+                key={st.type}
+                type="button"
+                onClick={() => setMeasureSubtype(st.type)}
+                className={`py-1.5 px-1 rounded text-center transition-all border flex flex-col items-center gap-0.5 ${
+                  measureSubtype === st.type
+                    ? 'bg-amber-600/30 border-amber-400 text-amber-200 font-bold shadow-sm'
+                    : 'bg-[#142017] border-[#25382a] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span className="text-[10.5px] font-semibold">{st.label}</span>
+                <span className="text-[8.5px] opacity-75">{st.desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* 측정 안내 문구 */}
+          <div className="text-[9.5px] text-amber-200/80 bg-amber-950/30 p-1.5 rounded border border-amber-800/30">
+            {measureSubtype === 'distance' && '💡 지도 위 2개 지점을 클릭하면 3D 경사거리, 2D 수평거리, 표고차(ΔH), 경사도를 즉시 산출합니다.'}
+            {measureSubtype === 'height' && '💡 건물의 지표면 기단부와 옥상 포인트를 클릭하면 실측 건물 높이와 층수를 계산합니다.'}
+            {measureSubtype === 'area' && '💡 다각형의 모서리를 순서대로 3점 이상 클릭하면 면적(㎡/평), 둘레, 포함 건물/필지 수를 집계합니다.'}
+          </div>
+
+          {/* 실시간 측정 결과 카드 */}
+          {measureResult && (
+            <div className="p-2.5 rounded-lg bg-[#0a140e] border border-amber-500/60 space-y-2 animate-fade-in">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                  실측 연산 결과
+                </span>
+                <button
+                  type="button"
+                  onClick={clearMeasure}
+                  className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+                >
+                  초기화
+                </button>
+              </div>
+
+              {measureResult.subtype === 'distance' && (
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="p-1.5 rounded bg-amber-950/40 border border-amber-800/40">
+                    <span className="text-slate-400 block text-[9px]">3D 실측 거리</span>
+                    <span className="font-mono font-bold text-amber-300 text-sm">
+                      {measureResult.directDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-amber-950/40 border border-amber-800/40">
+                    <span className="text-slate-400 block text-[9px]">수평 투영 거리</span>
+                    <span className="font-mono font-bold text-slate-200 text-sm">
+                      {measureResult.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">표고차 (ΔH)</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {measureResult.elevationDeltaMeters} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">평균 경사도</span>
+                    <span className="font-mono font-bold text-emerald-300">
+                      {measureResult.slopeDegrees}° ({measureResult.slopePercent}%)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {measureResult.subtype === 'height' && (
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="col-span-2 p-2 rounded bg-amber-950/50 border border-amber-700/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">실측 건물 높이</span>
+                      <span className="font-mono font-extrabold text-amber-300 text-base">
+                        {measureResult.buildingHeightMeters?.toFixed(1) || measureResult.elevationDeltaMeters} m
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-bold px-2 py-1 rounded bg-amber-900/60 text-amber-200 border border-amber-600">
+                      지상 약 {Math.max(1, Math.round((measureResult.buildingHeightMeters || measureResult.elevationDeltaMeters) / 3.2))}층
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">지표면 표고</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      EL. {measureResult.elevations[0]} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">옥상 표고</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      EL. {measureResult.elevations[1]} m
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {measureResult.subtype === 'area' && (
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="col-span-2 p-2 rounded bg-emerald-950/50 border border-emerald-700/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">구역 실측 면적</span>
+                      <span className="font-mono font-extrabold text-emerald-300 text-base">
+                        {measureResult.areaSqm?.toLocaleString()} ㎡
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-bold px-2 py-1 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-600">
+                      약 {measureResult.areaPyeong?.toLocaleString()} 평
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">외곽 둘레</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {measureResult.perimeterMeters?.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">포함 건물 / 필지</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {measureResult.containedBuildings ?? 0}동 / {measureResult.containedParcels ?? 0}필지
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* 3단 경사도 분석 격자 오버레이 토글 */}
         <div className="flex items-center justify-between p-2.5 rounded bg-[#18221b] border border-[#29382e]">
           <div>
@@ -3510,6 +3843,48 @@ export const ControlPanel: React.FC = () => {
                       </span>
                     </span>
                   </div>
+
+                  {/* 25.5톤 덤프트럭 환산 및 추정 토목공사비 산출 */}
+                  <div className="grid grid-cols-2 gap-1.5 text-[9.5px] font-mono bg-[#09150e] p-1.5 rounded border border-[#1b3022]">
+                    <div className="text-rose-300">
+                      25.5t 덤프: {Math.ceil(cutFill.result.totalCutVolumeM3 / 15).toLocaleString()}대 반출
+                    </div>
+                    <div className="text-blue-300">
+                      25.5t 덤프: {Math.ceil(cutFill.result.totalFillVolumeM3 / 15).toLocaleString()}대 반입
+                    </div>
+                  </div>
+
+                  {cutFill.result.estimatedCivilCost && (
+                    <div className="p-2 rounded bg-[#0a140f] border border-emerald-700/60 space-y-1.5 text-[10px]">
+                      <div className="flex items-center justify-between text-emerald-300 font-bold">
+                        <span className="flex items-center gap-1">
+                          <Scale className="w-3 h-3 text-emerald-400" />
+                          추정 토목공사비 산출
+                        </span>
+                        <span className="font-mono text-xs font-extrabold text-amber-300">
+                          {Math.round(cutFill.result.estimatedCivilCost.totalCostKrw / 10000).toLocaleString()} 만원
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 text-[9px] text-slate-400 font-mono">
+                        <div className="flex justify-between">
+                          <span>• 절토 공사비(8,500원/㎥):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.cutCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• 성토 및 다짐비(9,500원/㎥):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.fillCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• 덤프 사토 운반비(12만원/대):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.transportCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• 부지 정지비(4,000원/㎡):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.siteGradingCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

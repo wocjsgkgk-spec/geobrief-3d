@@ -57,6 +57,13 @@ import { analyzeSlopeGrid, generateElevationProfile } from '@/utils/terrainAnaly
 import { aggregateBuildingFeatures } from '@/utils/gangwonSpatialAggregator';
 import { enforceMaxActiveLayers } from '@/utils/layerBudgetGuard';
 import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
+import { getGangwon18MilitarySiteById } from '@/constants/gangwon18MilitarySites';
+import {
+  VWorld3DMeasureEngine,
+  VWorldDaylightEngine,
+  VWorldCutFillEngine,
+  VWorldSiteDevelopmentEngine,
+} from '@/lib/vendor/vworldAnalysisSuite';
 import {
   Ruler,
   ShieldAlert,
@@ -5726,7 +5733,7 @@ export const MapViewer: React.FC = () => {
     setGpuBuildingLayersVisibility(map, false, true);
   }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
-  // 21. [3D 실측 줄자 (3D Ruler) 인터랙션 & GeoJSON 동기화]
+  // 21. [3D 다목적 실측 줄자 (3D Ruler & Area) 인터랙션 & GeoJSON 동기화]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
@@ -5737,16 +5744,33 @@ export const MapViewer: React.FC = () => {
       const handleMeasureClick = (e: maplibregl.MapMouseEvent) => {
         const pt: [number, number] = [e.lngLat.lng, e.lngLat.lat];
         const currentPts = useMapStore.getState().measurePoints;
+        const subtype = useMapStore.getState().measureSubtype || 'distance';
 
-        if (currentPts.length === 0) {
+        if (subtype === 'distance') {
+          if (currentPts.length === 0) {
+            addMeasurePoint(pt);
+          } else {
+            const nextPts: [number, number][] = [currentPts[0], pt];
+            addMeasurePoint(pt);
+            const res = VWorld3DMeasureEngine.calculate(map, nextPts, { subtype: 'distance' });
+            setMeasureResult(res);
+          }
+        } else if (subtype === 'height') {
+          if (currentPts.length === 0) {
+            addMeasurePoint(pt);
+          } else {
+            const nextPts: [number, number][] = [currentPts[0], pt];
+            addMeasurePoint(pt);
+            const res = VWorld3DMeasureEngine.calculate(map, nextPts, { subtype: 'height' });
+            setMeasureResult(res);
+          }
+        } else if (subtype === 'area') {
+          const nextPts: [number, number][] = [...currentPts, pt];
           addMeasurePoint(pt);
-        } else if (currentPts.length === 1) {
-          const pt1 = currentPts[0];
-          addMeasurePoint(pt);
-          const res = calculate3DMeasurement(map, pt1, pt);
-          setMeasureResult(res);
-        } else {
-          addMeasurePoint(pt);
+          if (nextPts.length >= 3) {
+            const res = VWorld3DMeasureEngine.calculate(map, nextPts, { subtype: 'area' });
+            setMeasureResult(res);
+          }
         }
       };
 
@@ -5765,7 +5789,36 @@ export const MapViewer: React.FC = () => {
     const lineSource = map.getSource('measure-line-source') as maplibregl.GeoJSONSource;
     const pointsSource = map.getSource('measure-points-source') as maplibregl.GeoJSONSource;
 
-    if (measurePoints.length >= 2) {
+    const shouldShow = isMeasureMode || measurePoints.length > 0;
+    const vis = shouldShow ? 'visible' : 'none';
+
+    ['measure-line-glow', 'measure-line-main', 'measure-points-circle'].forEach((lid) => {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(lid, 'visibility', vis);
+      }
+    });
+
+    const subtype = useMapStore.getState().measureSubtype || 'distance';
+
+    if (subtype === 'area' && measurePoints.length >= 3) {
+      const ring = [...measurePoints];
+      if (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1]) {
+        ring.push(ring[0]);
+      }
+      lineSource?.setData({
+        type: 'FeatureCollection',
+        features: [
+          turf.polygon([ring]),
+          turf.lineString(ring),
+        ],
+      });
+      pointsSource?.setData({
+        type: 'FeatureCollection',
+        features: measurePoints.map((pt, idx) =>
+          turf.point(pt, { label: `P${idx + 1}` })
+        ),
+      });
+    } else if (measurePoints.length >= 2) {
       lineSource?.setData({
         type: 'FeatureCollection',
         features: [turf.lineString(measurePoints)],
@@ -5786,7 +5839,34 @@ export const MapViewer: React.FC = () => {
       lineSource?.setData({ type: 'FeatureCollection', features: [] });
       pointsSource?.setData({ type: 'FeatureCollection', features: [] });
     }
-  }, [measurePoints, isMapLoaded]);
+  }, [measurePoints, isMapLoaded, isMeasureMode]);
+
+  // 21-1. [3D 일조권 및 연속 일조 시간 시뮬레이션 동기화]
+  useEffect(() => {
+    const polyCenter = polygonCenter || [viewport.longitude, viewport.latitude];
+    const season = useMapStore.getState().sunSeason || 'winter_solstice';
+    const daylight = VWorldDaylightEngine.calculateDaylightAndShadow(
+      polyCenter[1],
+      polyCenter[0],
+      sunHour,
+      season,
+      selectedBuilding?.height || 24.0
+    );
+    useMapStore.getState().setContinuousDaylightResult(daylight.daylightResult);
+  }, [sunHour, polygonCenter, viewport.longitude, viewport.latitude, selectedBuilding?.height]);
+
+  // 21-2. [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션 동기화]
+  useEffect(() => {
+    const site = getGangwon18MilitarySiteById(selectedIdleSiteId || '');
+    const siteArea = site?.areaSqm || polygonArea?.sqm || 310000;
+    const zoningName = site?.zoning || '제2종일반주거지역';
+    const feasibility = VWorldSiteDevelopmentEngine.calculateFeasibility(
+      siteArea,
+      zoningName,
+      placedFacilities
+    );
+    useMapStore.getState().setSiteFeasibilityResult(feasibility);
+  }, [placedFacilities, selectedIdleSiteId, polygonArea?.sqm]);
 
   // 22. [ESC 키 단축키로 사계 분석 또는 3D 줄자 해제]
   useEffect(() => {

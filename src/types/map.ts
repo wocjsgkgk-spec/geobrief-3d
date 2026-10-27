@@ -253,7 +253,10 @@ export interface ViewshedResult {
 }
 
 // [3D 실측 줄자 측정 결과]
+export type Measure3DSubtype = 'distance' | 'height' | 'area';
+
 export interface Measure3DResult {
+  subtype?: Measure3DSubtype;
   points: [number, number][];
   elevations: [number, number];
   horizontalDistanceMeters: number;
@@ -262,6 +265,43 @@ export interface Measure3DResult {
   elevationDeltaMeters: number;
   slopePercent: number;
   slopeDegrees: number;
+  buildingHeightMeters?: number;
+  areaSqm?: number;
+  areaPyeong?: number;
+  perimeterMeters?: number;
+  containedBuildings?: number;
+  containedParcels?: number;
+}
+
+// [3D 일조권 및 연속 일조 시간 분석 결과]
+export type SunSeasonType = 'winter_solstice' | 'equinox' | 'summer_solstice';
+
+export interface ContinuousDaylightResult {
+  season: SunSeasonType;
+  seasonLabel: string;
+  continuousHours: number;
+  continuousMinutes: number;
+  totalHours: number;
+  totalMinutes: number;
+  status: 'PASS' | 'WARNING' | 'INFRINGED';
+  legalStandard: string;
+  legalVerdict: string;
+}
+
+// [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션 결과]
+export interface SiteFeasibilityResult {
+  siteAreaSqm: number;
+  siteAreaPyeong: number;
+  totalFootprintSqm: number;
+  totalGrossFloorAreaSqm: number;
+  achievedBcr: number; // 건폐율 (%)
+  legalMaxBcr: number; // 법정 건폐율 상한 (%)
+  achievedFar: number; // 용적률 (%)
+  legalMaxFar: number; // 법정 용적률 상한 (%)
+  residentPop: number; // 수용 인구 (인)
+  employmentPop: number; // 고용 유발 인원 (인)
+  compliance: 'PASS' | 'EXCEEDED';
+  summary: string;
 }
 
 // [3D 공간 주석 핀 (Billboard Pin)]
@@ -353,6 +393,21 @@ export interface CutFillResult {
   dumpTruck15tCutCount: number; // 15톤 덤프트럭(약 10m3) 기준 절토 반출 대수
   dumpTruck15tFillCount: number; // 성토 반입 대수
   dumpTruck15tNetCount: number; // 순 토공 환산 대수
+  dumpTruck25tCutCount?: number; // 25.5톤 덤프트럭(약 15m3) 기준 절토 반출 대수
+  dumpTruck25tFillCount?: number; // 25.5톤 성토 반입 대수
+  dumpTruck25tNetCount?: number;
+  estimatedCivilCost?: {
+    cutCostKrw: number;
+    fillCostKrw: number;
+    transportCostKrw: number;
+    siteGradingCostKrw: number;
+    totalCostKrw: number;
+  };
+  slopeSuitability?: {
+    gentlePct: number; // <= 15도 개발 적지
+    moderatePct: number; // 15~25도 완경사
+    steepPct: number; // > 25도 급경사 보전
+  };
   cutCellCount: number;
   fillCellCount: number;
   balancedCellCount: number;

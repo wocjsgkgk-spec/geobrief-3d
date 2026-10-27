@@ -18,6 +18,10 @@ import {
   VworldDiagnosticState,
   ViewshedResult,
   Measure3DResult,
+  Measure3DSubtype,
+  SunSeasonType,
+  ContinuousDaylightResult,
+  SiteFeasibilityResult,
   SpatialPin,
   TacticalArrow,
   WaterLevelState,
@@ -408,15 +412,27 @@ interface MapStoreState {
   setViewshedResult: (result: ViewshedResult | null) => void;
   clearViewshed: () => void;
 
-  // 정밀 3D 거리 및 고저차 측정 도구 (3D Ruler)
+  // 다목적 3D 측정기 (직선거리 · 높이 · 다각형 면적)
   isMeasureMode: boolean;
+  measureSubtype: Measure3DSubtype;
   measurePoints: [number, number][];
   measureResult: Measure3DResult | null;
   toggleMeasureMode: () => void;
+  setMeasureSubtype: (subtype: Measure3DSubtype) => void;
   setMeasurePoints: (points: [number, number][]) => void;
   addMeasurePoint: (point: [number, number]) => void;
   setMeasureResult: (result: Measure3DResult | null) => void;
   clearMeasure: () => void;
+
+  // [3D 일조권 및 연속 일조 시간 시뮬레이션]
+  sunSeason: SunSeasonType;
+  setSunSeason: (season: SunSeasonType) => void;
+  continuousDaylightResult: ContinuousDaylightResult | null;
+  setContinuousDaylightResult: (result: ContinuousDaylightResult | null) => void;
+
+  // [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션]
+  siteFeasibilityResult: SiteFeasibilityResult | null;
+  setSiteFeasibilityResult: (result: SiteFeasibilityResult | null) => void;
 
   // [3D 공간 주석 핀 (Billboard Pin)]
   spatialPins: SpatialPin[];
@@ -1157,8 +1173,9 @@ export const useMapStore = create<MapStoreState>()(
       setViewshedResult: (viewshedResult) => set({ viewshedResult }),
       clearViewshed: () => set({ viewshedResult: null, isViewshedMode: false }),
 
-      // 정밀 3D 거리 및 고저차 측정 도구 (3D Ruler)
+      // 다목적 3D 측정기 (직선거리 · 높이 · 다각형 면적)
       isMeasureMode: false,
+      measureSubtype: 'distance',
       measurePoints: [],
       measureResult: null,
       toggleMeasureMode: () =>
@@ -1167,13 +1184,20 @@ export const useMapStore = create<MapStoreState>()(
           isViewshedMode: false,
           isDrawingMode: false,
           stampMode: false,
+          isPinMode: false,
+          isArrowMode: false,
           measurePoints: [],
           measureResult: null,
         })),
+      setMeasureSubtype: (measureSubtype) =>
+        set({ measureSubtype, measurePoints: [], measureResult: null }),
       setMeasurePoints: (measurePoints) => set({ measurePoints }),
       addMeasurePoint: (point) => {
+        const subtype = get().measureSubtype;
         const current = get().measurePoints;
-        if (current.length >= 2) {
+        if (subtype === 'distance' && current.length >= 2) {
+          set({ measurePoints: [point], measureResult: null });
+        } else if (subtype === 'height' && current.length >= 2) {
           set({ measurePoints: [point], measureResult: null });
         } else {
           set({ measurePoints: [...current, point] });
@@ -1181,6 +1205,16 @@ export const useMapStore = create<MapStoreState>()(
       },
       setMeasureResult: (measureResult) => set({ measureResult }),
       clearMeasure: () => set({ measurePoints: [], measureResult: null, isMeasureMode: false }),
+
+      // [3D 일조권 및 연속 일조 시간 시뮬레이션]
+      sunSeason: 'winter_solstice',
+      setSunSeason: (sunSeason) => set({ sunSeason }),
+      continuousDaylightResult: null,
+      setContinuousDaylightResult: (continuousDaylightResult) => set({ continuousDaylightResult }),
+
+      // [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션]
+      siteFeasibilityResult: null,
+      setSiteFeasibilityResult: (siteFeasibilityResult) => set({ siteFeasibilityResult }),
 
       // [3D 공간 주석 핀 (Billboard Pin)]
       spatialPins: [],
