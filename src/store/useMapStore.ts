@@ -49,6 +49,7 @@ import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
 import { BORDER_DISTRICT_IDS } from '@/constants/borderSecurityZones';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
+import { GANGWON_18_MILITARY_SITES, getGangwon18MilitarySiteById } from '@/constants/gangwon18MilitarySites';
 import { generateStrategicFacilities, STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { generateSpiralPreset, generateApproachPreset } from '@/utils/cinematicPathInterpolator';
 import type { CloudProject } from '@/lib/supabase';
@@ -1060,10 +1061,11 @@ export const useMapStore = create<MapStoreState>()(
           molitDiagnostic: { ...state.molitDiagnostic, ...data },
         })),
 
-      // 전략 군 유휴지 실증 프리셋 (강원 6대+ 다중 거점 통합)
-      selectedIdleSiteId: 'first-logistics-wonju',
+      // 전략 군 유휴지 실증 프리셋 (강원 18개 시·군 전역 거점 통합)
+      selectedIdleSiteId: 'wj-1st-logistics',
       selectIdleSite: (siteId: string) => {
-        const gangwonSite = getGangwonMilitarySiteById(siteId);
+        const gangwon18 = getGangwon18MilitarySiteById(siteId);
+        const gangwonSite = gangwon18 || getGangwonMilitarySiteById(siteId);
         const legacySite = MILITARY_IDLE_SITES.find((s) => s.id === siteId);
         const found = gangwonSite || legacySite;
         if (!found) return;

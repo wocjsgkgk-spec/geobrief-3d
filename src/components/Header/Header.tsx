@@ -45,6 +45,11 @@ import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
 import { RenderMode3D } from '@/types/map';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
 import {
+  GANGWON_18_MILITARY_SITES,
+  getGangwon18MilitarySiteById,
+  GangwonSubregionType,
+} from '@/constants/gangwon18MilitarySites';
+import {
   GANGWON_18_REGIONS,
   GANGWON_SUBREGIONS,
   GangwonSubregion,
@@ -122,7 +127,9 @@ export const Header: React.FC = () => {
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const currentRegion = getGangwonRegionByIdOrName(selectedRegionId || '');
-  const currentMilitarySite = getGangwonMilitarySiteById(selectedIdleSiteId || '');
+  const currentMilitarySite =
+    getGangwon18MilitarySiteById(selectedIdleSiteId || '') ||
+    getGangwonMilitarySiteById(selectedIdleSiteId || '');
   const currentDisplayName = currentMilitarySite?.shortName || currentRegion?.name || '원주시';
 
 
@@ -392,52 +399,68 @@ export const Header: React.FC = () => {
                 </div>
               )}
 
-              {/* 2) 강원권 3D 스마트 복합단지(LOD2) 5대 거점 */}
+              {/* 2) 강원특별자치도 18개 시·군 전역 군 유휴부지 & 핵심 거점 */}
               {siteTab === 'hubs' && (
-                <div className="flex flex-col space-y-1">
+                <div className="flex flex-col space-y-2">
                   <div className="px-1.5 py-0.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-[#243529] pb-1">
-                    <span className="text-emerald-300">LOD2 실사 건물 스마트 복합단지</span>
-                    <span className="text-emerald-400 font-mono text-[9.5px]">{GANGWON_MILITARY_SITES.length}개소</span>
+                    <span className="text-emerald-300">강원 18개 시·군 군 유휴부지 & 핵심 거점</span>
+                    <span className="text-emerald-400 font-mono text-[9.5px]">총 {GANGWON_18_MILITARY_SITES.length}개소</span>
                   </div>
-                  <div className="flex flex-col space-y-1 max-h-[55vh] overflow-y-auto pr-1">
-                    {GANGWON_MILITARY_SITES.map((site) => {
-                      const isSelected =
-                        selectedIdleSiteId === site.id || site.aliasIds.includes(selectedIdleSiteId || '');
+                  <div className="flex flex-col space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                    {(['영서 중·남부권', '북부 접경권', '동해안 및 태백권'] as GangwonSubregionType[]).map((subreg) => {
+                      const sitesInSub = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === subreg);
                       return (
-                        <button
-                          key={site.id}
-                          onClick={() => {
-                            selectIdleSite(site.id);
-                            setActiveDropdown(null);
-                          }}
-                          className={`w-full px-2.5 py-2 text-xs rounded-lg text-left transition-all flex items-center justify-between ${
-                            isSelected
-                              ? 'bg-emerald-950/80 border border-emerald-500/80 text-emerald-200 shadow-inner'
-                              : 'hover:bg-[#1e2e22] text-slate-200 border border-transparent'
-                          }`}
-                        >
-                          <div className="min-w-0 pr-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[9.5px] px-1.5 py-0.5 rounded font-mono font-semibold bg-[#17251c] text-emerald-300 border border-[#263c2c]">
-                                {site.hubCategoryLabel}
-                              </span>
-                              <span className="font-bold text-slate-100 truncate">
-                                {site.shortName}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
-                              {site.themeTitle}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end flex-shrink-0 text-[10px] font-mono">
-                            <span className="text-emerald-400 font-semibold">
-                              약 {site.areaPyeong.toLocaleString()}평
+                        <div key={subreg} className="bg-[#131f17]/90 rounded-lg p-1.5 border border-[#233829]">
+                          <div className="px-1.5 py-0.5 text-[10.5px] font-bold text-emerald-300 flex items-center justify-between mb-1">
+                            <span className="flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              {subreg}
                             </span>
-                            <span className="text-slate-400">
-                              {site.recommendedCamera.pitch}° 3D
-                            </span>
+                            <span className="text-[9.5px] font-mono text-slate-400">{sitesInSub.length}개 거점</span>
                           </div>
-                        </button>
+                          <div className="space-y-1">
+                            {sitesInSub.map((site) => {
+                              const isSelected = selectedIdleSiteId === site.id || site.aliasIds.includes(selectedIdleSiteId || '');
+                              return (
+                                <button
+                                  key={site.id}
+                                  type="button"
+                                  onClick={() => {
+                                    selectIdleSite(site.id);
+                                    setActiveDropdown(null);
+                                  }}
+                                  className={`w-full px-2 py-1.5 text-xs rounded-lg text-left transition-all flex items-center justify-between ${
+                                    isSelected
+                                      ? 'bg-emerald-950/90 border border-emerald-500/80 text-emerald-200 shadow-inner'
+                                      : 'hover:bg-[#1c2c20] text-slate-200 border border-transparent'
+                                  }`}
+                                >
+                                  <div className="min-w-0 pr-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[9px] px-1 py-0.2 rounded font-mono font-semibold bg-[#17251c] text-emerald-300 border border-[#263c2c]">
+                                        {site.regionName}
+                                      </span>
+                                      <span className="font-bold text-slate-100 truncate text-[11px]">
+                                        {site.shortName}
+                                      </span>
+                                    </div>
+                                    <p className="text-[9.5px] text-slate-400 truncate mt-0.5">
+                                      {site.targetUse}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col items-end flex-shrink-0 text-[9.5px] font-mono">
+                                    <span className="text-emerald-400 font-semibold">
+                                      약 {site.areaPyeong.toLocaleString()}평
+                                    </span>
+                                    <span className="text-slate-400">
+                                      {site.recommendedCamera.pitch}° 3D
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>

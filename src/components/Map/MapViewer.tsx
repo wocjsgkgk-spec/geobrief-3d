@@ -40,6 +40,7 @@ import { setupVworldPoiLayer, updateVworldPoisWithBuildings, VWORLD_POI_LAYER_ID
 import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
+import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
 import {
   createGpuBuildingStackLayers,
   ensureBuildingPatterns,
@@ -552,6 +553,7 @@ export const MapViewer: React.FC = () => {
   const realisticKoreanCityLayerRef = useRef<RealisticKoreanCityLayer | null>(null);
   const smartCityComplexLayerRef = useRef<SmartCityComplex3DLayer | null>(null);
   const proceduralTreesLayerRef = useRef<ProceduralTrees3DLayer | null>(null);
+  const militarySiteVisualizerRef = useRef<MilitarySiteVisualizer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
   const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
@@ -3209,6 +3211,32 @@ export const MapViewer: React.FC = () => {
         console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
       }
 
+      // [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진]
+      try {
+        const visualizer = new MilitarySiteVisualizer({
+          onSelectSite: (siteId) => {
+            useMapStore.getState().selectIdleSite(siteId);
+          },
+          onModeChange: (_siteId, mode) => {
+            const currentLayerState = useMapStore.getState().layers.firstLogisticsSmartCity;
+            if (mode === 'future_masterplan') {
+              if (!currentLayerState) {
+                useMapStore.getState().toggleLayer('firstLogisticsSmartCity');
+              }
+            } else {
+              if (currentLayerState) {
+                useMapStore.getState().toggleLayer('firstLogisticsSmartCity');
+              }
+            }
+          },
+          initialMode: layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military',
+        });
+        visualizer.attach(map);
+        militarySiteVisualizerRef.current = visualizer;
+      } catch (visErr) {
+        console.warn('[MilitarySiteVisualizer] registration notice:', visErr);
+      }
+
       // [4단계 신규: 3D 입체 수목(식생 InstancedMesh) 및 가로수 고성능 렌더러]
       try {
         const treesLayer = new ProceduralTrees3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
@@ -3532,6 +3560,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         smartCityComplexLayerRef.current = null;
+      }
+      if (militarySiteVisualizerRef.current) {
+        try {
+          militarySiteVisualizerRef.current.detach();
+        } catch {
+          // ignore
+        }
+        militarySiteVisualizerRef.current = null;
       }
       if (waterLevelLayerRef.current && map.getLayer('custom-water-level-layer')) {
         try {
@@ -4222,6 +4258,18 @@ export const MapViewer: React.FC = () => {
         smartCityComplexLayerRef.current.setSite(selectedIdleSiteId);
       }
       smartCityComplexLayerRef.current.setVisible(!!layers.firstLogisticsSmartCity);
+    }
+  }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
+
+  // 8-0-3-1. [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진 동기화]
+  useEffect(() => {
+    if (militarySiteVisualizerRef.current) {
+      if (selectedIdleSiteId) {
+        militarySiteVisualizerRef.current.selectSite(selectedIdleSiteId);
+      }
+      militarySiteVisualizerRef.current.setDisplayMode(
+        layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military'
+      );
     }
   }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
 

@@ -68,6 +68,13 @@ import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
 import { getGangwonZone } from '@/utils/regionalBuildingStyler';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
+import {
+  GANGWON_18_MILITARY_SITES,
+  Gangwon18MilitarySite,
+  GangwonSubregionType,
+  getGangwon18MilitarySiteById,
+  getMilitarySitesBySubregion,
+} from '@/constants/gangwon18MilitarySites';
 import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { AddressSearch } from '@/components/Search/AddressSearch';
 import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
@@ -513,59 +520,77 @@ export const ControlPanel: React.FC = () => {
       {/* [부지정보/접근성 탭 섹션 그룹 (유휴지, 시군, 북마크, 구역지정)] */}
       {activeSidebarTab === 'site_access' && (
         <>
-          {/* 3. [강원권 다중 거점] 군 유휴부지 3D 스마트 복합단지(LOD2) 자동 안착 카탈로그 */}
+          {/* 3. [강원 18개 시·군 전역] 군 유휴부지 3D 실측 DB & 마스터플랜 카탈로그 */}
           {(() => {
+            const current18 = getGangwon18MilitarySiteById(selectedIdleSiteId || '');
             const currentGangwon = getGangwonMilitarySiteById(selectedIdleSiteId || '');
             const currentLegacy = MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId);
-            const currentSite = currentGangwon || currentLegacy || GANGWON_MILITARY_SITES[0];
+            const currentSite = current18 || currentGangwon || currentLegacy || GANGWON_18_MILITARY_SITES[0];
+
+            const sitesWestSouth = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === '영서 중·남부권');
+            const sitesBorder = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === '북부 접경권');
+            const sitesEastCoast = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === '동해안 및 태백권');
+
+            const isMasterplanActive = !!layers.firstLogisticsSmartCity;
 
             return (
               <section className="p-4 border-b border-[#242f27] space-y-2.5 bg-[#121c15]">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                     <Crosshair className="w-4 h-4 text-emerald-400" />
-                    강원 군 유휴지 3D 스마트 복합단지 (LOD2)
+                    강원 18개 시·군 군 유휴부지 실측 DB
                   </h2>
                   <span className="text-[10px] text-emerald-300 font-mono font-semibold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/60">
-                    실증 {GANGWON_MILITARY_SITES.length}개 거점
+                    전역 {GANGWON_18_MILITARY_SITES.length}개 거점
                   </span>
                 </div>
 
-                {/* 유휴지 선택 셀렉터 */}
+                {/* 3대 권역별 유휴부지 선택 셀렉터 */}
                 <div>
                   <select
                     value={selectedIdleSiteId || currentSite.id}
                     onChange={(e) => selectIdleSite(e.target.value)}
                     className="w-full bg-[#18261c] border border-[#2d4232] focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-100 font-medium focus:outline-none transition-colors cursor-pointer shadow-inner"
                   >
-                    <optgroup label="📍 강원권 3D 스마트 복합단지 핵심 거점" className="bg-[#121a14] text-emerald-400 font-bold">
-                      {GANGWON_MILITARY_SITES.map((site) => (
+                    <optgroup label="📍 영서 중·남부권 (원주·춘천·횡성·홍천·영월·평창·정선)" className="bg-[#121a14] text-emerald-400 font-bold">
+                      {sitesWestSouth.map((site) => (
                         <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
-                          [{site.hubCategoryLabel}] {site.name} ({site.areaPyeong.toLocaleString()}평)
+                          [{site.regionName}] {site.name} ({site.areaPyeong.toLocaleString()}평)
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="📋 기타 강원 군 유휴지 실증지" className="bg-[#121a14] text-slate-400 font-bold">
-                      {MILITARY_IDLE_SITES.filter(
-                        (ms) => !GANGWON_MILITARY_SITES.some((gs) => gs.id === ms.id || gs.aliasIds.includes(ms.id))
-                      ).map((site) => (
-                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-300 font-normal">
-                          {site.name} ({site.areaPyeong.toLocaleString()}평)
+                    <optgroup label="🛡️ 북부 접경권 (철원·화천·양구·인제·고성 — 사단 해체지)" className="bg-[#121a14] text-amber-400 font-bold">
+                      {sitesBorder.map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
+                          [{site.regionName}] {site.name} ({site.areaPyeong.toLocaleString()}평)
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🌊 동해안 및 태백권 (강릉·동해·속초·삼척·양양·태백)" className="bg-[#121a14] text-cyan-400 font-bold">
+                      {sitesEastCoast.map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
+                          [{site.regionName}] {site.name} ({site.areaPyeong.toLocaleString()}평)
                         </option>
                       ))}
                     </optgroup>
                   </select>
                 </div>
 
-                {/* 선택된 유휴지 브리핑 카드 */}
+                {/* 선택된 유휴지 종합 브리핑 카드 */}
                 {currentSite && (
                   <div className="p-3 bg-[#152219] border border-[#2a3e2f] rounded-lg space-y-2 text-xs">
+                    {/* 상단 타이틀 & 뱃지 */}
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          {'hubCategoryLabel' in currentSite && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {'subregion' in currentSite && (
                             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-semibold">
-                              {(currentSite as any).hubCategoryLabel}
+                              {(currentSite as any).subregion}
+                            </span>
+                          )}
+                          {'regionName' in currentSite && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#17251c] text-slate-300 border border-[#273a2d]">
+                              {(currentSite as any).regionName}
                             </span>
                           )}
                           <h3 className="font-bold text-slate-100 text-xs">
@@ -581,7 +606,7 @@ export const ControlPanel: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* 면적 & 관리기관 */}
+                    {/* 실측 속성 매트릭스 (면적, 관리기관, 현재상태, 계획용도, 경사도, 용도지역) */}
                     <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#0f1712] p-2 rounded border border-[#213024]">
                       <div>
                         <span className="text-slate-400 block">대지 면적</span>
@@ -595,6 +620,38 @@ export const ControlPanel: React.FC = () => {
                           {currentSite.managingAgency}
                         </span>
                       </div>
+                      {'currentStatus' in currentSite && (
+                        <div className="col-span-2 pt-1 border-t border-[#1a281e]">
+                          <span className="text-amber-400 block font-semibold text-[9.5px]">현재 상태</span>
+                          <span className="font-medium text-slate-200 block text-[10px]">
+                            {(currentSite as any).currentStatus}
+                          </span>
+                        </div>
+                      )}
+                      {'targetUse' in currentSite && (
+                        <div className="col-span-2">
+                          <span className="text-cyan-400 block font-semibold text-[9.5px]">계획 용도</span>
+                          <span className="font-medium text-cyan-200 block text-[10px]">
+                            {(currentSite as any).targetUse}
+                          </span>
+                        </div>
+                      )}
+                      {'averageSlope' in currentSite && (
+                        <div>
+                          <span className="text-slate-400 block text-[9.5px]">평균 경사도</span>
+                          <span className="font-mono text-emerald-300 font-semibold block text-[10px]">
+                            {(currentSite as any).averageSlope}
+                          </span>
+                        </div>
+                      )}
+                      {'zoning' in currentSite && (
+                        <div>
+                          <span className="text-slate-400 block text-[9.5px]">용도지역</span>
+                          <span className="font-medium text-slate-300 truncate block text-[10px]">
+                            {(currentSite as any).zoning}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* 개발 테마 & 비전 */}
@@ -607,6 +664,111 @@ export const ControlPanel: React.FC = () => {
                       <p className="text-[10px] text-emerald-100/80">
                         {currentSite.devVision}
                       </p>
+                    </div>
+
+                    {/* 3D 실시간 비교 스위치: 영내 기존 군 막사 vs 미래 3D 마스터플랜 */}
+                    <div className="p-2.5 rounded bg-[#101a14] border border-[#243929] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10.5px] font-bold text-slate-200 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                          3D 조형 모드 원클릭 비교
+                        </span>
+                        <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                          isMasterplanActive
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
+                            : 'bg-amber-950 text-amber-300 border-amber-600'
+                        }`}>
+                          {isMasterplanActive ? '🏢 미래 마스터플랜 ON' : '🏛️ 영내 기존 군막사 ON'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (layers.firstLogisticsSmartCity) {
+                              toggleLayer('firstLogisticsSmartCity');
+                            }
+                          }}
+                          className={`py-2 px-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all border ${
+                            !isMasterplanActive
+                              ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-950/60'
+                              : 'bg-[#18261c] text-slate-400 border-[#2b3d2f] hover:text-slate-200'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <Warehouse className="w-3.5 h-3.5" />
+                            영내 기존 군 막사
+                          </span>
+                          <span className="text-[8.5px] opacity-80 font-normal">
+                            병영막사·연병장·정비창
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!layers.firstLogisticsSmartCity) {
+                              toggleLayer('firstLogisticsSmartCity');
+                            }
+                          }}
+                          className={`py-2 px-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all border ${
+                            isMasterplanActive
+                              ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/60'
+                              : 'bg-[#18261c] text-slate-400 border-[#2b3d2f] hover:text-slate-200'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            미래 3D 마스터플랜
+                          </span>
+                          <span className="text-[8.5px] opacity-80 font-normal">
+                            R&D타워·주거·시민공원
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* 현재 선택된 모드의 세부 건물 리스트 */}
+                      {current18 && (
+                        <div className="pt-1.5 border-t border-[#1e2f23] space-y-1">
+                          <span className="text-[9.5px] font-semibold text-slate-400 flex items-center justify-between">
+                            <span>{isMasterplanActive ? '미래 마스터플랜 특화 시설 (LOD2+)' : '기존 군사시설 보존·철거 대상'}</span>
+                            <span className="text-[9px] font-mono text-emerald-400">
+                              {isMasterplanActive
+                                ? `${current18.futureBuildings.length}개 동`
+                                : `${current18.existingBuildings.length}개 동`}
+                            </span>
+                          </span>
+                          <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto pr-0.5">
+                            {isMasterplanActive
+                              ? current18.futureBuildings.map((b, bIdx) => (
+                                  <div
+                                    key={bIdx}
+                                    className="p-1.5 rounded bg-emerald-950/40 border border-emerald-800/50 flex items-center justify-between text-[9.5px]"
+                                  >
+                                    <span className="font-bold text-emerald-200 truncate pr-2">
+                                      🏢 {b.name}
+                                    </span>
+                                    <span className="font-mono text-emerald-300 font-semibold whitespace-nowrap">
+                                      {b.height}m ({b.floors}F)
+                                    </span>
+                                  </div>
+                                ))
+                              : current18.existingBuildings.map((b, bIdx) => (
+                                  <div
+                                    key={bIdx}
+                                    className="p-1.5 rounded bg-amber-950/30 border border-amber-800/40 flex items-center justify-between text-[9.5px]"
+                                  >
+                                    <span className="font-medium text-amber-200 truncate pr-2">
+                                      🏛️ {b.name}
+                                    </span>
+                                    <span className="font-mono text-amber-300 whitespace-nowrap">
+                                      {b.height > 1 ? `${b.height}m (${b.floors}F)` : '평지'}
+                                    </span>
+                                  </div>
+                                ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* 교통 접근성 실시간 진단 */}
@@ -629,51 +791,14 @@ export const ControlPanel: React.FC = () => {
                       </div>
                     )}
 
-                    {/* 3D 스마트 복합단지(LOD2) 절차적 메쉬 구성 */}
-                    <div className="p-2 rounded bg-cyan-950/25 border border-cyan-800/40 text-[10px] space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-cyan-300 flex items-center gap-1">
-                          <Box className="w-3 h-3 text-cyan-400" />
-                          3D 스마트 복합단지(LOD2) 자동 안착 메쉬
-                        </span>
-                        <span className="text-[9px] font-mono text-cyan-300 font-semibold bg-cyan-900/60 px-1.5 py-0.2 rounded">
-                          Terrain Clamped
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 pt-0.5 text-[9px]">
-                        {'complex3DPresets' in currentSite ? (
-                          (currentSite as any).complex3DPresets.map((preset: string, pIdx: number) => {
-                            const labelMap: Record<string, string> = {
-                              rd_tower: 'R&D 타워(헬리패드)',
-                              knowledge_center: '지식산업센터(태양광)',
-                              logistics_depot: '군수물류 데포(아치트러스)',
-                              watch_tower: '전술 감시탑(360°관측큐브)',
-                              residential_support: '표준 주거동(박공지붕)',
-                              civic_convention: '문화컨벤션(곡선아치)',
-                            };
-                            return (
-                              <span
-                                key={pIdx}
-                                className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-200 border border-cyan-700/60 font-medium"
-                              >
-                                {labelMap[preset] || preset}
-                              </span>
-                            );
-                          })
-                        ) : (
-                          <span className="text-slate-400">표준 군 복합지원 시설 메쉬</span>
-                        )}
-                      </div>
-                    </div>
-
                     {/* 원클릭 카메라 3D 항공 뷰 비행 버튼 */}
                     <button
                       type="button"
                       onClick={() => selectIdleSite(currentSite.id)}
-                      className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50"
+                      className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50"
                     >
                       <Navigation2 className="w-3.5 h-3.5" />
-                      <span>3D 항공 뷰(55°/20°) 전환 및 복합단지 안착</span>
+                      <span>3D 항공 뷰(55°/20°) 전환 및 부지 포커스</span>
                     </button>
                   </div>
                 )}
