@@ -34,6 +34,7 @@ import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
 import { generateDetailedBuildingMass } from '@/utils/buildingMassGenerator';
 import { ThreeDModelLayer } from './ThreeDModelLayer';
 import { ThreeboxBuildingLayer } from './ThreeboxBuildingLayer';
+import { VWorld3DTileLayer } from './VWorld3DTileLayer';
 import { LOD2BuildingEngine } from './LOD2BuildingEngine';
 import { RealisticKoreanCityLayer } from './RealisticKoreanCityLayer';
 import { setupVworldPoiLayer, updateVworldPoisWithBuildings, VWORLD_POI_LAYER_ID } from '@/utils/koreanPoiLayer';
@@ -561,6 +562,7 @@ export const MapViewer: React.FC = () => {
   const smartCityComplexLayerRef = useRef<SmartCityComplex3DLayer | null>(null);
   const proceduralTreesLayerRef = useRef<ProceduralTrees3DLayer | null>(null);
   const militarySiteVisualizerRef = useRef<MilitarySiteVisualizer | null>(null);
+  const vworld3DTileLayerRef = useRef<VWorld3DTileLayer | null>(null);
   const waterLevelLayerRef = useRef<WaterLevelLayer | null>(null);
   const uavSensorLayerRef = useRef<UavSensorLayer | null>(null);
   const deck3DTilesManagerRef = useRef<Deck3DTilesManager | null>(null);
@@ -3244,6 +3246,17 @@ export const MapViewer: React.FC = () => {
         console.warn('[MilitarySiteVisualizer] registration notice:', visErr);
       }
 
+      // [2단계 신규: 브이월드 실사 3D 타일 스트리밍 레이어(VWorld3DTileLayer) 등록]
+      try {
+        const vworldTileLayer = new VWorld3DTileLayer();
+        vworldTileLayer.setVisible(!!layers.vworld3DReal && !!layers.buildings3D);
+        map.addLayer(vworldTileLayer);
+        vworld3DTileLayerRef.current = vworldTileLayer;
+        (window as any).__vworld3DTileLayer = vworldTileLayer;
+      } catch (vwTileErr) {
+        console.warn('[MapViewer] VWorld3DTileLayer registration warning:', vwTileErr);
+      }
+
       // [4단계 신규: 3D 입체 수목(식생 InstancedMesh) 및 가로수 고성능 렌더러]
       try {
         const treesLayer = new ProceduralTrees3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
@@ -3407,6 +3420,9 @@ export const MapViewer: React.FC = () => {
       if (tacticalDefenseLayerRef.current) {
         tacticalDefenseLayerRef.current.setVisible(false);
       }
+      if (vworld3DTileLayerRef.current) {
+        vworld3DTileLayerRef.current.setVisible(false);
+      }
 
       try {
         map.easeTo({ pitch: 0, bearing: 0, duration: 250 });
@@ -3551,6 +3567,14 @@ export const MapViewer: React.FC = () => {
           // ignore
         }
         realisticKoreanCityLayerRef.current = null;
+      }
+      if (vworld3DTileLayerRef.current && map.getLayer('vworld-3d-tile-layer')) {
+        try {
+          map.removeLayer('vworld-3d-tile-layer');
+        } catch {
+          // ignore
+        }
+        vworld3DTileLayerRef.current = null;
       }
       if (threeDLayerRef.current && map.getLayer('custom-three-model-layer')) {
         try {
@@ -4625,6 +4649,13 @@ export const MapViewer: React.FC = () => {
       }
     }
   }, [layers.zoning, isMapLoaded]);
+
+  // [브이월드 실사 3D 건물 (XDO 스트리밍) 레이어 토글 동기화]
+  useEffect(() => {
+    if (!isMapLoaded || !vworld3DTileLayerRef.current) return;
+    const isVis = !!layers.vworld3DReal && !!layers.buildings3D;
+    vworld3DTileLayerRef.current.setVisible(isVis);
+  }, [layers.vworld3DReal, layers.buildings3D, isMapLoaded]);
 
   // [공공데이터포털] 전국 교량 및 터널 레이어 가시성 동적 토글 (2D 심볼 + 3D Three.js 구조물)
   useEffect(() => {

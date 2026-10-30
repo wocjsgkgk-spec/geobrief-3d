@@ -169,6 +169,7 @@ export const ControlPanel: React.FC = () => {
     setVworldDiagnostic,
     molitDiagnostic,
     setMolitDiagnostic,
+    vworldTileStats,
     // [신규] 전략 군 유휴지 실증 프리셋
     selectedIdleSiteId,
     selectIdleSite,
@@ -3910,6 +3911,30 @@ export const ControlPanel: React.FC = () => {
         </h2>
 
         <div className="space-y-1.5 text-xs">
+          {/* [2단계 신규: 브이월드 실사 3D 타일 스트리밍 (XDO)] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              브이월드 실사 3D 스트리밍 (XDO)
+            </span>
+            <div className="flex items-center gap-2">
+              {vworldTileStats && vworldTileStats.loadedTiles > 0 && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono">
+                  {vworldTileStats.loadedTiles}타일 (L{vworldTileStats.currentLevel})
+                </span>
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.vworld3DReal}
+                  onChange={() => handleToggleLayer('vworld3DReal')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-600"></div>
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
             <span className="flex items-center gap-2 text-slate-300 font-medium">
               <Building className="w-3.5 h-3.5 text-blue-400" />

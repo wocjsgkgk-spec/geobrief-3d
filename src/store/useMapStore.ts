@@ -271,6 +271,7 @@ interface MapStoreState {
     ssaoPostProcessing: boolean; // 디지털 트윈 SSAO & Bloom 후처리
     firstLogisticsSmartCity: boolean; // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
     proceduralTrees: boolean; // [4단계: 3D 식생·가로수 표시 (InstancedMesh)]
+    vworld3DReal: boolean; // [브이월드 실사 3D 건물 (XDO 스트리밍)]
   };
   toggleLayer: (key: keyof MapStoreState['layers']) => void;
 
@@ -567,6 +568,20 @@ interface MapStoreState {
   loadCinematicPreset: (preset: 'spiral' | 'approach', center?: [number, number]) => void;
   resetCinematicFlight: () => void;
 
+  // [브이월드 실사 3D 타일 스트리밍 통계]
+  vworldTileStats: {
+    loadedTiles: number;
+    totalVertices: number;
+    totalTriangles: number;
+    currentLevel: number;
+  };
+  setVworldTileStats: (stats: {
+    loadedTiles: number;
+    totalVertices: number;
+    totalTriangles: number;
+    currentLevel: number;
+  }) => void;
+
   // [.geobrief 브리핑 프로젝트 파일 입출력]
   exportProjectFile: () => string;
   importProjectFile: (fileContent: string) => boolean;
@@ -631,7 +646,15 @@ export const useMapStore = create<MapStoreState>()(
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
         firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
         proceduralTrees: false, // [4단계: 3D 식생·가로수 표시 기본 OFF]
+        vworld3DReal: true, // [브이월드 실사 3D 건물 (XDO 스트리밍) 기본 ON]
       },
+      vworldTileStats: {
+        loadedTiles: 0,
+        totalVertices: 0,
+        totalTriangles: 0,
+        currentLevel: 15,
+      },
+      setVworldTileStats: (stats) => set({ vworldTileStats: stats }),
       toggleLayer: (key) =>
         set((state) => ({
           layers: { ...state.layers, [key]: !state.layers[key] },
@@ -2247,6 +2270,7 @@ export const useMapStore = create<MapStoreState>()(
                 ssaoPostProcessing: false,
                 firstLogisticsSmartCity: false,
                 proceduralTrees: false,
+                vworld3DReal: true,
               };
             } else {
               state.layers.roads = true;
