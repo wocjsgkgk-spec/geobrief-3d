@@ -55,6 +55,7 @@ import { StreetsGlFacadeEngine } from '@/lib/vendor/streetsGlFacadeEngine';
 import { OsmRoofGenerator } from '@/lib/vendor/osmRoofGenerator';
 import { VworldRealisticFacadeEngine } from '@/lib/vendor/vworldRealisticFacade';
 import { Vworld3DRenderEngine } from '@/lib/vendor/vworld3DRenderEngine';
+import { HybridVworldRenderer } from '@/lib/vendor/hybridVworldRenderer';
 import {
   classifyBuildingWithVendor,
   ClassifiedBuildingInfo,
@@ -1027,10 +1028,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // -------------------------------------------------------------------
-      // A. [브이월드(V-World) LOD2+ 4단 입체 건축물 메쉬 + 실사 포토 아틀라스]
-      // [1층 기단부(Base) + 기준층 본동(Wall) + 옥상 난간(Parapet) + 지붕 구조물(Roof & Penthouse)]
+      // A. [브이월드(V-World) 실사 메쉬 + 고해상도 절차적 아키텍처 하이브리드 렌더링 엔진]
+      // [1순위 건축물대장 정밀 매칭 + 2순위 Streets-GL 포토 아틀라스 4단 입체 + 3순위 OSMBuildings 복합 지붕]
       // -------------------------------------------------------------------
-      Vworld3DRenderEngine.buildFullBuildingLOD2({
+      HybridVworldRenderer.buildHybridBuilding({
         pts2D,
         baseElev,
         height,
@@ -1038,18 +1039,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         edgeLens,
         maxEdgeLen,
         minEdgeLen,
-        isTrueHighRiseApt,
-        sideWallEdgeIndices,
-        buildingType: classified.type,
-        atlasWallSlot: featProps.realWallSlot || classified.atlasWallSlot,
-        atlasRoofSlot: featProps.realRoofSlot || classified.atlasRoofSlot,
+        featProps,
+        centerLngLat: [cLng, cLat],
+        rawCoords,
         holeIndices,
         innerRings2D,
         addQuad: this.addQuad,
         addTriangle: this.addTriangle,
         addRooftopQuad: this.addRooftopQuad,
         addRooftopTriangle: this.addRooftopTriangle,
-        featProps,
       });
 
       anyBuilt = true;

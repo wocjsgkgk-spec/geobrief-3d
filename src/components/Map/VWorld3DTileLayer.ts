@@ -29,6 +29,7 @@ import {
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 import { elevationCache } from '@/utils/elevationCache';
 import { useMapStore } from '@/store/useMapStore';
+import { HybridVworldRenderer } from '@/lib/vendor/hybridVworldRenderer';
 
 interface CachedTile {
   key: string;
@@ -389,6 +390,17 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
             m.color = new THREE.Color(0xe2e8f0);
             m.metalness = 0.35;
             m.roughness = 0.55;
+          }
+        });
+      } else if (layer === 'facility_build') {
+        // [하이브리드 렌더러 연동] 실사 포토 아틀라스 고해상도 밉맵/Anisotropy 보정
+        parsed.materials.forEach((m) => {
+          if (m instanceof THREE.MeshStandardMaterial && m.map) {
+            m.map.anisotropy = 16;
+            m.map.generateMipmaps = true;
+            m.roughness = 0.72;
+            m.metalness = 0.18;
+            m.needsUpdate = true;
           }
         });
       }
