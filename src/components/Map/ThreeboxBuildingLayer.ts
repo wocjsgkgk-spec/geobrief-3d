@@ -15,6 +15,7 @@ import { generateLOD2RoofsGroup, disposeRoofMaterialsCache } from '@/utils/roofG
 import { generateBuildingFacadesGroup, disposeFacadeMaterialsCache } from '@/utils/proceduralFacades';
 import { elevationCache } from '@/utils/elevationCache';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
+import { VWorldWebGLShaderSpec } from '@/lib/vendor/vworldReverseSpec';
 
 /**
  * Threebox-MapLibre 연동 정밀 3D 건축물 커스텀 레이어
@@ -242,26 +243,50 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         this.originLngLat = [c.lng, c.lat];
       }
 
-      // 1. [검은색 벽면 현상 해결: 3점 조명(Three-Point Lighting)]
-      this.directionalLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
-      this.directionalLight.position.set(120, 180, 100).normalize();
+      // 1. [브이월드 3D WebGL 역공학 기반 조명 및 대기 안개 적용]
+      this.directionalLight = new THREE.DirectionalLight(
+        VWorldWebGLShaderSpec.LIGHTING.directional.color,
+        VWorldWebGLShaderSpec.LIGHTING.directional.intensity
+      );
+      this.directionalLight.position.set(
+        VWorldWebGLShaderSpec.LIGHTING.directional.position[0],
+        VWorldWebGLShaderSpec.LIGHTING.directional.position[1],
+        VWorldWebGLShaderSpec.LIGHTING.directional.position[2]
+      ).normalize();
       this.directionalLight.castShadow = false;
       this.scene.add(this.directionalLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.85);
+      this.hemisphereLight = new THREE.HemisphereLight(
+        VWorldWebGLShaderSpec.LIGHTING.hemisphere.skyColor,
+        VWorldWebGLShaderSpec.LIGHTING.hemisphere.groundColor,
+        VWorldWebGLShaderSpec.LIGHTING.hemisphere.intensity
+      );
       this.scene.add(this.hemisphereLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      this.ambientLight = new THREE.AmbientLight(
+        VWorldWebGLShaderSpec.LIGHTING.ambient.color,
+        VWorldWebGLShaderSpec.LIGHTING.ambient.intensity
+      );
       this.scene.add(this.ambientLight);
 
-      this.fillLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
-      this.fillLight.position.set(-80, 100, 80).normalize();
+      this.fillLight = new THREE.DirectionalLight(
+        VWorldWebGLShaderSpec.LIGHTING.fill.color,
+        VWorldWebGLShaderSpec.LIGHTING.fill.intensity
+      );
+      this.fillLight.position.set(
+        VWorldWebGLShaderSpec.LIGHTING.fill.position[0],
+        VWorldWebGLShaderSpec.LIGHTING.fill.position[1],
+        VWorldWebGLShaderSpec.LIGHTING.fill.position[2]
+      ).normalize();
       this.scene.add(this.fillLight);
 
-      // 높이 기반 심도 안개 (Depth Fog)
-      this.scene.fog = new THREE.FogExp2(0x1e293b, 0.0008);
+      // 브이월드 자연 대기 안개 (Distance Fog)
+      this.scene.fog = new THREE.FogExp2(
+        VWorldWebGLShaderSpec.FOG.color,
+        VWorldWebGLShaderSpec.FOG.density
+      );
 
-      // 2. WebGLRenderer 초기화 (섀도우맵 비활성화로 MapLibre 베이스맵 캔버스 보존)
+      // 2. WebGLRenderer 초기화 (브이월드 톤매핑 & 색공간 동기화)
       try {
         this.renderer = new THREE.WebGLRenderer({
           canvas: map.getCanvas(),
@@ -272,6 +297,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         });
         this.renderer.autoClear = false;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = VWorldWebGLShaderSpec.LIGHTING.toneMapping;
+        this.renderer.toneMappingExposure = VWorldWebGLShaderSpec.LIGHTING.exposure;
         this.renderer.shadowMap.enabled = false;
         const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
         this.renderer.setPixelRatio(pr);
