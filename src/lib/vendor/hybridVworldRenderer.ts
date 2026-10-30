@@ -299,13 +299,18 @@ export class HybridVworldRenderer {
     if (finalHeight <= 0) {
       if (isHighRiseApt) {
         finalHeight = 48.0 + (seed % 28) * 1.0;
-      } else if (areaSqm < 220) {
-        finalHeight = 7.5 + (seed % 5) * 0.9;
+      } else if (areaSqm < 250) {
+        finalHeight = 7.5 + (seed % 4) * 0.8;
       } else if (areaSqm < 500) {
         finalHeight = 11.0 + (seed % 6) * 1.0;
       } else {
         finalHeight = 16.0 + (seed % 10) * 1.2;
       }
+    }
+
+    // 소형 필지(area < 250㎡) 연필 기둥 현상 영구 차단: 어떤 경우에도 11.0m 이하로 엄격 제한!
+    if (areaSqm < 250 && finalHeight > 11.0) {
+      finalHeight = Math.min(11.0, 7.5 + (seed % 4) * 0.8);
     }
 
     // 세장비 안전 캡

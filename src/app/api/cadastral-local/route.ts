@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { transformFeatureToWgs84 } from '@/utils/koreanCoordTransform';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,7 +57,8 @@ function loadLocalCadastralFeatures(regionId = 'wonju', useCoreOnly = true): any
     try {
       const raw = fs.readFileSync(filePath, 'utf8');
       const json = JSON.parse(raw);
-      const features = json.features || [];
+      const rawFeatures: any[] = json.features || [];
+      const features = rawFeatures.map((f) => transformFeatureToWgs84(f));
       cadastralMemoryCache.set(cacheKey, features);
       return features;
     } catch {

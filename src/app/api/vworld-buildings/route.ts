@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
+import { transformGeometryCoordinatesToWgs84 } from '@/utils/koreanCoordTransform';
 
 /**
  * 건물 용도 및 명칭을 바탕으로 브이월드 스타일 3D 색상과 카테고리를 판별합니다.
@@ -409,7 +410,10 @@ export async function GET(request: NextRequest) {
             roofColor: roofColour,
             source: 'vworld',
           },
-          geometry: item.geometry,
+          geometry: {
+            ...item.geometry,
+            coordinates: transformGeometryCoordinatesToWgs84(item.geometry.coordinates),
+          },
         };
       })
       .filter(Boolean);

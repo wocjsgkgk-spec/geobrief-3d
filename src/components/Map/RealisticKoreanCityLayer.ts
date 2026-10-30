@@ -75,6 +75,10 @@ import {
   buildLandmarkBuildingMesh,
   LandmarkInfo,
 } from '@/utils/landmarkBuildingBuilder';
+import {
+  isPermittedBuildingPolygon,
+  sanitizeBuildingHeight,
+} from '@/utils/master3DRendererManager';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -842,31 +846,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       const areaSqm = Math.max(10, Math.abs(area2D) * 0.5);
 
-      // [요구사항 2] 바닥 면적이 4,500㎡를 초과하는 거대 구역 폴리곤 3D 압출 즉시 제외
-      if (areaSqm > 4500) {
-        continue;
-      }
-
-      // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역, 공원/단지 landuse/leisure 경계) 3D 압출 100% 원천 차단
+      // [1단계: 마스터 전역 기하 필터] 면적 4,500㎡ 초과 비건물 및 비정상 지적/필지/찢어짐 폴리곤 100% 영구 차단
       const featProps = (feat.properties || {}) as Record<string, any>;
-      const isNonBuildingTag =
-        featProps.is_non_building === true ||
-        featProps.is_site_boundary === true ||
-        Boolean(featProps.UQ111 || featProps.UQ111_NM || featProps.uq111 || featProps.zoneName || featProps.zone_nm || featProps.spfc_nm || featProps.spfc_cd) ||
-        Boolean(featProps.landuse || featProps.leisure || featProps.boundary || featProps.admin_level || featProps.natural) ||
-        (Boolean(featProps.pnu || featProps.jimok || featProps.jibun) &&
-          !featProps.bd_mgt_sn &&
-          !featProps.buld_nm &&
-          !featProps.bldNm &&
-          !featProps.buildingName &&
-          !featProps.grnd_flr &&
-          !featProps.gro_flo_co &&
-          !featProps.grndFlrCnt &&
-          !featProps.hei &&
-          !featProps.heit &&
-          !featProps.height);
-
-      if (isNonBuildingTag) {
+      if (!isPermittedBuildingPolygon(featProps, areaSqm, 100, 100, 50)) {
         continue;
       }
 
@@ -949,44 +931,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      // [3단계: 소형 건물(50㎡ ~ 250㎡) 입체 복원: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
-      if (areaSqm >= 50 && areaSqm <= 250) {
-        const minSmallH = 8.0 + (classified.seed % 8) * 1.0;
-        if (height < minSmallH) {
-          height = minSmallH;
-        }
-      }
-
-      // [절대 규칙 1: 세장비 제한 (Slenderness Ratio Limit)]
-      const maxAllowedSlenderH = Math.max(8.0, minWidth * 3.5);
-      if (height > maxAllowedSlenderH) {
-        height = Math.min(height, Math.max(8.0, maxAllowedSlenderH));
-      }
-
-      // [절대 규칙 2: 소형 주택 area < 220㎡는 어떤 경우에도 절대 12m를 초과하지 못하도록 차단]
-      if (areaSqm < 220 && height > 12.0) {
-        height = Math.min(12.0, 7.5 + (classified.seed % 5) * 0.9);
-      }
-
-      // [절대 규칙 3: 바닥 면적 280㎡ 미만 소형 건물은 절대로 고층(15m 이상) 불가!]
-      if (areaSqm < 280 && height > 15.0) {
-        height = Math.min(
-          15.0,
-          areaSqm < 220 ? Math.min(12.0, 8.0 + (classified.seed % 5) * 0.8) : 11.0 + (classified.seed % 5) * 0.9
-        );
-      }
-
-      if (height < 6.5) {
-        height = 6.5 + (classified.seed % 4) * 0.8;
-      }
-
       // [진짜 아파트 동 판정] 대단지 아파트는 실제 층수인 45m~78m 적용
       const isTrueHighRiseApt =
         (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)') &&
         (areaSqm >= 350 || height >= 25.0);
-      if (isTrueHighRiseApt && height < 45.0) {
-        height = 48.0 + (classified.seed % 28) * 1.0;
-      }
+
+      // [마스터 전역 높이 필터] 소형 필지(area < 250㎡) 연필 기둥 현상 영구 차단 & 세장비 안전 캡
+      height = sanitizeBuildingHeight(height, areaSqm, minWidth, classified.seed, isTrueHighRiseApt);
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
       const sideWallEdgeIndices = new Set<number>();

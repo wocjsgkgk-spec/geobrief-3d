@@ -42,6 +42,7 @@ import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
+import { syncMaster3DRenderer } from '@/utils/master3DRendererManager';
 import {
   createGpuBuildingStackLayers,
   ensureBuildingPatterns,
@@ -3345,8 +3346,14 @@ export const MapViewer: React.FC = () => {
                   if (realisticKoreanCityLayerRef.current) realisticKoreanCityLayerRef.current.setVisible(false);
                   setGpuBuildingLayersVisibility(map, false, true);
                 } else {
-                  if (realisticKoreanCityLayerRef.current) realisticKoreanCityLayerRef.current.setVisible(useMapStore.getState().layers.buildings3D);
-                  setGpuBuildingLayersVisibility(map, useMapStore.getState().layers.buildings3D);
+                  syncMaster3DRenderer(map, {
+                    renderMode3D: 'tiles3d',
+                    isBuildingsVisible: !!useMapStore.getState().layers.buildings3D,
+                    realisticKoreanCityLayer: realisticKoreanCityLayerRef.current,
+                    lod2BuildingEngine: lod2BuildingEngineRef.current,
+                    deck3DTilesManager: deck3DTilesManagerRef.current,
+                    threeboxLayer: threeboxLayerRef.current,
+                  });
                 }
                 map.triggerRepaint();
               }
@@ -4090,74 +4097,19 @@ export const MapViewer: React.FC = () => {
 
     const bldgVis = !!layers.buildings3D;
 
-    if (renderMode3D === 'native') {
-      // 1. 모드 A: 경량 네이티브 모드
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.detachFromMap();
-      }
-      if (lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setVisible(false);
-      }
-      if (realisticKoreanCityLayerRef.current) {
-        realisticKoreanCityLayerRef.current.setVisible(false);
-      }
-      if (threeboxLayerRef.current) {
-        threeboxLayerRef.current.setLodMode('lod1');
-        threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
-      }
-      setGpuBuildingLayersVisibility(map, bldgVis);
-      setGpuBuildingLayersMode(map, 'native');
-      if (bldgVis) {
-        promoteBuildingLayersToTop(map);
-      }
-    } else if (renderMode3D === 'facade') {
-      // 2. 모드 B: 실감 파사드 모드 (Three.js 단일 버퍼 실사 파사드 + 입체 지붕)
-      // [이중 겹침 100% 제거] RealisticKoreanCityLayer만 표출하고 모든 fill-extrusion 레이어는 완전 숨김('none')
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.detachFromMap();
-      }
-      if (lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setVisible(false);
-      }
-      if (realisticKoreanCityLayerRef.current) {
-        realisticKoreanCityLayerRef.current.setVisible(bldgVis);
-      }
-      if (threeboxLayerRef.current) {
-        threeboxLayerRef.current.setLodMode('lod2');
-        threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
-      }
-      setGpuBuildingLayersVisibility(map, false, bldgVis);
-      if (map.getLayer('3d-buildings')) {
-        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
-      }
-      if (bldgVis) {
-        promoteBuildingLayersToTop(map);
-      }
-    } else if (renderMode3D === 'tiles3d') {
-      // 3. 모드 C: 고정밀 3D 타일셋 스트리밍
-      // [이중 겹침 방지] 단 하나의 3D 메쉬 엔진(RealisticKoreanCityLayer)만 폴백으로 유지
-      if (lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setVisible(false);
-      }
-      if (realisticKoreanCityLayerRef.current) {
-        realisticKoreanCityLayerRef.current.setVisible(bldgVis);
-      }
-      setGpuBuildingLayersVisibility(map, false, bldgVis);
-      if (map.getLayer('3d-buildings')) {
-        map.setLayoutProperty('3d-buildings', 'visibility', 'none');
-      }
-      setGpuBuildingLayersMode(map, 'tiles3d');
-      if (threeboxLayerRef.current) {
-        threeboxLayerRef.current.setLodMode('lod2');
-        threeboxLayerRef.current.setVisible(placedFacilities.length > 0);
-      }
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.attachToMap(map);
-        deck3DTilesManagerRef.current.update({ ...tile3DStream, enabled: true });
-      }
-      if (bldgVis) {
-        promoteBuildingLayersToTop(map);
-      }
+    // [마스터 3D 렌더러 단일화 상태 머신]: 오직 단 하나의 마스터 엔진만 활성화하여 Z-Fighting 및 이중 겹침 영구 차단
+    syncMaster3DRenderer(map, {
+      renderMode3D,
+      isBuildingsVisible: bldgVis,
+      realisticKoreanCityLayer: realisticKoreanCityLayerRef.current,
+      lod2BuildingEngine: lod2BuildingEngineRef.current,
+      deck3DTilesManager: deck3DTilesManagerRef.current,
+      threeboxLayer: threeboxLayerRef.current,
+      placedFacilitiesCount: placedFacilities.length,
+    });
+
+    if (bldgVis) {
+      promoteBuildingLayersToTop(map);
     }
 
     if (map.getLayer(VWORLD_POI_LAYER_ID)) {

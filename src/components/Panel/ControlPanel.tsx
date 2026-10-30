@@ -324,7 +324,7 @@ export const ControlPanel: React.FC = () => {
   };
 
   return (
-    <aside className="w-full md:w-[360px] md:min-w-[360px] h-full md:h-[calc(100vh-3.5rem)] bg-[#141a16] border-r border-[#242f27] flex flex-col text-slate-200 overflow-y-auto">
+    <aside className="w-full min-w-0 h-full md:h-[calc(100vh-3.5rem)] bg-slate-950/80 backdrop-blur-md border-r border-slate-800/80 flex flex-col text-slate-200 overflow-y-auto">
       {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 - 0.01초 즉시 반응형 UI */}
       <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
         <button

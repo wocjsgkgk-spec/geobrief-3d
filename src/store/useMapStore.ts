@@ -399,6 +399,11 @@ interface MapStoreState {
   togglePresentationMode: () => void;
   setIsPresentationMode: (val: boolean) => void;
 
+  // [신규] 좌측 컨트롤 패널 접기/펼치기 상태
+  isSidebarCollapsed: boolean;
+  toggleSidebarCollapse: () => void;
+  setIsSidebarCollapsed: (val: boolean) => void;
+
   // 모바일 반응형 제어 패널 서랍 토글
   isMobilePanelOpen: boolean;
   toggleMobilePanel: () => void;
@@ -1183,6 +1188,11 @@ export const useMapStore = create<MapStoreState>()(
       isPresentationMode: false,
       togglePresentationMode: () => set((state) => ({ isPresentationMode: !state.isPresentationMode })),
       setIsPresentationMode: (isPresentationMode) => set({ isPresentationMode }),
+
+      // [신규] 좌측 컨트롤 패널 접기/펼치기
+      isSidebarCollapsed: false,
+      toggleSidebarCollapse: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+      setIsSidebarCollapsed: (isSidebarCollapsed) => set({ isSidebarCollapsed }),
 
       // 모바일 반응형 제어 패널 서랍 토글
       isMobilePanelOpen: false,

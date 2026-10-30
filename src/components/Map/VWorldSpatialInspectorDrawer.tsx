@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useMapStore } from '@/store/useMapStore';
+import { getGangwon18MilitarySiteById } from '@/constants/gangwon18MilitarySites';
 import {
   X,
   Building2,
@@ -66,6 +68,8 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'bld' | 'cadastral' | 'infra'>('all');
+  const { selectedIdleSiteId, layers, toggleLayer } = useMapStore();
+  const militarySite = selectedIdleSiteId ? getGangwon18MilitarySiteById(selectedIdleSiteId) : null;
 
   if (!isOpen || (!selectedBuilding && !cadastralReport)) {
     return null;
@@ -176,7 +180,7 @@ ${bufferActive && bufferStats ? `\n■ [4] 반경 500m 인프라 집계\n- 총 �
   return (
     <div
       id="vworld-spatial-inspector-drawer"
-      className="fixed top-14 right-0 bottom-0 w-[420px] max-w-[calc(100vw-1.5rem)] z-40 bg-[#09130f]/95 backdrop-blur-2xl border-l border-cyan-500/40 shadow-2xl flex flex-col text-xs text-slate-200 select-none animate-in slide-in-from-right-4 duration-200 ring-1 ring-cyan-500/20"
+      className="fixed top-14 right-0 bottom-0 w-[360px] max-w-[calc(100vw-1.5rem)] z-40 bg-slate-950/85 backdrop-blur-md border-l border-emerald-500/30 shadow-2xl flex flex-col text-xs text-slate-200 select-none animate-in slide-in-from-right-4 duration-200 ring-1 ring-emerald-500/20"
       style={{ willChange: 'transform' }}
     >
       {/* 1. 드로어 최상단 헤더 */}
@@ -348,6 +352,85 @@ ${bufferActive && bufferStats ? `\n■ [4] 반경 500m 인프라 집계\n- 총 �
 
       {/* 4. 스크롤 가능한 본문 실측 데이터 섹션 */}
       <div className="p-3.5 space-y-3 overflow-y-auto flex-1 custom-scrollbar">
+        {/* 군 유휴부지 & 마스터플랜 3D 비교 위젯 (선택된 군 유휴부지 활성화 시 상시 표시) */}
+        {militarySite && (
+          <div className="bg-gradient-to-br from-emerald-950/60 via-slate-900/80 to-slate-950/90 p-3 rounded-xl border border-emerald-500/40 ring-1 ring-emerald-500/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                군 유휴부지 특화 실측 현황
+              </span>
+              <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60">
+                {militarySite.regionName}
+              </span>
+            </div>
+            <div className="text-xs font-extrabold text-white">
+              {militarySite.name}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+              <div>
+                <span className="text-slate-400 block text-[9.5px]">공부상 대지면적</span>
+                <span className="font-mono font-bold text-emerald-300">
+                  {militarySite.areaSqm.toLocaleString()} ㎡{' '}
+                  <span className="text-[9px] text-slate-400 font-normal">
+                    ({militarySite.areaPyeong.toLocaleString()}평)
+                  </span>
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[9.5px]">용도지역</span>
+                <span className="font-bold text-amber-300 truncate block">
+                  {militarySite.zoning}
+                </span>
+              </div>
+              <div className="col-span-2 pt-1 border-t border-slate-800">
+                <span className="text-slate-400 block text-[9.5px]">현재 상태</span>
+                <span className="text-slate-200 font-medium">
+                  {militarySite.currentStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* 3D 실시간 비교 스위치 */}
+            <div className="pt-1 border-t border-emerald-900/50">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-bold text-slate-300">3D 조형 비교</span>
+                <span className="text-[9px] font-mono text-emerald-400 font-semibold">
+                  {layers.firstLogisticsSmartCity ? '🏢 미래 마스터플랜' : '🏛️ 영내 기존 군 막사'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (layers.firstLogisticsSmartCity) toggleLayer('firstLogisticsSmartCity');
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition-all border ${
+                    !layers.firstLogisticsSmartCity
+                      ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-950/60'
+                      : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  🏛️ 영내 기존 군 막사
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!layers.firstLogisticsSmartCity) toggleLayer('firstLogisticsSmartCity');
+                  }}
+                  className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold transition-all border ${
+                    layers.firstLogisticsSmartCity
+                      ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/60'
+                      : 'bg-slate-900/80 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  🏢 미래 마스터플랜
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* [1. 건축물대장 표제부 (국토교통부 API)] */}
         {(activeTab === 'all' || activeTab === 'bld') && (
           <div className="bg-[#101c15] p-3 rounded-xl border border-[#203728] space-y-2">

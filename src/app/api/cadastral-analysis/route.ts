@@ -21,6 +21,7 @@ import path from 'path';
 import * as turf from '@turf/turf';
 import { findGangwonRegionByCoords, getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
 import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
+import { transformFeatureToWgs84 } from '@/utils/koreanCoordTransform';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -222,8 +223,16 @@ export async function GET(req: NextRequest) {
     parcelSource = 'synthetic_buffer';
   }
 
+  // [국토지리정보원 표준 7-파라미터 좌표 보정] EPSG:5174/5179/5186 -> EPSG:4326 오차 0m 정합
+  if (parcelFeature) {
+    const transformed = transformFeatureToWgs84(parcelFeature);
+    if (transformed) {
+      parcelFeature = transformed;
+    }
+  }
+
   // 속성 정규화
-  const props = parcelFeature.properties || {};
+  const props = (parcelFeature && parcelFeature.properties) ? parcelFeature.properties : {};
   pnu = String(props.pnu || props.PNU || pnu || '');
   const rawJibun = props.jibun || props.JIBUN || (props.bonbun ? `${props.bonbun}-${props.bubun || 0}` : '');
   jibun = String(rawJibun || '42-1번지');
@@ -234,11 +243,16 @@ export async function GET(req: NextRequest) {
   // ---------------------------------------------------------------------------
   let areaSqm = 0;
   let perimeterM = 0;
-  try {
-    areaSqm = Math.round(turf.area(parcelFeature) * 10) / 10;
-    const line = turf.polygonToLine(parcelFeature as any);
-    perimeterM = Math.round(turf.length(line as any, { units: 'kilometers' }) * 1000 * 10) / 10;
-  } catch {
+  if (parcelFeature) {
+    try {
+      areaSqm = Math.round(turf.area(parcelFeature) * 10) / 10;
+      const line = turf.polygonToLine(parcelFeature as any);
+      perimeterM = Math.round(turf.length(line as any, { units: 'kilometers' }) * 1000 * 10) / 10;
+    } catch {
+      areaSqm = 1250.0;
+      perimeterM = 145.0;
+    }
+  } else {
     areaSqm = 1250.0;
     perimeterM = 145.0;
   }

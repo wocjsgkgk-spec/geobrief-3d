@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
+import { transformFeatureToWgs84 } from '@/utils/koreanCoordTransform';
 import { findGangwonRegionByCoords, getGangwonRegionByIdOrName, GangwonRegionPreset } from '@/constants/gangwon18Regions';
 import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
 
@@ -108,7 +109,8 @@ async function fetchLocalCadastralParcels(bbox: [number, number, number, number]
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, 'utf8');
       const json = JSON.parse(raw);
-      const features = json.features || [];
+      const rawFeatures: any[] = json.features || [];
+      const features = rawFeatures.map((f: any) => transformFeatureToWgs84(f));
       const [minLng, minLat, maxLng, maxLat] = bbox;
       const pad = 0.005;
       return features.filter((f: any) => {

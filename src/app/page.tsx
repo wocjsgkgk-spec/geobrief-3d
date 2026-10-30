@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { Header } from '@/components/Header/Header';
 import { ControlPanel } from '@/components/Panel/ControlPanel';
 import { useMapStore } from '@/store/useMapStore';
-import { Minimize2 } from 'lucide-react';
+import { Minimize2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
 // WebGL MapLibre GL은 클라이언트 전용으로 dynamic import
 const MapViewer = dynamic(
@@ -28,6 +28,8 @@ export default function Home() {
     isPresentationMode,
     togglePresentationMode,
     setIsPresentationMode,
+    isSidebarCollapsed,
+    toggleSidebarCollapse,
     isMobilePanelOpen,
     toggleMobilePanel,
     setIsMobilePanelOpen,
@@ -78,17 +80,50 @@ export default function Home() {
     };
   }, [isPresentationMode]);
 
-  // ESC 키 입력 시 프레젠테이션 모드 또는 모바일 패널 해제
+  // 좌측 사이드바 접기/펼치기 애니메이션 완료 후 맵 리사이즈 통지
+  useEffect(() => {
+    const timer1 = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 120);
+    const timer2 = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 320);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [isSidebarCollapsed]);
+
+  // 키보드 단축키: ESC(복귀), '[' 또는 Alt+B (사이드바 접기/펼치기 토글)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 텍스트 인풋 포커스 중에는 무시
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA' ||
+        document.activeElement?.tagName === 'SELECT'
+      ) {
+        return;
+      }
+
       if (e.key === 'Escape') {
         if (isPresentationMode) togglePresentationMode();
         if (isMobilePanelOpen) setIsMobilePanelOpen(false);
+      } else if (e.key === '[' || (e.altKey && e.key.toLowerCase() === 'b')) {
+        e.preventDefault();
+        toggleSidebarCollapse();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPresentationMode, togglePresentationMode, isMobilePanelOpen, setIsMobilePanelOpen]);
+  }, [
+    isPresentationMode,
+    togglePresentationMode,
+    isMobilePanelOpen,
+    setIsMobilePanelOpen,
+    toggleSidebarCollapse,
+  ]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0e0c]">
@@ -97,10 +132,12 @@ export default function Home() {
 
       {/* 메인 작업 영역: 좌측 패널 + 우측 메인 맵 뷰포트 */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* [데스크톱] 좌측 컨트롤 패널 */}
+        {/* [데스크톱] 좌측 슬림 컨트롤 패널 (반투명 글래스모피즘 & 접기/펼치기 지원) */}
         <div
-          className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden ${
-            isPresentationMode ? 'w-0 opacity-0 pointer-events-none' : 'w-[360px] opacity-100'
+          className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden border-r border-slate-800/80 backdrop-blur-md bg-slate-950/80 shadow-2xl relative z-20 ${
+            isPresentationMode || isSidebarCollapsed
+              ? 'w-0 opacity-0 pointer-events-none'
+              : 'w-[320px] md:w-[325px] opacity-100'
           }`}
         >
           <ControlPanel />
@@ -137,6 +174,32 @@ export default function Home() {
         {/* 우측 메인 맵 뷰포트 (모바일에서는 전체 화면 100%) */}
         <main className="flex-1 h-full w-full overflow-hidden relative">
           <MapViewer />
+
+          {/* [데스크톱 전용] 좌측 패널 원클릭 접기/펼치기 플로팅 버튼 */}
+          {!isPresentationMode && (
+            <div className="hidden md:block absolute top-3 left-3 z-30">
+              <button
+                onClick={toggleSidebarCollapse}
+                className="group px-3 py-1.5 rounded-lg bg-slate-950/80 backdrop-blur-md hover:bg-slate-900 border border-slate-700/70 hover:border-emerald-500/60 text-slate-200 text-xs font-semibold shadow-xl flex items-center gap-1.5 transition-all active:scale-95 ring-1 ring-white/5"
+                title={isSidebarCollapsed ? '좌측 제어 패널 열기 ( [ 키 )' : '좌측 제어 패널 숨겨서 와이드 3D 뷰 보기 ( [ 키 )'}
+              >
+                {isSidebarCollapsed ? (
+                  <>
+                    <PanelLeftOpen className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                    <span>▶ 패널 열기</span>
+                  </>
+                ) : (
+                  <>
+                    <PanelLeftClose className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+                    <span>◀ 패널 숨김</span>
+                  </>
+                )}
+                <kbd className="text-[10px] text-slate-400 bg-slate-800/90 border border-slate-600/70 rounded px-1 font-mono">
+                  [
+                </kbd>
+              </button>
+            </div>
+          )}
 
           {/* 모바일 전용 플로팅 토글 퀵 버튼 */}
           <div className="md:hidden absolute bottom-5 right-4 z-30">
