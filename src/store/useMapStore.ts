@@ -272,6 +272,8 @@ interface MapStoreState {
     firstLogisticsSmartCity: boolean; // [2단계 신규: 1군지사 미래 개발 구상안(3D 입체)]
     proceduralTrees: boolean; // [4단계: 3D 식생·가로수 표시 (InstancedMesh)]
     vworld3DReal: boolean; // [브이월드 실사 3D 건물 (XDO 스트리밍)]
+    vworld3DBridges: boolean; // [브이월드 실사 3D 교량 (facility_bridge 스트리밍)]
+    vworldDemTerrain: boolean; // [브이월드 3D DEM 지형 표고 격자 스트리밍]
   };
   toggleLayer: (key: keyof MapStoreState['layers']) => void;
 
@@ -571,12 +573,16 @@ interface MapStoreState {
   // [브이월드 실사 3D 타일 스트리밍 통계]
   vworldTileStats: {
     loadedTiles: number;
+    loadedBridges: number;
+    loadedDemTiles: number;
     totalVertices: number;
     totalTriangles: number;
     currentLevel: number;
   };
   setVworldTileStats: (stats: {
     loadedTiles: number;
+    loadedBridges: number;
+    loadedDemTiles: number;
     totalVertices: number;
     totalTriangles: number;
     currentLevel: number;
@@ -647,9 +653,13 @@ export const useMapStore = create<MapStoreState>()(
         firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
         proceduralTrees: false, // [4단계: 3D 식생·가로수 표시 기본 OFF]
         vworld3DReal: true, // [브이월드 실사 3D 건물 (XDO 스트리밍) 기본 ON]
+        vworld3DBridges: true, // [브이월드 실사 3D 교량 기본 ON]
+        vworldDemTerrain: false, // [브이월드 DEM 지형 격자 기본 OFF]
       },
       vworldTileStats: {
         loadedTiles: 0,
+        loadedBridges: 0,
+        loadedDemTiles: 0,
         totalVertices: 0,
         totalTriangles: 0,
         currentLevel: 15,
@@ -2271,6 +2281,8 @@ export const useMapStore = create<MapStoreState>()(
                 firstLogisticsSmartCity: false,
                 proceduralTrees: false,
                 vworld3DReal: true,
+                vworld3DBridges: true,
+                vworldDemTerrain: false,
               };
             } else {
               state.layers.roads = true;

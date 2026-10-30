@@ -3935,6 +3935,54 @@ export const ControlPanel: React.FC = () => {
             </div>
           </div>
 
+          {/* [3단계 신규: 브이월드 전국 실사 3D 교량 (facility_bridge)] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Boxes className="w-3.5 h-3.5 text-blue-400" />
+              브이월드 실사 3D 교량 (Bridge)
+            </span>
+            <div className="flex items-center gap-2">
+              {vworldTileStats && vworldTileStats.loadedBridges > 0 && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono">
+                  {vworldTileStats.loadedBridges}교량
+                </span>
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.vworld3DBridges}
+                  onChange={() => handleToggleLayer('vworld3DBridges')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* [3단계 신규: 브이월드 3D DEM 지형 표고 격자] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Mountain className="w-3.5 h-3.5 text-emerald-400" />
+              브이월드 3D DEM 지형 격자
+            </span>
+            <div className="flex items-center gap-2">
+              {vworldTileStats && vworldTileStats.loadedDemTiles > 0 && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono">
+                  {vworldTileStats.loadedDemTiles}격자
+                </span>
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.vworldDemTerrain}
+                  onChange={() => handleToggleLayer('vworldDemTerrain')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
             <span className="flex items-center gap-2 text-slate-300 font-medium">
               <Building className="w-3.5 h-3.5 text-blue-400" />

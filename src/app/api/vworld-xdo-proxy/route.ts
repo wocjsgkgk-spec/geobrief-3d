@@ -133,6 +133,27 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // 3D 교량(.xdo) 폴백 바이너리 생성
+  if (layer === 'facility_bridge') {
+    const bridgeBuffer = VWorldXDOParser.createSyntheticBridgeXDO({
+      objectID: Math.abs((idx * 2000 + idy) % 999999) + 50000,
+      deckWidth: 18,
+      deckLength: 95,
+      deckHeight: 3.6,
+      altitude: 112,
+      imageName: dataFile || 'bridge_concrete_deck.png',
+    });
+
+    return new NextResponse(bridgeBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Cache-Control': 'public, max-age=86400',
+        'X-VWorld-Source': 'synthetic-bridge',
+      },
+    });
+  }
+
   // 3D 건물(.xdo) 폴백 바이너리 생성
   const syntheticBuffer = VWorldXDOParser.createSyntheticXDO({
     objectID: Math.abs((idx * 1000 + idy) % 999999) + 10000,

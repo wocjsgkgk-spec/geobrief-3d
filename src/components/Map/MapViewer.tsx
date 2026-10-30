@@ -4650,12 +4650,13 @@ export const MapViewer: React.FC = () => {
     }
   }, [layers.zoning, isMapLoaded]);
 
-  // [브이월드 실사 3D 건물 (XDO 스트리밍) 레이어 토글 동기화]
+  // [브이월드 실사 3D 건물·교량·DEM 통합 스트리밍 레이어 토글 동기화]
   useEffect(() => {
     if (!isMapLoaded || !vworld3DTileLayerRef.current) return;
-    const isVis = !!layers.vworld3DReal && !!layers.buildings3D;
-    vworld3DTileLayerRef.current.setVisible(isVis);
-  }, [layers.vworld3DReal, layers.buildings3D, isMapLoaded]);
+    vworld3DTileLayerRef.current.setBuildingsVisible(!!layers.vworld3DReal && !!layers.buildings3D);
+    vworld3DTileLayerRef.current.setBridgesVisible(!!layers.vworld3DBridges && !!layers.buildings3D);
+    vworld3DTileLayerRef.current.setDemVisible(!!layers.vworldDemTerrain);
+  }, [layers.vworld3DReal, layers.vworld3DBridges, layers.vworldDemTerrain, layers.buildings3D, isMapLoaded]);
 
   // [공공데이터포털] 전국 교량 및 터널 레이어 가시성 동적 토글 (2D 심볼 + 3D Three.js 구조물)
   useEffect(() => {

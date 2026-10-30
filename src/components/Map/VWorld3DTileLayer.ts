@@ -1,23 +1,18 @@
 /**
  * components/Map/VWorld3DTileLayer.ts
  *
- * [GeoBrief 3D 2단계: 브이월드(V-World 3D) 실사 타일 스트리밍 및 파싱 레이어]
+ * [GeoBrief 3D 3단계: 브이월드(V-World 3D) 실사 건물·교량·DEM 통합 스트리밍 엔진]
  *
- * 브이월드 역공학 쿼드트리 인덱싱(VWorldQuadtreeIndexer)과 XDO 바이너리 파서(VWorldXDOParser)를
- * MapLibre GL 3D 커스텀 레이어 파이프라인에 직결하여, 뷰포트 내 브이월드 실사 3D 건축물을
- * 비동기 쿼드트리 청크 단위로 스트리밍 렌더링합니다.
+ * 브이월드 역공학 쿼드트리 인덱싱(VWorldQuadtreeIndexer), XDO 바이너리 파서(VWorldXDOParser),
+ * 및 DEM 수치표고모델 파서(VWorldDEMParser)를 통합하여, 뷰포트 내 3대 핵심 레이어를
+ * 비동기 쿼드트리 청크 단위로 독립적·동시 스트리밍 렌더링합니다:
  *
- * [핵심 아키텍처]
- *  1. [LOD 동적 분기 & 지능형 프러스텀 컬링]:
- *     - Zoom < 13: 대기 모드 (GPU Draw Call 절약)
- *     - Zoom 13 ~ 14.5: 레벨 14 (LOD2 중경 건축물 청크)
- *     - Zoom >= 14.5: 레벨 15 (LOD3+ 초정밀 실사 건축물 메쉬)
- *  2. [LRU 메모리 캐시 & VRAM 누수 원천 차단]:
- *     - 최대 48개 타일 캐시 유지, 뷰포트 이탈 시 geometry/material dispose
- *  3. [64비트 정밀도 보존 & 지형 밀착]:
- *     - MapLibre MercatorCoordinate 및 extractCustomLayerMatrix 연동
- *  4. [황금비 조명 & 대기 안개 동기화]:
- *     - VWorldWebGLShaderSpec 사양 적용
+ *  1. [실사 3D 건축물 (facility_build)]:
+ *     - Zoom >= 13: 레벨 14/15 고정밀 실사 입면·외벽 텍스처 메쉬
+ *  2. [전국 3D 교량 및 교각 (facility_bridge)]:
+ *     - Zoom >= 13: 하천 횡단 대교, 고가교, 인터체인지 입체 교량 상판 및 교각 메쉬
+ *  3. [수치표고모델 지형 격자 (dem)]:
+ *     - Zoom >= 11: 65x65 고밀도 DEM 지형 표고 와이어프레임 & 고도 메쉬
  */
 
 import maplibregl from 'maplibre-gl';
@@ -25,8 +20,10 @@ import * as THREE from 'three';
 import {
   VWorldQuadtreeIndexer,
   VWorldXDOParser,
+  VWorldDEMParser,
   VWorldTileBounds,
   VWorldParsedXDO,
+  VWorldParsedDEM,
   VWorldWebGLShaderSpec,
 } from '@/lib/vendor/vworldReverseSpec';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
@@ -35,11 +32,23 @@ import { useMapStore } from '@/store/useMapStore';
 
 interface CachedTile {
   key: string;
+  layer: 'facility_build' | 'facility_bridge';
   level: number;
   idx: number;
   idy: number;
   group: THREE.Group;
   parsed: VWorldParsedXDO;
+  bounds: VWorldTileBounds;
+  lastAccessed: number;
+}
+
+interface CachedDemTile {
+  key: string;
+  level: number;
+  idx: number;
+  idy: number;
+  mesh: THREE.Mesh;
+  parsed: VWorldParsedDEM;
   bounds: VWorldTileBounds;
   lastAccessed: number;
 }
@@ -53,9 +62,13 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
   private camera: THREE.PerspectiveCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 5000);
   private scene: THREE.Scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer | null = null;
-  private tilesRootGroup: THREE.Group = new THREE.Group();
 
-  // 조명 및 안개
+  // 3대 서브 레이어 루트 그룹
+  private buildingsRootGroup: THREE.Group = new THREE.Group();
+  private bridgesRootGroup: THREE.Group = new THREE.Group();
+  private demRootGroup: THREE.Group = new THREE.Group();
+
+  // 조명 객체
   private dirLight: THREE.DirectionalLight | null = null;
   private hemiLight: THREE.HemisphereLight | null = null;
   private ambLight: THREE.AmbientLight | null = null;
@@ -70,25 +83,54 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
   private rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 
   // 타일 캐시 및 큐 관리
-  private tileCache: Map<string, CachedTile> = new Map();
+  private buildingTileCache: Map<string, CachedTile> = new Map();
+  private bridgeTileCache: Map<string, CachedTile> = new Map();
+  private demTileCache: Map<string, CachedDemTile> = new Map();
   private pendingFetches: Set<string> = new Set();
+
   private activeLevel = 15;
   private maxCachedTiles = 48;
-  private isVisible = true;
+  private isBuildingsVisible = true;
+  private isBridgesVisible = true;
+  private isDemVisible = false;
   private isDestroyed = false;
   private moveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    this.tilesRootGroup.name = 'VWorld_3D_Tiles_Root';
-    this.scene.add(this.tilesRootGroup);
+    this.buildingsRootGroup.name = 'VWorld_Buildings_Root';
+    this.bridgesRootGroup.name = 'VWorld_Bridges_Root';
+    this.demRootGroup.name = 'VWorld_DEM_Root';
+
+    this.scene.add(this.buildingsRootGroup);
+    this.scene.add(this.bridgesRootGroup);
+    this.scene.add(this.demRootGroup);
   }
 
   public setVisible(visible: boolean): void {
-    this.isVisible = visible;
-    this.tilesRootGroup.visible = visible;
-    if (this.map) {
-      this.map.triggerRepaint();
-    }
+    this.isBuildingsVisible = visible;
+    this.buildingsRootGroup.visible = visible;
+    if (this.map) this.map.triggerRepaint();
+  }
+
+  public setBuildingsVisible(visible: boolean): void {
+    this.isBuildingsVisible = visible;
+    this.buildingsRootGroup.visible = visible;
+    if (this.map) this.map.triggerRepaint();
+    this.scheduleTileUpdate(50);
+  }
+
+  public setBridgesVisible(visible: boolean): void {
+    this.isBridgesVisible = visible;
+    this.bridgesRootGroup.visible = visible;
+    if (this.map) this.map.triggerRepaint();
+    this.scheduleTileUpdate(50);
+  }
+
+  public setDemVisible(visible: boolean): void {
+    this.isDemVisible = visible;
+    this.demRootGroup.visible = visible;
+    if (this.map) this.map.triggerRepaint();
+    this.scheduleTileUpdate(50);
   }
 
   public onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
@@ -147,7 +189,7 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
   }
 
   private onMapMoveEnd = (): void => {
-    if (this.isDestroyed || !this.isVisible) return;
+    if (this.isDestroyed) return;
     this.scheduleTileUpdate(200);
   };
 
@@ -161,90 +203,150 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
   }
 
   /**
-   * 뷰포트 프러스텀 내의 브이월드 쿼드트리 타일 동적 산출 및 스트리밍
+   * 뷰포트 프러스텀 내의 브이월드 쿼드트리 타일(건물·교량·DEM) 동적 산출 및 스트리밍
    */
   private updateVisibleTiles(): void {
-    if (!this.map || this.isDestroyed || !this.isVisible) return;
+    if (!this.map || this.isDestroyed) return;
 
     const zoom = this.map.getZoom();
 
-    // 줌 13 미만에서는 타일 로딩을 중지하고 숨김 처리하여 성능 확보
-    if (zoom < 13.0) {
-      this.tilesRootGroup.visible = false;
-      return;
-    }
-    this.tilesRootGroup.visible = true;
+    // 1. [실사 건물 및 교량 스트리밍] 줌 13 이상에서 가동
+    if (zoom >= 13.0) {
+      const level =
+        zoom >= 14.5
+          ? VWorldQuadtreeIndexer.LEVEL_BUILDING_LOD3_REALISTIC
+          : VWorldQuadtreeIndexer.LEVEL_BUILDING_LOD2;
+      this.activeLevel = level;
 
-    // LOD 레벨 분기: 14.5 이상은 Level 15 (초정밀), 이하는 Level 14
-    const level = zoom >= 14.5 ? VWorldQuadtreeIndexer.LEVEL_BUILDING_LOD3_REALISTIC : VWorldQuadtreeIndexer.LEVEL_BUILDING_LOD2;
-    this.activeLevel = level;
+      const bounds = this.map.getBounds();
+      const minLon = bounds.getWest();
+      const maxLon = bounds.getEast();
+      const minLat = bounds.getSouth();
+      const maxLat = bounds.getNorth();
 
-    // 현재 뷰포트 BBOX 계산
-    const bounds = this.map.getBounds();
-    const minLon = bounds.getWest();
-    const maxLon = bounds.getEast();
-    const minLat = bounds.getSouth();
-    const maxLat = bounds.getNorth();
+      const tiles = VWorldQuadtreeIndexer.getTilesForBbox([minLon, minLat, maxLon, maxLat], level);
+      const center = this.map.getCenter();
+      const cLon = center.lng;
+      const cLat = center.lat;
 
-    // 쿼드트리 인덱서로 BBOX 내 타일 목록 추출
-    const tiles = VWorldQuadtreeIndexer.getTilesForBbox([minLon, minLat, maxLon, maxLat], level);
+      // 카메라 중심 거리 기준 정렬
+      tiles.sort((a, b) => {
+        const bA = VWorldQuadtreeIndexer.getTileBounds(a.idx, a.idy, level);
+        const bB = VWorldQuadtreeIndexer.getTileBounds(b.idx, b.idy, level);
+        const distA = Math.hypot(bA.centerLon - cLon, bA.centerLat - cLat);
+        const distB = Math.hypot(bB.centerLon - cLon, bB.centerLat - cLat);
+        return distA - distB;
+      });
 
-    const center = this.map.getCenter();
-    const cLon = center.lng;
-    const cLat = center.lat;
+      const activeTiles = tiles.slice(0, 12);
+      const activeBldgKeys = new Set<string>();
+      const activeBridgeKeys = new Set<string>();
 
-    // 카메라 중심에서 가까운 순으로 정렬 (중앙 우선 스트리밍)
-    tiles.sort((a, b) => {
-      const bA = VWorldQuadtreeIndexer.getTileBounds(a.idx, a.idy, level);
-      const bB = VWorldQuadtreeIndexer.getTileBounds(b.idx, b.idy, level);
-      const distA = Math.hypot(bA.centerLon - cLon, bA.centerLat - cLat);
-      const distB = Math.hypot(bB.centerLon - cLon, bB.centerLat - cLat);
-      return distA - distB;
-    });
+      // 건물 스트리밍
+      if (this.isBuildingsVisible) {
+        this.buildingsRootGroup.visible = true;
+        for (const tile of activeTiles) {
+          const key = `bldg_${tile.level}_${tile.idx}_${tile.idy}`;
+          activeBldgKeys.add(key);
 
-    // 1회 최대 활성 타일 수: 12개 (60fps 및 VRAM 보호)
-    const activeTiles = tiles.slice(0, 12);
-    const activeKeys = new Set<string>();
-
-    for (const tile of activeTiles) {
-      const key = `${tile.level}_${tile.idx}_${tile.idy}`;
-      activeKeys.add(key);
-
-      if (this.tileCache.has(key)) {
-        const cached = this.tileCache.get(key)!;
-        cached.lastAccessed = Date.now();
-        cached.group.visible = true;
+          if (this.buildingTileCache.has(key)) {
+            const cached = this.buildingTileCache.get(key)!;
+            cached.lastAccessed = Date.now();
+            cached.group.visible = true;
+          } else {
+            this.fetchAndLoadXdoTile('facility_build', tile.level, tile.idx, tile.idy, key);
+          }
+        }
       } else {
-        // 비동기 스트리밍 요청
-        this.fetchAndLoadTile(tile.level, tile.idx, tile.idy, key);
+        this.buildingsRootGroup.visible = false;
       }
+
+      // 교량 스트리밍
+      if (this.isBridgesVisible) {
+        this.bridgesRootGroup.visible = true;
+        for (const tile of activeTiles) {
+          const key = `bridge_${tile.level}_${tile.idx}_${tile.idy}`;
+          activeBridgeKeys.add(key);
+
+          if (this.bridgeTileCache.has(key)) {
+            const cached = this.bridgeTileCache.get(key)!;
+            cached.lastAccessed = Date.now();
+            cached.group.visible = true;
+          } else {
+            this.fetchAndLoadXdoTile('facility_bridge', tile.level, tile.idx, tile.idy, key);
+          }
+        }
+      } else {
+        this.bridgesRootGroup.visible = false;
+      }
+
+      // 화면 이탈 타일 가시성 제어
+      for (const [key, cached] of this.buildingTileCache.entries()) {
+        if (!activeBldgKeys.has(key)) cached.group.visible = false;
+      }
+      for (const [key, cached] of this.bridgeTileCache.entries()) {
+        if (!activeBridgeKeys.has(key)) cached.group.visible = false;
+      }
+    } else {
+      this.buildingsRootGroup.visible = false;
+      this.bridgesRootGroup.visible = false;
     }
 
-    // 활성 뷰포트에서 벗어난 타일 숨김 처리
-    for (const [key, cached] of this.tileCache.entries()) {
-      if (!activeKeys.has(key)) {
-        cached.group.visible = false;
+    // 2. [DEM 지형 표고 격자 스트리밍] 줌 11 이상 및 토글 활성화 시 가동
+    if (this.isDemVisible && zoom >= 11.0) {
+      this.demRootGroup.visible = true;
+      const demLevel = Math.max(10, Math.min(13, Math.floor(zoom - 1.5)));
+      const bounds = this.map.getBounds();
+      const demTiles = VWorldQuadtreeIndexer.getTilesForBbox(
+        [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+        demLevel
+      ).slice(0, 8);
+
+      const activeDemKeys = new Set<string>();
+      for (const tile of demTiles) {
+        const key = `dem_${tile.level}_${tile.idx}_${tile.idy}`;
+        activeDemKeys.add(key);
+
+        if (this.demTileCache.has(key)) {
+          const cached = this.demTileCache.get(key)!;
+          cached.lastAccessed = Date.now();
+          cached.mesh.visible = true;
+        } else {
+          this.fetchAndLoadDemTile(tile.level, tile.idx, tile.idy, key);
+        }
       }
+
+      for (const [key, cached] of this.demTileCache.entries()) {
+        if (!activeDemKeys.has(key)) cached.mesh.visible = false;
+      }
+    } else {
+      this.demRootGroup.visible = false;
     }
 
-    // LRU 캐시 정리 (최대치 초과 시 오래된 타일 폐기)
+    // LRU 캐시 정리 & 통계 발행
     this.trimCache();
     this.updateStats();
   }
 
   /**
-   * XDO 타일 비동기 다운로드 및 3D 메쉬 생성
+   * 건물 또는 교량 XDO 바이너리 비동기 스트리밍 로드
    */
-  private async fetchAndLoadTile(level: number, idx: number, idy: number, key: string): Promise<void> {
-    if (this.pendingFetches.has(key) || this.tileCache.has(key) || this.isDestroyed) {
-      return;
-    }
+  private async fetchAndLoadXdoTile(
+    layer: 'facility_build' | 'facility_bridge',
+    level: number,
+    idx: number,
+    idy: number,
+    key: string
+  ): Promise<void> {
+    if (this.pendingFetches.has(key) || this.isDestroyed) return;
+    const targetCache = layer === 'facility_build' ? this.buildingTileCache : this.bridgeTileCache;
+    if (targetCache.has(key)) return;
 
     this.pendingFetches.add(key);
 
     try {
       const proxyUrl = VWorldQuadtreeIndexer.getProxyTileUrl({
-        layer: 'facility_build',
+        layer,
         level,
         idx,
         idy,
@@ -264,8 +366,6 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
       }
 
       const tileBounds = VWorldQuadtreeIndexer.getTileBounds(idx, idy, level);
-
-      // 기준 원점 대비 상대 미터 위치 계산
       const origin = this.originLngLat || [tileBounds.centerLon, tileBounds.centerLat];
       const metersPerLng = 111319.49 * Math.cos((origin[1] * Math.PI) / 180.0);
       const metersPerLat = 111132.92;
@@ -273,23 +373,34 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
       const localX = (tileBounds.centerLon - origin[0]) * metersPerLng;
       const localZ = -(tileBounds.centerLat - origin[1]) * metersPerLat;
 
-      // 지형 표고 조회
       const terrainElev =
         (this.map && elevationCache.getFromMap(this.map, [tileBounds.centerLon, tileBounds.centerLat])) ||
         110.0;
 
-      // XDO 파싱
       const parsed = VWorldXDOParser.parse(buffer, {
         originCenter: [0, 0, 0],
         scale: 1.0,
       });
 
-      // 타일 서브그룹 위치 설정
+      // 교량의 경우 고급 콘크리트 상판 및 금속 재질 적용
+      if (layer === 'facility_bridge') {
+        parsed.materials.forEach((m) => {
+          if (m instanceof THREE.MeshStandardMaterial) {
+            m.color = new THREE.Color(0xe2e8f0);
+            m.metalness = 0.35;
+            m.roughness = 0.55;
+          }
+        });
+      }
+
       parsed.group.position.set(localX, terrainElev - this.clampedAltitude, localZ);
-      this.tilesRootGroup.add(parsed.group);
+
+      const targetRoot = layer === 'facility_build' ? this.buildingsRootGroup : this.bridgesRootGroup;
+      targetRoot.add(parsed.group);
 
       const cachedItem: CachedTile = {
         key,
+        layer,
         level,
         idx,
         idy,
@@ -299,14 +410,86 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
         lastAccessed: Date.now(),
       };
 
-      this.tileCache.set(key, cachedItem);
+      targetCache.set(key, cachedItem);
       this.updateStats();
 
-      if (this.map) {
-        this.map.triggerRepaint();
-      }
+      if (this.map) this.map.triggerRepaint();
     } catch (err) {
-      console.warn(`[VWorld3DTileLayer] Failed to load tile ${key}:`, err);
+      console.warn(`[VWorld3DTileLayer] Failed to load ${layer} tile ${key}:`, err);
+    } finally {
+      this.pendingFetches.delete(key);
+    }
+  }
+
+  /**
+   * DEM 수치표고모델 바이너리 비동기 스트리밍 로드
+   */
+  private async fetchAndLoadDemTile(level: number, idx: number, idy: number, key: string): Promise<void> {
+    if (this.pendingFetches.has(key) || this.demTileCache.has(key) || this.isDestroyed) return;
+    this.pendingFetches.add(key);
+
+    try {
+      const proxyUrl = VWorldQuadtreeIndexer.getProxyTileUrl({
+        layer: 'dem',
+        level,
+        idx,
+        idy,
+      });
+
+      const res = await fetch(proxyUrl);
+      if (!res.ok) {
+        this.pendingFetches.delete(key);
+        return;
+      }
+
+      const buffer = await res.arrayBuffer();
+      if (this.isDestroyed || buffer.byteLength === 0) {
+        this.pendingFetches.delete(key);
+        return;
+      }
+
+      const tileBounds = VWorldQuadtreeIndexer.getTileBounds(idx, idy, level);
+      const parsedDem = VWorldDEMParser.parse(buffer, 65, tileBounds);
+
+      // 에메랄드 토포그래피 와이어프레임 & 반투명 지형 셰이더
+      const terrainMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x059669),
+        wireframe: true,
+        transparent: true,
+        opacity: 0.35,
+        roughness: 0.8,
+        metalness: 0.1,
+      });
+
+      const mesh = new THREE.Mesh(parsedDem.geometry, terrainMat);
+      mesh.name = `VWorld_DEM_${key}`;
+
+      const origin = this.originLngLat || [tileBounds.centerLon, tileBounds.centerLat];
+      const metersPerLng = 111319.49 * Math.cos((origin[1] * Math.PI) / 180.0);
+      const metersPerLat = 111132.92;
+      const localX = (tileBounds.centerLon - origin[0]) * metersPerLng;
+      const localZ = -(tileBounds.centerLat - origin[1]) * metersPerLat;
+
+      mesh.position.set(localX, parsedDem.meanElevation - this.clampedAltitude, localZ);
+      this.demRootGroup.add(mesh);
+
+      const cachedDem: CachedDemTile = {
+        key,
+        level,
+        idx,
+        idy,
+        mesh,
+        parsed: parsedDem,
+        bounds: tileBounds,
+        lastAccessed: Date.now(),
+      };
+
+      this.demTileCache.set(key, cachedDem);
+      this.updateStats();
+
+      if (this.map) this.map.triggerRepaint();
+    } catch (err) {
+      console.warn(`[VWorld3DTileLayer] Failed to load dem tile ${key}:`, err);
     } finally {
       this.pendingFetches.delete(key);
     }
@@ -316,40 +499,79 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
    * LRU 캐시 정리
    */
   private trimCache(): void {
-    if (this.tileCache.size <= this.maxCachedTiles) return;
-
-    const entries = Array.from(this.tileCache.entries()).sort(
-      (a, b) => a[1].lastAccessed - b[1].lastAccessed
-    );
-
-    const excessCount = this.tileCache.size - this.maxCachedTiles;
-    for (let i = 0; i < excessCount; i++) {
-      const [key, item] = entries[i];
-      this.disposeTile(item);
-      this.tileCache.delete(key);
+    // 건물 캐시 정리
+    if (this.buildingTileCache.size > this.maxCachedTiles) {
+      const entries = Array.from(this.buildingTileCache.entries()).sort(
+        (a, b) => a[1].lastAccessed - b[1].lastAccessed
+      );
+      const excess = this.buildingTileCache.size - this.maxCachedTiles;
+      for (let i = 0; i < excess; i++) {
+        const [k, item] = entries[i];
+        this.disposeXdoTile(this.buildingsRootGroup, item);
+        this.buildingTileCache.delete(k);
+      }
     }
-  }
 
-  private disposeTile(tile: CachedTile): void {
-    this.tilesRootGroup.remove(tile.group);
-
-    for (const geom of tile.parsed.geometries) {
-      geom.dispose();
+    // 교량 캐시 정리
+    if (this.bridgeTileCache.size > this.maxCachedTiles) {
+      const entries = Array.from(this.bridgeTileCache.entries()).sort(
+        (a, b) => a[1].lastAccessed - b[1].lastAccessed
+      );
+      const excess = this.bridgeTileCache.size - this.maxCachedTiles;
+      for (let i = 0; i < excess; i++) {
+        const [k, item] = entries[i];
+        this.disposeXdoTile(this.bridgesRootGroup, item);
+        this.bridgeTileCache.delete(k);
+      }
     }
-    for (const mat of tile.parsed.materials) {
-      if (Array.isArray(mat)) {
-        mat.forEach((m) => m.dispose());
-      } else {
-        mat.dispose();
+
+    // DEM 캐시 정리
+    if (this.demTileCache.size > 24) {
+      const entries = Array.from(this.demTileCache.entries()).sort(
+        (a, b) => a[1].lastAccessed - b[1].lastAccessed
+      );
+      const excess = this.demTileCache.size - 24;
+      for (let i = 0; i < excess; i++) {
+        const [k, item] = entries[i];
+        this.demRootGroup.remove(item.mesh);
+        item.mesh.geometry.dispose();
+        if (Array.isArray(item.mesh.material)) {
+          item.mesh.material.forEach((m) => m.dispose());
+        } else {
+          item.mesh.material.dispose();
+        }
+        this.demTileCache.delete(k);
       }
     }
   }
 
-  private disposeAllTiles(): void {
-    for (const tile of this.tileCache.values()) {
-      this.disposeTile(tile);
+  private disposeXdoTile(root: THREE.Group, tile: CachedTile): void {
+    root.remove(tile.group);
+    for (const geom of tile.parsed.geometries) geom.dispose();
+    for (const mat of tile.parsed.materials) {
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat.dispose();
     }
-    this.tileCache.clear();
+  }
+
+  private disposeAllTiles(): void {
+    for (const tile of this.buildingTileCache.values()) {
+      this.disposeXdoTile(this.buildingsRootGroup, tile);
+    }
+    this.buildingTileCache.clear();
+
+    for (const tile of this.bridgeTileCache.values()) {
+      this.disposeXdoTile(this.bridgesRootGroup, tile);
+    }
+    this.bridgeTileCache.clear();
+
+    for (const tile of this.demTileCache.values()) {
+      this.demRootGroup.remove(tile.mesh);
+      tile.mesh.geometry.dispose();
+      if (Array.isArray(tile.mesh.material)) tile.mesh.material.forEach((m) => m.dispose());
+      else tile.mesh.material.dispose();
+    }
+    this.demTileCache.clear();
     this.pendingFetches.clear();
   }
 
@@ -357,10 +579,24 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
     let totalVertices = 0;
     let totalTriangles = 0;
 
-    for (const tile of this.tileCache.values()) {
+    for (const tile of this.buildingTileCache.values()) {
       if (tile.group.visible) {
         totalVertices += tile.parsed.totalVertices;
         totalTriangles += tile.parsed.totalTriangles;
+      }
+    }
+
+    for (const tile of this.bridgeTileCache.values()) {
+      if (tile.group.visible) {
+        totalVertices += tile.parsed.totalVertices;
+        totalTriangles += tile.parsed.totalTriangles;
+      }
+    }
+
+    for (const tile of this.demTileCache.values()) {
+      if (tile.mesh.visible) {
+        totalVertices += 65 * 65;
+        totalTriangles += 64 * 64 * 2;
       }
     }
 
@@ -368,7 +604,9 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
       const store = useMapStore.getState();
       if ((store as any).setVworldTileStats) {
         (store as any).setVworldTileStats({
-          loadedTiles: this.tileCache.size,
+          loadedTiles: this.buildingTileCache.size,
+          loadedBridges: this.bridgeTileCache.size,
+          loadedDemTiles: this.demTileCache.size,
           totalVertices,
           totalTriangles,
           currentLevel: this.activeLevel,
@@ -378,12 +616,10 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
   }
 
   public render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.isVisible || !this.renderer || !this.map || !this.originLngLat) {
-      return;
-    }
+    if (!this.renderer || !this.map || !this.originLngLat) return;
+    if (!this.isBuildingsVisible && !this.isBridgesVisible && !this.isDemVisible) return;
 
     try {
-      // 뷰포트 원점 이동 보정: 원점과 현재 중심의 거리가 5km 이상 벌어지면 좌표 재설정
       const center = this.map.getCenter();
       const distKm = Math.hypot(center.lng - this.originLngLat[0], center.lat - this.originLngLat[1]) * 111.0;
       if (distKm > 5.0) {
@@ -392,7 +628,6 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
         this.updateVisibleTiles();
       }
 
-      // 지형 고도 클램핑
       if (this.clampedAltitude === 0 && this.map.queryTerrainElevation) {
         const alt = this.map.queryTerrainElevation(this.originLngLat);
         if (alt && alt > 5.0) {
@@ -431,8 +666,7 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
     } catch (renderErr) {
-      // 프레임 렌더 오류 억제 (지도 메인루프 보호)
-      console.warn('[VWorld3DTileLayer] Render cycle caught error:', renderErr);
+      console.warn('[VWorld3DTileLayer] Render error:', renderErr);
     }
   }
 }

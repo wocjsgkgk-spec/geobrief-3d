@@ -553,6 +553,34 @@ export class VWorldXDOParser {
 
     return buffer;
   }
+
+  /**
+   * 브이월드 전국 교량(facility_bridge) 실사 규격 바이너리 생성기
+   */
+  public static createSyntheticBridgeXDO(options: {
+    objectID?: number;
+    deckWidth?: number;
+    deckLength?: number;
+    deckHeight?: number;
+    altitude?: number;
+    imageName?: string;
+  } = {}): ArrayBuffer {
+    const objectID = options.objectID || 5001;
+    const w = options.deckWidth || 18;
+    const d = options.deckLength || 90;
+    const h = options.deckHeight || 3.5;
+    const alt = options.altitude || 115;
+    const img = options.imageName || 'bridge_concrete_deck.png';
+
+    return this.createSyntheticXDO({
+      objectID,
+      width: w,
+      depth: d,
+      height: h,
+      altitude: alt,
+      imageName: img,
+    });
+  }
 }
 
 // ============================================================================
