@@ -132,12 +132,12 @@ export default function Home() {
 
       {/* 메인 작업 영역: 좌측 패널 + 우측 메인 맵 뷰포트 */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* [데스크톱] 좌측 슬림 컨트롤 패널 (반투명 글래스모피즘 & 접기/펼치기 지원) */}
+        {/* [데스크톱] 좌측 슬림 컨트롤 패널 (280px 폭 & 반투명 글래스모피즘 & 접기/펼치기 지원) */}
         <div
-          className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden border-r border-slate-800/80 backdrop-blur-md bg-slate-950/80 shadow-2xl relative z-20 ${
+          className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden border-r border-[#1e2a22] backdrop-blur-xl bg-[#0a0f0c]/90 shadow-2xl relative z-20 ${
             isPresentationMode || isSidebarCollapsed
               ? 'w-0 opacity-0 pointer-events-none'
-              : 'w-[320px] md:w-[325px] opacity-100'
+              : 'w-[280px] opacity-100'
           }`}
         >
           <ControlPanel />

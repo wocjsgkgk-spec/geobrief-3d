@@ -263,6 +263,7 @@ interface MapStoreState {
   // 레이어 토글 상태
   layers: {
     buildings3D: boolean;
+    militarySites: boolean; // 강원 18개 시·군 군 유휴부지 경계 및 3D 배지
     roads: boolean;
     demContours: boolean;
     cadastral: boolean; // 브이월드 연속지적도(필지선)
@@ -649,6 +650,7 @@ export const useMapStore = create<MapStoreState>()(
 
       layers: {
         buildings3D: true,
+        militarySites: true, // 강원 18개 시·군 군 유휴부지 경계선 및 면적 배지
         roads: true,
         demContours: false,
         cadastral: false, // 브이월드 연속지적도(필지선)
@@ -2274,6 +2276,7 @@ export const useMapStore = create<MapStoreState>()(
             if (!state.layers) {
               state.layers = {
                 buildings3D: true,
+                militarySites: true,
                 roads: true,
                 demContours: false,
                 cadastral: false,
@@ -2288,6 +2291,9 @@ export const useMapStore = create<MapStoreState>()(
               };
             } else {
               state.layers.roads = true;
+              if (state.layers.militarySites === undefined) {
+                state.layers.militarySites = true;
+              }
             }
           }
           if (state && state.completedPolygon && state.polygonCenter) {

@@ -1236,7 +1236,7 @@ export const MapViewer: React.FC = () => {
     bridges: string[];
     radiusMeters: number;
   } | null>(null);
-  const [showPolygonHUD, setShowPolygonHUD] = useState<boolean>(true);
+  const [showPolygonHUD, setShowPolygonHUD] = useState<boolean>(false);
 
   const handleCloseCadastralReport = useCallback(() => {
     setCadastralReport(null);
@@ -4255,6 +4255,7 @@ export const MapViewer: React.FC = () => {
   // 8-0-3-1. [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진 동기화]
   useEffect(() => {
     if (militarySiteVisualizerRef.current) {
+      militarySiteVisualizerRef.current.setVisible(layers.militarySites !== false);
       if (selectedIdleSiteId) {
         militarySiteVisualizerRef.current.selectSite(selectedIdleSiteId);
       }
@@ -4262,7 +4263,7 @@ export const MapViewer: React.FC = () => {
         layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military'
       );
     }
-  }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
+  }, [layers.firstLogisticsSmartCity, layers.militarySites, selectedIdleSiteId]);
 
   // 8-0-4. [4단계: 3D 식생·가로수(InstancedMesh) 가시성 및 거점 전환 동기화]
   useEffect(() => {
@@ -6872,93 +6873,34 @@ export const MapViewer: React.FC = () => {
           }}
         />
 
-        {/* [1. 브라우저 화면 내 긴급 에러 오버레이 (Error Overlay)] */}
-        <div
-          id="map-debug-overlay"
-          className={`absolute top-2 left-2 z-[9999] pointer-events-auto transition-all text-xs font-mono rounded-lg shadow-xl backdrop-blur-md border ${
-            debugErrors.length > 0
-              ? 'bg-red-950/95 border-red-500 text-red-200 p-3 max-h-56 overflow-y-auto max-w-xl'
-              : 'bg-black/80 border-emerald-500/60 text-emerald-300 px-3 py-1.5'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                debugErrors.length > 0 ? 'bg-red-500 animate-ping' : 'bg-emerald-400'
-              }`}
-            />
-            <span className="font-bold">
-              {debugErrors.length > 0 ? (
-                <span className="text-red-400">🚨 렌더링 에러 {debugErrors.length}건 감지</span>
-              ) : (
-                <span className="text-emerald-300 flex items-center gap-1.5 flex-wrap">
-                  <span>✅ WebGL 3D 엔진 정상</span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
-                    [V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: {realtimeMetrics.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetrics.activeLayersCount}개]
-                  </span>
-                </span>
-              )}
-            </span>
-            {debugErrors.length > 0 ? (
+        {/* [1. 런타임 긴급 에러 발생 시에만 최소한으로 표출되는 에러 오버레이] */}
+        {debugErrors.length > 0 && (
+          <div
+            id="map-debug-overlay"
+            className="absolute top-2 left-2 z-[9999] pointer-events-auto transition-all text-xs font-mono rounded-lg shadow-xl backdrop-blur-md border bg-red-950/95 border-red-500 text-red-200 p-3 max-h-56 overflow-y-auto max-w-xl"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              <span className="font-bold text-red-400">🚨 렌더링 에러 {debugErrors.length}건 감지</span>
               <button
                 onClick={() => setDebugErrors([])}
                 className="text-[10px] bg-red-800 hover:bg-red-700 px-2 py-0.5 rounded text-white font-sans ml-auto"
               >
-                로그 초기화
+                닫기 ✕
               </button>
-            ) : (
-              <button
-                onClick={() => setIsDebugCollapsed(!isDebugCollapsed)}
-                className="text-[10px] text-emerald-400/70 hover:text-emerald-200 underline ml-2 cursor-pointer"
-              >
-                {isDebugCollapsed ? '상세보기' : '접기'}
-              </button>
-            )}
-          </div>
-          {(!isDebugCollapsed || debugErrors.length > 0) && (
-            <div className="mt-2 pt-2 border-t border-white/10 text-[11px] leading-relaxed">
-              {debugErrors.length === 0 ? (
-                <div className="text-emerald-400/90">
-                  • 현재 브라우저 런타임 WebGL 및 MapLibre 에러가 0건입니다.<br />
-                  • 강원특별자치도 18개 시·군 3D 랜드마크 및 DEM 입체 지형이 정상 렌더링 중입니다.
-                </div>
-              ) : (
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                  {debugErrors.map((err, idx) => (
-                    <div
-                      key={idx}
-                      className="break-all whitespace-pre-wrap text-[11px] bg-red-900/60 p-1.5 rounded border border-red-700/60 font-mono"
-                    >
-                      {err}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-          )}
-        </div>
-
-        {/* 16:9 브리핑 오버레이 프레임워크 */}
-        {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
-        <BriefingHeader />
-
-        {/* 좌측 상단 카메라 연동 동적 방위표 (North Arrow - React 리렌더링 차단 및 DOM 직접 조작) */}
-        <Compass
-          bearing={viewport.bearing}
-          pitch={viewport.pitch}
-          zoom={viewport.zoom}
-          onResetNorth={handleResetNorth}
-          onAdjustPitch={handleAdjustPitch}
-        />
-
-        {/* 좌측 하단 인쇄 규격 동적 축척 바 (Scale Bar - React 리렌더링 차단 및 DOM 직접 조작) */}
-        <ScaleBar latitude={viewport.latitude} zoom={viewport.zoom} />
-
-        {/* [교통·인프라 접근성] 16:9 슬라이드 삽입용 정량 분석 표(Table) 오버레이 */}
-        <AccessibilityTableOverlay />
-
-        {/* 우측 하단 반투명 범례 카드 (Legend) */}
-        <LegendBox />
+            <div className="mt-2 pt-2 border-t border-white/10 space-y-1.5 max-h-40 overflow-y-auto">
+              {debugErrors.map((err, idx) => (
+                <div
+                  key={idx}
+                  className="break-all whitespace-pre-wrap text-[11px] bg-red-900/60 p-1.5 rounded border border-red-700/60 font-mono"
+                >
+                  {err}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* [교통·인프라 접근성] 3D 타깃 인프라 플로팅 핀 배지 */}
         {tieLineMarkerScreenPos && (
@@ -7083,7 +7025,7 @@ export const MapViewer: React.FC = () => {
           onSetSiteCenter={handleSetBuildingAsSiteCenter}
         />
 
-        {/* [2단계: 다각형 부지 정밀 측정 HUD 카드] */}
+        {/* [2단계: 다각형 부지 정밀 측정 HUD 카드 (필요 시에만 표시)] */}
         {completedPolygon && showPolygonHUD && (
           <PolygonMeasurementCard
             polygon={completedPolygon}
@@ -7097,20 +7039,6 @@ export const MapViewer: React.FC = () => {
             onClose={() => setShowPolygonHUD(false)}
             onOpenCutFillModal={toggleCutFill}
           />
-        )}
-
-        {/* 지형 단면 분석 플로팅 퀵 버튼 */}
-        {completedPolygon && (
-          <div className="absolute bottom-16 left-6 z-20">
-            <button
-              onClick={() => setShowTerrainProfile(true)}
-              className="bg-[#121914]/90 backdrop-blur-md border border-emerald-500/50 hover:border-emerald-400 px-3 py-1.5 rounded-lg shadow-xl text-xs font-bold text-emerald-300 hover:text-white flex items-center gap-1.5 transition-all group"
-              title="부지 횡단 해발고도(EL.) 단면도 및 경사도 분석 열기"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:animate-ping"></span>
-              <span>지형 고도단면 & 경사도 분석</span>
-            </button>
-          </div>
         )}
 
         {/* [군사·입지 분석] 3D 가시권(Viewshed/사계) 분석 플로팅 컨트롤 & 결과 카드 */}
