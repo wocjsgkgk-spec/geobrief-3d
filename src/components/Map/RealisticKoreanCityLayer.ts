@@ -79,6 +79,8 @@ import {
   isPermittedBuildingPolygon,
   sanitizeBuildingHeight,
 } from '@/utils/master3DRendererManager';
+import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
+import { DiverseBuildingGenerator } from '@/lib/vendor/diverseBuildingGenerator';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -364,6 +366,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       moveEndEvents.forEach((evt) => map.on(evt, this.handleMoveEnd));
 
       map.on('idle', this.handleMapIdle);
+      map.on('sourcedata', this.handleSourceData);
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
       const center = map.getCenter();
@@ -376,9 +379,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleSourceData = (e: any): void => {
     if (
-      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap') &&
+      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'fusion-buildings-source') &&
       e.isSourceLoaded &&
-      this.vectorTileFeatures.length === 0 &&
       !this.isMoving
     ) {
       this.extractAndBuildFromMap();
@@ -386,7 +388,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   };
 
   private handleMapIdle = (): void => {
-    if (!this.hasInitialBuilt && !this.isMoving && this.map) {
+    if (!this.isMoving && this.map) {
       this.extractAndBuildFromMap();
     }
   };
@@ -409,16 +411,18 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
     }
-    // 300ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤에만 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
-    this.moveEndTimer = setTimeout(() => {
+    const checkAndComplete = () => {
       this.moveEndTimer = null;
       if (!this.map) return;
       if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
+        this.moveEndTimer = setTimeout(checkAndComplete, 150);
         return;
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
-    }, 300);
+    };
+    // 250ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
+    this.moveEndTimer = setTimeout(checkAndComplete, 250);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -463,7 +467,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
    * MapLibre 맵 소스 및 캐시로부터 화면 내 건물을 추출하여 3D 빌드 실행 (100% 입체화)
    */
   public extractAndBuildFromMap(): void {
-    if (!this.map || this.isMoving || this.isBuildingGeometry) return;
+    if (!this.map || this.isBuildingGeometry) return;
+    if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
+      return;
+    }
+    this.isMoving = false;
 
     // 1) 뷰포트 내 MapLibre 벡터 타일 피처 전체 수집 (6,400+ 저층/중층 건물 100% 추출)
     try {
@@ -846,12 +854,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       const areaSqm = Math.max(10, Math.abs(area2D) * 0.5);
 
-      // [1단계: 마스터 전역 기하 필터] 면적 4,500㎡ 초과 비건물 및 비정상 지적/필지/찢어짐 폴리곤 100% 영구 차단
-      const featProps = (feat.properties || {}) as Record<string, any>;
-      if (!isPermittedBuildingPolygon(featProps, areaSqm, 100, 100, 50)) {
-        continue;
-      }
-
       // 와인딩 오더 보정 (CCW)
       if (area2D < 0) {
         pts2D.reverse();
@@ -882,9 +884,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const spanX = Math.max(1, maxX - minX);
       const spanZ = Math.max(1, maxZ - minZ);
 
+      // [1단계: 마스터 전역 기하 필터] 면적 5,500㎡ 초과 비건물 및 찢어짐 폴리곤 100% 영구 차단
+      const featProps = (feat.properties || {}) as Record<string, any>;
+      if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen)) {
+        continue;
+      }
+
       // [1단계: 화면 중앙 붉은색/검은색 삼각형 찢어짐(Polygon Tearing) 원천 차단]
-      // 임의의 변 길이가 180m를 초과하거나 가로/세로 span이 220m를 초과하는 비정상 폴리곤은 즉시 폐기(Skip)
-      if (maxEdgeLen > 180 || spanX > 220 || spanZ > 220) {
+      if (maxEdgeLen > 220 || spanX > 260 || spanZ > 260) {
         continue;
       }
 
@@ -924,20 +931,34 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         stampBuildingWithMasterData(feat);
       }
 
-      // [벤더링 16대 프리셋 분류기 적용]
+      // [2단계: DiverseBuildingGenerator 24대 실사 아키텍처 변주 엔진 시드 연동]
+      const diverseSeed = DiverseBuildingGenerator.calculateSeed(cLng, cLat);
       const classified = classifyBuildingWithVendor(rawCoords, featProps);
-      let height = featProps.realHeight || classified.height;
-      if (height <= 0) {
-        continue;
-      }
 
-      // [진짜 아파트 동 판정] 대단지 아파트는 실제 층수인 45m~78m 적용
+      // [1단계: VworldMasterEngine 연동 실사 높이 복원 (0m 평면 건물 원천 차단)]
       const isTrueHighRiseApt =
-        (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)') &&
-        (areaSqm >= 350 || height >= 25.0);
+        (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)' || String(featProps.buld_nm || '').includes('아파트')) &&
+        areaSqm >= 320;
 
-      // [마스터 전역 높이 필터] 소형 필지(area < 250㎡) 연필 기둥 현상 영구 차단 & 세장비 안전 캡
-      height = sanitizeBuildingHeight(height, areaSqm, minWidth, classified.seed, isTrueHighRiseApt);
+      let rawH = Number(featProps.realHeight || featProps.height || featProps.heit || classified.height || 0);
+      let height = sanitizeBuildingHeight(
+        rawH,
+        areaSqm,
+        minWidth,
+        diverseSeed,
+        isTrueHighRiseApt,
+        featProps,
+        [cLng, cLat]
+      );
+      if (height <= 0) {
+        height = VworldMasterEngine.calculateBuildingHeight(
+          featProps,
+          areaSqm,
+          minWidth,
+          diverseSeed,
+          [cLng, cLat]
+        );
+      }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
       const sideWallEdgeIndices = new Set<number>();
@@ -953,11 +974,25 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
-      // 지형 표고 캐시 확인 및 안착
-      const rawElev =
-        elevationCache.getFromMap(map, [cLng, cLat]) ||
-        (map.queryTerrainElevation ? map.queryTerrainElevation([cLng, cLat]) || 0 : 0);
-      const baseElev = rawElev - this.clampedAltitude;
+      // 지형 표고: 실제 지형 고도(m) 직접 안착 (고도 중복 편차 및 0m 누락 완전 해결)
+      let rawElev = 0;
+      try {
+        if (map.queryTerrainElevation) {
+          const q = map.queryTerrainElevation([cLng, cLat]);
+          if (typeof q === 'number' && Number.isFinite(q) && q > 0) rawElev = q;
+        }
+        if (rawElev <= 0) {
+          const cached = elevationCache.getFromMap(map, [cLng, cLat]);
+          if (cached > 0) rawElev = cached;
+        }
+      } catch {}
+
+      // 원주 등 강원권 평균 표고(138m) 안전 기본값 (DEM 타일 로드 전이라도 지표면에 밀착)
+      if (rawElev <= 0) {
+        rawElev = 138.0;
+      }
+
+      const baseElev = rawElev;
       this.currentBuildingBaseElev = baseElev;
       const topElev = baseElev + height;
 
@@ -986,7 +1021,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         pts2D,
         baseElev,
         height,
-        seed: classified.seed,
+        seed: diverseSeed,
         edgeLens,
         maxEdgeLen,
         minEdgeLen,
@@ -1014,10 +1049,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     rawFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): void {
     if (!this.map) return;
-    if (this.isMoving) {
+    if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
       this.pendingFeatures = rawFeatures;
       return;
     }
+    this.isMoving = false;
 
     if (this.activeBuildSliceRaf !== null) {
       cancelAnimationFrame(this.activeBuildSliceRaf);
@@ -1038,30 +1074,38 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
-        if (dLng > 0.08 || dLat > 0.08) {
+        if (dLng > 0.03 || dLat > 0.03) {
           this.originLngLat = [center.lng, center.lat];
           this.resetAccumulatedBuffers();
         }
       }
 
-      // 중심점 기준 지형 고도 캐싱 (DEM 타일 로드 상태 반영)
-      const queriedAltitude =
-        elevationCache.getFromMap(map, this.originLngLat) ||
-        (map.queryTerrainElevation ? map.queryTerrainElevation(this.originLngLat) || 0 : 0);
-      if (Number.isFinite(queriedAltitude) && queriedAltitude > 0) {
-        this.clampedAltitude = queriedAltitude;
-      }
+      this.clampedAltitude = 0; // 항상 해수면(0m) 고정 기준계 유지 (표고 이중 가산 방지)
 
       const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
       const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
       const metersPerLat = (Math.PI / 180) * 6378137;
 
       const maxLimit = this.options.maxBuildings || 35000;
-      const features = rawFeatures.slice(0, maxLimit);
+      const centerLng = center.lng;
+      const centerLat = center.lat;
+
+      // 뷰포트 중심 거리순 정렬: 화면 중심(사용자 시야)의 건물을 0ms 최우선으로 즉시 빌드
+      const sorted = rawFeatures.slice();
+      sorted.sort((a: any, b: any) => {
+        const cA = a.geometry?.type === 'Polygon' ? a.geometry.coordinates?.[0]?.[0] : a.geometry?.coordinates?.[0]?.[0]?.[0];
+        const cB = b.geometry?.type === 'Polygon' ? b.geometry.coordinates?.[0]?.[0] : b.geometry?.coordinates?.[0]?.[0]?.[0];
+        if (!cA || !cB) return 0;
+        const dA = (cA[0] - centerLng) * (cA[0] - centerLng) + (cA[1] - centerLat) * (cA[1] - centerLat);
+        const dB = (cB[0] - centerLng) * (cB[0] - centerLng) + (cB[1] - centerLat) * (cB[1] - centerLat);
+        return dA - dB;
+      });
+
+      const features = sorted.slice(0, maxLimit);
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 4.0; // 프레임당 최대 4.0ms 이내 연산 엄격 보장 (60fps 무결점)
+      const FRAME_BUDGET_MS = 8.0; // 프레임당 최대 8.0ms 이내 연산 엄격 보장 (60fps 무결점)
 
       const executeSlice = () => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1079,7 +1123,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         const sliceStartTime = performance.now();
-        const FRAME_BUDGET_MS = 3.5; // 프레임당 최대 3.5ms 이내 엄격 보장 (4.0ms 버짓 절대 준수)
+        const FRAME_BUDGET_MS = 8.0; // 프레임당 최대 8.0ms 이내 보장 (60fps 무결점)
 
         while (featureIdx < features.length) {
           if (performance.now() - sliceStartTime >= FRAME_BUDGET_MS) {
@@ -1108,19 +1152,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // 최초 화면 즉시 표시: 300개 이상 누적 시 초기에 먼저 표출하여 사용자 대기 0초 달성
-          if (newlyAddedCount >= 300 && !this.masterMesh) {
+          // 최초 화면 즉시 표시: 1개 이상 생성 시 즉각 1차 표출하여 사용자 대기 0초 달성
+          if (this.accPosIdx > 0 && (!this.masterMesh || newlyAddedCount >= 30)) {
             this.commitAccumulatedGeometry();
+            newlyAddedCount = 0;
           }
-          // 아직 처리할 건물이 남아있으면 다음 프레임에 4ms 슬라이스 계속
+          // 아직 처리할 건물이 남아있으면 다음 프레임에 슬라이스 계속
           this.activeBuildSliceRaf = requestAnimationFrame(executeSlice);
         } else {
           // 전체 피처 슬라이싱 완료!
           this.activeBuildSliceRaf = null;
           this.isBuildingGeometry = false;
 
-          // 신규 건물이 하나라도 추가되었거나 최초 빌드인 경우 원자적 더블 버퍼링 커밋
-          if (newlyAddedCount > 0 || !this.masterMesh) {
+          // 최종 원자적 더블 버퍼링 커밋
+          if (this.accPosIdx > 0) {
             this.commitAccumulatedGeometry();
           }
 
@@ -1387,25 +1432,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
-      // [지형 표고 레이스 컨디션 해결] DEM 타일 로딩 완료 후 지형 표고가 수신되면 지형 위로 리빌드
-      if (this.clampedAltitude === 0 && this.map) {
-        const queried =
-          elevationCache.getFromMap(this.map, this.originLngLat) ||
-          (this.map.queryTerrainElevation ? this.map.queryTerrainElevation(this.originLngLat) || 0 : 0);
-        if (queried > 5.0) {
-          this.clampedAltitude = queried;
-          setTimeout(() => {
-            if (!this.isMoving) this.extractAndBuildFromMap();
-          }, 50);
-        }
-      }
-
       const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
       const mercator = maplibregl.MercatorCoordinate.fromLngLat(
         this.originLngLat,
-        this.clampedAltitude
+        0 // 항상 해수면(0m) 기준계로 고정하여 표고 변위 지터링 완전 차단
       );
 
       const meterScale = maplibregl.MercatorCoordinate.fromLngLat(

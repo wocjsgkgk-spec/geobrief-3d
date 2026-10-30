@@ -158,10 +158,10 @@ export function getKoreanRoadLayerDefinitions(
           ['linear'],
           ['zoom'],
           9, '#0f2942',  // 원경: 깊은 틸 블루
-          13, '#1e3a5f', // 중경: 맑고 깨끗한 네이비 블루
-          16, '#18476d', // 근경: 청명한 강물 반사 톤
+          13, '#1e3a5f', // 중경: 맑고 깨끗한 네이비 블루 (#1e3a5f)
+          16, '#1e3a5f', // 근경: 자연스러운 청정 수면 컬러
         ],
-        'fill-opacity': 0.88,
+        'fill-opacity': 0.70, // 사용자 요구사항: 자연스러운 투명도 0.70
         'fill-antialias': true,
       },
       layout: {
@@ -178,9 +178,9 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#38bdf8', // 맑은 하늘빛 수면 반사광 라인
-        'line-opacity': 0.45,
-        'line-width': 1.6,
+        'line-color': '#2a4d70', // 은은한 수면 반사 테두리 (어색한 쨍한 네온색 제거)
+        'line-opacity': 0.35,
+        'line-width': 1.0,
       },
       layout: {
         'line-cap': 'round',
@@ -198,15 +198,15 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#1e3a5f',
-        'line-opacity': 0.85,
+        'line-color': '#1e3a5f', // 자연스러운 수면 색상 (#1e3a5f)
+        'line-opacity': 0.70,   // 사용자 요구사항: 투명도 0.70
         'line-width': [
           'interpolate',
           ['exponential', 1.5],
           ['zoom'],
-          11, 1.8,
-          14, 3.8,
-          17, 8.5,
+          11, 0.8, // 소하천 폭 실제 지형에 맞게 대폭 축소
+          14, 1.8,
+          17, 3.2,
         ],
       },
       layout: {

@@ -19,6 +19,7 @@ import type maplibregl from 'maplibre-gl';
 import type { RealisticKoreanCityLayer } from '@/components/Map/RealisticKoreanCityLayer';
 import type { LOD2BuildingEngine } from '@/components/Map/LOD2BuildingEngine';
 import type { RenderMode3D } from '@/types/map';
+import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
 
 export const ALL_FILL_EXTRUSION_LAYER_IDS = [
   'bldg-tier1-podium',
@@ -41,7 +42,7 @@ export const ALL_FILL_EXTRUSION_LAYER_IDS = [
 ];
 
 export interface Master3DRendererOptions {
-  renderMode3D: RenderMode3D;
+  renderMode3D?: RenderMode3D;
   isBuildingsVisible: boolean;
   realisticKoreanCityLayer?: RealisticKoreanCityLayer | null;
   lod2BuildingEngine?: LOD2BuildingEngine | null;
@@ -52,6 +53,8 @@ export interface Master3DRendererOptions {
 
 /**
  * 마스터 3D 렌더러 상태 머신 동기화 실행기
+ * - '모드 A/B/C' 분리 및 '0 버텍스 타일셋 숨김 로직' 전면 폐기
+ * - 오직 단 하나의 통합된 'V-World 실사 3D 마스터 렌더러'가 무조건 100% 가동
  */
 export function syncMaster3DRenderer(
   map: maplibregl.Map | null,
@@ -60,7 +63,6 @@ export function syncMaster3DRenderer(
   if (!map) return;
 
   const {
-    renderMode3D,
     isBuildingsVisible,
     realisticKoreanCityLayer,
     lod2BuildingEngine,
@@ -76,7 +78,6 @@ export function syncMaster3DRenderer(
     if (deck3DTilesManager) deck3DTilesManager.detachFromMap();
     if (threeboxLayer) threeboxLayer.setVisible(false);
 
-    // 모든 fill-extrusion 레이어 none
     ALL_FILL_EXTRUSION_LAYER_IDS.forEach((id) => {
       if (map.getLayer(id)) {
         map.setLayoutProperty(id, 'visibility', 'none');
@@ -85,80 +86,32 @@ export function syncMaster3DRenderer(
     return;
   }
 
-  // 2. 건물이 켜져 있는 경우: 모드별 단일 마스터 엔진 활성화 (상호 배타적 분기)
-  if (renderMode3D === 'facade') {
-    // [모드 A (권장 / 기본)]: Three.js RealisticKoreanCityLayer 단독 활성화
-    if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(true);
-    if (lod2BuildingEngine) lod2BuildingEngine.setVisible(false);
-    if (deck3DTilesManager) deck3DTilesManager.detachFromMap();
-
-    if (threeboxLayer) {
-      threeboxLayer.setLodMode('lod2');
-      threeboxLayer.setVisible(placedFacilitiesCount > 0);
-    }
-
-    // [이중 겹침 및 Z-Fighting 영구 차단]: 모든 MapLibre fill-extrusion 레이어 100% 숨김
-    ALL_FILL_EXTRUSION_LAYER_IDS.forEach((id) => {
-      if (map.getLayer(id)) {
-        map.setLayoutProperty(id, 'visibility', 'none');
-      }
-    });
-  } else if (renderMode3D === 'native') {
-    // [모드 B]: MapLibre 네이티브 GPU 다층 슬라이스 활성화
-    if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(false);
-    if (lod2BuildingEngine) lod2BuildingEngine.setVisible(false);
-    if (deck3DTilesManager) deck3DTilesManager.detachFromMap();
-
-    if (threeboxLayer) {
-      threeboxLayer.setLodMode('lod1');
-      threeboxLayer.setVisible(placedFacilitiesCount > 0);
-    }
-
-    // GPU building layers만 활성화
-    const nativeIds = [
-      'bldg-tier1-podium',
-      'bldg-tier2-mainwall',
-      'bldg-tier4-roofcap',
-      'bldg-tier5-roofdetail',
-      '3d-buildings',
-    ];
-    nativeIds.forEach((id) => {
-      if (map.getLayer(id)) {
-        map.setLayoutProperty(id, 'visibility', 'visible');
-      }
-    });
-
-    // 불필요한 레이어 숨김
-    ['bldg-tier3-pattern', 'buildings-extrusion'].forEach((id) => {
-      if (map.getLayer(id)) {
-        map.setLayoutProperty(id, 'visibility', 'none');
-      }
-    });
-  } else if (renderMode3D === 'tiles3d') {
-    // [모드 C]: 외부 3D Tiles 스트리밍 활성화
-    if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(false);
-    if (lod2BuildingEngine) lod2BuildingEngine.setVisible(false);
-
-    if (deck3DTilesManager) {
-      deck3DTilesManager.attachToMap(map);
-    }
-
-    if (threeboxLayer) {
-      threeboxLayer.setLodMode('lod2');
-      threeboxLayer.setVisible(placedFacilitiesCount > 0);
-    }
-
-    // fill-extrusion 숨김
-    ALL_FILL_EXTRUSION_LAYER_IDS.forEach((id) => {
-      if (map.getLayer(id)) {
-        map.setLayoutProperty(id, 'visibility', 'none');
-      }
-    });
+  // 2. [단일 통합 V-World 실사 3D 마스터 렌더러 100% 무조건 가동]
+  if (realisticKoreanCityLayer) {
+    realisticKoreanCityLayer.setVisible(true);
   }
+  if (lod2BuildingEngine) {
+    lod2BuildingEngine.setVisible(false);
+  }
+  if (deck3DTilesManager) {
+    deck3DTilesManager.detachFromMap();
+  }
+
+  if (threeboxLayer) {
+    threeboxLayer.setLodMode('lod2');
+    threeboxLayer.setVisible(placedFacilitiesCount > 0);
+  }
+
+  // 이중 겹침 및 Z-Fighting 영구 차단을 위해 fill-extrusion은 숨김 유지
+  ALL_FILL_EXTRUSION_LAYER_IDS.forEach((id) => {
+    if (map.getLayer(id)) {
+      map.setLayoutProperty(id, 'visibility', 'none');
+    }
+  });
 }
 
 /**
- * [전역 기하 필터] 비건물 및 이상 거대 폴리곤 검증 (면적 > 4,500㎡ 차단)
+ * [전역 기하 필터] 비건물 및 이상 거대 폴리곤 검증 (VworldMasterEngine 연동)
  */
 export function isPermittedBuildingPolygon(
   featProps: Record<string, any> = {},
@@ -167,98 +120,75 @@ export function isPermittedBuildingPolygon(
   spanZ: number,
   maxEdgeLen: number
 ): boolean {
-  // 1. 면적 4,500㎡ 초과 비건물 (필지, 단지, 공원, 행정구역 경계) 영구 차단
-  if (areaSqm > 4500 || areaSqm < 4.0) {
+  // 1. 면적 5,500㎡ 초과 비건물 (산림, 호수, 행정구역 경계선) 차단
+  if (areaSqm > 5500 || areaSqm < 4.0) {
     return false;
   }
 
-  // 2. 가로/세로 span 220m 초과 또는 단일 변 180m 초과 (찢어짐 방지)
-  if (spanX > 220 || spanZ > 220 || maxEdgeLen > 180) {
+  // 2. 가로/세로 span 260m 초과 또는 단일 변 220m 초과 (찢어짐 방지)
+  if (spanX > 260 || spanZ > 260 || maxEdgeLen > 220) {
     return false;
   }
 
-  // 3. 비건물 속성 태그 영구 차단
-  if (featProps.is_non_building === true || featProps.is_site_boundary === true) {
-    return false;
-  }
+  // 3. 건물이 확실한 속성 검증
+  const hasBuildingTag = Boolean(
+    featProps.building ||
+    featProps.type === 'building' ||
+    featProps.buld_nm ||
+    featProps.bldNm ||
+    featProps.bld_nm ||
+    featProps.buildingName ||
+    featProps.bd_mgt_sn ||
+    featProps.grnd_flr ||
+    featProps.gro_flo_co ||
+    featProps.grndFlrCnt ||
+    featProps.height ||
+    featProps.heit ||
+    featProps.realHeight
+  );
 
-  // 용도지역(UQ111), 단지(landuse), 공원(leisure), 행정경계(admin_level)
-  if (
-    featProps.UQ111 ||
-    featProps.UQ111_NM ||
-    featProps.uq111 ||
-    featProps.zoneName ||
-    featProps.zone_nm ||
-    featProps.spfc_nm ||
-    featProps.spfc_cd ||
-    featProps.landuse ||
-    featProps.leisure ||
-    featProps.boundary ||
-    featProps.admin_level ||
-    featProps.natural
-  ) {
-    return false;
-  }
-
-  // 순수 지적도 필지(PNU, 지번, 지목만 있고 건축물 속성이 없는 경우)
-  const isPureCadastralParcel =
-    Boolean(featProps.pnu || featProps.jimok || featProps.jibun) &&
-    !featProps.bd_mgt_sn &&
-    !featProps.buld_nm &&
-    !featProps.bldNm &&
-    !featProps.buildingName &&
-    !featProps.grnd_flr &&
-    !featProps.gro_flo_co &&
-    !featProps.grndFlrCnt &&
-    !featProps.hei &&
-    !featProps.heit &&
-    !featProps.height;
-
-  if (isPureCadastralParcel) {
-    return false;
+  // 건물이 아닌 순수 레이어만 차단
+  if (!hasBuildingTag) {
+    if (
+      featProps.is_site_boundary === true ||
+      featProps.is_non_building === true ||
+      featProps.boundary ||
+      featProps.admin_level ||
+      featProps.natural
+    ) {
+      return false;
+    }
   }
 
   return true;
 }
 
 /**
- * [전역 높이 필터] 소형 필지(area < 250㎡) 연필 기둥 방지 및 세장비 제한
+ * [전역 높이 필터] 브이월드 REA 역공학 4단계 스펙 연동
  */
 export function sanitizeBuildingHeight(
   rawHeight: number,
   areaSqm: number,
   minWidth: number,
   seed: number,
-  isHighRiseApt: boolean
+  isHighRiseApt: boolean,
+  featProps: Record<string, any> = {},
+  centerLngLat?: [number, number]
 ): number {
-  let h = rawHeight;
-
-  // 1. 소형 필지(area < 250㎡) 연필 기둥 현상 영구 차단:
-  // 어떤 경우에도 11.0m 이하(2.5~3층)로 엄격 제한!
-  if (areaSqm < 250) {
-    const maxSmallH = 7.5 + (seed % 4) * 0.8; // 7.5m ~ 9.9m
-    if (h > 11.0) {
-      h = Math.min(11.0, maxSmallH);
+  if (rawHeight > 0) {
+    if (areaSqm < 220) {
+      return Math.min(rawHeight, 7.5 + (seed % 4) * 0.9);
     }
+    const safeW = Math.max(6.0, minWidth);
+    const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
+    return Math.max(7.5, Math.min(rawHeight, maxAllowed));
   }
 
-  // 2. 바닥 면적 250㎡ ~ 450㎡ 중소형 건물
-  if (areaSqm >= 250 && areaSqm < 450 && !isHighRiseApt) {
-    if (h > 18.0) {
-      h = Math.min(18.0, 12.0 + (seed % 5) * 1.0);
-    }
-  }
-
-  // 3. 세장비(Slenderness Ratio) 안전 제한: 높이는 건물 최소 폭의 3.5배를 초과 불가
-  const maxAllowedSlenderH = Math.max(8.0, minWidth * 3.5);
-  if (h > maxAllowedSlenderH) {
-    h = Math.min(h, Math.max(8.0, maxAllowedSlenderH));
-  }
-
-  // 4. 진짜 대단지 아파트 (45m ~ 78m 보장)
-  if (isHighRiseApt && areaSqm >= 350 && h < 45.0) {
-    h = 48.0 + (seed % 28) * 1.0;
-  }
-
-  return Math.max(6.5, Math.round(h * 10) / 10);
+  return VworldMasterEngine.calculateBuildingHeight(
+    featProps,
+    areaSqm,
+    minWidth,
+    seed,
+    centerLngLat
+  );
 }

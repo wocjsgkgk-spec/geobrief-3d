@@ -26,6 +26,7 @@ const ESSENTIAL_LAYER_PREFIXES = [
   'local-cadastral',
   'molit-bridge-tunnel',
   'bldg-',
+  'building-',
   'real-',
   '3d-buildings',
   'fusion-buildings',

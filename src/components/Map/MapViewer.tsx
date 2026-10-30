@@ -1101,9 +1101,9 @@ export const MapViewer: React.FC = () => {
           }
         }).length;
 
-        // 전체 활성 레이어 수를 항상 15개 이하로 엄격 제한 (GPU 과부하 방지)
-        if (activeCount > 15) {
-          activeCount = enforceMaxActiveLayers(map, 15);
+        // 전체 활성 레이어 수를 적정 한도 이하로 유지 (GPU 과부하 방지)
+        if (activeCount > 85) {
+          activeCount = enforceMaxActiveLayers(map, 85);
         }
 
         setRealtimeMetrics((prev) => {
@@ -2275,6 +2275,8 @@ export const MapViewer: React.FC = () => {
     });
 
     (window as any).__map = map;
+    (window as any).__mapLibreMap = map;
+    (window as any).map = map;
     (window as any).__setRenderMode3D = setRenderMode3D;
     (window as any).__useMapStore = useMapStore;
     (window as any).__spatialAnalysisEngine = {
@@ -2904,6 +2906,23 @@ export const MapViewer: React.FC = () => {
           });
         }
 
+        // [핵심] OpenFreeMap 벡터 타일 스트리밍 활성화용 캐리어 레이어 (6,500+ 건물 100% 수집 보장)
+        if (!map.getLayer('building-vector-carrier')) {
+          map.addLayer({
+            id: 'building-vector-carrier',
+            type: 'fill',
+            source: 'openmaptiles-vector',
+            'source-layer': 'building',
+            minzoom: 10.0,
+            maxzoom: 24,
+            paint: {
+              'fill-opacity': 0.0001,
+              'fill-color': '#000000',
+            },
+            layout: { visibility: 'visible' },
+          });
+        }
+
         // 폴백용 3d-buildings 레이어 (중복 렌더링 방지 layout: none)
         if (!map.getLayer('3d-buildings')) {
           map.addLayer({
@@ -3338,25 +3357,12 @@ export const MapViewer: React.FC = () => {
             onTileCountUpdate: (count) => {
               console.log('[Universal3DTilesManager] Real-time 3D hybrid building count:', count);
             },
-            onExternalActiveChange: (isActive) => {
-              if (useMapStore.getState().renderMode3D === 'tiles3d') {
-                if (isActive) {
-                  // [요구사항 2] 외부 3D Tiles 로드 시 기존 절차적 건물 자동 대체
-                  if (lod2BuildingEngineRef.current) lod2BuildingEngineRef.current.setVisible(false);
-                  if (realisticKoreanCityLayerRef.current) realisticKoreanCityLayerRef.current.setVisible(false);
-                  setGpuBuildingLayersVisibility(map, false, true);
-                } else {
-                  syncMaster3DRenderer(map, {
-                    renderMode3D: 'tiles3d',
-                    isBuildingsVisible: !!useMapStore.getState().layers.buildings3D,
-                    realisticKoreanCityLayer: realisticKoreanCityLayerRef.current,
-                    lod2BuildingEngine: lod2BuildingEngineRef.current,
-                    deck3DTilesManager: deck3DTilesManagerRef.current,
-                    threeboxLayer: threeboxLayerRef.current,
-                  });
-                }
-                map.triggerRepaint();
+            onExternalActiveChange: (_isActive) => {
+              // V-World 실사 3D 마스터 렌더러 100% 상시 활성화 유지 (0 버텍스 은폐 로직 영구 폐기)
+              if (realisticKoreanCityLayerRef.current) {
+                realisticKoreanCityLayerRef.current.setVisible(true);
               }
+              map.triggerRepaint();
             },
           });
           deck3DTilesManagerRef.current = deckManager;
@@ -3540,6 +3546,8 @@ export const MapViewer: React.FC = () => {
     mapRef.current = map;
     if (typeof window !== 'undefined') {
       (window as any).__map = map;
+    (window as any).__mapLibreMap = map;
+    (window as any).map = map;
     }
 
     const resizeObserver = new ResizeObserver(() => {
@@ -6199,63 +6207,22 @@ export const MapViewer: React.FC = () => {
     addSurveillanceSensor,
   ]);
 
-  // 29. [Deck.gl Tile3DLayer 및 LOD2 3D 엔진 실시간 파라미터(투명도, SSE, 점 크기) 동기화]
+  // 29. [V-World 실사 3D 마스터 렌더러 100% 상시 활성화 유지 (0 버텍스 은폐 로직 영구 폐기)]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (renderMode3D === 'tiles3d') {
-      const presetId = tile3DStream.presetId;
-      const isExternalTilesActive = deck3DTilesManagerRef.current?.isExternalTilesActive?.() || false;
-      const center = map.getCenter();
-      const isWonju = center.lng >= 127.5 && center.lng <= 128.5 && center.lat >= 37.0 && center.lat <= 37.8;
-
-      if (lod2BuildingEngineRef.current) {
-        lod2BuildingEngineRef.current.setStyleMode(
-          presetId === 'sample_city' || presetId === 'sample_pointcloud' ? 'clean_mass' : 'photorealistic'
-        );
-        lod2BuildingEngineRef.current.setOpacity(tile3DStream.opacity ?? 1.0);
-        lod2BuildingEngineRef.current.setSSE(tile3DStream.maximumScreenSpaceError ?? 16);
-        const shouldHideThreejs = isExternalTilesActive;
-        lod2BuildingEngineRef.current.setVisible(!shouldHideThreejs && layers.buildings3D && tile3DStream.enabled);
-      }
-      if (realisticKoreanCityLayerRef.current) {
-        const shouldHide = isExternalTilesActive;
-        realisticKoreanCityLayerRef.current.setVisible(!shouldHide && layers.buildings3D && tile3DStream.enabled);
-      }
-
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.attachToMap(map);
-        deck3DTilesManagerRef.current.update({
-          ...tile3DStream,
-          enabled: tile3DStream.enabled,
-        });
-      }
-      map.triggerRepaint();
-    } else {
-      if (deck3DTilesManagerRef.current) {
-        deck3DTilesManagerRef.current.detachFromMap();
-      }
-      if (renderMode3D === 'facade') {
-        if (lod2BuildingEngineRef.current) {
-          lod2BuildingEngineRef.current.setVisible(false);
-        }
-        if (realisticKoreanCityLayerRef.current) {
-          realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
-        }
-      }
+    if (deck3DTilesManagerRef.current) {
+      deck3DTilesManagerRef.current.detachFromMap();
     }
-  }, [
-    renderMode3D,
-    layers.buildings3D,
-    tile3DStream.enabled,
-    tile3DStream.url,
-    tile3DStream.presetId,
-    tile3DStream.opacity,
-    tile3DStream.maximumScreenSpaceError,
-    tile3DStream.pointSize,
-    isMapLoaded,
-  ]);
+    if (lod2BuildingEngineRef.current) {
+      lod2BuildingEngineRef.current.setVisible(false);
+    }
+    if (realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
+    }
+    map.triggerRepaint();
+  }, [layers.buildings3D, isMapLoaded]);
 
   // 30-1. [지휘통제 및 보안 관제] 3D 전술 탐지 돔(Threat Dome) 상태 동기화
   useEffect(() => {
@@ -6927,7 +6894,7 @@ export const MapViewer: React.FC = () => {
                 <span className="text-emerald-300 flex items-center gap-1.5 flex-wrap">
                   <span>✅ WebGL 3D 엔진 정상</span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
-                    [활성 모드: {renderMode3D === 'native' ? '모드 A' : renderMode3D === 'facade' ? '모드 B' : '모드 C'} | 화면 내 렌더링 건물 수: {realtimeMetrics.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetrics.activeLayersCount}개]
+                    [V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: {realtimeMetrics.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetrics.activeLayersCount}개]
                   </span>
                 </span>
               )}

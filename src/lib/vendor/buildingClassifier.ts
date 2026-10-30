@@ -9,6 +9,9 @@
  * 2. Shoelace 면적(area), 둘레(perimeter), 장단축 비율(aspectRatio) 기반 한국 실제 건물 유형 6종 분류
  */
 
+import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
+import { DiverseBuildingGenerator } from '@/lib/vendor/diverseBuildingGenerator';
+
 export type KoreanBuildingType =
   | 'apartment'    // 유형 1: 한국형 대단지 아파트 (15~25층, 45~75m)
   | 'industrial'   // 유형 2: 산업단지·군수창고·대형공장 (8~14m, 코발트블루/실버/세이지)
@@ -205,28 +208,64 @@ export function classifyBuildingWithVendor(
   const metrics = calculatePolygonMetrics(coords);
   const { areaSqm, perimeter, aspectRatio, firstLng, firstLat, centerLng, centerLat } = metrics;
 
-  // 1. 고유 시드 생성 (옆 건물과 절대 똑같아지지 않는 0 ~ 99 정수 해시)
-  const seed = Math.abs(Math.floor(firstLng * 100000 + firstLat * 100000)) % 100;
+  // 1. [2단계] DiverseBuildingGenerator 24대 아키텍처 해시 시드 연동 (좌표 기반 고유 시드)
+  const seed = DiverseBuildingGenerator.calculateSeed(firstLng, firstLat);
 
-  // [요구사항 2] 연속지적도 필지, 용도지역 구역, 공원/단지(landuse) 경계 및 바닥면적 4,500㎡ 초과 거대 구역 3D 압출 즉시 차단
-  const isNonBuildingTag =
+  // [수정: 건물 태그 및 형상 적합성 정밀 판정]
+  const hasExplicitBuildingMarker =
+    Boolean(
+      properties.building ||
+      properties.bld_category ||
+      properties.bd_mgt_sn ||
+      properties.buld_nm ||
+      properties.bldNm ||
+      properties.bld_nm ||
+      properties.buildingName ||
+      properties.grnd_flr ||
+      properties.gro_flo_co ||
+      properties.grndFlrCnt ||
+      properties.hei ||
+      properties.heit ||
+      properties.height ||
+      properties.realHeight ||
+      properties.render_height ||
+      properties.render_min_height ||
+      properties.type === 'building' ||
+      properties.class === 'building' ||
+      properties.layer === 'building'
+    );
+
+  const isExplicitNonBuilding =
     properties.is_non_building === true ||
     properties.is_site_boundary === true ||
-    Boolean(properties.UQ111 || properties.UQ111_NM || properties.uq111 || properties.zoneName || properties.zone_nm || properties.spfc_nm || properties.spfc_cd) ||
-    Boolean(properties.landuse || properties.leisure || properties.boundary || properties.admin_level || properties.natural) ||
-    (Boolean(properties.pnu || properties.jimok || properties.jibun) &&
-      !properties.bd_mgt_sn &&
-      !properties.buld_nm &&
-      !properties.bldNm &&
-      !properties.buildingName &&
-      !properties.grnd_flr &&
-      !properties.gro_flo_co &&
-      !properties.grndFlrCnt &&
-      !properties.hei &&
-      !properties.heit &&
-      !properties.height);
+    properties.admin_level !== undefined ||
+    properties.boundary === 'administrative';
 
-  if (isNonBuildingTag || areaSqm > 4500) {
+  const isParcelWithoutBuilding =
+    !hasExplicitBuildingMarker &&
+    Boolean(
+      properties.UQ111 ||
+      properties.UQ111_NM ||
+      properties.uq111 ||
+      properties.zoneName ||
+      properties.zone_nm ||
+      properties.spfc_nm ||
+      properties.spfc_cd ||
+      properties.landuse ||
+      properties.leisure ||
+      properties.natural ||
+      properties.pnu ||
+      properties.jimok
+    );
+
+  const isValidGeometry = VworldMasterEngine.isValidBuildingGeometry(
+    properties,
+    areaSqm,
+    metrics.minWidth || 0,
+    metrics.maxLength || 0
+  );
+
+  if (isExplicitNonBuilding || isParcelWithoutBuilding || !isValidGeometry) {
     return {
       type: 'residential',
       typeIndex: 0,
@@ -711,12 +750,24 @@ export function classifyBuildingWithVendor(
     }
   }
 
-  // 일반 건물 최소 볼륨 보장 (0% Flat 납작화 방지: 일반 건물 6.5m, 부속 건물 4.0m)
-  const minFloorCeiling = isAuxiliaryInApt ? 4.0 : (areaSqm >= 50 && areaSqm <= 250 ? 8.0 : 6.5);
-  if (height < minFloorCeiling) {
-    height = minFloorCeiling + (seed % 4) * 0.8;
-    floors = Math.max(2, Math.round(height / 3.3));
+  // ---------------------------------------------------------------------------
+  // [브이월드 실사 마스터 엔진 연동: 100% 실사 높이 보장 (0m 평면화 원천 방지)]
+  // ---------------------------------------------------------------------------
+  const masterEngineH = VworldMasterEngine.calculateBuildingHeight(
+    properties,
+    areaSqm,
+    minWidth,
+    seed,
+    [centerLng, centerLat]
+  );
+  if (masterEngineH > height) {
+    height = masterEngineH;
+    floors = Math.max(floors, Math.max(2, Math.round(height / 3.3)));
   }
+
+  // 일반 건물 최소 볼륨 보장 (0% Flat 납작화 방지: 최소 7.5m 이상 입체 복원)
+  height = Math.max(7.5, height);
+  floors = Math.max(2, floors);
 
   // ---------------------------------------------------------------------------
   // [최종 높이 및 유형에 따른 외벽/지붕 텍스처 엄격 동기화]

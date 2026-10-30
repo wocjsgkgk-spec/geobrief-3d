@@ -53,6 +53,8 @@ import {
   WONJU_AUTHENTIC_BRIDGES,
   AuthenticBridgeSpec,
 } from '@/utils/authenticBridgeBuilder';
+import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
+import { DiverseBuildingGenerator } from '@/lib/vendor/diverseBuildingGenerator';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -294,80 +296,73 @@ export class HybridVworldRenderer {
       }
     }
 
-    // 2. 높이 확정 (1순위: 대장 실측값 -> 2순위: 층수 기반 -> 3순위: 면적 기반)
+    // 2. 높이 확정 (VworldMasterEngine REA 4단계 스펙 연동)
     let finalHeight = master.height;
     if (finalHeight <= 0) {
-      if (isHighRiseApt) {
-        finalHeight = 48.0 + (seed % 28) * 1.0;
-      } else if (areaSqm < 250) {
-        finalHeight = 7.5 + (seed % 4) * 0.8;
-      } else if (areaSqm < 500) {
-        finalHeight = 11.0 + (seed % 6) * 1.0;
-      } else {
-        finalHeight = 16.0 + (seed % 10) * 1.2;
+      finalHeight = VworldMasterEngine.calculateBuildingHeight(
+        featProps,
+        areaSqm,
+        minEdge,
+        seed,
+        centerLngLat
+      );
+    } else {
+      // 대장 속성이 있더라도 소형 필지 연필 기둥 방지
+      if (areaSqm < 220 && finalHeight > 11.5) {
+        finalHeight = Math.min(11.5, 7.5 + (seed % 4) * 0.9);
       }
     }
 
-    // 소형 필지(area < 250㎡) 연필 기둥 현상 영구 차단: 어떤 경우에도 11.0m 이하로 엄격 제한!
-    if (areaSqm < 250 && finalHeight > 11.0) {
-      finalHeight = Math.min(11.0, 7.5 + (seed % 4) * 0.8);
-    }
+    // -------------------------------------------------------------------------
+    // [GeoBrief 3D 2단계] DiverseBuildingGenerator 24대 실사 아키텍처 변주 엔진 연동
+    // -------------------------------------------------------------------------
+    const cLL: [number, number] = centerLngLat || [127.94, 37.34];
+    const diverseArch = DiverseBuildingGenerator.resolveArchitecture(
+      featProps,
+      finalHeight,
+      areaSqm,
+      cLL
+    );
 
-    // 세장비 안전 캡
-    const minSpan = Math.min(maxEdge, 45);
-    const maxAllowedH = Math.max(8.0, minSpan * 3.5);
-    finalHeight = Math.min(finalHeight, maxAllowedH);
-
-    // 3. 지붕 양식 결정
-    let roofStyle: HybridBuildingSpec['roofStyle'] = 'flat_parapet';
+    // 3. 지붕 양식 및 슬롯 매핑
+    let roofStyle: HybridBuildingSpec['roofStyle'] =
+      diverseArch.roofStyle === 'podium_setback' ? 'flat_parapet' : diverseArch.roofStyle;
     let tier: BuildingTierCategory = 'tier2_procedural';
 
     if (landmarkInfo) {
       tier = 'tier3_landmark_pitched';
       roofStyle = 'landmark_multipart';
-    } else if (master.roofCdNm.includes('기와') || master.roofCdNm.includes('박공') || master.roofCdNm.includes('경사') || (!isHighRiseApt && finalHeight <= 14.0 && areaSqm < 280)) {
+    } else if (
+      master.roofCdNm.includes('기와') ||
+      master.roofCdNm.includes('박공') ||
+      master.roofCdNm.includes('경사') ||
+      (!isHighRiseApt && finalHeight <= 14.0 && areaSqm < 280)
+    ) {
       tier = 'tier3_landmark_pitched';
-      roofStyle = seed % 2 === 0 ? 'gabled' : 'hipped';
+      roofStyle = diverseArch.roofStyle === 'hipped' ? 'hipped' : 'gabled';
     } else if (master.isRegistered) {
       tier = 'tier1_registered';
-      roofStyle = 'flat_parapet';
     }
 
-    // 4. 슬롯 매핑
-    let wallSlot = 'apt_preset_a';
-    if (isHighRiseApt) {
-      wallSlot = seed % 3 === 0 ? 'apt_preset_a' : seed % 3 === 1 ? 'apt_preset_b' : 'apt_preset_c';
-    } else if (finalHeight >= 12.0 || useLower.includes('근린') || useLower.includes('상가') || useLower.includes('업무')) {
-      const matIdx = seed % HYBRID_COMMERCIAL_5_MATERIALS.length;
-      wallSlot = HYBRID_COMMERCIAL_5_MATERIALS[matIdx].slot;
-    } else if (useLower.includes('군사') || useLower.includes('국방')) {
-      wallSlot = 'facility_military_barracks';
-    } else {
-      wallSlot = seed % 3 === 0 ? 'villa_red_brick' : seed % 3 === 1 ? 'villa_brown_brick' : 'villa_stucco_ivory';
-    }
-
-    // 지붕 슬롯
-    let roofSlot = 'roof_urethane_sage';
-    if (roofStyle === 'gabled' || roofStyle === 'hipped') {
-      roofSlot = seed % 100 < 50 ? 'roof_terracotta_tile' : seed % 100 < 80 ? 'roof_zinc_blue' : 'comm_charcoal_panel';
-    } else {
-      const r = seed % 100;
-      if (r < 45) roofSlot = 'roof_urethane_sage';
-      else if (r < 80) roofSlot = 'roof_concrete_warmgray';
-      else roofSlot = 'roof_terracotta_tile';
-    }
+    const wallSlot = featProps.realWallSlot || diverseArch.wallSlot;
+    const roofSlot = featProps.realRoofSlot || diverseArch.roofSlot;
 
     return {
       tier,
       height: finalHeight,
       floors: Math.max(1, Math.round(finalHeight / 3.3)),
-      buildingType: isHighRiseApt ? 'apartment' : (finalHeight >= 12.0 ? 'commercial' : 'residential'),
-      wallSlot: featProps.realWallSlot || wallSlot,
-      roofSlot: featProps.realRoofSlot || roofSlot,
-      isHighRiseApt,
-      hasPodium: isHighRiseApt || finalHeight >= 10.0,
-      hasParapet: roofStyle === 'flat_parapet',
-      hasPenthouse: (isHighRiseApt || finalHeight >= 14.0) && areaSqm >= 120,
+      buildingType:
+        diverseArch.category === 'high_rise_apartment'
+          ? 'apartment'
+          : diverseArch.category === 'public_office_landmark' || diverseArch.category === 'mid_rise_commercial'
+          ? 'commercial'
+          : 'residential',
+      wallSlot,
+      roofSlot,
+      isHighRiseApt: diverseArch.category === 'high_rise_apartment' || isHighRiseApt,
+      hasPodium: diverseArch.hasPodium,
+      hasParapet: diverseArch.hasParapet,
+      hasPenthouse: diverseArch.hasPenthouseCore,
       roofStyle,
       landmarkInfo,
       sideWallEdgeIndices,
@@ -532,11 +527,9 @@ export class HybridVworldRenderer {
           uvShopShowcase
         );
 
-        // 2층 이상 상층부
+        // 2층 이상 상층부 (6대 외벽 소재 변주 매핑)
         if (height > podiumH + 0.5) {
-          const matIdx = (seed + i) % HYBRID_COMMERCIAL_5_MATERIALS.length;
-          const upperSlot = HYBRID_COMMERCIAL_5_MATERIALS[matIdx].slot;
-          const upperUV = getDiverseFacadeSlotUV(upperSlot);
+          const upperUV = getDiverseFacadeSlotUV(spec.wallSlot);
 
           const upperH = height - podiumH;
           const numUpperFloors = Math.max(1, Math.round(upperH / 3.3));
@@ -558,15 +551,16 @@ export class HybridVworldRenderer {
         }
       }
 
-      // [C] 단독주택·다세대 빌라·군 주둔지 막사
+      // [C] 단독주택·다세대 빌라·군 주둔지 막사 (24대 아키텍처 슬롯 매핑)
       else {
+        const uvResidential = getDiverseFacadeSlotUV(spec.wallSlot);
         addQuad(
           [p1.x, baseElev, p1.z],
           [p2.x, baseElev, p2.z],
           [p2.x, topElev, p2.z],
           [p1.x, topElev, p1.z],
           norm,
-          uvMainWall
+          uvResidential
         );
       }
     }

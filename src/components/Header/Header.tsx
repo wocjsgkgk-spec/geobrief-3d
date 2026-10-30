@@ -187,18 +187,10 @@ export const Header: React.FC = () => {
     }
   };
 
-  // 3D 렌더 모드 3단계 원클릭 순환: 실감 파사드 -> 고정밀 3D 타일셋 -> 경량 네이티브
+  // V-World 실사 3D 마스터 렌더러 상시 유지
   const cycleRenderMode3D = () => {
     startTransition(() => {
-      requestAnimationFrame(() => {
-        if (renderMode3D === 'facade') {
-          setRenderMode3D('tiles3d');
-        } else if (renderMode3D === 'tiles3d') {
-          setRenderMode3D('native');
-        } else {
-          setRenderMode3D('facade');
-        }
-      });
+      setRenderMode3D('facade');
     });
   };
 
@@ -1046,42 +1038,17 @@ export const Header: React.FC = () => {
 
       {/* 우측 전용 영역: [3D 디테일 모드] + [도면 저장] 직관적 배치 */}
       <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0 ml-auto">
-        {/* [3D 디테일 모드: 실감 파사드 / 3D 타일셋 / 경량 네이티브 원클릭 전환] */}
-        <button
-          onClick={cycleRenderMode3D}
-          className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm ${
-            renderMode3D === 'facade'
-              ? 'bg-amber-600/30 border-amber-400/80 text-amber-200 shadow-amber-950/40 ring-1 ring-amber-400/50'
-              : renderMode3D === 'tiles3d'
-              ? 'bg-cyan-600/30 border-cyan-400/80 text-cyan-200 shadow-cyan-950/40 ring-1 ring-cyan-400/50'
-              : 'bg-blue-600/30 border-blue-400/80 text-blue-200 shadow-blue-950/40 ring-1 ring-blue-400/50'
-          }`}
-          title="3D 디테일 모드 전환: 실감 파사드(LOD2) ⇄ 고정밀 3D 타일셋 ⇄ 경량 네이티브(클릭 시 순환)"
+        {/* [단일 통합 V-World 실사 3D 마스터 렌더러 뱃지] */}
+        <div
+          className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/80 bg-emerald-950/40 text-emerald-200 shadow-emerald-950/40 ring-1 ring-emerald-500/50 flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm"
+          title="국토부 브이월드 LT_C_SPBD + 건축물대장 + 실사 포토 아틀라스 100% 통합 가동 중"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-          <span className="hidden sm:inline text-slate-300 font-medium">3D 디테일:</span>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-              renderMode3D === 'facade'
-                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50'
-                : renderMode3D === 'tiles3d'
-                ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50'
-                : 'bg-blue-500/25 text-blue-300 border border-blue-500/50'
-            }`}
-          >
-            {renderMode3D === 'facade'
-              ? '실감(LOD2)'
-              : renderMode3D === 'tiles3d'
-              ? tile3DStream.presetId === 'sample_pointcloud'
-                ? 'LiDAR 점군'
-                : tile3DStream.presetId === 'sample_city'
-                ? '도시 모델(b3dm)'
-                : tile3DStream.presetId === 'custom'
-                ? '3D Tiles(URL)'
-                : '3D 타일셋'
-              : '경량 네이티브'}
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+          <span className="hidden sm:inline text-slate-300 font-medium">3D 엔진:</span>
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-500/50">
+            V-World 실사 3D 마스터
           </span>
-        </button>
+        </div>
 
         {/* [도면 저장]: 프로젝트 보관함 및 클라우드/로컬 저장 */}
         <button

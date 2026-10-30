@@ -1717,136 +1717,28 @@ export const ControlPanel: React.FC = () => {
 
             <div className="space-y-2 pt-1">
               {/* 모드 A: 경량 네이티브 모드 */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelectRenderMode3D('native')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSelectRenderMode3D('native');
-                  }
-                }}
-                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  localRenderMode3D === 'native'
-                    ? 'bg-blue-950/40 border-blue-500/80 shadow-md ring-1 ring-blue-500/30'
-                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renderMode3D"
-                  checked={localRenderMode3D === 'native'}
-                  readOnly
-                  className="mt-1 accent-blue-500 pointer-events-none"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-100">
-                      모드 A: 경량 네이티브
-                    </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300 border border-blue-700">
-                      MapLibre fill-extrusion
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
-                    기본 3D 각기둥 및 지붕 음영. 저사양 브라우저나 광역 탐색 시 가장 가볍고 빠름 (60fps 유지).
-                  </p>
+              {/* 단일 통합 V-World 실사 3D 마스터 렌더러 가동 카드 */}
+              <div className="p-3.5 rounded-xl border border-emerald-500/80 bg-gradient-to-br from-emerald-950/60 via-slate-900/80 to-[#12231b] shadow-lg ring-1 ring-emerald-500/30 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-emerald-300 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    V-World 실사 3D 마스터 렌더러
+                  </span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-900/80 text-emerald-200 border border-emerald-500/60 shadow-sm animate-pulse">
+                    100% 통합 가동 중
+                  </span>
                 </div>
-              </div>
-
-              {/* 모드 B: 실감 파사드 모드 (LOD2) */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelectRenderMode3D('facade')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSelectRenderMode3D('facade');
-                  }
-                }}
-                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  localRenderMode3D === 'facade'
-                    ? 'bg-amber-950/40 border-amber-500/80 shadow-md ring-1 ring-amber-500/30'
-                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renderMode3D"
-                  checked={localRenderMode3D === 'facade'}
-                  readOnly
-                  className="mt-1 accent-amber-500 pointer-events-none"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-200">
-                      모드 B: 실감 파사드 (LOD2)
-                    </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-300 border border-amber-700">
-                      Three.js 절차적 생성
-                    </span>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  국토부 브이월드 <span className="text-emerald-400 font-semibold font-mono">LT_C_SPBD</span> + 건축물대장 표제부 + OpenFreeMap 하이브리드 결합으로 <strong>원주 반곡동 혁신도시, 단구동, 무실동 등 화면 내 모든 건물(100%)</strong>이 바닥에 납작하게 깔리지 않고 실제 높이의 3D 도시로 솟아오릅니다.
+                </p>
+                <div className="pt-2 border-t border-emerald-800/40 grid grid-cols-2 gap-2 text-[10px] text-slate-300">
+                  <div className="bg-slate-950/60 p-2 rounded-lg border border-emerald-900/40">
+                    <span className="text-emerald-400 font-bold block mb-0.5">🏢 아파트 단지 스펙</span>
+                    <span>15층 ~ 25층 (45m ~ 75m)</span>
                   </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
-                    한국형 판상형 아파트/상가 파사드, 경사 박공지붕, 옥상 헬리패드, DEM 지형 표고 정밀 밀착.
-                  </p>
-                </div>
-              </div>
-
-              {/* 모드 C: 고정밀 3D 타일셋 스트리밍 */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelectRenderMode3D('tiles3d')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSelectRenderMode3D('tiles3d');
-                  }
-                }}
-                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  localRenderMode3D === 'tiles3d'
-                    ? 'bg-cyan-950/40 border-cyan-500/80 shadow-md ring-1 ring-cyan-500/30'
-                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="renderMode3D"
-                  checked={localRenderMode3D === 'tiles3d'}
-                  readOnly
-                  className="mt-1 accent-cyan-500 pointer-events-none"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-cyan-200">
-                      모드 C: 강원 특화 실측 디지털 트윈 (LOD2+)
-                    </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-cyan-900/60 text-cyan-300 border border-cyan-700">
-                      브이월드 실측 대장 + PBR 실사
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
-                    국토부 브이월드 실측 4,811동 층수·높이 100% 입체화 + 항공사진 옥상 컬러 + PBR 실사 파사드 + 옥탑/물탱크 풀옵션 가동.
-                  </p>
-
-                  <div className="mt-2.5 pt-2 border-t border-cyan-900/40 flex items-center justify-between">
-                    <span className="text-[10px] text-cyan-300/80 font-mono truncate max-w-[160px]">
-                      {tile3DStream.statusText || '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setCustom3DTilesModalOpen(true);
-                      }}
-                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-cyan-900/50 hover:bg-cyan-800/80 text-cyan-200 border border-cyan-600/60 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap"
-                    >
-                      <Sliders className="w-3 h-3 text-cyan-400" />
-                      <span>URL & 프리셋 설정</span>
-                    </button>
+                  <div className="bg-slate-950/60 p-2 rounded-lg border border-emerald-900/40">
+                    <span className="text-cyan-400 font-bold block mb-0.5">🏛️ 혁신도시 공공기관</span>
+                    <span>6층 ~ 15층 (22m ~ 48m)</span>
                   </div>
                 </div>
               </div>
@@ -4395,209 +4287,29 @@ export const ControlPanel: React.FC = () => {
             </label>
           </div>
 
-          {/* [4단계 신규] Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍 */}
-          <div className="p-3 rounded-xl bg-gradient-to-b from-[#10202a] to-[#0a151d] border border-cyan-500/50 space-y-2.5">
+          {/* [V-World 실사 3D 마스터 렌더러 파이프라인 상태] */}
+          <div className="p-3 rounded-xl bg-gradient-to-b from-[#0f231a] to-[#0a1711] border border-emerald-500/50 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-400">
-                  <Box className="w-3.5 h-3.5" />
+                <span className="p-1 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-400">
+                  <Sparkles className="w-3.5 h-3.5" />
                 </span>
                 <div>
                   <span className="text-xs font-bold text-slate-100 block">
-                    고정밀 3D 타일셋(3D Tiles) 스트리밍
+                    V-World 실사 3D 마스터 파이프라인
                   </span>
-                  <span className="text-[10px] text-cyan-300/80 block">
-                    Deck.gl Tile3DLayer · b3dm & LiDAR 점군
+                  <span className="text-[10px] text-emerald-300/80 block">
+                    건축물대장 + 브이월드 LT_C_SPBD + 실사 포토 아틀라스
                   </span>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={tile3DStream.enabled}
-                  onChange={toggleTile3DStream}
-                  className="sr-only peer"
-                />
-                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
-              </label>
+              <span className="text-[9.5px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-600/70">
+                100% 가동
+              </span>
             </div>
-
-            {tile3DStream.enabled && (
-              <div className="space-y-2.5 pt-1.5 border-t border-cyan-900/50 animate-fade-in text-[11px]">
-                {/* 스트리밍 상태 표시 */}
-                <div className="flex items-center justify-between bg-[#081219] p-2 rounded-lg border border-[#142837]">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        tile3DStream.isLoading
-                          ? 'bg-amber-400 animate-ping'
-                          : tile3DStream.statusText?.includes('⚠️')
-                          ? 'bg-amber-500'
-                          : 'bg-emerald-400'
-                      }`}
-                    />
-                    <span
-                      className={`text-[10px] font-mono leading-tight ${
-                        tile3DStream.statusText?.includes('⚠️')
-                          ? 'text-amber-300 font-semibold'
-                          : 'text-slate-300'
-                      }`}
-                    >
-                      {tile3DStream.statusText || '강원권 자체 절차적 3D 도시 모델(LOD2) 가동 중'}
-                    </span>
-                  </div>
-                  {tile3DStream.tilesLoadedCount ? (
-                    <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60 whitespace-nowrap">
-                      {tile3DStream.tilesLoadedCount}개 타일 · {(tile3DStream.verticesLoadedCount || 0).toLocaleString()} 버텍스
-                    </span>
-                  ) : null}
-                </div>
-
-                {/* 3D 타일셋 프리셋 선택 */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-slate-400 font-semibold">
-                      타일셋 소스 선택
-                    </label>
-                    <span className="text-[9px] text-cyan-400/90 font-mono">
-                      LOD 14+ 실사 메쉬
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {(
-                      [
-                        { id: 'vworld_3d_buildings', label: '브이월드 실사 3D (OGC)' },
-                        { id: 'sample_city', label: '도시 모델 (b3dm)' },
-                        { id: 'sample_pointcloud', label: 'LiDAR 점군 (pnts)' },
-                        { id: 'custom', label: '사용자 지정 URL' },
-                      ] as const
-                    ).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          setTile3DStreamPreset(item.id);
-                          if (item.id === 'custom') {
-                            setCustom3DTilesModalOpen(true);
-                          }
-                        }}
-                        className={`py-1.5 px-1.5 rounded text-[10px] font-bold transition-all border text-center ${
-                          tile3DStream.presetId === item.id
-                            ? 'bg-cyan-600 border-cyan-400 text-white shadow-sm'
-                            : 'bg-[#0a1620] border-cyan-900/50 text-cyan-300 hover:bg-[#112332]'
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-1 text-[9.5px] text-slate-400/90 leading-tight">
-                    * 줌 13 이하: MapLibre 기본 레이어 | 줌 14 이상: 브이월드 실사 3D 메쉬 자동 스트리밍 (화면 밖 타일 메모리 자동 Unload)
-                  </div>
-                </div>
-
-                {/* 사용자 정의 URL 입력기 */}
-                {tile3DStream.presetId === 'custom' && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-slate-400 block">
-                        3D Tiles 엔드포인트 URL (tileset.json)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setCustom3DTilesModalOpen(true)}
-                        className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-mono"
-                      >
-                        모달 열기
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="https://.../tileset.json"
-                      value={tile3DStream.url}
-                      onChange={(e) => setTile3DStreamUrl(e.target.value)}
-                      className="w-full bg-[#081219] border border-cyan-800/60 rounded px-2 py-1 text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-400"
-                    />
-                  </div>
-                )}
-
-                {/* LOD 프러스텀 컬링 세밀도 (Screen Space Error: 8/16/24) */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-slate-300">LOD 렌더링 품질 (SSE)</span>
-                    <span className="font-mono text-cyan-300 font-bold">
-                      {tile3DStream.maximumScreenSpaceError === 8
-                        ? '8 (초정밀)'
-                        : tile3DStream.maximumScreenSpaceError === 16
-                        ? '16 (균형/권장)'
-                        : '24 (고성능)'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[
-                      { sse: 8, label: '초정밀 (SSE 8)' },
-                      { sse: 16, label: '균형 (SSE 16)' },
-                      { sse: 24, label: '고성능 (SSE 24)' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.sse}
-                        type="button"
-                        onClick={() => setTile3DStreamSse(opt.sse)}
-                        className={`py-0.5 px-1 rounded text-[9px] font-semibold border ${
-                          tile3DStream.maximumScreenSpaceError === opt.sse
-                            ? 'bg-cyan-600 border-cyan-400 text-white'
-                            : 'bg-[#08141d] border-cyan-900/40 text-slate-300'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[8.5px] text-slate-400 leading-tight">
-                    💡 뷰포트 내 타일만 화면 크기 오차에 따라 동적 로드하여 프레임 드랍을 원천 차단합니다.
-                  </p>
-                </div>
-
-                {/* 불투명도 및 점 크기 조절 */}
-                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-cyan-900/40">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[9.5px]">
-                      <span className="text-slate-400">투명도</span>
-                      <span className="font-mono text-cyan-300 font-bold">
-                        {Math.round(tile3DStream.opacity * 100)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0.0}
-                      max={1.0}
-                      step={0.05}
-                      value={tile3DStream.opacity}
-                      onChange={(e) => setTile3DStreamOpacity(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[9.5px]">
-                      <span className="text-slate-400">점군 크기</span>
-                      <span className="font-mono text-cyan-300 font-bold">
-                        {tile3DStream.pointSize}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      step={0.5}
-                      value={tile3DStream.pointSize}
-                      onChange={(e) => setTile3DStreamPointSize(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="text-[10.5px] text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-emerald-900/40 leading-relaxed">
+              화면 내 모든 건물(원주 반곡동 혁신도시·단구동·무실동·우산동 등)이 실제 높이(최소 7.5m ~ 최대 75m)로 일제히 입체 렌더링되고 있습니다.
+            </div>
           </div>
         </div>
       </section>

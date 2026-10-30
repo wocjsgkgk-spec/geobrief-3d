@@ -1518,7 +1518,7 @@ export const useMapStore = create<MapStoreState>()(
                 ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
                 : '⚪ 3D 타일셋 일시 정지 (LOD2 메쉬 가동 중)',
             },
-            renderMode3D: nextEnabled ? 'tiles3d' : 'facade',
+            renderMode3D: 'facade',
             detail3DMode: 'lod2',
           };
         }),
@@ -1528,10 +1528,10 @@ export const useMapStore = create<MapStoreState>()(
             ...state.tile3DStream,
             enabled,
             statusText: enabled
-              ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
-              : '⚪ 3D 타일셋 일시 정지 (LOD2 메쉬 가동 중)',
+              ? '🟢 V-World 실사 3D 마스터 렌더러 가동 중'
+              : '⚪ V-World 실사 3D 마스터 렌더러 가동 중',
           },
-          renderMode3D: enabled ? 'tiles3d' : 'facade',
+          renderMode3D: 'facade',
           detail3DMode: 'lod2',
         })),
       setTile3DStreamUrl: (url) =>
@@ -1543,16 +1543,16 @@ export const useMapStore = create<MapStoreState>()(
             enabled: true,
             statusText: `🟢 사용자 지정 3D Tiles 연결됨 (${url.slice(0, 32)}...)`,
           },
-          renderMode3D: 'tiles3d',
+          renderMode3D: 'facade',
           detail3DMode: 'lod2',
         })),
       setTile3DStreamPreset: (presetId, customUrl) =>
         set((state) => {
           const preset = SAMPLE_3D_TILES_PRESETS[presetId];
           const statusMap: Record<Tile3DPresetId, string> = {
-            vworld_3d_buildings: '🟢 브이월드 실사 3D (OGC 타일셋) 스트리밍 가동',
-            google_3d: '🟢 Google Photorealistic 3D Tiles 스트리밍 가동',
-            cesium_osm: '🟢 Cesium Ion OSM Buildings 3D 메쉬 스트리밍 가동',
+            vworld_3d_buildings: '🟢 브이월드 실사 3D 마스터 렌더러 가동',
+            google_3d: '🟢 Google Photorealistic 3D Tiles 연동 가동',
+            cesium_osm: '🟢 Cesium Ion OSM Buildings 3D 메쉬 연동 가동',
             sample_city: '🟢 도시 모델 (b3dm) 클린 화이트 매스 렌더링 가동',
             sample_pointcloud: '🟢 고밀도 LiDAR 공간 점군 (pnts) 가동',
             custom: '🟢 사용자 지정 OGC 3D Tiles 스트리밍 가동',
@@ -1566,7 +1566,7 @@ export const useMapStore = create<MapStoreState>()(
               enabled: true,
               statusText: statusMap[presetId] || '🟢 3D 타일셋 스트리밍 가동',
             },
-            renderMode3D: 'tiles3d',
+            renderMode3D: 'facade',
             detail3DMode: 'lod2',
           };
         }),
@@ -1634,30 +1634,22 @@ export const useMapStore = create<MapStoreState>()(
           };
         }),
 
-      // [신규] 3D 건축물 상호 배타적 렌더러 모드 (Mutual Exclusion)
+      // [통합 단일화] V-World 실사 3D 마스터 렌더러 단일 고정
       renderMode3D: 'facade',
-      setRenderMode3D: (mode) =>
-        set((s) => {
-          const isNative = mode === 'native';
-          const isFacade = mode === 'facade';
-          const isTiles3D = mode === 'tiles3d';
-
-          return {
-            renderMode3D: mode,
-            detail3DMode: isNative ? 'lod1' : 'lod2',
-            layers: {
-              ...s.layers,
-              buildings3D: true, // 모든 3D 모드(A, B, C)에서 공간 건물 데이터 파이프라인 상시 유지
-            },
-            tile3DStream: {
-              ...s.tile3DStream,
-              enabled: isTiles3D,
-              statusText: isTiles3D
-                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
-                : s.tile3DStream.statusText,
-            },
-          };
-        }),
+      setRenderMode3D: (_mode) =>
+        set((s) => ({
+          renderMode3D: 'facade',
+          detail3DMode: 'lod2',
+          layers: {
+            ...s.layers,
+            buildings3D: true,
+          },
+          tile3DStream: {
+            ...s.tile3DStream,
+            enabled: false,
+            statusText: '🟢 V-World 실사 3D 마스터 렌더러 100% 통합 가동 중',
+          },
+        })),
 
       // [신규] 좌측 분석 패널 3단 탭
       activeSidebarTab: 'terrain_infra',
