@@ -167,25 +167,32 @@ export function applyKoreanSkylineRules(
   const { cLng, cLat, dimMin, dimMax, approxArea, aspectRatio } = metrics;
   const name = String(rawProps.name || rawProps.name_ko || rawProps.buld_nm || rawProps.buildingName || '');
 
-  // [요구사항 2] 바닥 면적 4,500㎡ 초과 거대 구역(학교 부지, 아파트 단지 외곽, 군부대 경계) 또는 비건물(지적 필지, 용도지역, landuse) 압출 차단
+  // [요구사항 2] 바닥 면적 4,000㎡ 초과 거대 구역(학교 부지, 아파트 단지 외곽, 군부대 경계) 또는 비건물(지적 필지, 용도지역, landuse) 압출 차단
+  const isExplicitBuilding = Boolean(
+    rawProps.building ||
+    rawProps.buld_nm ||
+    rawProps.bldNm ||
+    rawProps.buildingName ||
+    rawProps.bd_mgt_sn ||
+    rawProps.mgmBldrgstPk ||
+    rawProps.realUse ||
+    rawProps.grnd_flr ||
+    rawProps.gro_flo_co ||
+    rawProps.grndFlrCnt ||
+    rawProps.hei ||
+    rawProps.heit ||
+    rawProps.height
+  );
+
   const isNonBuildingTag =
     rawProps.is_non_building === true ||
     rawProps.is_site_boundary === true ||
-    Boolean(rawProps.UQ111 || rawProps.UQ111_NM || rawProps.uq111 || rawProps.zoneName || rawProps.zone_nm || rawProps.spfc_nm || rawProps.spfc_cd) ||
-    Boolean(rawProps.landuse || rawProps.leisure || rawProps.boundary || rawProps.admin_level || rawProps.natural) ||
-    (Boolean(rawProps.pnu || rawProps.jimok || rawProps.jibun) &&
-      !rawProps.bd_mgt_sn &&
-      !rawProps.buld_nm &&
-      !rawProps.bldNm &&
-      !rawProps.buildingName &&
-      !rawProps.grnd_flr &&
-      !rawProps.gro_flo_co &&
-      !rawProps.grndFlrCnt &&
-      !rawProps.hei &&
-      !rawProps.heit &&
-      !rawProps.height);
+    (!isExplicitBuilding &&
+      (Boolean(rawProps.UQ111 || rawProps.UQ111_NM || rawProps.uq111 || rawProps.zoneName || rawProps.zone_nm || rawProps.spfc_nm || rawProps.spfc_cd) ||
+        Boolean(rawProps.landuse || rawProps.leisure || rawProps.boundary || rawProps.admin_level || rawProps.natural) ||
+        Boolean(rawProps.pnu || rawProps.jimok || rawProps.jibun)));
 
-  if (isNonBuildingTag || approxArea > 4500) {
+  if (isNonBuildingTag || approxArea > 4000 || approxArea < 10) {
     return {
       height: 0,
       levels: 0,
@@ -422,10 +429,10 @@ export function extractOpenFreeMapBuildings(
     if (vectorSources.length === 0) return [];
 
     const bounds = map.getBounds();
-    const minLng = bounds.getWest() - 0.008;
-    const maxLng = bounds.getEast() + 0.008;
-    const minLat = bounds.getSouth() - 0.008;
-    const maxLat = bounds.getNorth() + 0.008;
+    const minLng = bounds.getWest() - 0.025;
+    const maxLng = bounds.getEast() + 0.025;
+    const minLat = bounds.getSouth() - 0.025;
+    const maxLat = bounds.getNorth() + 0.025;
 
     const seen = new Set<string>();
     const results: ExternalSpatialBuildingFeature[] = [];

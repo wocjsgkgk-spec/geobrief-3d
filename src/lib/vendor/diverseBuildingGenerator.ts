@@ -63,22 +63,22 @@ export interface DiverseBuildingArchitecture {
  */
 export const KOREAN_DIVERSE_24_STYLES: Omit<DiverseBuildingArchitecture, 'seed'>[] = [
   // ---------------------------------------------------------------------------
-  // [1. 고층 아파트 단지 4대 브랜드 스타일 (0 ~ 3)]
+  // [1. 고층 아파트 단지 4대 브랜드 스타일 (0 ~ 3) - V-World 실사 규격]
   // ---------------------------------------------------------------------------
   {
     styleIndex: 0,
     category: 'high_rise_apartment',
-    name: '아파트 브랜드 A: 크림 화이트 & 브라운 캡',
+    name: '아파트 브랜드 A: 크림 화이트 & 옥상 다크 그레이 슬래브 및 옥탑방',
     wallSlot: 'apt_preset_a',
-    sideWallSlot: 'apt_side',
-    roofSlot: 'roof_terracotta_tile',
-    wallColor: '#f5f2eb',
-    roofColor: '#7c3f2c',
-    roofStyle: 'gabled',
+    sideWallSlot: 'apt_side_brown',
+    roofSlot: 'roof_concrete_warmgray',
+    wallColor: '#f4f1ea',
+    roofColor: '#57534e',
+    roofStyle: 'flat_parapet',
     hasPodium: true,
     podiumHeight: 3.3,
-    hasParapet: false,
-    parapetHeight: 0,
+    hasParapet: true,
+    parapetHeight: 0.9,
     hasPenthouseCore: true,
     hasHelipad: false,
     hasTerraceGarden: false,
@@ -86,48 +86,48 @@ export const KOREAN_DIVERSE_24_STYLES: Omit<DiverseBuildingArchitecture, 'seed'>
   {
     styleIndex: 1,
     category: 'high_rise_apartment',
-    name: '아파트 브랜드 B: 샌드 베이지 & 테라코타 투톤',
+    name: '아파트 브랜드 B: 샌드 베이지 & 적갈색/브라운 박공 지붕캡',
     wallSlot: 'apt_preset_b',
-    sideWallSlot: 'apt_side',
-    roofSlot: 'roof_concrete_warmgray',
-    wallColor: '#e8e0d2',
-    roofColor: '#8c8881',
-    roofStyle: 'flat_parapet',
+    sideWallSlot: 'apt_side_navy',
+    roofSlot: 'roof_terracotta_tile',
+    wallColor: '#e2dacb',
+    roofColor: '#6b3426',
+    roofStyle: 'gabled',
     hasPodium: true,
     podiumHeight: 3.3,
-    hasParapet: true,
-    parapetHeight: 0.9,
-    hasPenthouseCore: true,
+    hasParapet: false,
+    parapetHeight: 0,
+    hasPenthouseCore: false,
     hasHelipad: false,
     hasTerraceGarden: false,
   },
   {
     styleIndex: 2,
     category: 'high_rise_apartment',
-    name: '아파트 브랜드 C: 웜그레이 & 네이비 브랜드 라인',
+    name: '아파트 브랜드 C: 소프트 아이보리 & 슬레이트 네이비 지붕캡',
     wallSlot: 'apt_preset_c',
-    sideWallSlot: 'apt_side',
-    roofSlot: 'roof_concrete_warmgray',
-    wallColor: '#dcd8d0',
-    roofColor: '#8c8881',
-    roofStyle: 'flat_parapet',
+    sideWallSlot: 'apt_side_terracotta',
+    roofSlot: 'roof_zinc_blue',
+    wallColor: '#ebe5d8',
+    roofColor: '#334155',
+    roofStyle: 'gabled',
     hasPodium: true,
     podiumHeight: 3.3,
-    hasParapet: true,
-    parapetHeight: 0.9,
-    hasPenthouseCore: true,
+    hasParapet: false,
+    parapetHeight: 0,
+    hasPenthouseCore: false,
     hasHelipad: false,
     hasTerraceGarden: false,
   },
   {
     styleIndex: 3,
     category: 'high_rise_apartment',
-    name: '아파트 브랜드 D: 아이보리 & 콘크리트 슬래브 코어',
+    name: '아파트 브랜드 D: 라이트 웜그레이 & 옥상 다크 그레이 슬래브 및 옥탑방',
     wallSlot: 'apt_preset_d',
-    sideWallSlot: 'apt_side',
+    sideWallSlot: 'apt_side_warmgray',
     roofSlot: 'roof_apt_slab',
-    wallColor: '#faf7f2',
-    roofColor: '#6e6a64',
+    wallColor: '#dcd8d0',
+    roofColor: '#57534e',
     roofStyle: 'flat_parapet',
     hasPodium: true,
     podiumHeight: 3.3,
@@ -149,7 +149,7 @@ export const KOREAN_DIVERSE_24_STYLES: Omit<DiverseBuildingArchitecture, 'seed'>
     sideWallSlot: 'gov_tower',
     podiumSlot: 'gov_podium',
     roofSlot: 'helipad_h',
-    wallColor: '#93c5fd',
+    wallColor: '#cbd5e1',
     roofColor: '#334155',
     roofStyle: 'podium_setback',
     hasPodium: true,
@@ -163,13 +163,13 @@ export const KOREAN_DIVERSE_24_STYLES: Omit<DiverseBuildingArchitecture, 'seed'>
   {
     styleIndex: 5,
     category: 'public_office_landmark',
-    name: '공공기관 B: 관광공사/공공청사형 에메랄드 반사유리 & 옥상 테라스 정원',
+    name: '공공기관 B: 관광공사/공공청사형 실버 글래스 & 옥상 테라스 정원',
     wallSlot: 'comm_preset_g',
     sideWallSlot: 'comm_preset_g',
     podiumSlot: 'gov_podium',
     roofSlot: 'terrace_garden',
-    wallColor: '#6ee7b7',
-    roofColor: '#2e6f4e',
+    wallColor: '#94a3b8',
+    roofColor: '#475569',
     roofStyle: 'podium_setback',
     hasPodium: true,
     podiumHeight: 9.9,
@@ -363,7 +363,7 @@ export const KOREAN_DIVERSE_24_STYLES: Omit<DiverseBuildingArchitecture, 'seed'>
     sideWallSlot: 'comm_preset_f',
     podiumSlot: 'comm_shop_showcase',
     roofSlot: 'roof_urethane_sage',
-    wallColor: '#93c5fd',
+    wallColor: '#94a3b8',
     roofColor: '#2e6f4e',
     roofStyle: 'flat_parapet',
     hasPodium: true,
@@ -604,9 +604,13 @@ export class DiverseBuildingGenerator {
 
     let targetIdx = 0;
 
-    // 1. [고층 아파트 단지 (H >= 28m 또는 대형 아파트)] -> 스타일 0 ~ 3
-    if ((height >= 28.0 && isApartment) || (isApartment && areaSqm >= 320 && height >= 22.0) || height >= 45.0) {
-      targetIdx = seed % 4; // 0, 1, 2, 3
+    // 1. [고층 아파트 단지 (H >= 24m 또는 대형 아파트)] -> 스타일 0 ~ 3
+    if (
+      isApartment ||
+      (height >= 24.0 && !name.includes('청사') && !name.includes('공사') && !name.includes('병원')) ||
+      (areaSqm >= 300 && height >= 20.0 && !name.includes('청사') && !name.includes('공사') && !name.includes('병원'))
+    ) {
+      targetIdx = seed % 4; // 0, 1, 2, 3 (아파트 4대 브랜드: 크림 화이트, 샌드 베이지, 웜그레이, 아이보리)
     }
     // 2. [반곡동 혁신도시 공공기관 & 강원 18개 시·군 관공서/대형 오피스] -> 스타일 4 ~ 7
     else if (isPublicOffice) {

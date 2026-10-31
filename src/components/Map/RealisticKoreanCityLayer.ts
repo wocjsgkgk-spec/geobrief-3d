@@ -49,13 +49,13 @@ import { stampBuildingWithMasterData } from '@/utils/masterDataSynchronizer';
 import {
   calculateOBB,
   calculateSafeRooftopCore,
-  generateGabledRoofMesh,
 } from '@/lib/vendor/safeGeoAlgorithms';
 import { StreetsGlFacadeEngine } from '@/lib/vendor/streetsGlFacadeEngine';
 import { OsmRoofGenerator } from '@/lib/vendor/osmRoofGenerator';
 import { VworldRealisticFacadeEngine } from '@/lib/vendor/vworldRealisticFacade';
 import { Vworld3DRenderEngine } from '@/lib/vendor/vworld3DRenderEngine';
 import { HybridVworldRenderer } from '@/lib/vendor/hybridVworldRenderer';
+import { VworldRealRenderer } from '@/lib/vendor/vworldRealRenderer';
 import {
   classifyBuildingWithVendor,
   ClassifiedBuildingInfo,
@@ -165,6 +165,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   // 단일 대용량 버퍼 사전 할당 (재할당/push 오버헤드 0%, Draw Call = 1)
   private accPosBuf: Float32Array = new Float32Array(3000000);
   private accNormBuf: Float32Array = new Float32Array(3000000);
+  private accColorBuf: Float32Array = new Float32Array(3000000);
   private accUvBuf: Float32Array = new Float32Array(2000000);
   private accHeightBuf: Float32Array = new Float32Array(1000000);
   private accPosIdx: number = 0;
@@ -174,6 +175,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   // 옥상 난간 및 옥탑 코어 사전 할당 버퍼
   private accRooftopPosBuf: Float32Array = new Float32Array(900000);
   private accRooftopNormBuf: Float32Array = new Float32Array(900000);
+  private accRooftopColorBuf: Float32Array = new Float32Array(900000);
   private accRooftopUvBuf: Float32Array = new Float32Array(600000);
   private accRooftopHeightBuf: Float32Array = new Float32Array(300000);
   private accRooftopPosIdx: number = 0;
@@ -290,27 +292,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 2단계] 16종 실사 파사드 프리셋 아틀라스 & RMA 연동 PBR 메터리얼 초기화
+      // 2. [GeoBrief 3D 2단계] 16종 실사 파사드 아틀라스 & 순수 MeshStandardMaterial 정통 PBR 재질 초기화
       const atlasTex = getDiverseKoreanFacadeAtlasTexture();
-      const rmaTex = getDiverseFacadeRmaTexture();
-      this.masterMaterial = createPhotorealisticPbrMaterial({
-        map: atlasTex || null,
-        rmaMap: rmaTex || null,
-        roughness: 0.85, // 콘크리트 무광 베이스 (창문 영역은 RMA 맵 및 PBR 인젝션으로 0.15로 동적 전환)
-        metalness: 0.04, // (창문 영역은 0.85로 동적 전환)
+      this.masterMaterial = new THREE.MeshStandardMaterial({
+        map: atlasTex || undefined,
+        color: new THREE.Color('#e5e0d8'),
+        vertexColors: true,
+        roughness: 0.65,
+        metalness: 0.08,
         side: THREE.DoubleSide,
-        sunDirection: this.sunLight?.position,
       });
 
-      this.rooftopMaterial = createPhotorealisticPbrMaterial({
-        map: atlasTex || null,
-        rmaMap: rmaTex || null,
+      this.rooftopMaterial = new THREE.MeshStandardMaterial({
+        map: atlasTex || undefined,
+        color: new THREE.Color('#e5e0d8'),
+        vertexColors: true,
         roughness: 0.70,
         metalness: 0.05,
-        transparent: true,
-        opacity: 0.0,
         side: THREE.DoubleSide,
-        sunDirection: this.sunLight?.position,
+        transparent: false,
+        opacity: 1.0,
       });
 
       // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
@@ -431,6 +432,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     } else {
       this.handleMoveEnd();
     }
+  }
+
+  public getBuildingCount(): number {
+    return this.builtBuildingKeys.size;
   }
 
   /**
@@ -638,14 +643,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const newSize = Math.max(this.accPosBuf.length * 2, neededFloats + 300000);
       const newPos = new Float32Array(newSize);
       const newNorm = new Float32Array(newSize);
+      const newColor = new Float32Array(newSize);
       const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
       const newHeight = new Float32Array(Math.floor(newSize / 3));
       newPos.set(this.accPosBuf.subarray(0, this.accPosIdx));
       newNorm.set(this.accNormBuf.subarray(0, this.accPosIdx));
+      newColor.set(this.accColorBuf.subarray(0, this.accPosIdx));
       newUv.set(this.accUvBuf.subarray(0, this.accUvIdx));
       newHeight.set(this.accHeightBuf.subarray(0, this.accHeightIdx));
       this.accPosBuf = newPos;
       this.accNormBuf = newNorm;
+      this.accColorBuf = newColor;
       this.accUvBuf = newUv;
       this.accHeightBuf = newHeight;
     }
@@ -657,14 +665,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const newSize = Math.max(this.accRooftopPosBuf.length * 2, neededFloats + 100000);
       const newPos = new Float32Array(newSize);
       const newNorm = new Float32Array(newSize);
+      const newColor = new Float32Array(newSize);
       const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
       const newHeight = new Float32Array(Math.floor(newSize / 3));
       newPos.set(this.accRooftopPosBuf.subarray(0, this.accRooftopPosIdx));
       newNorm.set(this.accRooftopNormBuf.subarray(0, this.accRooftopPosIdx));
+      newColor.set(this.accRooftopColorBuf.subarray(0, this.accRooftopPosIdx));
       newUv.set(this.accRooftopUvBuf.subarray(0, this.accRooftopUvIdx));
       newHeight.set(this.accRooftopHeightBuf.subarray(0, this.accRooftopHeightIdx));
       this.accRooftopPosBuf = newPos;
       this.accRooftopNormBuf = newNorm;
+      this.accRooftopColorBuf = newColor;
       this.accRooftopUvBuf = newUv;
       this.accRooftopHeightBuf = newHeight;
     }
@@ -677,13 +688,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     norm: [number, number, number],
     uv0: [number, number],
     uv1: [number, number],
-    uv2: [number, number]
+    uv2: [number, number],
+    color?: [number, number, number]
   ): void => {
     this.ensureCapacity(3);
     const p = this.accPosIdx;
     const u = this.accUvIdx;
     const h = this.accHeightIdx;
     const baseElev = this.currentBuildingBaseElev;
+    const cr = color ? color[0] : 0.90;
+    const cg = color ? color[1] : 0.88;
+    const cb = color ? color[2] : 0.85;
 
     this.accPosBuf[p] = p0[0];
     this.accPosBuf[p + 1] = p0[1];
@@ -691,6 +706,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.accNormBuf[p] = norm[0];
     this.accNormBuf[p + 1] = norm[1];
     this.accNormBuf[p + 2] = norm[2];
+    this.accColorBuf[p] = cr;
+    this.accColorBuf[p + 1] = cg;
+    this.accColorBuf[p + 2] = cb;
     this.accUvBuf[u] = uv0[0];
     this.accUvBuf[u + 1] = uv0[1];
     this.accHeightBuf[h] = Math.max(0, p0[1] - baseElev);
@@ -701,6 +719,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.accNormBuf[p + 3] = norm[0];
     this.accNormBuf[p + 4] = norm[1];
     this.accNormBuf[p + 5] = norm[2];
+    this.accColorBuf[p + 3] = cr;
+    this.accColorBuf[p + 4] = cg;
+    this.accColorBuf[p + 5] = cb;
     this.accUvBuf[u + 2] = uv1[0];
     this.accUvBuf[u + 3] = uv1[1];
     this.accHeightBuf[h + 1] = Math.max(0, p1[1] - baseElev);
@@ -711,6 +732,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.accNormBuf[p + 6] = norm[0];
     this.accNormBuf[p + 7] = norm[1];
     this.accNormBuf[p + 8] = norm[2];
+    this.accColorBuf[p + 6] = cr;
+    this.accColorBuf[p + 7] = cg;
+    this.accColorBuf[p + 8] = cb;
     this.accUvBuf[u + 4] = uv2[0];
     this.accUvBuf[u + 5] = uv2[1];
     this.accHeightBuf[h + 2] = Math.max(0, p2[1] - baseElev);
@@ -726,7 +750,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     pTR: [number, number, number],
     pTL: [number, number, number],
     norm: [number, number, number],
-    uvRect: UVRect
+    uvRect: UVRect,
+    color?: [number, number, number]
   ): void => {
     this.addTriangle(
       pBL,
@@ -735,7 +760,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       norm,
       [uvRect.u0, uvRect.v0],
       [uvRect.u1, uvRect.v0],
-      [uvRect.u1, uvRect.v1]
+      [uvRect.u1, uvRect.v1],
+      color
     );
     this.addTriangle(
       pBL,
@@ -744,7 +770,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       norm,
       [uvRect.u0, uvRect.v0],
       [uvRect.u1, uvRect.v1],
-      [uvRect.u0, uvRect.v1]
+      [uvRect.u0, uvRect.v1],
+      color
     );
   };
 
@@ -755,9 +782,60 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     norm: [number, number, number],
     uv0: [number, number],
     uv1: [number, number],
-    uv2: [number, number]
+    uv2: [number, number],
+    color?: [number, number, number]
   ): void => {
-    this.addTriangle(p0, p1, p2, norm, uv0, uv1, uv2);
+    this.ensureRooftopCapacity(3);
+    const p = this.accRooftopPosIdx;
+    const u = this.accRooftopUvIdx;
+    const h = this.accRooftopHeightIdx;
+    const baseElev = this.currentBuildingBaseElev;
+    const cr = color ? color[0] : 0.85;
+    const cg = color ? color[1] : 0.83;
+    const cb = color ? color[2] : 0.80;
+
+    this.accRooftopPosBuf[p] = p0[0];
+    this.accRooftopPosBuf[p + 1] = p0[1];
+    this.accRooftopPosBuf[p + 2] = p0[2];
+    this.accRooftopNormBuf[p] = norm[0];
+    this.accRooftopNormBuf[p + 1] = norm[1];
+    this.accRooftopNormBuf[p + 2] = norm[2];
+    this.accRooftopColorBuf[p] = cr;
+    this.accRooftopColorBuf[p + 1] = cg;
+    this.accRooftopColorBuf[p + 2] = cb;
+    this.accRooftopUvBuf[u] = uv0[0];
+    this.accRooftopUvBuf[u + 1] = uv0[1];
+    this.accRooftopHeightBuf[h] = Math.max(0, p0[1] - baseElev);
+
+    this.accRooftopPosBuf[p + 3] = p1[0];
+    this.accRooftopPosBuf[p + 4] = p1[1];
+    this.accRooftopPosBuf[p + 5] = p1[2];
+    this.accRooftopNormBuf[p + 3] = norm[0];
+    this.accRooftopNormBuf[p + 4] = norm[1];
+    this.accRooftopNormBuf[p + 5] = norm[2];
+    this.accRooftopColorBuf[p + 3] = cr;
+    this.accRooftopColorBuf[p + 4] = cg;
+    this.accRooftopColorBuf[p + 5] = cb;
+    this.accRooftopUvBuf[u + 2] = uv1[0];
+    this.accRooftopUvBuf[u + 3] = uv1[1];
+    this.accRooftopHeightBuf[h + 1] = Math.max(0, p1[1] - baseElev);
+
+    this.accRooftopPosBuf[p + 6] = p2[0];
+    this.accRooftopPosBuf[p + 7] = p2[1];
+    this.accRooftopPosBuf[p + 8] = p2[2];
+    this.accRooftopNormBuf[p + 6] = norm[0];
+    this.accRooftopNormBuf[p + 7] = norm[1];
+    this.accRooftopNormBuf[p + 8] = norm[2];
+    this.accRooftopColorBuf[p + 6] = cr;
+    this.accRooftopColorBuf[p + 7] = cg;
+    this.accRooftopColorBuf[p + 8] = cb;
+    this.accRooftopUvBuf[u + 4] = uv2[0];
+    this.accRooftopUvBuf[u + 5] = uv2[1];
+    this.accRooftopHeightBuf[h + 2] = Math.max(0, p2[1] - baseElev);
+
+    this.accRooftopPosIdx += 9;
+    this.accRooftopUvIdx += 6;
+    this.accRooftopHeightIdx += 3;
   };
 
   private addRooftopQuad = (
@@ -766,9 +844,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     pTR: [number, number, number],
     pTL: [number, number, number],
     norm: [number, number, number],
-    uvRect: UVRect
+    uvRect: UVRect,
+    color?: [number, number, number]
   ): void => {
-    this.addQuad(pBL, pBR, pTR, pTL, norm, uvRect);
+    this.addRooftopTriangle(
+      pBL,
+      pBR,
+      pTR,
+      norm,
+      [uvRect.u0, uvRect.v0],
+      [uvRect.u1, uvRect.v0],
+      [uvRect.u1, uvRect.v1],
+      color
+    );
+    this.addRooftopTriangle(
+      pBL,
+      pTR,
+      pTL,
+      norm,
+      [uvRect.u0, uvRect.v0],
+      [uvRect.u1, uvRect.v1],
+      [uvRect.u0, uvRect.v1],
+      color
+    );
   };
 
   /**
@@ -846,16 +944,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const cLng = sumLng / ptCount;
       const cLat = sumLat / ptCount;
 
-      // 면적 및 외곽 둘레 계산
-      let area2D = 0;
+      // 면적 및 외곽 둘레 계산 (동향 x, 북향 -z 기준 표준 평면 직교 좌표계)
+      let signedArea = 0;
       for (let i = 0; i < ptCount; i++) {
         const j = (i + 1) % ptCount;
-        area2D += pts2D[i].x * pts2D[j].z - pts2D[j].x * pts2D[i].z;
+        signedArea += pts2D[i].x * (-pts2D[j].z) - pts2D[j].x * (-pts2D[i].z);
       }
-      const areaSqm = Math.max(10, Math.abs(area2D) * 0.5);
+      const areaSqm = Math.max(10, Math.abs(signedArea) * 0.5);
 
-      // 와인딩 오더 보정 (CCW)
-      if (area2D < 0) {
+      // 와인딩 오더 보정 (CCW 강제 정렬: Shoelace signedArea < 0 이면 CW이므로 .reverse())
+      if (signedArea < 0) {
         pts2D.reverse();
       }
 
@@ -997,7 +1095,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const topElev = baseElev + height;
 
       // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
-      const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat);
+      const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat, areaSqm);
       if (landmarkInfo) {
         const landmarkH = Math.max(14.0, landmarkInfo.targetHeight || height);
         buildLandmarkBuildingMesh({
@@ -1014,10 +1112,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // -------------------------------------------------------------------
-      // A. [브이월드(V-World) 실사 메쉬 + 고해상도 절차적 아키텍처 하이브리드 렌더링 엔진]
+      // A. [morluto/rea 기반 브이월드 3D 실사 렌더러 직결 (VworldRealRenderer)]
       // [1순위 건축물대장 정밀 매칭 + 2순위 Streets-GL 포토 아틀라스 4단 입체 + 3순위 OSMBuildings 복합 지붕]
       // -------------------------------------------------------------------
-      HybridVworldRenderer.buildHybridBuilding({
+      VworldRealRenderer.buildRealBuilding({
         pts2D,
         baseElev,
         height,
@@ -1067,14 +1165,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const map = this.map;
       const center = map.getCenter();
 
-      // 고정 원점 유지: 시·군 내 미세 이동 시 고정(지터링 방지), 시·군간 이동(8km+) 시 즉시 원점 재동기화 및 버퍼 재설정
+      // 고정 원점 유지: 시·군 내 이동 시 고정(지터링 방지 및 캐시 유지), 시·군간 원거리 이동(8km+) 시 원점 재동기화
       if (!this.fixedOriginInitialized) {
         this.originLngLat = [center.lng, center.lat];
         this.fixedOriginInitialized = true;
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
-        if (dLng > 0.03 || dLat > 0.03) {
+        if (dLng > 0.08 || dLat > 0.08) {
           this.originLngLat = [center.lng, center.lat];
           this.resetAccumulatedBuffers();
         }
@@ -1123,12 +1221,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         const sliceStartTime = performance.now();
-        const FRAME_BUDGET_MS = 8.0; // 프레임당 최대 8.0ms 이내 보장 (60fps 무결점)
+        const FRAME_BUDGET_MS = 12.0; // 프레임당 최대 12ms 이내 보장 (60fps 무결점)
+        let sliceCount = 0;
 
         while (featureIdx < features.length) {
-          if (performance.now() - sliceStartTime >= FRAME_BUDGET_MS) {
+          if (sliceCount >= 100 && performance.now() - sliceStartTime >= FRAME_BUDGET_MS) {
             break;
           }
+          sliceCount++;
           const feat = features[featureIdx++];
           const key = getBuildingFeatureKey(feat);
 
@@ -1194,12 +1294,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.accPosIdx > 0 && this.masterMaterial) {
       const finalPositions = this.accPosBuf.subarray(0, this.accPosIdx);
       const finalNormals = this.accNormBuf.subarray(0, this.accPosIdx);
+      const finalColors = this.accColorBuf.subarray(0, this.accPosIdx);
       const finalUvs = this.accUvBuf.subarray(0, this.accUvIdx);
       const finalHeights = this.accHeightBuf.subarray(0, this.accHeightIdx);
 
       const newGeometry = new THREE.BufferGeometry();
       newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPositions, 3));
       newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormals, 3));
+      newGeometry.setAttribute('color', new THREE.BufferAttribute(finalColors, 3));
       newGeometry.setAttribute('uv', new THREE.BufferAttribute(finalUvs, 2));
       newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalHeights, 1));
       newGeometry.computeBoundingSphere();
@@ -1224,26 +1326,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
     }
 
-    // 2-B. 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (더블 버퍼링 적용)
+    // 2-B. 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (더블 버퍼링 적용 및 항상 가시성 보장)
     if (this.accRooftopPosIdx > 0 && this.rooftopMaterial) {
       const finalRooftopPositions = this.accRooftopPosBuf.subarray(0, this.accRooftopPosIdx);
       const finalRooftopNormals = this.accRooftopNormBuf.subarray(0, this.accRooftopPosIdx);
+      const finalRooftopColors = this.accRooftopColorBuf.subarray(0, this.accRooftopPosIdx);
       const finalRooftopUvs = this.accRooftopUvBuf.subarray(0, this.accRooftopUvIdx);
       const finalRooftopHeights = this.accRooftopHeightBuf.subarray(0, this.accRooftopHeightIdx);
 
       const newRooftopGeometry = new THREE.BufferGeometry();
       newRooftopGeometry.setAttribute('position', new THREE.BufferAttribute(finalRooftopPositions, 3));
       newRooftopGeometry.setAttribute('normal', new THREE.BufferAttribute(finalRooftopNormals, 3));
+      newRooftopGeometry.setAttribute('color', new THREE.BufferAttribute(finalRooftopColors, 3));
       newRooftopGeometry.setAttribute('uv', new THREE.BufferAttribute(finalRooftopUvs, 2));
       newRooftopGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalRooftopHeights, 1));
       newRooftopGeometry.computeBoundingSphere();
 
       const newRooftopMesh = new THREE.Mesh(newRooftopGeometry, this.rooftopMaterial);
       newRooftopMesh.frustumCulled = false;
-      const curZ = this.map ? this.map.getZoom() : 15.0;
-      const initT = Math.max(0, Math.min(1, (curZ - 14.5) / 1.0));
-      newRooftopMesh.visible = this.isVisible && initT > 0.01;
-      this.rooftopMaterial.opacity = initT;
+      newRooftopMesh.visible = this.isVisible;
+      this.rooftopMaterial.opacity = 1.0;
 
       const oldRooftop = this.rooftopMesh;
       const oldRooftopGeo = this.rooftopGeometry;

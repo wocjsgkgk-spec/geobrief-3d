@@ -271,7 +271,7 @@ export function extractRenderedVectorBuildings(
           height: renderHeight,
           levels,
           grnd_flr: rawFlr || levels,
-          roofShape: isMilitary ? 'gabled' : (props['roof:shape'] || props.roof_shape || (isApartment || isCommercial ? 'flat' : 'gabled')),
+          roofShape: 'flat',
           roofColour: props['roof:colour'] || props['roof:color'] || computedRoofCol,
           usageType: isApartment ? 'apartment' : isMilitary ? 'military' : isCommercial ? 'commercial' : 'residential',
           isMilitaryOrPublic: isMilitary,

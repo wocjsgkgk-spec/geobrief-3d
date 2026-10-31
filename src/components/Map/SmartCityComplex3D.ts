@@ -1094,17 +1094,149 @@ export function buildSmartRoadAndGreenPlaza(mats: SmartCityMaterials): THREE.Gro
 }
 
 // =============================================================================
-// 9. 강원 6대 거점별 맞춤형 3D 스마트 복합단지(LOD2) 절차적 생성 라우터
+// 8-1. 영내 기존 군 막사 & 연병장 3D 컴포넌트 (Current Military Barracks Complex)
 // =============================================================================
-export function buildComplexForSite(siteId: string, _mats: SmartCityMaterials): THREE.Group {
-  const root = new THREE.Group();
-  root.name = `complex_root_${siteId}`;
-  // [1단계: 비정상적인 거대 가상 박스(더미 메쉬) 전면 삭제]
-  // 실제 GIS 데이터(건물 외곽선 폴리곤)에 기반하지 않은 임의의 3D 박스 생성을 전면 중단
-  return root;
+export function buildMilitaryBarracksSite(mats: SmartCityMaterials): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'military_barracks_complex';
+
+  // 1. 연병장 바닥 (토사 바닥 + 헬리패드)
+  const paradeGeo = new THREE.PlaneGeometry(160, 110);
+  paradeGeo.rotateX(-Math.PI / 2);
+  const paradeMat = new THREE.MeshStandardMaterial({
+    color: 0x937c68, // 토사 흙색
+    roughness: 0.95,
+    metalness: 0.05,
+  });
+  const paradeMesh = new THREE.Mesh(paradeGeo, paradeMat);
+  paradeMesh.position.set(0, 0.2, 0);
+  group.add(paradeMesh);
+
+  // 연병장 백색 트랙 라인
+  const trackGeo = new THREE.RingGeometry(35, 36, 32);
+  trackGeo.rotateX(-Math.PI / 2);
+  const trackMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const trackMesh = new THREE.Mesh(trackGeo, trackMat);
+  trackMesh.position.set(0, 0.25, 0);
+  group.add(trackMesh);
+
+  // 중앙 헬리패드 'H' 마크
+  const helipadMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const hBar1 = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 14), helipadMat);
+  hBar1.position.set(-4, 0.28, 0);
+  const hBar2 = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 14), helipadMat);
+  hBar2.position.set(4, 0.28, 0);
+  const hCross = new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 2), helipadMat);
+  hCross.position.set(0, 0.28, 0);
+  group.add(hBar1, hBar2, hCross);
+
+  // 2. 통합 병영 막사 빌더 (3층 샌드베이지 + 적갈색 기와 박공)
+  const createBarracks = (x: number, z: number, rotY: number, name: string) => {
+    const bGroup = new THREE.Group();
+    bGroup.name = name;
+
+    const wallGeo = new THREE.BoxGeometry(36, 9.5, 15);
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0xe2dacb, // 샌드 베이지
+      roughness: 0.75,
+      metalness: 0.1,
+    });
+    const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+    wallMesh.position.y = 4.75;
+    bGroup.add(wallMesh);
+
+    // 적갈색 기와 박공 지붕
+    const roofShape = new THREE.Shape();
+    roofShape.moveTo(-8, 0);
+    roofShape.lineTo(0, 3.5);
+    roofShape.lineTo(8, 0);
+    roofShape.closePath();
+
+    const roofGeo = new THREE.ExtrudeGeometry(roofShape, {
+      steps: 1,
+      depth: 38,
+      bevelEnabled: false,
+    });
+    roofGeo.center();
+    const roofMat = new THREE.MeshStandardMaterial({
+      color: 0x7c3626, // 적갈색 기와 박공
+      roughness: 0.6,
+      metalness: 0.15,
+    });
+    const roofMesh = new THREE.Mesh(roofGeo, roofMat);
+    roofMesh.rotation.y = Math.PI / 2;
+    roofMesh.position.y = 9.5 + 1.75;
+    bGroup.add(roofMesh);
+
+    // 현관 캐노피
+    const canopyGeo = new THREE.BoxGeometry(6, 0.4, 3);
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
+    const canopyMesh = new THREE.Mesh(canopyGeo, canopyMat);
+    canopyMesh.position.set(0, 3.5, 8.5);
+    bGroup.add(canopyMesh);
+
+    bGroup.position.set(x, 0, z);
+    bGroup.rotation.y = rotY;
+    return bGroup;
+  };
+
+  group.add(createBarracks(-55, -45, (-10 * Math.PI) / 180, 'barracks_1'));
+  group.add(createBarracks(0, -55, 0, 'barracks_2'));
+  group.add(createBarracks(55, -45, (10 * Math.PI) / 180, 'barracks_3'));
+
+  // 3. 군수물자 종합 보급창고 2동
+  const createWarehouse = (x: number, z: number, rotY: number, colorHex: number) => {
+    const wGroup = new THREE.Group();
+    const bodyGeo = new THREE.BoxGeometry(42, 7, 18);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd4cfc5, roughness: 0.6 });
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+    bodyMesh.position.y = 3.5;
+    wGroup.add(bodyMesh);
+
+    const rGeo = new THREE.CylinderGeometry(10, 10, 44, 16, 1, false, 0, Math.PI);
+    rGeo.rotateZ(Math.PI / 2);
+    const rMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.4, metalness: 0.3 });
+    const rMesh = new THREE.Mesh(rGeo, rMat);
+    rMesh.position.y = 7;
+    wGroup.add(rMesh);
+
+    wGroup.position.set(x, 0, z);
+    wGroup.rotation.y = rotY;
+    return wGroup;
+  };
+
+  group.add(createWarehouse(-65, 45, (8 * Math.PI) / 180, 0x1e3a5f)); // 네이비 보급창고
+  group.add(createWarehouse(65, 45, (-8 * Math.PI) / 180, 0x2e4835)); // 국방색 군수 정비고
+
+  // 4. 위병소 및 국기 게양대
+  const guardGeo = new THREE.BoxGeometry(5, 3.5, 5);
+  const guardMat = new THREE.MeshStandardMaterial({ color: 0xe2dacb, roughness: 0.8 });
+  const guardMesh = new THREE.Mesh(guardGeo, guardMat);
+  guardMesh.position.set(-8, 1.75, 75);
+  group.add(guardMesh);
+
+  const poleGeo = new THREE.CylinderGeometry(0.12, 0.15, 14, 8);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.8, roughness: 0.2 });
+  const poleMesh = new THREE.Mesh(poleGeo, poleMat);
+  poleMesh.position.set(8, 7, 75);
+  group.add(poleMesh);
+
+  return group;
 }
 
-function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials): THREE.Group {
+// =============================================================================
+// 9. 강원 6대 거점별 맞춤형 3D 스마트 복합단지(LOD2) 절차적 생성 라우터
+// =============================================================================
+export function buildComplexForSite(
+  siteId: string,
+  mats: SmartCityMaterials,
+  mode: 'current_military' | 'future_masterplan' = 'future_masterplan'
+): THREE.Group {
+  if (mode === 'current_military') {
+    // 위성사진과의 괴리 방지: 현재 군부대 상태에서는 임의의 가상 절차적 박스(더미 막사) 생성을 전면 중단하고, 위성 실사 및 실제 GIS 1:1 건물만 표출
+    return new THREE.Group();
+  }
+
   const root = new THREE.Group();
   root.name = `complex_root_${siteId}`;
 
@@ -1114,6 +1246,7 @@ function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials)
 
   switch (canonicalId) {
     // 1) 원주 1군지사 이전부지 (첨단 국방·반도체 R&D 밸리 & 스마트 모빌리티 복합단지)
+    case 'wj-1st-logistics':
     case 'first-logistics-wonju':
     case 'wonju-1st-logistics': {
       // 1) 첨단 국방·반도체 R&D 메인 타워 (15층, 55m, 커튼월 + 옥탑 헬리패드)
@@ -1155,6 +1288,7 @@ function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials)
     }
 
     // 2) 원주 캠프 롱 반환부지 (의료·모빌리티 스마트 복합단지 & 바이오 R&D 밸리)
+    case 'wj-camp-long':
     case 'camp-long-wonju':
     case 'wonju-camp-long': {
       const rdTower = buildDefenseRDTower(mats);
@@ -1180,6 +1314,7 @@ function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials)
     }
 
     // 3) 춘천 캠프 페이지 반환부지 (도심 첨단 문화·관광 복합타운 & 메가 랜드마크)
+    case 'cc-camp-page':
     case 'chuncheon-camp-page':
     case 'camp-page-chuncheon': {
       const convention = buildCivicConventionHall(mats);
@@ -1200,6 +1335,7 @@ function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials)
     }
 
     // 4) 춘천 102보충대 유휴부지 (바이오 테크노파크 & 평화·보훈 연수 힐링파크)
+    case 'cc-102-depot':
     case 'ch-102-chuncheon':
     case 'chuncheon-102-depot': {
       const knowledgeCenter = buildKnowledgeIndustryCenter(mats);
@@ -1225,6 +1361,7 @@ function _disabled_buildComplexForSite(siteId: string, mats: SmartCityMaterials)
     }
 
     // 5) 철원 접경 거점 (구 보병연대 - 민·군 상생 평화 스마트팜 & 전방 작전 클러스터)
+    case 'cw-border-hub':
     case 'cheorwon-infantry':
     case 'cheorwon-border-hub': {
       const watchTower1 = buildTacticalWatchTower(mats);
@@ -1465,6 +1602,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   private ambientLight: THREE.AmbientLight | null = null;
 
   private isVisible = true;
+  private currentMode: 'current_military' | 'future_masterplan' = 'future_masterplan';
   private currentSiteId = 'first-logistics-wonju';
   private centerLngLat: [number, number] = FIRST_LOGISTICS_WONJU_CENTER;
   private clampedAltitude = 0;
@@ -1497,6 +1635,44 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   }
 
   /**
+   * [현재 영내 군 막사·연병장 3D] vs [미래 복합개발 마스터플랜 3D] 전환
+   */
+  public setMode(mode: 'current_military' | 'future_masterplan'): void {
+    if (this.currentMode === mode && this.complexMesh) return;
+    this.currentMode = mode;
+    this.rebuildMesh();
+  }
+
+  public getMode(): 'current_military' | 'future_masterplan' {
+    return this.currentMode;
+  }
+
+  /**
+   * 3D 메쉬 재구축
+   */
+  public rebuildMesh(): void {
+    if (!this.materials) return;
+
+    if (this.complexMesh) {
+      this.scene.remove(this.complexMesh);
+      this.disposeObject(this.complexMesh);
+      this.complexMesh = null;
+    }
+
+    this.complexMesh = buildComplexForSite(this.currentSiteId, this.materials, this.currentMode);
+    this.complexMesh.traverse((child) => {
+      child.frustumCulled = false;
+    });
+    this.scene.add(this.complexMesh);
+
+    this.scaleY = 1.0;
+    this.targetScaleY = 1.0;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  /**
    * 실시간 거점 전환 (Site Switch): 기존 GPU 리소스 완벽 해제 후 새 부지 메쉬 구축
    */
   public setSite(siteId: string): void {
@@ -1505,7 +1681,6 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
     const site = getGangwonMilitarySiteById(siteId) || GANGWON_MILITARY_SITES[0];
     const targetId = site.id;
 
-    // 이미 활성화된 동일 거점인 경우 리렌더링 바이패스
     if (this.currentSiteId === targetId && this.complexMesh) {
       this.setVisible(true);
       return;
@@ -1515,30 +1690,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
     this.centerLngLat = site.center;
     this.rotationDeg = site.rotationDeg;
 
-    // 기존 3D 복합단지 메쉬 완전 소멸 (GPU 버퍼 메모리 해제)
-    if (this.complexMesh) {
-      this.scene.remove(this.complexMesh);
-      this.disposeObject(this.complexMesh);
-      this.complexMesh = null;
-    }
-
-    // 신규 부지 전용 LOD2 복합단지 메쉬 절차적 생성
-    if (this.materials) {
-      this.complexMesh = buildComplexForSite(targetId, this.materials);
-      this.complexMesh.traverse((child) => {
-        child.frustumCulled = false;
-      });
-      this.scene.add(this.complexMesh);
-    }
-
-    // 솟아오름(Rise-Up) 보간 즉각 완료
-    this.scaleY = 1.0;
-    this.targetScaleY = 1.0;
-    this.isVisible = true;
-
-    if (this.map) {
-      this.map.triggerRepaint();
-    }
+    this.rebuildMesh();
   }
 
   public getCurrentSiteId(): string {
@@ -1582,7 +1734,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       this.scene.add(this.fillLight);
 
       // 3. 현재 거점에 대응하는 스마트 복합단지 절차적 생성
-      this.complexMesh = buildComplexForSite(this.currentSiteId, this.materials);
+      this.complexMesh = buildComplexForSite(this.currentSiteId, this.materials, this.currentMode);
       this.complexMesh.traverse((child) => {
         child.frustumCulled = false;
       });

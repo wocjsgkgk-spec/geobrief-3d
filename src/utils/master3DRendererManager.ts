@@ -120,41 +120,47 @@ export function isPermittedBuildingPolygon(
   spanZ: number,
   maxEdgeLen: number
 ): boolean {
-  // 1. 면적 5,500㎡ 초과 비건물 (산림, 호수, 행정구역 경계선) 차단
-  if (areaSqm > 5500 || areaSqm < 4.0) {
+  // 1. 면적 4,000㎡ 초과 비건물 (산림, 호수, 행정구역 경계선, 대형 필지 단지) 및 10㎡ 미만 파편 영구 차단
+  if (areaSqm > 4000 || areaSqm < 10.0) {
     return false;
   }
 
-  // 2. 가로/세로 span 260m 초과 또는 단일 변 220m 초과 (찢어짐 방지)
+  // 2. 가로/세로 span 260m 초과 또는 단일 변 220m 초과 (삼각형 찢어짐 방지)
   if (spanX > 260 || spanZ > 260 || maxEdgeLen > 220) {
     return false;
   }
 
-  // 3. 건물이 확실한 속성 검증
-  const hasBuildingTag = Boolean(
+  // 3. 건물이 아닌 순수 레이어/비건물 속성만 엄격 차단 (OpenFreeMap/OpenMapTiles 건축물 폴리곤 100% 보존)
+  const isExplicitBuilding = Boolean(
     featProps.building ||
-    featProps.type === 'building' ||
     featProps.buld_nm ||
     featProps.bldNm ||
-    featProps.bld_nm ||
     featProps.buildingName ||
+    featProps.mgmBldrgstPk ||
     featProps.bd_mgt_sn ||
+    featProps.realUse ||
     featProps.grnd_flr ||
     featProps.gro_flo_co ||
-    featProps.grndFlrCnt ||
+    featProps.render_height ||
     featProps.height ||
-    featProps.heit ||
-    featProps.realHeight
+    featProps.hei ||
+    featProps.heit
   );
 
-  // 건물이 아닌 순수 레이어만 차단
-  if (!hasBuildingTag) {
+  if (!isExplicitBuilding) {
     if (
       featProps.is_site_boundary === true ||
       featProps.is_non_building === true ||
+      featProps.layer_type === 'cadastral' ||
+      featProps.layer_type === 'zoning' ||
       featProps.boundary ||
       featProps.admin_level ||
-      featProps.natural
+      featProps.natural ||
+      featProps.landuse ||
+      featProps.leisure ||
+      featProps.UQ111 ||
+      featProps.UQ111_NM ||
+      featProps.uq111
     ) {
       return false;
     }
@@ -177,7 +183,7 @@ export function sanitizeBuildingHeight(
 ): number {
   if (rawHeight > 0) {
     if (areaSqm < 220) {
-      return Math.min(rawHeight, 7.5 + (seed % 4) * 0.9);
+      return Math.min(rawHeight, 7.5 + (seed % 5) * 0.85); // 7.5m ~ 10.9m
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);

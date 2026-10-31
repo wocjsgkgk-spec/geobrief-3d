@@ -114,25 +114,8 @@ export class OsmRoofGenerator {
     const spanZ = Math.max(1, maxZ - minZ);
 
     // -------------------------------------------------------------------------
-    // [A] 저층 단독주택·빌라·막사: 장축 기반 3D 박공(Gabled) & 우진각(Hipped) 지붕
-    // -------------------------------------------------------------------------
-    if (isGabled && height <= 16.0) {
-      OsmRoofGenerator.generateGabledOrHippedRoof({
-        pts2D,
-        topElev,
-        seed,
-        spanX,
-        spanZ,
-        roofSlot,
-        wallSlot,
-        addQuad,
-        addTriangle,
-      });
-      return;
-    }
-
-    // -------------------------------------------------------------------------
-    // [B] 중층 상가·원룸·아파트: 침하형 옥상 슬래브 + 0.35m 돌출 난간(Parapet) + 2.8m 옥탑 코어
+    // 100% 모든 건물: 완전 수평 침하형 옥상 슬래브(Earcut) + 0.8m 돌출 난간(Parapet)
+    // - 삼각형 뿔(피라미드/박공/우진각) 종이접기 기하 왜곡 영구 완전 차단
     // -------------------------------------------------------------------------
     const roofUV = roofSlot
       ? getPhotorealisticSlotUV(roofSlot)
@@ -184,10 +167,10 @@ export class OsmRoofGenerator {
       );
     }
 
-    // 2. 옥상 테두리 3D 돌출 콘크리트 난간(Parapet)
-    const hasParapet = isHighRiseApt || buildingType === 'commercial' || height >= 10.0;
+    // 2. 옥상 테두리 3D 돌출 콘크리트 난간(Parapet) - 100% 전수 적용 (0.8m)
+    const hasParapet = true;
     if (hasParapet) {
-      const parapetH = 0.9;  // 0.9m 돌출 높이
+      const parapetH = 0.8;  // 0.8m 돌출 높이
       const parapetW = 0.35; // 0.35m 실측 두께
       const topCapY = topElev + parapetH;
       const uvParapet = getDiverseFacadeSlotUV('parapet_concrete');
@@ -268,93 +251,7 @@ export class OsmRoofGenerator {
     }
   }
 
-  /**
-   * 장축 기반 박공/우진각 지붕 정밀 지오메트리
-   */
-  private static generateGabledOrHippedRoof(opts: {
-    pts2D: Point2D[];
-    topElev: number;
-    seed: number;
-    spanX: number;
-    spanZ: number;
-    roofSlot: string;
-    wallSlot: string;
-    addQuad: AddQuadFn;
-    addTriangle: AddTriangleFn;
-  }): void {
-    const { pts2D, topElev, seed, spanX, spanZ, roofSlot, wallSlot, addQuad, addTriangle } = opts;
 
-    let cX = 0, cZ = 0;
-    for (const p of pts2D) {
-      cX += p.x;
-      cZ += p.z;
-    }
-    cX /= pts2D.length;
-    cZ /= pts2D.length;
-
-    const isLongX = spanX >= spanZ;
-    const majorLen = isLongX ? spanX : spanZ;
-    const minorWid = isLongX ? spanZ : spanX;
-
-    const ridgeH = Math.max(1.8, Math.min(3.2, minorWid * 0.42));
-    const ridgeY = topElev + ridgeH;
-
-    // 지붕 텍스처 (적갈색 기와 50% / 코발트 블루 강판 30% / 슬레이트 그레이 20%)
-    const gPick = seed % 10;
-    let gabledRoofUV = getDiverseFacadeSlotUV(roofSlot || (gPick < 5 ? 'roof_terracotta_tile' : gPick < 8 ? 'roof_zinc_blue' : 'roof_concrete_warmgray'));
-    const bldWallUV = getDiverseFacadeSlotUV(wallSlot || 'villa_red_brick');
-
-    const halfL = majorLen * 0.5;
-    const halfW = minorWid * 0.5;
-
-    if (isLongX) {
-      // X축 방향 능선
-      const r0: [number, number, number] = [cX - halfL, ridgeY, cZ];
-      const r1: [number, number, number] = [cX + halfL, ridgeY, cZ];
-
-      const e00: [number, number, number] = [cX - halfL, topElev, cZ - halfW];
-      const e10: [number, number, number] = [cX + halfL, topElev, cZ - halfW];
-      const e11: [number, number, number] = [cX + halfL, topElev, cZ + halfW];
-      const e01: [number, number, number] = [cX - halfL, topElev, cZ + halfW];
-
-      const hyp = Math.hypot(ridgeH, halfW);
-      const sinA = ridgeH / hyp;
-      const cosA = halfW / hyp;
-
-      // 북측 경사면
-      addQuad(e00, e10, r1, r0, [0, cosA, -sinA], gabledRoofUV);
-      // 남측 경사면
-      addQuad(r0, r1, e11, e01, [0, cosA, sinA], gabledRoofUV);
-
-      // 서측 박공 삼각형 벽체
-      addTriangle(e01, e00, r0, [-1, 0, 0], [bldWallUV.u0, bldWallUV.v0], [bldWallUV.u1, bldWallUV.v0], [(bldWallUV.u0 + bldWallUV.u1) * 0.5, bldWallUV.v1]);
-      // 동측 박공 삼각형 벽체
-      addTriangle(e10, e11, r1, [1, 0, 0], [bldWallUV.u0, bldWallUV.v0], [bldWallUV.u1, bldWallUV.v0], [(bldWallUV.u0 + bldWallUV.u1) * 0.5, bldWallUV.v1]);
-    } else {
-      // Z축 방향 능선
-      const r0: [number, number, number] = [cX, ridgeY, cZ - halfL];
-      const r1: [number, number, number] = [cX, ridgeY, cZ + halfL];
-
-      const e00: [number, number, number] = [cX - halfW, topElev, cZ - halfL];
-      const e10: [number, number, number] = [cX + halfW, topElev, cZ - halfL];
-      const e11: [number, number, number] = [cX + halfW, topElev, cZ + halfL];
-      const e01: [number, number, number] = [cX - halfW, topElev, cZ + halfL];
-
-      const hyp = Math.hypot(ridgeH, halfW);
-      const sinA = ridgeH / hyp;
-      const cosA = halfW / hyp;
-
-      // 서측 경사면
-      addQuad(e00, r0, r1, e01, [-sinA, cosA, 0], gabledRoofUV);
-      // 동측 경사면
-      addQuad(r0, e10, e11, r1, [sinA, cosA, 0], gabledRoofUV);
-
-      // 북측 박공 삼각형 벽체
-      addTriangle(e00, e10, r0, [0, 0, -1], [bldWallUV.u0, bldWallUV.v0], [bldWallUV.u1, bldWallUV.v0], [(bldWallUV.u0 + bldWallUV.u1) * 0.5, bldWallUV.v1]);
-      // 남측 박공 삼각형 벽체
-      addTriangle(e11, e01, r1, [0, 0, 1], [bldWallUV.u0, bldWallUV.v0], [bldWallUV.u1, bldWallUV.v0], [(bldWallUV.u0 + bldWallUV.u1) * 0.5, bldWallUV.v1]);
-    }
-  }
 
   /**
    * 옥상 텍스처 확률적 선택 (우레탄 45%, 시멘트 35%, 아스팔트/기와 20%)

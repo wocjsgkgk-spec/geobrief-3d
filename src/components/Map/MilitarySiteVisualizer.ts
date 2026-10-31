@@ -1,25 +1,16 @@
 /**
  * components/Map/MilitarySiteVisualizer.ts
  *
- * [GeoBrief 3D 2단계: 군 유휴부지(Military Idle Land) 초고시인성 3D 시각화 & 마스터플랜 비교 엔진]
- *
- * 강원특별자치도 18개 시·군 전역 군 유휴부지의 명확한 위치 인식과
- * [기존 병영 군사시설 3D] vs [미래 스마트 마스터플랜 3D] 원클릭 비교를 지원하는 특화 시각화 엔진:
+ * [GeoBrief 3D 3단계: 강원 18개 시·군 군 유휴부지 정밀 표시 & 렌더링 무결성 마감]
  *
  * 1. 4중 초고시인성 3D 경계 시각화:
- *    - 외곽 네온 에메랄드 글로우 라인 (#10b981, 두께 4px, 블러 2px)
- *    - 내부 백색 전술 점선 (#ffffff, dasharray: [2, 2])
- *    - 3D 수직 빛기둥 가드월 펜스 (높이 8m 반투명 fill-extrusion 펜스)
- *    - 부지 바닥 에메랄드 반투명 해칭 (opacity: 0.22)
+ *    - 선택된 군 유휴부지 외곽 에메랄드 네온 이중 경계선 (#10b981, 두께 4px, 블러 2px)
+ *    - 내부 백색 전술 점선 (#ffffff, dasharray: [3, 2])
+ *    - 반투명 구역 에메랄드 하이라이트 (opacity: 0.28)
  *
- * 2. 부지 상공 고정형 3D 홀로그램 브리핑 배지 (Floating Hologram Badge):
- *    - 부지 중심 상공 3D 팝업 배지:
- *      * [🛡️ 부지명], [총면적 (㎡ / 평)], [현재 상태], [계획 용도], [평균 경사도 / 용도지역]
- *      * 원클릭 [현재 군 막사 3D] ↔ [미래 마스터플랜 3D] 전환 토글 스위치
- *
- * 3. 영내 기존 군 막사 vs 미래 개발 구상안(3D 마스터플랜) 실시간 비교:
- *    - 현재 상태: 샌드베이지 군 막사, 연병장, 군수정비고, 보급창고
- *    - 미래 개발안: 블루 커튼월 R&D 타워, 헬리패드, 지식산업센터, 시민공원 조감도
+ * 2. 부지 상공 고정형 3D 플로팅 배지:
+ *    - [🛡️ 부지명 | 총면적 ㎡ (평) | 용도지역]
+ *    - 원클릭 [현재 영내 군 막사·연병장 3D] ↔ [미래 복합개발 마스터플랜 3D] 전환 스위치
  */
 
 import maplibregl from 'maplibre-gl';
@@ -41,7 +32,7 @@ export class MilitarySiteVisualizer {
   private map: maplibregl.Map | null = null;
   private markers: Map<string, maplibregl.Marker> = new Map();
   private currentMode: MilitarySiteDisplayMode = 'future_masterplan';
-  private selectedSiteId: string | null = null;
+  private selectedSiteId: string = 'wj-1st-logistics';
   private options: MilitarySiteVisualizerOptions;
   private isVisible = true;
 
@@ -56,6 +47,7 @@ export class MilitarySiteVisualizer {
   public attach(map: maplibregl.Map): void {
     this.map = map;
     this.setupMapLayers();
+    this.updateLayersFilter();
     this.updateHologramBadges();
   }
 
@@ -67,9 +59,11 @@ export class MilitarySiteVisualizer {
     if (!this.map) return;
 
     const layerIds = [
-      'military-site-3d-fence',
+      'selected-military-site-dash',
+      'selected-military-site-neon',
+      'selected-military-site-glow',
+      'selected-military-site-fill',
       'military-site-glow-outer',
-      'military-site-dash-inner',
       'military-site-fill',
     ];
 
@@ -94,9 +88,11 @@ export class MilitarySiteVisualizer {
     if (!this.map) return;
 
     const layerIds = [
-      'military-site-3d-fence',
+      'selected-military-site-dash',
+      'selected-military-site-neon',
+      'selected-military-site-glow',
+      'selected-military-site-fill',
       'military-site-glow-outer',
-      'military-site-dash-inner',
       'military-site-fill',
     ];
 
@@ -117,36 +113,63 @@ export class MilitarySiteVisualizer {
    * 특정 군 유휴부지 선택 및 포커싱
    */
   public selectSite(siteId: string): void {
-    this.selectedSiteId = siteId;
     const site = getGangwon18MilitarySiteById(siteId);
-    if (!site || !this.map) return;
+    if (!site) return;
+    this.selectedSiteId = site.id;
 
-    // 카메라 추천 위치로 부드러운 3D 플라이투
-    this.map.flyTo({
-      center: site.center,
-      zoom: site.recommendedCamera.zoom,
-      pitch: site.recommendedCamera.pitch,
-      bearing: site.recommendedCamera.bearing,
-      essential: true,
-      duration: 1500,
-    });
+    if (this.map) {
+      // 카메라 추천 위치로 부드러운 3D 플라이투
+      this.map.flyTo({
+        center: site.center,
+        zoom: site.recommendedCamera.zoom,
+        pitch: site.recommendedCamera.pitch,
+        bearing: site.recommendedCamera.bearing,
+        essential: true,
+        duration: 1500,
+      });
 
-    this.updateHologramBadges();
+      this.updateLayersFilter();
+      this.updateHologramBadges();
+    }
   }
 
   /**
-   * [현재 군 막사 3D] vs [미래 스마트 마스터플랜 3D] 모드 전환
+   * [현재 영내 군 막사·연병장 3D 뷰] vs [미래 복합개발 마스터플랜 3D 조감도] 모드 전환
    */
   public setDisplayMode(mode: MilitarySiteDisplayMode): void {
     this.currentMode = mode;
     this.updateHologramBadges();
-    if (this.selectedSiteId && this.options.onModeChange) {
+    if (this.options.onModeChange) {
       this.options.onModeChange(this.selectedSiteId, mode);
     }
   }
 
   public getDisplayMode(): MilitarySiteDisplayMode {
     return this.currentMode;
+  }
+
+  /**
+   * 선택된 부지 필터 업데이트 (선명한 네온 이중 경계선 동기화)
+   */
+  private updateLayersFilter(): void {
+    if (!this.map) return;
+    const site = getGangwon18MilitarySiteById(this.selectedSiteId);
+    const targetId = site ? site.id : this.selectedSiteId;
+
+    const selectedFilter: any = ['==', ['get', 'id'], targetId];
+
+    if (this.map.getLayer('selected-military-site-fill')) {
+      this.map.setFilter('selected-military-site-fill', selectedFilter);
+    }
+    if (this.map.getLayer('selected-military-site-glow')) {
+      this.map.setFilter('selected-military-site-glow', selectedFilter);
+    }
+    if (this.map.getLayer('selected-military-site-neon')) {
+      this.map.setFilter('selected-military-site-neon', selectedFilter);
+    }
+    if (this.map.getLayer('selected-military-site-dash')) {
+      this.map.setFilter('selected-military-site-dash', selectedFilter);
+    }
   }
 
   /**
@@ -164,7 +187,7 @@ export class MilitarySiteVisualizer {
       });
     }
 
-    // 1. 부지 바닥: 에메랄드 반투명 해칭 (opacity: 0.22)
+    // 1. 전역 군 유휴부지 기본 반투명 바닥 (opacity: 0.12)
     if (!this.map.getLayer('military-site-fill')) {
       this.map.addLayer({
         id: 'military-site-fill',
@@ -172,27 +195,12 @@ export class MilitarySiteVisualizer {
         source: 'military-sites-source',
         paint: {
           'fill-color': '#10b981',
-          'fill-opacity': 0.22,
+          'fill-opacity': 0.12,
         },
       });
     }
 
-    // 2. 3D 수직 빛기둥 가드월 펜스 (높이 8m 반투명 펜스)
-    if (!this.map.getLayer('military-site-3d-fence')) {
-      this.map.addLayer({
-        id: 'military-site-3d-fence',
-        type: 'fill-extrusion',
-        source: 'military-sites-source',
-        paint: {
-          'fill-extrusion-color': '#10b981',
-          'fill-extrusion-height': 8.0,
-          'fill-extrusion-base': 0.0,
-          'fill-extrusion-opacity': 0.40,
-        },
-      });
-    }
-
-    // 3. 외곽 네온 에메랄드 글로우 라인 (두께 4px, 블러 2px)
+    // 2. 전역 군 유휴부지 기본 외곽선
     if (!this.map.getLayer('military-site-glow-outer')) {
       this.map.addLayer({
         id: 'military-site-glow-outer',
@@ -200,30 +208,75 @@ export class MilitarySiteVisualizer {
         source: 'military-sites-source',
         paint: {
           'line-color': '#10b981',
-          'line-width': 4.0,
-          'line-blur': 2.0,
-          'line-opacity': 0.95,
+          'line-width': 2.0,
+          'line-opacity': 0.5,
         },
       });
     }
 
-    // 4. 내부 백색 전술 점선 (#ffffff, dasharray: [2, 2])
-    if (!this.map.getLayer('military-site-dash-inner')) {
+    // 3. [선택된 부지 전용] 반투명 구역 하이라이트 (opacity: 0.28)
+    if (!this.map.getLayer('selected-military-site-fill')) {
       this.map.addLayer({
-        id: 'military-site-dash-inner',
+        id: 'selected-military-site-fill',
+        type: 'fill',
+        source: 'military-sites-source',
+        filter: ['==', ['get', 'id'], this.selectedSiteId],
+        paint: {
+          'fill-color': '#10b981',
+          'fill-opacity': 0.28,
+        },
+      });
+    }
+
+    // 4. [선택된 부지 전용] 선명한 에메랄드 네온 외곽 글로우 (#10b981, 두께 4px, 블러 2px)
+    if (!this.map.getLayer('selected-military-site-glow')) {
+      this.map.addLayer({
+        id: 'selected-military-site-glow',
         type: 'line',
         source: 'military-sites-source',
+        filter: ['==', ['get', 'id'], this.selectedSiteId],
+        paint: {
+          'line-color': '#10b981',
+          'line-width': 4.0,
+          'line-blur': 2.0,
+          'line-opacity': 1.0,
+        },
+      });
+    }
+
+    // 5. [선택된 부지 전용] 중앙 선명한 네온 라인 (#34d399, 두께 2px)
+    if (!this.map.getLayer('selected-military-site-neon')) {
+      this.map.addLayer({
+        id: 'selected-military-site-neon',
+        type: 'line',
+        source: 'military-sites-source',
+        filter: ['==', ['get', 'id'], this.selectedSiteId],
+        paint: {
+          'line-color': '#34d399',
+          'line-width': 2.0,
+          'line-opacity': 1.0,
+        },
+      });
+    }
+
+    // 6. [선택된 부지 전용] 내부 백색 전술 점선 (#ffffff, dasharray: [3, 2])
+    if (!this.map.getLayer('selected-military-site-dash')) {
+      this.map.addLayer({
+        id: 'selected-military-site-dash',
+        type: 'line',
+        source: 'military-sites-source',
+        filter: ['==', ['get', 'id'], this.selectedSiteId],
         paint: {
           'line-color': '#ffffff',
           'line-width': 1.8,
-          'line-dasharray': [2, 2],
+          'line-dasharray': [3, 2],
           'line-opacity': 0.95,
         },
       });
     }
 
     // 클릭 시 해당 부지 자동 선택
-    this.map.on('click', 'military-site-fill', (e) => {
+    const clickHandler = (e: any) => {
       if (e.features && e.features[0]) {
         const sid = e.features[0].properties?.id;
         if (sid) {
@@ -231,7 +284,10 @@ export class MilitarySiteVisualizer {
           this.options.onSelectSite?.(sid);
         }
       }
-    });
+    };
+
+    this.map.on('click', 'military-site-fill', clickHandler);
+    this.map.on('click', 'selected-military-site-fill', clickHandler);
 
     this.map.on('mouseenter', 'military-site-fill', () => {
       if (this.map) this.map.getCanvas().style.cursor = 'pointer';
@@ -242,83 +298,100 @@ export class MilitarySiteVisualizer {
   }
 
   /**
-   * 상공 고정형 3D 홀로그램 브리핑 배지 렌더링
+   * 부지 중앙 상공 고정형 [🛡️ 부지명 | 총면적 ㎡ (평) | 용도지역] 플로팅 배지
    */
   private updateHologramBadges(): void {
     if (!this.map) return;
     this.clearMarkers();
 
     for (const site of GANGWON_18_MILITARY_SITES) {
-      const isSelected = this.selectedSiteId === site.id || (!this.selectedSiteId && site.id === 'wj-1st-logistics');
+      const isSelected = this.selectedSiteId === site.id || site.aliasIds.includes(this.selectedSiteId);
 
       const el = document.createElement('div');
       el.className = `military-hologram-badge-container ${isSelected ? 'active-badge' : ''}`;
       el.style.cursor = 'pointer';
-      el.style.zIndex = isSelected ? '100' : '50';
+      el.style.zIndex = isSelected ? '120' : '50';
 
-      const modeTitle = this.currentMode === 'current_military' ? '🏛️ 기존 영내 병영막사 3D' : '🏢 미래 스마트 마스터플랜 3D';
-      const modeColor = this.currentMode === 'current_military' ? 'text-amber-400 border-amber-500/60' : 'text-cyan-400 border-cyan-500/60';
+      const modeTitle =
+        this.currentMode === 'future_masterplan'
+          ? '🏢 미래 복합개발 마스터플랜 3D'
+          : '🏛️ 현재 영내 군 막사·연병장 3D';
+
+      const zoningShort = site.zoning.split('/')[0].trim();
 
       el.innerHTML = `
         <div style="
           position: relative;
-          background: rgba(10, 20, 15, 0.90);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1.5px solid ${isSelected ? '#10b981' : '#22c55e60'};
+          background: rgba(10, 20, 15, 0.93);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border: 1.5px solid ${isSelected ? '#10b981' : '#10b98150'};
           border-radius: 12px;
           padding: 8px 12px;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 15px ${isSelected ? 'rgba(16, 185, 129, 0.5)' : 'transparent'};
+          box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.85), 0 0 16px ${isSelected ? 'rgba(16, 185, 129, 0.55)' : 'transparent'};
           color: #f8fafc;
           font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-          min-width: 220px;
-          max-width: 290px;
+          min-width: 290px;
+          max-width: 360px;
           transition: all 0.25s ease;
           pointer-events: auto;
         ">
-          <!-- 상단 핀 및 비콘 -->
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <div style="display: flex; align-items: center; gap: 5px;">
-              <span style="font-size: 13px;">🛡️</span>
-              <strong style="font-size: 12px; color: #10b981; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px;">
-                ${site.shortName}
-              </strong>
-            </div>
-            <span style="font-size: 9.5px; font-family: monospace; background: #064e3b; color: #6ee7b7; padding: 2px 5px; border-radius: 4px; border: 1px solid #059669;">
-              ${site.regionName}
-            </span>
-          </div>
-
-          <!-- 면적 & 현재 상태 -->
-          <div style="font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 3px;">
-            <span>총면적: <strong style="color: #f1f5f9;">${site.areaSqm.toLocaleString()}㎡</strong> (약 ${site.areaPyeong.toLocaleString()}평)</span>
-          </div>
-
-          <!-- 상태 및 계획 용도 -->
-          <div style="font-size: 10px; line-height: 1.35; margin-bottom: 5px;">
-            <div style="color: #cbd5e1; margin-bottom: 2px;">
-              <span style="color: #38bdf8;">• 상태:</span> ${site.currentStatus.split('/')[0]}
-            </div>
-            <div style="color: #cbd5e1; margin-bottom: 2px;">
-              <span style="color: #f59e0b;">• 용도:</span> ${site.targetUse.split('&')[0]}
-            </div>
-            <div style="color: #94a3b8; font-size: 9px;">
-              • 경사도: ${site.averageSlope} | ${site.zoning.split('/')[0]}
-            </div>
-          </div>
-
-          <!-- 원클릭 [현재 막사 3D] vs [미래 마스터플랜 3D] 토글 스위치 -->
+          <!-- 1. 플로팅 배지 헤더: [🛡️ 부지명 | 총면적 ㎡ (평) | 용도지역] -->
           <div style="
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: #09120c;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 6px;
-            padding: 3px 6px;
-            margin-top: 5px;
+            gap: 5px;
+            font-size: 12.5px;
+            font-weight: 800;
+            color: #10b981;
+            border-bottom: 1.5px solid rgba(16, 185, 129, 0.35);
+            padding-bottom: 5px;
+            margin-bottom: 5px;
           ">
-            <span style="font-size: 9.5px; font-weight: 600;" class="${modeColor}">
+            <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <span style="font-size: 14px;">🛡️</span>
+              <strong style="color: #34d399; font-size: 12.5px;">${site.shortName}</strong>
+              <span style="color: #64748b; font-weight: 400; font-size: 11px;">|</span>
+              <span style="color: #f8fafc; font-size: 11.5px; font-weight: 700;">${site.areaSqm.toLocaleString()}㎡ (${site.areaPyeong.toLocaleString()}평)</span>
+              <span style="color: #64748b; font-weight: 400; font-size: 11px;">|</span>
+              <span style="color: #38bdf8; font-size: 11px; font-weight: 600;">${zoningShort}</span>
+            </div>
+            <span style="
+              font-size: 9px;
+              font-family: monospace;
+              background: #064e3b;
+              color: #6ee7b7;
+              padding: 2px 5px;
+              border-radius: 4px;
+              border: 1px solid #059669;
+              flex-shrink: 0;
+            ">
+              ${site.regionName}
+            </span>
+          </div>
+
+          <!-- 2. 현황 및 계획 세부 정보 -->
+          <div style="font-size: 10px; line-height: 1.35; margin-bottom: 6px; color: #cbd5e1;">
+            <div style="margin-bottom: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+              <span style="color: #38bdf8; font-weight: 600;">• 현황:</span> ${site.currentStatus.split('/')[0]}
+            </div>
+            <div style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+              <span style="color: #f59e0b; font-weight: 600;">• 구상:</span> ${site.targetUse.split('&')[0]}
+            </div>
+          </div>
+
+          <!-- 3. 원클릭 [현재 막사 3D] vs [미래 마스터플랜 3D] 토글 스위치 -->
+          <div style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #08150d;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            border-radius: 7px;
+            padding: 4px 8px;
+          ">
+            <span style="font-size: 10px; font-weight: 700; color: ${this.currentMode === 'future_masterplan' ? '#38bdf8' : '#fbbf24'};">
               ${modeTitle}
             </span>
             <button
@@ -327,9 +400,9 @@ export class MilitarySiteVisualizer {
               style="
                 background: ${this.currentMode === 'future_masterplan' ? '#059669' : '#d97706'};
                 color: #ffffff;
-                font-size: 9px;
+                font-size: 9.5px;
                 font-weight: 700;
-                padding: 2px 7px;
+                padding: 3px 8px;
                 border-radius: 4px;
                 border: none;
                 cursor: pointer;
@@ -342,12 +415,13 @@ export class MilitarySiteVisualizer {
         </div>
       `;
 
-      // 클릭 시 해당 부지 선택
+      // 클릭 시 해당 부지 선택 및 모드 전환
       el.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (target && target.id === `btn-toggle-${site.id}`) {
           e.stopPropagation();
-          const nextMode: MilitarySiteDisplayMode = this.currentMode === 'future_masterplan' ? 'current_military' : 'future_masterplan';
+          const nextMode: MilitarySiteDisplayMode =
+            this.currentMode === 'future_masterplan' ? 'current_military' : 'future_masterplan';
           this.setDisplayMode(nextMode);
           return;
         }

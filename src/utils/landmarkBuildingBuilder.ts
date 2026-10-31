@@ -165,7 +165,8 @@ export function detectLandmarkType(
   rawCoords: [number, number][],
   props: Record<string, any>,
   cLng: number,
-  cLat: number
+  cLat: number,
+  areaSqm?: number
 ): LandmarkInfo | null {
   const name = String(props.name || props.buildingName || props.buld_nm || props.bldNm || '').trim();
   const purps = String(props.main_purps_cd_nm || props.mainPurpsCdNm || props.use || props.usageType || '').trim();
@@ -177,14 +178,23 @@ export function detectLandmarkType(
 
   const fullText = `${name} ${purps} ${address} ${amenity} ${office} ${building}`.toLowerCase();
 
-  // 1. 강원 18개 시·군 랜드마크 지리적 근접성 대조 (반경 r 이내)
+  // 소형 주택이나 일반 건물(면적 < 280㎡)은 가짜 랜드마크로 부풀려지지 않도록 영구 차단
+  if (areaSqm !== undefined && areaSqm < 280 && !name.includes('청사') && !name.includes('역') && !name.includes('시청')) {
+    return null;
+  }
+
+  // 1. 강원 18개 시·군 랜드마크 지리적 근접성 대조
+  // (임의 위치 건물 팽창 방지: 이름 일치 또는 25m 이내 초밀접 + 공공/대형 건물 조건 동시 충족 시에만 한정)
   for (const lm of GANGWON_18_LANDMARKS) {
     const dLng = (cLng - lm.lng) * 88800; // ~meters at lat 37.3
     const dLat = (cLat - lm.lat) * 111000;
     const dist = Math.hypot(dLng, dLat);
 
-    if (dist <= lm.radiusMeters) {
-      // 반경 내 건물이면 랜드마크 확정
+    const lmCoreName = lm.name.replace(/^(KTX|강원특별자치도|강원|국민|한국|춘천지방법원|근로복지공단)\s*/, '');
+    const isNameMatched = name.length >= 2 && (name.includes(lm.name) || lm.name.includes(name) || (lmCoreName.length >= 2 && name.includes(lmCoreName)));
+    const isVeryClosePublic = dist <= 25.0 && (fullText.includes(lm.type) || amenity !== '' || office !== '' || (areaSqm !== undefined && areaSqm >= 350));
+
+    if (isNameMatched || isVeryClosePublic) {
       return {
         type: lm.type,
         name: lm.name,

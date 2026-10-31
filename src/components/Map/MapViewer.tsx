@@ -658,24 +658,34 @@ export const MapViewer: React.FC = () => {
         // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역 구역, 공원/단지 landuse) 3D 건물 캐시 유입 100% 원천 차단
         const p = (feat.properties || {}) as Record<string, any>;
         if (p.is_non_building || p.is_site_boundary) return;
-        if (p.UQ111 || p.UQ111_NM || p.uq111 || p.zoneName || p.zone_nm || p.spfc_nm || p.spfc_cd) return;
-        if (p.landuse || p.leisure || p.boundary || p.admin_level || p.natural) return;
+
+        const isExplicitBuilding = Boolean(
+          p.building ||
+          p.buld_nm ||
+          p.bldNm ||
+          p.buildingName ||
+          p.bd_mgt_sn ||
+          p.mgmBldrgstPk ||
+          p.realUse ||
+          p.grnd_flr ||
+          p.gro_flo_co ||
+          p.grndFlrCnt ||
+          p.hei ||
+          p.heit ||
+          p.height
+        );
+
+        if (!isExplicitBuilding) {
+          if (p.UQ111 || p.UQ111_NM || p.uq111 || p.zoneName || p.zone_nm || p.spfc_nm || p.spfc_cd) return;
+          if (p.landuse || p.leisure || p.boundary || p.admin_level || p.natural) return;
+        }
 
         const isParcelWithoutBld =
           Boolean(p.pnu || p.jimok || p.jibun) &&
-          !p.bd_mgt_sn &&
-          !p.buld_nm &&
-          !p.bldNm &&
-          !p.buildingName &&
-          !p.grnd_flr &&
-          !p.gro_flo_co &&
-          !p.grndFlrCnt &&
-          !p.hei &&
-          !p.heit &&
-          !p.height;
+          !isExplicitBuilding;
         if (isParcelWithoutBld) return;
 
-        // [요구사항 2] 바닥 면적 4,500㎡ 초과 거대 구역 폴리곤(학교 부지, 아파트 단지 외곽, 군부대 경계 등) 3D 압출 즉시 제외
+        // [요구사항 2] 바닥 면적 4,000㎡ 초과 거대 구역 폴리곤(학교 부지, 아파트 단지 외곽, 군부대 경계 등) 및 10㎡ 미만 파편 3D 압출 제외
         const coords =
           feat.geometry.type === 'Polygon'
             ? feat.geometry.coordinates[0]
@@ -697,7 +707,7 @@ export const MapViewer: React.FC = () => {
           areaSum += x1 * y2 - x2 * y1;
         }
         const areaSqm = Math.abs(areaSum) * 0.5;
-        if (areaSqm > 4500) {
+        if (areaSqm > 4000 || areaSqm < 10) {
           return;
         }
 
@@ -2276,6 +2286,7 @@ export const MapViewer: React.FC = () => {
 
     (window as any).__map = map;
     (window as any).__mapLibreMap = map;
+    (window as any).__geobrief_map = map;
     (window as any).map = map;
     (window as any).__setRenderMode3D = setRenderMode3D;
     (window as any).__useMapStore = useMapStore;
@@ -3231,10 +3242,12 @@ export const MapViewer: React.FC = () => {
         console.warn('[RealisticKoreanCityLayer] Registration warning:', rcErr);
       }
 
-      // [1단계: 비정상적인 거대 가상 박스(더미 메쉬) 전면 삭제 - 임의 3D 박스 생성 중단]
+      // [강원 군 유휴부지 3D 시각화: 병영 막사 vs 미래 마스터플랜 레이어 등록]
       try {
-        const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
-        smartCityLayer.setVisible(false);
+        const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'wj-1st-logistics');
+        smartCityLayer.setMode(layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military');
+        smartCityLayer.setVisible(Boolean(layers.firstLogisticsSmartCity));
+        map.addLayer(smartCityLayer);
         smartCityComplexLayerRef.current = smartCityLayer;
       } catch (scErr) {
         console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
@@ -3547,6 +3560,7 @@ export const MapViewer: React.FC = () => {
     if (typeof window !== 'undefined') {
       (window as any).__map = map;
     (window as any).__mapLibreMap = map;
+    (window as any).__geobrief_map = map;
     (window as any).map = map;
     }
 
@@ -4242,15 +4256,18 @@ export const MapViewer: React.FC = () => {
     }
   }, [transformGizmoMode]);
 
-  // 8-0-3. [강원권 다중 거점 3D 스마트 복합단지(LOD2) 자동 안착 및 거점 전환 동기화]
+  // 8-0-3. [강원권 다중 거점 3D 스마트 복합단지(LOD2) 병영 막사 vs 미래 마스터플랜 동기화]
   useEffect(() => {
     if (smartCityComplexLayerRef.current) {
       if (selectedIdleSiteId) {
         smartCityComplexLayerRef.current.setSite(selectedIdleSiteId);
       }
-      smartCityComplexLayerRef.current.setVisible(!!layers.firstLogisticsSmartCity);
+      smartCityComplexLayerRef.current.setMode(
+        layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military'
+      );
+      smartCityComplexLayerRef.current.setVisible(Boolean(layers.firstLogisticsSmartCity));
     }
-  }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
+  }, [layers.firstLogisticsSmartCity, layers.militarySites, selectedIdleSiteId]);
 
   // 8-0-3-1. [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진 동기화]
   useEffect(() => {
@@ -5023,6 +5040,23 @@ export const MapViewer: React.FC = () => {
               ...(lp.jibun ? { '지번': lp.jibun } : {}),
               ...(lp.jimokLabel ? { '지목': lp.jimokLabel } : {}),
               ...(lp.pnu ? { 'PNU(고유번호)': lp.pnu } : {}),
+            },
+          });
+        } else {
+          // [즉시 오픈] 연속지적도 및 필지 분석 대상 지정
+          const clickCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+          const projected = map.project(clickCoords);
+          setSelectedBuilding({
+            name: '토지·연속지적 필지',
+            category: '연속지적도 및 용도지역',
+            levels: 0,
+            height: 0,
+            center: clickCoords,
+            screenPos: { x: projected.x, y: projected.y },
+            rawProperties: {
+              '위도': e.lngLat.lat.toFixed(6),
+              '경도': e.lngLat.lng.toFixed(6),
+              '소재지': '강원특별자치도 원주시',
             },
           });
         }
