@@ -362,6 +362,8 @@ export function createPhotorealisticPbrMaterial(
 
   const material = new THREE.MeshStandardMaterial({
     map: options.map || undefined,
+    color: new THREE.Color(0xffffff),
+    vertexColors: true,
     roughness: options.roughness !== undefined ? options.roughness : 0.45,
     metalness: options.metalness !== undefined ? options.metalness : 0.08,
     transparent: options.transparent || false,

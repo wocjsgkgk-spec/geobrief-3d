@@ -66,6 +66,7 @@ import {
   createPhotorealisticPbrMaterial,
   updatePhotorealisticPbrUniforms,
 } from '@/lib/vendor/photorealisticPbrShader';
+import { applyAtmosphericPerspectiveFog } from '@/lib/vendor/openSource3DEnhancer';
 import {
   buildAuthenticBridgeMeshGroup,
   WONJU_AUTHENTIC_BRIDGES,
@@ -292,26 +293,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 2단계] 4096px 고해상도 실사 파사드 아틀라스 & 순수 MeshStandardMaterial 정통 PBR 재질 초기화
+      // 2. [GeoBrief 3D 3단계] 4096px 고해상도 실사 파사드 아틀라스 & Streets-GL 접지 AO 셰이더 직결
       const atlasTex = getDiverseKoreanFacadeAtlasTexture();
-      this.masterMaterial = new THREE.MeshStandardMaterial({
+      this.masterMaterial = createPhotorealisticPbrMaterial({
         map: atlasTex || undefined,
-        color: new THREE.Color(0xffffff),
-        vertexColors: true,
         roughness: 0.55,
         metalness: 0.08,
-        side: THREE.DoubleSide,
+        specularGlintIntensity: 2.5,
+        aoIntensity: 1.0,
       });
 
-      this.rooftopMaterial = new THREE.MeshStandardMaterial({
+      this.rooftopMaterial = createPhotorealisticPbrMaterial({
         map: atlasTex || undefined,
-        color: new THREE.Color(0xffffff),
-        vertexColors: true,
         roughness: 0.65,
         metalness: 0.05,
-        side: THREE.DoubleSide,
-        transparent: false,
-        opacity: 1.0,
+        aoIntensity: 1.0,
       });
 
       // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
@@ -541,7 +537,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   public updateSunLight(
     dirOrAlt: [number, number, number] | THREE.Vector3 | number,
     colorOrAz?: string | number,
-    intensity: number = 1.85
+    intensity: number = 1.85,
+    fogColor?: string,
+    fogDensity?: number
   ): void {
     if (!this.sunLight) return;
     if (typeof dirOrAlt === 'number' && typeof colorOrAz === 'number') {
@@ -560,6 +558,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.color.set(colorOrAz);
     }
     this.sunLight.intensity = Math.max(0.2, intensity);
+
+    // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
+    if (this.scene) {
+      applyAtmosphericPerspectiveFog(this.scene, fogColor || '#cbd5e1', fogDensity || 0.00018);
+    }
   }
 
   /**

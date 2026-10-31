@@ -144,7 +144,7 @@ export function getKoreanRoadLayerDefinitions(
       },
     },
 
-    // 0-2. 원주천·섬강·소양강 맑은 네이비/틸 블루 수면 폴리곤 (korean-water-fill)
+    // 0-2. [3단계: osmbuildings 벤더링] 원주천·섬강·소양강·북한강·호수 짙은 에메랄드/다크 틸 수면 폴리곤 (korean-water-fill)
     {
       id: 'korean-water-fill',
       type: 'fill',
@@ -157,11 +157,11 @@ export function getKoreanRoadLayerDefinitions(
           'interpolate',
           ['linear'],
           ['zoom'],
-          9, '#0f2942',  // 원경: 깊은 틸 블루
-          13, '#1e3a5f', // 중경: 맑고 깨끗한 네이비 블루 (#1e3a5f)
-          16, '#1e3a5f', // 근경: 자연스러운 청정 수면 컬러
+          9, '#163832',  // 원경(호수/대하천): 짙은 에메랄드 틸 (#163832)
+          13, '#1b4332', // 중경(본류 하천): 자연스러운 딥 틸 (#1b4332)
+          16, '#204f3b', // 근경(하천/지류): 맑은 에메랄드 청정 수면 (#204f3b)
         ],
-        'fill-opacity': 0.70, // 사용자 요구사항: 자연스러운 투명도 0.70
+        'fill-opacity': 0.78, // 지형 및 위성사진과 자연스럽게 어우러지는 불투명도
         'fill-antialias': true,
       },
       layout: {
@@ -169,7 +169,7 @@ export function getKoreanRoadLayerDefinitions(
       },
     },
 
-    // 0-3. 하천 가장자리 부드러운 수면 반사광/물결 테두리 라인 (korean-water-edge)
+    // 0-3. [3단계] 하천 가장자리 에메랄드 수면 반사광/물결 테두리 라인 (korean-water-edge)
     {
       id: 'korean-water-edge',
       type: 'line',
@@ -178,9 +178,9 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#2a4d70', // 은은한 수면 반사 테두리 (어색한 쨍한 네온색 제거)
-        'line-opacity': 0.35,
-        'line-width': 1.0,
+        'line-color': '#2d6a4f', // 브이월드 레퍼런스 실사 에메랄드 물결 반사 테두리
+        'line-opacity': 0.45,
+        'line-width': 1.5,
       },
       layout: {
         'line-cap': 'round',
@@ -189,7 +189,7 @@ export function getKoreanRoadLayerDefinitions(
       },
     },
 
-    // 0-4. 소하천 및 지류 물길 선형 (korean-waterway-line)
+    // 0-4. [3단계] 소하천 및 지류 물길 선형 (korean-waterway-line)
     {
       id: 'korean-waterway-line',
       type: 'line',
@@ -198,8 +198,8 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#1e3a5f', // 자연스러운 수면 색상 (#1e3a5f)
-        'line-opacity': 0.70,   // 사용자 요구사항: 투명도 0.70
+        'line-color': '#1b4332', // 자연스러운 에메랄드 다크 틸
+        'line-opacity': 0.78,
         'line-width': [
           'interpolate',
           ['exponential', 1.5],

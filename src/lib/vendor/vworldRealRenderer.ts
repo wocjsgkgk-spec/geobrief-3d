@@ -44,6 +44,10 @@ import {
   calculateSafeRooftopCore,
 } from '@/lib/vendor/safeGeoAlgorithms';
 import {
+  ensurePolygonCCW,
+  buildStreetsGlRooftopEquipment,
+} from '@/lib/vendor/openSource3DEnhancer';
+import {
   DiverseBuildingGenerator,
   DiverseBuildingArchitecture,
 } from '@/lib/vendor/diverseBuildingGenerator';
@@ -153,7 +157,6 @@ export class VworldRealRenderer {
    */
   public static buildRealBuilding(opts: VworldRealRenderOptions): void {
     const {
-      pts2D,
       baseElev,
       seed,
       edgeLens,
@@ -167,8 +170,10 @@ export class VworldRealRenderer {
       addRooftopTriangle = addTriangle,
     } = opts;
 
-    if (!pts2D || pts2D.length < 3) return;
+    if (!opts.pts2D || opts.pts2D.length < 3) return;
 
+    // [3단계: 기하학 무결성] 반시계 방향(CCW) 정렬을 보장하여 법선 역전 원천 차단
+    const pts2D = ensurePolygonCCW(opts.pts2D);
     const ptCount = pts2D.length;
 
     // 1. OBB 및 치수 계산
@@ -570,47 +575,17 @@ export class VworldRealRenderer {
       );
     }
 
-    // 5. 엘리베이터 권상기실 / 옥탑방 코어 (아파트 및 중층 상가)
-    if (arch.hasPenthouseCore || isApartment) {
-      const innerPolyCoords: [number, number][] = innerPts.map((p) => [p.x, p.z]);
-      const core = calculateSafeRooftopCore(innerPolyCoords, height, topElev, 2.8);
-
-      if (core) {
-        const uvCore = getDiverseFacadeSlotUV('penthouse_core_wall');
-        const cPts = core.box2D;
-        const cBaseY = topElev;
-        const cTopY = topElev + core.height;
-
-        for (let c = 0; c < 4; c++) {
-          const nextC = (c + 1) % 4;
-          const cp0 = cPts[c];
-          const cp1 = cPts[nextC];
-          const cdx = cp1[0] - cp0[0];
-          const cdz = cp1[1] - cp0[1];
-          const clen = Math.hypot(cdx, cdz) || 1;
-
-          addRooftopQuad(
-            [cp0[0], cBaseY, cp0[1]],
-            [cp1[0], cBaseY, cp1[1]],
-            [cp1[0], cTopY, cp1[1]],
-            [cp0[0], cTopY, cp0[1]],
-            [-cdz / clen, 0, cdx / clen],
-            uvCore,
-            cleanWhiteRgb
-          );
-        }
-
-        // 옥탑 지붕
-        addRooftopQuad(
-          [cPts[0][0], cTopY, cPts[0][1]],
-          [cPts[1][0], cTopY, cPts[1][1]],
-          [cPts[2][0], cTopY, cPts[2][1]],
-          [cPts[3][0], cTopY, cPts[3][1]],
-          [0, 1, 0],
-          uvRoofFloor,
-          cleanWhiteRgb
-        );
-      }
+    // 5. [3단계: Streets-GL 벤더링] 엘리베이터 옥탑 권상기실 & 냉각탑/실외기 박스 옥상 설비 복합 메쉬
+    if (arch.hasPenthouseCore || isApartment || isCommercial) {
+      buildStreetsGlRooftopEquipment({
+        innerPts,
+        topElev,
+        buildingHeight: height,
+        isApartment,
+        isCommercial,
+        seed,
+        addRooftopQuad,
+      });
     }
   }
 }

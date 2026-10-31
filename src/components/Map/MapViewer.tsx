@@ -5690,7 +5690,8 @@ export const MapViewer: React.FC = () => {
         realisticKoreanCityLayerRef.current.updateSunLight(
           sunConfig.directionalVector,
           sunConfig.color,
-          sunConfig.intensity
+          sunConfig.intensity,
+          sunConfig.fogColor
         );
       }
       if (threeDLayerRef.current) {
