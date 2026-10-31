@@ -1,795 +1,4509 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import {
-  Mountain,
-  Building2,
-  Shield,
   MapPin,
-  Ruler,
+  Layers,
+  Sliders,
+  FileText,
+  Mountain,
+  Building,
+  Route,
+  Disc,
+  PenTool,
+  Check,
+  RotateCcw,
+  ShieldCheck,
+  ShieldAlert,
+  BookmarkPlus,
+  Bookmark,
+  Trash2,
+  Compass,
+  Navigation2,
+  Sparkles,
+  Grid,
+  Square,
+  Circle,
+  RotateCw,
+  Palette,
+  AlertTriangle,
+  FileSpreadsheet,
+  Copy,
+  CheckCircle2,
+  Plane,
+  Car,
+  Activity,
+  TrendingUp,
+  BarChart3,
+  Crosshair,
+  Settings,
   Sun,
+  Sunrise,
+  Sunset,
+  Clock,
+  Waves,
+  Radio,
   Eye,
+  X,
+  Boxes,
+  Truck,
+  ArrowDown,
+  ArrowUp,
+  Scale,
+  Box,
+  Move,
+  Maximize2,
+  Building2,
+  Home,
+  Warehouse,
+  Plus,
+  Focus,
+  Edit3,
+  Target,
   Play,
   Pause,
-  RotateCcw,
-  Check,
-  Navigation,
-  Sparkles,
-  Clock,
-  Globe,
-  Building,
-  CheckCircle2,
-  Compass,
-  ChevronDown,
-  ChevronUp,
-  Map as MapIcon,
-  Crosshair,
-  TrendingUp,
-  Layers,
-  Activity,
-  Trash2,
-  Plus,
-  ArrowUpRight,
-  ShieldAlert,
-  Car,
-  Train,
+  Ruler,
 } from 'lucide-react';
-import { useMapStore } from '@/store/useMapStore';
+import { calculateSunLight } from '@/utils/sunLightCalculator';
+import { GANGWON_REGIONS } from '@/constants/gangwonRegions';
+import { getGangwonZone } from '@/utils/regionalBuildingStyler';
+import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
+import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
 import {
   GANGWON_18_MILITARY_SITES,
-  getGangwon18MilitarySiteById,
+  Gangwon18MilitarySite,
   GangwonSubregionType,
+  getGangwon18MilitarySiteById,
+  getMilitarySitesBySubregion,
 } from '@/constants/gangwon18MilitarySites';
+import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
+import { AddressSearch } from '@/components/Search/AddressSearch';
+import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
+import { Custom3DTilesModal } from '@/components/Modal/Custom3DTilesModal';
+import { useMapStore } from '@/store/useMapStore';
 import {
-  GANGWON_18_REGIONS,
-  getGangwonRegionByIdOrName,
-} from '@/constants/gangwon18Regions';
-import {
-  getGangwonRegionStatById,
-  GANGWON_18_REGION_STATS,
-} from '@/constants/gangwonRegionData';
-import { SidebarTab, FACILITY_PRESETS, FacilityPresetId } from '@/types/map';
+  Bookmark as BookmarkItem,
+  PolygonStyle,
+  StampShape,
+  BUILDING_MASS_PRESETS,
+  BuildingMassPresetId,
+  FACILITY_PRESETS,
+  FacilityPresetId,
+  PlacedFacility3D,
+  TransformGizmoMode,
+} from '@/types/map';
 
 export const ControlPanel: React.FC = () => {
   const {
+    renderMode3D,
+    setRenderMode3D,
     activeSidebarTab,
     setActiveSidebarTab,
-    baseMap,
-    setBaseMap,
-    layers,
-    toggleLayer,
-    // 부지 & 시·군 선택
-    selectedIdleSiteId,
-    selectIdleSite,
-    selectedRegionId,
-    selectRegion,
-    // 3D 지형 DEM 고저차 배율 & 건물 테마
+    isCustom3DTilesModalOpen,
+    setCustom3DTilesModalOpen,
+    terrainEnabled,
+    setTerrainEnabled,
     terrainExaggeration,
     setTerrainExaggeration,
+    baseMap,
+    setBaseMap,
     buildingTheme,
     setBuildingTheme,
-    // 실시간 일조권 & 태양광 시뮬레이션
+    isViewshedMode,
+    toggleViewshedMode,
+    viewshedResult,
+    clearViewshed,
+    layers,
+    toggleLayer,
+    metadata,
+    updateMetadata,
+    // 부지 드로잉 상태 & 액션
+    isDrawingMode,
+    drawingPoints,
+    completedPolygon,
+    polygonArea,
+    toggleDrawingMode,
+    completePolygonDrawing,
+    resetPolygonDrawing,
+    // [Phase 2 고도화] 스타일, 스탬프, 회전
+    polygonStyle,
+    setPolygonStyle,
+    stampMode,
+    stampAreaPyeong,
+    stampShape,
+    setStampMode,
+    setStampAreaPyeong,
+    setStampShape,
+    rotatePolygon,
+    // 버퍼 링 토글
+    bufferRings,
+    toggleBufferRing,
+    // GANGWON_REGIONS 18개 시·군 선택
+    selectedRegionId,
+    selectRegion,
+    // [접경 안보 관제] 군사분계선/민통선 상태
+    borderSecurityVisible,
+    setBorderSecurityVisible,
+    isBorderDistrict,
+    // [국방 규제 및 비행안전 심층 분석]
+    defenseAnalysisResult,
+    showFlightCeiling3D,
+    toggleFlightCeiling3D,
+    // [교통·인프라 접근성]
+    showAccessibilityTable,
+    toggleAccessibilityTable,
+    // [가상 3D 건축 매스 구상안]
+    showBuildingMass3D,
+    buildingMassPreset,
+    customGltfUrl,
+    toggleBuildingMass3D,
+    setBuildingMassPreset,
+    setCustomGltfUrl,
+    // 북마크
+    bookmarks,
+    addBookmark,
+    removeBookmark,
+    flyToBookmark,
+    viewport,
+    vworldDiagnostic,
+    setVworldDiagnostic,
+    molitDiagnostic,
+    setMolitDiagnostic,
+    vworldTileStats,
+    // [신규] 전략 군 유휴지 실증 프리셋
+    selectedIdleSiteId,
+    selectIdleSite,
+    // [다목적 3D 측정기]
+    isMeasureMode,
+    measureSubtype,
+    measureResult,
+    measurePoints,
+    toggleMeasureMode,
+    setMeasureSubtype,
+    clearMeasure,
+    // [신규] 토목·지형 경사도 & 고도 단면 프로파일 분석
+    showSlopeAnalysis,
+    toggleSlopeAnalysis,
+    showTerrainProfile,
+    setShowTerrainProfile,
+    toggleTerrainProfile,
+    polygonCenter,
     sunHour,
     setSunHour,
     isSunPlaying,
     toggleSunPlaying,
     sunSeason,
     setSunSeason,
-    // 3D 신규 시설물 배치
+    continuousDaylightResult,
+    siteFeasibilityResult,
+    // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
+    waterLevel,
+    setWaterLevel,
+    // [신규] 국방·보안 감시 센서 콘 & UAV 정찰 비행
+    surveillanceSensors,
+    isSensorPlacementMode,
+    selectedSensorFov,
+    selectedSensorRange,
+    toggleSensorPlacementMode,
+    setSelectedSensorFov,
+    setSelectedSensorRange,
+    removeSurveillanceSensor,
+    clearSurveillanceSensors,
+    uavFlight,
+    toggleUavFlight,
+    setUavCameraMode,
+    setUavFlightSpeed,
+    setUavFlightAltitude,
+    // [3D 토공량(절토·성토 Cut & Fill) 산출 엔진]
+    cutFill,
+    toggleCutFill,
+    setCutFillEnabled,
+    setCutFillGridSize,
+    setCutFillTargetElevation,
+    // [Deck.gl Tile3DLayer 기반 3D Tiles 스트리밍]
+    tile3DStream,
+    toggleTile3DStream,
+    setTile3DStreamUrl,
+    setTile3DStreamPreset,
+    setTile3DStreamOpacity,
+    setTile3DStreamSse,
+    setTile3DStreamPointSize,
+    // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls]
     placedFacilities,
+    selectedFacilityId,
+    transformGizmoMode,
     addPlacedFacility,
     removePlacedFacility,
-    clearPlacedFacilities,
-    // 도면 범례 토글
-    showLegendBox,
-    toggleLegendBox,
+    clearAllPlacedFacilities,
+    selectFacility,
+    updateFacilityTransform,
+    setTransformGizmoMode,
+    flyToLocation,
+    // [3단계 신규: 3D 전술 탐지 돔, 3D 보안 펜스, 입체 LOS 가시선]
+    threatDome,
+    securityWall,
+    losAnalysis,
+    setThreatDome,
+    toggleThreatDome,
+    setSecurityWall,
+    toggleSecurityWall,
+    startLosAnalysis,
+    resetLosAnalysis,
   } = useMapStore();
 
-  // 1. 현재 선택된 대상 정보 단일화 판정 (군 유휴부지 vs 18개 시·군)
-  const isSiteSelected = Boolean(selectedIdleSiteId);
-  const currentMilitarySite = selectedIdleSiteId
-    ? getGangwon18MilitarySiteById(selectedIdleSiteId)
-    : null;
-  const currentRegionStat = getGangwonRegionStatById(selectedRegionId || 'wonju');
-  const currentRegionInfo = getGangwonRegionByIdOrName(selectedRegionId || 'wonju');
+  const [bookmarkInput, setBookmarkInput] = useState('');
+  const [isAddingBookmark, setIsAddingBookmark] = useState(false);
+  const [isCoordModalOpen, setIsCoordModalOpen] = useState(false);
+  const [boundaryTab, setBoundaryTab] = useState<'draw' | 'stamp' | 'coord'>('draw');
+  const [copiedDraft, setCopiedDraft] = useState(false);
+  const [gltfInput, setGltfInput] = useState('');
+  const [showGltfDrawer, setShowGltfDrawer] = useState(false);
+  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
+  const [editingFacilityName, setEditingFacilityName] = useState('');
 
-  // 해당 시·군에 속한 군 유휴부지 목록
-  const sitesInCurrentRegion = GANGWON_18_MILITARY_SITES.filter(
-    (s) => s.regionId === currentRegionStat.id || s.regionName === currentRegionStat.name
-  );
+  const handleCopyOpinionDraft = async () => {
+    if (!defenseAnalysisResult?.officialOpinionDraft) return;
+    try {
+      await navigator.clipboard.writeText(defenseAnalysisResult.officialOpinionDraft);
+      setCopiedDraft(true);
+      setTimeout(() => setCopiedDraft(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy draft:', err);
+    }
+  };
 
-  // 퀵 전환 대표 거점 칩 목록
-  const quickChips = [
-    { type: 'site' as const, id: 'first-logistics-wonju', label: '원주 1군지사' },
-    { type: 'site' as const, id: 'ch-camp-page-chuncheon', label: '춘천 캠프페이지' },
-    { type: 'region' as const, id: 'wonju', label: '원주시 전역' },
-    { type: 'region' as const, id: 'chuncheon', label: '춘천시 전역' },
-    { type: 'region' as const, id: 'gangneung', label: '강릉시 전역' },
-    { type: 'site' as const, id: 'gw-cheorwon-hwaji', label: '철원 화지리' },
-  ];
+  // [1단계: 비동기 상태 전환 최적화] 탭/메뉴 버튼은 0.01초 즉시 반응하고 무거운 지도 렌더러 전환은 비동기 분리
+  const [localActiveTab, setLocalActiveTab] = useState(activeSidebarTab);
+  const [localRenderMode3D, setLocalRenderMode3D] = useState(renderMode3D);
+
+  useEffect(() => {
+    setLocalActiveTab(activeSidebarTab);
+  }, [activeSidebarTab]);
+
+  useEffect(() => {
+    setLocalRenderMode3D(renderMode3D);
+  }, [renderMode3D]);
+
+  const handleTabChange = (tab: typeof activeSidebarTab) => {
+    setLocalActiveTab(tab);
+    setActiveSidebarTab(tab);
+  };
+
+  const handleSelectRenderMode3D = (mode: typeof renderMode3D) => {
+    setLocalRenderMode3D(mode);
+    setRenderMode3D(mode);
+  };
+
+  const handleToggleLayer = (key: keyof typeof layers) => {
+    toggleLayer(key);
+  };
+
+  const handleToggleFlightCeiling3D = () => {
+    toggleFlightCeiling3D();
+  };
+
+  const handleToggleBuildingMass3D = () => {
+    toggleBuildingMass3D();
+  };
+
+  const handleToggleSlopeAnalysis = () => {
+    toggleSlopeAnalysis();
+  };
+
+  const handleSetTerrainEnabled = (enabled: boolean) => {
+    setTerrainEnabled(enabled);
+  };
+
+  const handleCreateBookmark = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bookmarkInput.trim()) {
+      addBookmark(bookmarkInput.trim());
+      setBookmarkInput('');
+      setIsAddingBookmark(false);
+    }
+  };
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#0b100e]/95 backdrop-blur-md text-slate-200 select-none border-r border-[#1e2a22] font-sans">
-      {/* ===================================================================== */}
-      {/* 1. 패널 상단: 브랜드 및 3대 핵심 탭 네비게이션 */}
-      {/* ===================================================================== */}
-      <div className="border-b border-[#1e2a22] bg-[#0d1411]/90">
-        <div className="px-3 py-2.5 flex items-center justify-between border-b border-[#18241c]">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20" />
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[12.5px] font-bold tracking-tight text-white">GeoBrief 3D 전문가 분석</span>
-                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-700/50">
-                  실무
-                </span>
-              </div>
-            </div>
+    <aside className="w-full min-w-0 h-full md:h-[calc(100vh-3.5rem)] bg-slate-950/80 backdrop-blur-md border-r border-slate-800/80 flex flex-col text-slate-200 overflow-y-auto">
+      {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 - 0.01초 즉시 반응형 UI */}
+      <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
+        <button
+          onClick={() => handleTabChange('terrain_infra')}
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+            localActiveTab === 'terrain_infra'
+              ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
+          }`}
+          title="3D 지형(DEM), 공간 인프라 레이어, 토목 분석, 일조 시뮬레이션"
+        >
+          <div className="flex items-center gap-1 font-bold text-xs">
+            <Mountain className="w-3.5 h-3.5 text-emerald-400" />
+            <span>지형/인프라</span>
           </div>
-          <div className="text-[9.5px] font-mono text-emerald-400/90 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
-            60fps 실사
-          </div>
-        </div>
+          <span className="text-[9.5px] opacity-75">지형·레이어</span>
+        </button>
 
-        {/* 3대 핵심 탭 버튼 바 (`⛰️ 지형/인프라` | `🏢 3D 건축/단지` | `🛡️ 부지/접근성`) */}
-        <div className="grid grid-cols-3 p-1 gap-1 bg-[#070d0a]">
-          <button
-            type="button"
-            onClick={() => setActiveSidebarTab('terrain_infra')}
-            className={`py-1.5 px-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${
-              activeSidebarTab === 'terrain_infra'
-                ? 'bg-emerald-600 text-white shadow-md ring-1 ring-emerald-400/50'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#121c16]'
-            }`}
-          >
-            <span>⛰️</span>
-            <span className="truncate">지형/인프라</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSidebarTab('buildings_complex')}
-            className={`py-1.5 px-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${
-              activeSidebarTab === 'buildings_complex'
-                ? 'bg-emerald-600 text-white shadow-md ring-1 ring-emerald-400/50'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#121c16]'
-            }`}
-          >
-            <span>🏢</span>
-            <span className="truncate">3D 건축/단지</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSidebarTab('site_access')}
-            className={`py-1.5 px-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${
-              activeSidebarTab === 'site_access'
-                ? 'bg-emerald-600 text-white shadow-md ring-1 ring-emerald-400/50'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#121c16]'
-            }`}
-          >
-            <span>🛡️</span>
-            <span className="truncate">부지/접근성</span>
-          </button>
-        </div>
+        <button
+          onClick={() => handleTabChange('buildings_complex')}
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+            localActiveTab === 'buildings_complex'
+              ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
+          }`}
+          title="3D 건축 렌더링 모드 선택, 1군지사 스마트 복합단지, 3D 시설물 배치"
+        >
+          <div className="flex items-center gap-1 font-bold text-xs">
+            <Building2 className="w-3.5 h-3.5 text-amber-400" />
+            <span>3D 건축/단지</span>
+          </div>
+          <span className="text-[9.5px] opacity-75">3D 모드·단지</span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('site_access')}
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+            localActiveTab === 'site_access'
+              ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/60 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
+          }`}
+          title="전국/강원 주소 검색, 전략 유휴지 프리셋, 구역 지정, 국방 규제"
+        >
+          <div className="flex items-center gap-1 font-bold text-xs">
+            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+            <span>부지/접근성</span>
+          </div>
+          <span className="text-[9.5px] opacity-75">주소·구역·규제</span>
+        </button>
       </div>
 
-      {/* ===================================================================== */}
-      {/* 2. 탭 본문 스크롤 영역 */}
-      {/* ===================================================================== */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-3.5 text-xs custom-scrollbar">
-        {/* ------------------------------------------------------------------- */}
-        {/* [탭 1: ⛰️ 지형/인프라] */}
-        {/* ------------------------------------------------------------------- */}
-        {activeSidebarTab === 'terrain_infra' && (
-          <div className="space-y-3 animate-in fade-in duration-150">
-            {/* 1) 시간대별 일조·태양광 시뮬레이션 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-amber-400">
-                  <Sun className="w-3.5 h-3.5" />
-                  일조권·태양광 시뮬레이션
+      {/* 1. [신규] 동적 주소/지번 검색창 (부지/접근성 탭) */}
+      {activeSidebarTab === 'site_access' && (
+        <section className="p-4 border-b border-[#242f27] space-y-2 bg-[#101712]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <Navigation2 className="w-4 h-4" />
+              전국·강원 공간 주소 검색
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
+                  vworldDiagnostic.status === 'connected' || vworldDiagnostic.featureCount > 0
+                    ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                }`}
+              >
+                <span>
+                  {vworldDiagnostic.featureCount > 0
+                    ? `🟢 실시간 공간정보 (${vworldDiagnostic.featureCount.toLocaleString()}건)`
+                    : vworldDiagnostic.status === 'connected'
+                    ? '🟢 실시간 공간정보'
+                    : '⚪ 3D 지형 모드'}
                 </span>
-                <span className="font-mono text-emerald-400 text-[11px] font-bold">
-                  {sunHour.toString().padStart(2, '0')}:00
-                </span>
-              </div>
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">GIS</span>
+            </div>
+          </div>
+          <AddressSearch />
+        </section>
+      )}
 
-              {/* 시간 슬라이더 */}
-              <div className="space-y-1">
-                <input
-                  type="range"
-                  min={6}
-                  max={19}
-                  step={0.5}
-                  value={sunHour}
-                  onChange={(e) => setSunHour(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-[#1e2a22] rounded-lg appearance-none cursor-pointer accent-amber-400"
-                />
-                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
-                  <span>06시</span>
-                  <span>12시(정오)</span>
-                  <span>19시(일몰)</span>
+      {/* 2. [3D 일조권 및 시간대별 그림자 침해 시뮬레이터 (mourner/suncalc 연동)] */}
+      {activeSidebarTab === 'terrain_infra' &&
+        (() => {
+          const centerLat = polygonCenter ? polygonCenter[1] : (viewport?.latitude ?? 37.342);
+          const centerLng = polygonCenter ? polygonCenter[0] : (viewport?.longitude ?? 127.925);
+          const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(6, Math.min(19, sunHour)) : 12;
+          const sunInfo = calculateSunLight(safeHour, centerLat, centerLng);
+
+          return (
+            <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111913]">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  3D 일조권 & 그림자 침해 시뮬레이터
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={toggleSunPlaying}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 transition-all ${
+                      isSunPlaying
+                        ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md animate-pulse'
+                        : 'bg-[#18231c] text-amber-300 border-amber-700/60 hover:bg-[#203126]'
+                    }`}
+                    title="태양 궤적 타임라인 자동 재생/정지"
+                  >
+                    {isSunPlaying ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                    <span>{isSunPlaying ? '정지' : '재생'}</span>
+                  </button>
+                  <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-700/60 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-amber-400" />
+                    {sunInfo?.label ?? `${Math.floor(safeHour)}:00`}
+                  </span>
                 </div>
               </div>
 
-              {/* 재생/정지 & 계절 선택 */}
-              <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#1a261e]">
-                <button
-                  type="button"
-                  onClick={toggleSunPlaying}
-                  className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${
-                    isSunPlaying
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-[#18241d] hover:bg-[#203027] text-slate-300'
-                  }`}
-                >
-                  {isSunPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                  <span>{isSunPlaying ? '일시정지' : '자동재생'}</span>
-                </button>
-
-                <div className="flex rounded bg-[#0a100d] p-0.5 border border-[#1a261e]">
-                  {([
-                    { id: 'winter_solstice', label: '동지' },
-                    { id: 'equinox', label: '춘추분' },
-                    { id: 'summer_solstice', label: '하지' },
-                  ] as const).map(({ id, label }) => (
+              {/* 동지/춘분/하지 절기 선택 (건축법 법적 기준) */}
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 font-semibold block">일조 분석 절기 (태양 적위)</span>
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { id: 'winter_solstice' as const, label: '❄️ 동지 (12/22)', badge: '법적 기준' },
+                    { id: 'equinox' as const, label: '🌸 춘분 (3/21)', badge: '표준 일조' },
+                    { id: 'summer_solstice' as const, label: '☀️ 하지 (6/21)', badge: '최장 일조' },
+                  ].map((s) => (
                     <button
-                      key={id}
+                      key={s.id}
                       type="button"
-                      onClick={() => setSunSeason(id)}
-                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
-                        sunSeason === id
-                          ? 'bg-amber-500 text-slate-950 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
+                      onClick={() => setSunSeason(s.id)}
+                      className={`py-1.5 px-1 rounded text-center transition-all border flex flex-col items-center gap-0.5 ${
+                        sunSeason === s.id
+                          ? 'bg-amber-500/30 border-amber-400 text-amber-200 font-bold shadow-sm'
+                          : 'bg-[#142017] border-[#25382a] text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      {label}
+                      <span className="text-[10px] font-semibold">{s.label}</span>
+                      <span className="text-[8.5px] opacity-75">{s.badge}</span>
                     </button>
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* 2) 브이월드 항공위성 ↔ 클린 벡터 베이스맵 전환 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-1.5">
-              <div className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-cyan-400">
-                  <Globe className="w-3.5 h-3.5" />
-                  베이스맵 전환
-                </span>
-                <span className="text-[9.5px] font-mono text-slate-500">{baseMap}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setBaseMap('satellite')}
-                  className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                    baseMap === 'satellite'
-                      ? 'bg-cyan-950 border-cyan-500 text-cyan-300 shadow-sm'
-                      : 'bg-[#152019] border-[#223528] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>🛰️ 항공위성 3D</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBaseMap('clean')}
-                  className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                    baseMap === 'clean'
-                      ? 'bg-cyan-950 border-cyan-500 text-cyan-300 shadow-sm'
-                      : 'bg-[#152019] border-[#223528] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>🗺️ 클린 벡터</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 3) 3D 지형(DEM) 고저차 배율 슬라이더 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-1.5">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-teal-400">
-                  <Mountain className="w-3.5 h-3.5" />
-                  지형(DEM) 고저차 배율
-                </span>
-                <span className="font-mono text-teal-300 font-bold text-[11px]">
-                  {terrainExaggeration.toFixed(1)}x
-                </span>
-              </div>
-              <input
-                type="range"
-                min={1.0}
-                max={3.0}
-                step={0.1}
-                value={terrainExaggeration}
-                onChange={(e) => setTerrainExaggeration(parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-[#1e2a22] rounded-lg appearance-none cursor-pointer accent-teal-400"
-              />
-              <div className="flex justify-between text-[9px] text-slate-500 font-mono">
-                <span>1.0x (실측)</span>
-                <span>2.0x (강조)</span>
-                <span>3.0x (극대화)</span>
-              </div>
-            </div>
-
-            {/* 4) 필수 인프라 & 지적 레이어 4종 토글 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <Layers className="w-3.5 h-3.5" />
-                  인프라 & 지적 레이어
-                </span>
-                <span className="text-[9px] text-slate-500">원클릭 토글</span>
-              </div>
-
-              <div className="space-y-1">
-                {/* 수치지형도 등고선 */}
-                <button
-                  type="button"
-                  onClick={() => toggleLayer('demContours')}
-                  className={`w-full flex items-center justify-between p-1.5 rounded-lg border text-left transition-all ${
-                    layers.demContours
-                      ? 'bg-emerald-950/40 border-emerald-500/70 text-emerald-200'
-                      : 'bg-[#141e17] border-[#1e2a22] text-slate-400'
-                  }`}
-                >
-                  <span className="text-[10.5px] font-medium">수치지형도 등고선 (1:5,000)</span>
-                  <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] border ${layers.demContours ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'border-slate-600'}`}>
-                    {layers.demContours ? '✓' : ''}
+              {/* 태양광 시간 슬라이더 (06:00 ~ 19:00 확장) */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-[11px] text-slate-300">
+                  <span className="font-semibold flex items-center gap-1 text-[10.5px]">
+                    <Sunrise className="w-3 h-3 text-orange-400" /> 06:00
                   </span>
-                </button>
-
-                {/* 도로망 및 교량·터널 */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    toggleLayer('roads');
-                    toggleLayer('vworld3DBridges');
-                  }}
-                  className={`w-full flex items-center justify-between p-1.5 rounded-lg border text-left transition-all ${
-                    layers.roads || layers.vworld3DBridges
-                      ? 'bg-emerald-950/40 border-emerald-500/70 text-emerald-200'
-                      : 'bg-[#141e17] border-[#1e2a22] text-slate-400'
-                  }`}
-                >
-                  <span className="text-[10.5px] font-medium">도로망 & 국토부 3D 교량·터널</span>
-                  <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] border ${layers.roads || layers.vworld3DBridges ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'border-slate-600'}`}>
-                    {layers.roads || layers.vworld3DBridges ? '✓' : ''}
+                  <span className="font-bold text-amber-300 font-mono text-xs">
+                    {Math.floor(safeHour).toString().padStart(2, '0')}:
+                    {Math.round((safeHour % 1) * 60).toString().padStart(2, '0')}
                   </span>
-                </button>
-
-                {/* 연속지적도 */}
-                <button
-                  type="button"
-                  onClick={() => toggleLayer('cadastral')}
-                  className={`w-full flex items-center justify-between p-1.5 rounded-lg border text-left transition-all ${
-                    layers.cadastral
-                      ? 'bg-emerald-950/40 border-emerald-500/70 text-emerald-200'
-                      : 'bg-[#141e17] border-[#1e2a22] text-slate-400'
-                  }`}
-                >
-                  <span className="text-[10.5px] font-medium">연속지적도 (필지 경계선)</span>
-                  <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] border ${layers.cadastral ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'border-slate-600'}`}>
-                    {layers.cadastral ? '✓' : ''}
+                  <span className="font-semibold flex items-center gap-1 text-[10.5px]">
+                    19:00 <Sunset className="w-3 h-3 text-rose-400" />
                   </span>
-                </button>
-
-                {/* 용도지역지구 */}
-                <button
-                  type="button"
-                  onClick={() => toggleLayer('zoning')}
-                  className={`w-full flex items-center justify-between p-1.5 rounded-lg border text-left transition-all ${
-                    layers.zoning
-                      ? 'bg-emerald-950/40 border-emerald-500/70 text-emerald-200'
-                      : 'bg-[#141e17] border-[#1e2a22] text-slate-400'
-                  }`}
-                >
-                  <span className="text-[10.5px] font-medium">국토계획법 용도지역지구 (주·상·공·녹)</span>
-                  <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] border ${layers.zoning ? 'bg-emerald-500 border-emerald-400 text-black font-bold' : 'border-slate-600'}`}>
-                    {layers.zoning ? '✓' : ''}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------------- */}
-        {/* [탭 2: 🏢 3D 건축/단지] */}
-        {/* ------------------------------------------------------------------- */}
-        {activeSidebarTab === 'buildings_complex' && (
-          <div className="space-y-3 animate-in fade-in duration-150">
-            {/* 1) V-World 3D 건물 표현 테마 3단 스위치 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <Building2 className="w-3.5 h-3.5" />
-                  건물 3D 표현 테마
-                </span>
-                <span className="text-[9px] font-mono text-emerald-400 font-bold">V-World 급</span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-[#070c09] border border-[#1b2b20]">
-                <button
-                  type="button"
-                  onClick={() => setBuildingTheme('photorealistic')}
-                  className={`py-1.5 px-1 rounded text-[10px] font-bold text-center transition-all ${
-                    buildingTheme === 'photorealistic'
-                      ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  실사 외벽+지붕
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBuildingTheme('landuse')}
-                  className={`py-1.5 px-1 rounded text-[10px] font-bold text-center transition-all ${
-                    buildingTheme === 'landuse'
-                      ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  용도별 색상
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBuildingTheme('height_spectrum')}
-                  className={`py-1.5 px-1 rounded text-[10px] font-bold text-center transition-all ${
-                    buildingTheme === 'height_spectrum'
-                      ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  층수 스펙트럼
-                </button>
-              </div>
-            </div>
-
-            {/* 2) 국토부 건축HUB 표제부 실시간 연동 상태 */}
-            <div className="p-2.5 rounded-lg border border-emerald-600/40 bg-emerald-950/20 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  국토부 건축HUB 표제부 연동
-                </span>
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-700">
-                  정상 (200 OK)
-                </span>
-              </div>
-              <p className="text-[9.5px] text-slate-300 leading-snug">
-                건축물대장 층수·높이·연면적·구조(RC) 및 WFS 실측 폴리곤이 3D 메쉬와 실시간 결합되어 있습니다.
-              </p>
-            </div>
-
-            {/* 3) 군 유휴부지 [현재 군 막사 뷰 ↔ 미래 복합개발 3D 조감도] 비교 스위치 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-cyan-400">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  미래 개발안 3D 비교
-                </span>
-                <span className="text-[9px] font-mono text-cyan-400">원클릭 전환</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => toggleLayer('firstLogisticsSmartCity')}
-                className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 border shadow-sm ${
-                  layers.firstLogisticsSmartCity
-                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-400/80 shadow-md'
-                    : 'bg-[#15231c] hover:bg-[#1e3328] text-emerald-300 border-emerald-600/50'
-                }`}
-              >
-                {layers.firstLogisticsSmartCity ? (
-                  <>
-                    <Building className="w-4 h-4 text-cyan-200" />
-                    <span>미래 스마트 개발 조감도 (표시 중)</span>
-                  </>
-                ) : (
-                  <>
-                    <Shield className="w-4 h-4 text-emerald-300" />
-                    <span>현재 영내 군 막사·연병장 뷰 (표시 중)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* 4) 3D 신규 시설물 배치 카탈로그 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-amber-400">
-                  <Plus className="w-3.5 h-3.5" />
-                  3D 시설물 배치 카탈로그
-                </span>
-                <span className="text-[9px] font-mono text-slate-400">
-                  {placedFacilities.length}개 배치됨
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5">
-                {(['defense_rd_tower', 'barracks_hq', 'logistics_depot', 'watch_tower'] as FacilityPresetId[]).map((pid) => {
-                  const meta = FACILITY_PRESETS[pid];
-                  return (
-                    <button
-                      key={pid}
-                      type="button"
-                      onClick={() => addPlacedFacility(pid)}
-                      className="p-1.5 rounded-lg bg-[#141e17] hover:bg-[#1b2b20] border border-[#203024] text-left transition-colors flex flex-col justify-between"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-white truncate">{meta.badge}</span>
-                        <span className="text-[9px] font-mono text-emerald-400">{meta.defaultHeight}m</span>
-                      </div>
-                      <span className="text-[8.5px] text-slate-400 truncate mt-0.5">{meta.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {placedFacilities.length > 0 && (
-                <div className="pt-1 flex items-center justify-between border-t border-[#1c2920]">
-                  <span className="text-[10px] text-slate-400">배치 시설물 관리</span>
-                  <button
-                    type="button"
-                    onClick={clearPlacedFacilities}
-                    className="text-[9.5px] text-rose-400 hover:text-rose-300 flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>전체 삭제</span>
-                  </button>
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------------- */}
-        {/* [탭 3: 🛡️ 부지/접근성] */}
-        {/* ------------------------------------------------------------------- */}
-        {activeSidebarTab === 'site_access' && (
-          <div className="space-y-3 animate-in fade-in duration-150">
-            {/* 1) 강원 18개 시·군 권역별 군 유휴부지 & 거점 리스트 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  권역별 핵심 군 유휴부지 (18대)
-                </span>
-                <span className="text-[9px] text-slate-500">원클릭 이동</span>
+                <input
+                  type="range"
+                  min="6"
+                  max="19"
+                  step="0.25"
+                  value={sunHour}
+                  onChange={(e) => setSunHour(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-[#1b261e] rounded-lg appearance-none cursor-pointer accent-amber-400"
+                />
               </div>
 
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                {GANGWON_18_MILITARY_SITES.map((site) => {
-                  const isCur = selectedIdleSiteId === site.id;
-                  return (
-                    <button
-                      key={site.id}
-                      type="button"
-                      onClick={() => selectIdleSite(site.id)}
-                      className={`w-full p-1.5 rounded-lg text-left transition-all flex items-center justify-between border ${
-                        isCur
-                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
-                          : 'bg-[#141e17] border-[#1e2a22] text-slate-300 hover:border-slate-600'
+              {/* 실시간 태양 천문 궤적 및 그림자 지표 */}
+              <div className="grid grid-cols-3 gap-1.5 text-[10px] bg-[#0c130e] p-2 rounded-lg border border-[#1f2f22]">
+                <div>
+                  <span className="text-slate-400 block">태양 방위각</span>
+                  <span className="font-bold text-slate-200 font-mono">
+                    {sunInfo?.azimuthDeg ?? 180}°
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">태양 고도각</span>
+                  <span className="font-bold text-amber-300 font-mono">
+                    {Math.max(-90, Math.min(90, sunInfo?.altitudeDeg ?? 45))}°
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">그림자 배율</span>
+                  <span className="font-bold text-emerald-400 font-mono">
+                    {sunInfo?.altitudeDeg && sunInfo.altitudeDeg > 5
+                      ? `${(1 / Math.tan((sunInfo.altitudeDeg * Math.PI) / 180)).toFixed(1)}x`
+                      : '장대 그림자'}
+                  </span>
+                </div>
+              </div>
+
+              {/* [건축법 제86조] 연속 일조 시간 및 법적 적합성 판정 카드 */}
+              {continuousDaylightResult && (
+                <div className="p-2.5 rounded-lg bg-[#0a140f] border border-amber-600/50 space-y-1.5 animate-fade-in text-[10.5px]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-300 flex items-center gap-1">
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      연속 일조권 법적 판정
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                        continuousDaylightResult.status === 'PASS'
+                          ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
+                          : continuousDaylightResult.status === 'WARNING'
+                          ? 'bg-amber-950 text-amber-300 border-amber-600'
+                          : 'bg-rose-950 text-rose-300 border-rose-600'
                       }`}
                     >
-                      <div className="min-w-0 pr-1">
-                        <div className="flex items-center gap-1">
-                          <span className="text-[8.5px] px-1 py-0.2 rounded bg-black/40 text-emerald-400 font-mono">
-                            {site.regionName}
-                          </span>
-                          <span className="text-[10.5px] font-bold text-white truncate">
-                            {site.shortName}
+                      {continuousDaylightResult.status === 'PASS'
+                        ? '✅ 법적 기준 적합'
+                        : continuousDaylightResult.status === 'WARNING'
+                        ? '⚠️ 일조 침해 우려'
+                        : '❌ 일조권 위반'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                      <span className="text-slate-400 block text-[9px]">최대 연속 일조 시간</span>
+                      <span className="font-mono font-bold text-emerald-300 text-xs">
+                        {continuousDaylightResult.continuousHours}시간 {continuousDaylightResult.continuousMinutes}분
+                      </span>
+                    </div>
+                    <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                      <span className="text-slate-400 block text-[9px]">총 일조 시간 (08~16시)</span>
+                      <span className="font-mono font-bold text-amber-300 text-xs">
+                        {continuousDaylightResult.totalHours}시간 {continuousDaylightResult.totalMinutes}분
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-[9.5px] text-slate-300 leading-tight pt-0.5">
+                    {continuousDaylightResult.legalVerdict}
+                  </p>
+                </div>
+              )}
+            </section>
+          );
+        })()}
+
+      {/* [부지정보/접근성 탭 섹션 그룹 (유휴지, 시군, 북마크, 구역지정)] */}
+      {activeSidebarTab === 'site_access' && (
+        <>
+          {/* 3. [강원 18개 시·군 전역] 군 유휴부지 3D 실측 DB & 마스터플랜 카탈로그 */}
+          {(() => {
+            const current18 = getGangwon18MilitarySiteById(selectedIdleSiteId || '');
+            const currentGangwon = getGangwonMilitarySiteById(selectedIdleSiteId || '');
+            const currentLegacy = MILITARY_IDLE_SITES.find((s) => s.id === selectedIdleSiteId);
+            const currentSite = current18 || currentGangwon || currentLegacy || GANGWON_18_MILITARY_SITES[0];
+
+            const sitesWestSouth = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === '영서 중·남부권');
+            const sitesBorder = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === '북부 접경권');
+            const sitesEastCoast = GANGWON_18_MILITARY_SITES.filter((s) => s.subregion === '동해안 및 태백권');
+
+            const isMasterplanActive = !!layers.firstLogisticsSmartCity;
+
+            return (
+              <section className="p-4 border-b border-[#242f27] space-y-2.5 bg-[#121c15]">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <Crosshair className="w-4 h-4 text-emerald-400" />
+                    강원 18개 시·군 군 유휴부지 실측 DB
+                  </h2>
+                  <span className="text-[10px] text-emerald-300 font-mono font-semibold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/60">
+                    전역 {GANGWON_18_MILITARY_SITES.length}개 거점
+                  </span>
+                </div>
+
+                {/* 3대 권역별 유휴부지 선택 셀렉터 */}
+                <div>
+                  <select
+                    value={selectedIdleSiteId || currentSite.id}
+                    onChange={(e) => selectIdleSite(e.target.value)}
+                    className="w-full bg-[#18261c] border border-[#2d4232] focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-100 font-medium focus:outline-none transition-colors cursor-pointer shadow-inner"
+                  >
+                    <optgroup label="📍 영서 중·남부권 (원주·춘천·횡성·홍천·영월·평창·정선)" className="bg-[#121a14] text-emerald-400 font-bold">
+                      {sitesWestSouth.map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
+                          [{site.regionName}] {site.name} ({site.areaPyeong.toLocaleString()}평)
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🛡️ 북부 접경권 (철원·화천·양구·인제·고성 — 사단 해체지)" className="bg-[#121a14] text-amber-400 font-bold">
+                      {sitesBorder.map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
+                          [{site.regionName}] {site.name} ({site.areaPyeong.toLocaleString()}평)
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🌊 동해안 및 태백권 (강릉·동해·속초·삼척·양양·태백)" className="bg-[#121a14] text-cyan-400 font-bold">
+                      {sitesEastCoast.map((site) => (
+                        <option key={site.id} value={site.id} className="bg-[#18261c] text-slate-100 font-normal">
+                          [{site.regionName}] {site.name} ({site.areaPyeong.toLocaleString()}평)
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* 선택된 유휴지 종합 브리핑 카드 */}
+                {currentSite && (
+                  <div className="p-3 bg-[#152219] border border-[#2a3e2f] rounded-lg space-y-2 text-xs">
+                    {/* 상단 타이틀 & 뱃지 */}
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {'subregion' in currentSite && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-semibold">
+                              {(currentSite as any).subregion}
+                            </span>
+                          )}
+                          {'regionName' in currentSite && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#17251c] text-slate-300 border border-[#273a2d]">
+                              {(currentSite as any).regionName}
+                            </span>
+                          )}
+                          <h3 className="font-bold text-slate-100 text-xs">
+                            {currentSite.name}
+                          </h3>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                          {currentSite.district}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 font-bold whitespace-nowrap">
+                        약 {currentSite.areaPyeong.toLocaleString()}평
+                      </span>
+                    </div>
+
+                    {/* 실측 속성 매트릭스 (면적, 관리기관, 현재상태, 계획용도, 경사도, 용도지역) */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#0f1712] p-2 rounded border border-[#213024]">
+                      <div>
+                        <span className="text-slate-400 block">대지 면적</span>
+                        <span className="font-semibold text-slate-200 font-mono">
+                          {currentSite.areaSqm.toLocaleString()} ㎡
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">관리 기관</span>
+                        <span className="font-semibold text-slate-300 truncate block">
+                          {currentSite.managingAgency}
+                        </span>
+                      </div>
+                      {'currentStatus' in currentSite && (
+                        <div className="col-span-2 pt-1 border-t border-[#1a281e]">
+                          <span className="text-amber-400 block font-semibold text-[9.5px]">현재 상태</span>
+                          <span className="font-medium text-slate-200 block text-[10px]">
+                            {(currentSite as any).currentStatus}
                           </span>
                         </div>
+                      )}
+                      {'targetUse' in currentSite && (
+                        <div className="col-span-2">
+                          <span className="text-cyan-400 block font-semibold text-[9.5px]">계획 용도</span>
+                          <span className="font-medium text-cyan-200 block text-[10px]">
+                            {(currentSite as any).targetUse}
+                          </span>
+                        </div>
+                      )}
+                      {'averageSlope' in currentSite && (
+                        <div>
+                          <span className="text-slate-400 block text-[9.5px]">평균 경사도</span>
+                          <span className="font-mono text-emerald-300 font-semibold block text-[10px]">
+                            {(currentSite as any).averageSlope}
+                          </span>
+                        </div>
+                      )}
+                      {'zoning' in currentSite && (
+                        <div>
+                          <span className="text-slate-400 block text-[9.5px]">용도지역</span>
+                          <span className="font-medium text-slate-300 truncate block text-[10px]">
+                            {(currentSite as any).zoning}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 개발 테마 & 비전 */}
+                    <div className="p-2 rounded bg-emerald-950/30 border border-emerald-800/40 text-[10.5px] text-emerald-200/90 leading-relaxed">
+                      {'themeTitle' in currentSite && (
+                        <span className="font-bold text-emerald-300 block text-[10px] mb-0.5">
+                          🎯 {(currentSite as any).themeTitle}
+                        </span>
+                      )}
+                      <p className="text-[10px] text-emerald-100/80">
+                        {currentSite.devVision}
+                      </p>
+                    </div>
+
+                    {/* 3D 실시간 비교 스위치: 영내 기존 군 막사 vs 미래 3D 마스터플랜 */}
+                    <div className="p-2.5 rounded bg-[#101a14] border border-[#243929] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10.5px] font-bold text-slate-200 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                          3D 조형 모드 원클릭 비교
+                        </span>
+                        <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                          isMasterplanActive
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
+                            : 'bg-amber-950 text-amber-300 border-amber-600'
+                        }`}>
+                          {isMasterplanActive ? '🏢 미래 마스터플랜 ON' : '🏛️ 영내 기존 군막사 ON'}
+                        </span>
                       </div>
-                      <span className="text-[9.5px] font-mono text-emerald-400 font-bold shrink-0">
-                        {site.areaPyeong.toLocaleString()}평
-                      </span>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (layers.firstLogisticsSmartCity) {
+                              toggleLayer('firstLogisticsSmartCity');
+                            }
+                          }}
+                          className={`py-2 px-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all border ${
+                            !isMasterplanActive
+                              ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-950/60'
+                              : 'bg-[#18261c] text-slate-400 border-[#2b3d2f] hover:text-slate-200'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <Warehouse className="w-3.5 h-3.5" />
+                            영내 기존 군 막사
+                          </span>
+                          <span className="text-[8.5px] opacity-80 font-normal">
+                            병영막사·연병장·정비창
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!layers.firstLogisticsSmartCity) {
+                              toggleLayer('firstLogisticsSmartCity');
+                            }
+                          }}
+                          className={`py-2 px-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all border ${
+                            isMasterplanActive
+                              ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/60'
+                              : 'bg-[#18261c] text-slate-400 border-[#2b3d2f] hover:text-slate-200'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            미래 3D 마스터플랜
+                          </span>
+                          <span className="text-[8.5px] opacity-80 font-normal">
+                            R&D타워·주거·시민공원
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* 현재 선택된 모드의 세부 건물 리스트 */}
+                      {current18 && (
+                        <div className="pt-1.5 border-t border-[#1e2f23] space-y-1">
+                          <span className="text-[9.5px] font-semibold text-slate-400 flex items-center justify-between">
+                            <span>{isMasterplanActive ? '미래 마스터플랜 특화 시설 (LOD2+)' : '기존 군사시설 보존·철거 대상'}</span>
+                            <span className="text-[9px] font-mono text-emerald-400">
+                              {isMasterplanActive
+                                ? `${current18.futureBuildings.length}개 동`
+                                : `${current18.existingBuildings.length}개 동`}
+                            </span>
+                          </span>
+                          <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto pr-0.5">
+                            {isMasterplanActive
+                              ? current18.futureBuildings.map((b, bIdx) => (
+                                  <div
+                                    key={bIdx}
+                                    className="p-1.5 rounded bg-emerald-950/40 border border-emerald-800/50 flex items-center justify-between text-[9.5px]"
+                                  >
+                                    <span className="font-bold text-emerald-200 truncate pr-2">
+                                      🏢 {b.name}
+                                    </span>
+                                    <span className="font-mono text-emerald-300 font-semibold whitespace-nowrap">
+                                      {b.height}m ({b.floors}F)
+                                    </span>
+                                  </div>
+                                ))
+                              : current18.existingBuildings.map((b, bIdx) => (
+                                  <div
+                                    key={bIdx}
+                                    className="p-1.5 rounded bg-amber-950/30 border border-amber-800/40 flex items-center justify-between text-[9.5px]"
+                                  >
+                                    <span className="font-medium text-amber-200 truncate pr-2">
+                                      🏛️ {b.name}
+                                    </span>
+                                    <span className="font-mono text-amber-300 whitespace-nowrap">
+                                      {b.height > 1 ? `${b.height}m (${b.floors}F)` : '평지'}
+                                    </span>
+                                  </div>
+                                ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 교통 접근성 실시간 진단 */}
+                    {'transitInfo' in currentSite && (
+                      <div className="p-2 rounded bg-[#101913] border border-[#223526] space-y-1 text-[10px]">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-300 flex items-center gap-1">
+                            <Navigation2 className="w-3 h-3 text-cyan-400" />
+                            교통 접근성 인프라
+                          </span>
+                          <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800">
+                            접근성 {(currentSite as any).transitInfo.score}점
+                          </span>
+                        </div>
+                        <div className="text-slate-400 space-y-0.5 text-[9.5px]">
+                          <div>• 고속도로: {(currentSite as any).transitInfo.highway}</div>
+                          <div>• 철도/KTX: {(currentSite as any).transitInfo.railway}</div>
+                          <div>• 간선국도: {(currentSite as any).transitInfo.nationalRoad}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 원클릭 카메라 3D 항공 뷰 비행 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => selectIdleSite(currentSite.id)}
+                      className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50"
+                    >
+                      <Navigation2 className="w-3.5 h-3.5" />
+                      <span>3D 항공 뷰(55°/20°) 전환 및 부지 포커스</span>
                     </button>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+                )}
+              </section>
+            );
+          })()}
 
-            {/* 2) 선택 부지 인근 IC·역세권·간선국도 접근성 분석표 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] space-y-2">
-              <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px]">
-                <span className="flex items-center gap-1.5 text-teal-400">
-                  <Car className="w-3.5 h-3.5" />
-                  교통망 접근성 지표 (Accessibility)
-                </span>
-                <span className="text-[9px] font-mono text-teal-300 font-bold">
-                  {currentMilitarySite?.transitInfo?.score || 88}점/100
-                </span>
-              </div>
+      {/* 3. 강원특별자치도 18개 시·군 전역 퀵 셀렉터 (GANGWON_18_REGIONS) */}
+      {(() => {
+        const currentRegion =
+          GANGWON_REGIONS.find((r) => r.id === selectedRegionId) || GANGWON_REGIONS[0];
+        const cities = GANGWON_REGIONS.filter((r) => r.type === '시');
+        const counties = GANGWON_REGIONS.filter((r) => r.type === '군');
+        const zone = getGangwonZone(currentRegion.id, currentRegion.center[0], currentRegion.center[1]);
+        const zoneLabels: Record<string, { label: string; desc: string; badge: string }> = {
+          urban_innovation: {
+            label: '도시·혁신도시권',
+            desc: '청사 커튼월/루버 + 아파트 투톤 + 구도심 상가',
+            badge: 'bg-blue-950/70 border-blue-700/60 text-blue-300',
+          },
+          border_military: {
+            label: '접경·군사거점권',
+            desc: '통합막사 박공 + 군수 물류창고 징크 + 농촌 주택',
+            badge: 'bg-amber-950/70 border-amber-700/60 text-amber-300',
+          },
+          coastal_belt: {
+            label: '동해안 해양권',
+            desc: '오션뷰 리조트 통유리 + 항만 사일로/공장',
+            badge: 'bg-cyan-950/70 border-cyan-700/60 text-cyan-300',
+          },
+          mountain_highland: {
+            label: '산악·고원권',
+            desc: '급경사 옹벽(-8m) + 30° 다설형 급경사 박공',
+            badge: 'bg-emerald-950/70 border-emerald-700/60 text-emerald-300',
+          },
+        };
+        const currentZoneInfo = zoneLabels[zone] || zoneLabels.urban_innovation;
 
-              <div className="space-y-1.5 text-[10px]">
-                <div className="flex items-center justify-between p-1.5 rounded bg-black/40 border border-[#1b271f]">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Car className="w-3 h-3 text-amber-400" />
-                    인근 고속도로 IC
-                  </span>
-                  <span className="font-mono text-slate-200 font-bold">
-                    {currentMilitarySite?.transitInfo?.highway || '북원주IC (4.2km)'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-1.5 rounded bg-black/40 border border-[#1b271f]">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Train className="w-3 h-3 text-cyan-400" />
-                    KTX / 철도 역사
-                  </span>
-                  <span className="font-mono text-slate-200 font-bold">
-                    {currentMilitarySite?.transitInfo?.railway || '원주역 (3.5km)'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-1.5 rounded bg-black/40 border border-[#1b271f]">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Navigation className="w-3 h-3 text-emerald-400" />
-                    주요 간선국도
-                  </span>
-                  <span className="font-mono text-slate-200 font-bold">
-                    {currentMilitarySite?.transitInfo?.nationalRoad || '국도 5·19호선'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 3) 우측 하단 접이식 [보고서 도면 범례(Legend)] 토글 스위치 */}
-            <div className="bg-[#101813] p-2.5 rounded-lg border border-[#1e2a22] flex items-center justify-between">
-              <div>
-                <div className="text-[11px] font-bold text-slate-200">보고서 도면 범례 (Legend)</div>
-                <div className="text-[9px] text-slate-400">우측 하단 범례 박스 표시/숨김</div>
-              </div>
-              <button
-                type="button"
-                onClick={toggleLegendBox}
-                className={`px-3 py-1 rounded text-xs font-bold transition-all border ${
-                  showLegendBox
-                    ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm'
-                    : 'bg-[#152019] text-slate-400 border-[#223528] hover:text-white'
-                }`}
-              >
-                {showLegendBox ? '표시 중' : '숨김'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* [하단 브리핑 카드: 100% 실시간 동기화 - 시·군 선택 시 원주 1군지사 고정 버그 완벽 수정] */}
-        {/* ===================================================================== */}
-        <section className="pt-2 space-y-2">
-          <div className="flex items-center justify-between text-slate-300 font-semibold text-[11px] uppercase tracking-wider">
-            <span className="flex items-center gap-1.5 text-emerald-400">
-              {isSiteSelected ? <Shield className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
-              {isSiteSelected ? '선택 군 유휴부지 브리핑' : '선택 시·군 행정구역 브리핑'}
-            </span>
-            <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
-              실시간 동기화
-            </span>
-          </div>
-
-          {/* 브리핑 카드 본문 */}
-          <div className="p-2.5 rounded-lg border border-emerald-600/50 bg-gradient-to-br from-[#0e1713] to-[#09100d] space-y-2 shadow-lg">
-            <div className="flex items-start justify-between gap-1">
-              <div>
-                <div className="text-[12.5px] font-bold text-white leading-snug">
-                  {isSiteSelected && currentMilitarySite
-                    ? (currentMilitarySite.shortName || currentMilitarySite.name)
-                    : `${currentRegionStat.name} (${currentRegionStat.fullName})`}
-                </div>
-                <div className="text-[9.5px] text-emerald-400/90 flex items-center gap-1 mt-0.5">
-                  <MapPin className="w-2.5 h-2.5" />
-                  <span>
-                    {isSiteSelected && currentMilitarySite
-                      ? `${currentMilitarySite.regionName} | ${currentMilitarySite.managingAgency}`
-                      : `${currentRegionStat.subregion} | ${currentRegionStat.name}`}
-                  </span>
-                </div>
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono border border-emerald-700/50 shrink-0">
-                {isSiteSelected && currentMilitarySite
-                  ? `${currentMilitarySite.areaPyeong.toLocaleString()} 평`
-                  : currentRegionStat.areaPyeongText}
+        return (
+          <section className="p-4 border-b border-[#242f27] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <MapPin className="w-4 h-4" />
+                강원 18개 시·군 광역 공간정보
+              </h2>
+              <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+                {currentRegion.subregion}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5 text-[10px] bg-black/40 p-2 rounded border border-[#1e2a22]">
-              <div>
-                <div className="text-[8px] text-slate-500 uppercase">
-                  {isSiteSelected ? '부지 총면적' : '관할 총면적'}
-                </div>
-                <div className="font-mono text-slate-200 font-bold truncate">
-                  {isSiteSelected && currentMilitarySite
-                    ? `${currentMilitarySite.areaSqm.toLocaleString()} ㎡`
-                    : currentRegionStat.areaKm2Text}
-                </div>
-              </div>
-              <div>
-                <div className="text-[8px] text-slate-500 uppercase">
-                  {isSiteSelected ? '계획 용도' : '3D 실측 건물 수'}
-                </div>
-                <div className="text-emerald-300 font-medium truncate" title={isSiteSelected && currentMilitarySite ? currentMilitarySite.targetUse : currentRegionStat.buildingCountText}>
-                  {isSiteSelected && currentMilitarySite
-                    ? (currentMilitarySite.targetUse || currentMilitarySite.themeTitle)
-                    : currentRegionStat.buildingCountText}
-                </div>
-              </div>
+            {/* 시·군 드롭다운 (시/군 optgroup 시각적 분리 및 행정코드 표기) */}
+            <div>
+              <select
+                value={selectedRegionId}
+                onChange={(e) => selectRegion(e.target.value)}
+                className="w-full bg-[#18221b] border border-[#2b3a2f] focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-100 font-medium focus:outline-none transition-colors cursor-pointer shadow-inner"
+              >
+                <optgroup label="── 시 (City) ──" className="bg-[#121814] text-emerald-300 font-bold">
+                  {cities.map((r) => (
+                    <option key={r.id} value={r.id} className="bg-[#18221b] text-slate-100 font-normal">
+                      {r.name} ({r.admCode || '51xxx'}) · {r.subregion}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="── 군 (County) ──" className="bg-[#121814] text-amber-300 font-bold">
+                  {counties.map((r) => (
+                    <option key={r.id} value={r.id} className="bg-[#18221b] text-slate-100 font-normal">
+                      {r.name} ({r.admCode || '51xxx'}) · {r.subregion}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
 
-            <div className="text-[9.5px] text-slate-300 bg-[#0d1611] p-1.5 rounded border border-[#17251c] leading-tight">
-              <span className="text-slate-500">특성: </span>
-              {isSiteSelected && currentMilitarySite
-                ? `영내 군 막사·연병장 등 12개동 시설 (정화 완료 후 착공 예정)`
-                : `${currentRegionStat.characteristic} (관할 군 유휴부지 ${sitesInCurrentRegion.length}개소)`}
-            </div>
+            {/* 선택된 시·군 상세 공간정보 & 거점 카드 */}
+            <div className="p-2.5 bg-[#18221b] border border-[#2b3a2f] rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-bold text-slate-100">
+                    {currentRegion.fullName || currentRegion.name}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    ({currentRegion.type === '시' ? '시 지역' : '군 지역'})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {currentRegion.admCode && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700" title={`신: ${currentRegion.admCode} / 구: ${currentRegion.legacyAdmCode}`}>
+                      코드 {currentRegion.admCode}
+                    </span>
+                  )}
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 font-semibold">
+                    {currentRegion.subregion}
+                  </span>
+                </div>
+              </div>
 
-            {/* 원클릭 해당 대상지 3D 비행 버튼 */}
+              {/* 지형 특성 배지 */}
+              {currentRegion.terrainCharacteristic && (
+                <div className="text-[10px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-900/50 rounded px-2 py-1 flex items-center gap-1.5">
+                  <Mountain className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  <span className="line-clamp-1">{currentRegion.terrainCharacteristic}</span>
+                </div>
+              )}
+
+              {/* 강원권 4대 맞춤형 실사 건축 권역 배지 */}
+              <div className="text-[10px] bg-[#141d16] px-2 py-1 rounded border border-[#233226] space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="w-3 h-3 text-emerald-400" />
+                    <span className="text-slate-200 font-semibold">{currentZoneInfo.label} 실사 건축</span>
+                  </div>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium border ${currentZoneInfo.badge}`}>
+                    권역 맞춤 렌더링
+                  </span>
+                </div>
+                <p className="text-[9.5px] text-slate-400 font-mono leading-tight">
+                  {currentZoneInfo.desc}
+                </p>
+              </div>
+
+              {/* 지형 및 부지 특성 설명 텍스트 (Description) */}
+              <p className="text-[11px] text-slate-300 leading-relaxed bg-[#121914] p-2 rounded border border-[#202c23]">
+                {currentRegion.description}
+              </p>
+
+              {/* 대표 군 유휴부지 & 전략 거점 퀵 포커스 */}
+              {currentRegion.militarySites && currentRegion.militarySites.length > 0 && (
+                <div className="space-y-1.5 pt-1 border-t border-[#242f27]">
+                  <div className="text-[10px] font-semibold text-amber-300 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-amber-400" />
+                    <span>대표 군 유휴부지 및 전략 거점 ({currentRegion.militarySites.length}곳)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {currentRegion.militarySites.map((site) => (
+                      <button
+                        key={site.siteId}
+                        onClick={() => {
+                          flyToLocation(
+                            {
+                              longitude: site.coords[0],
+                              latitude: site.coords[1],
+                              zoom: 15.2,
+                              pitch: 55,
+                              bearing: 20,
+                            },
+                            1500
+                          );
+                        }}
+                        className="w-full text-left p-1.5 bg-[#121914] hover:bg-[#1f2d22] border border-[#26372b] hover:border-emerald-500/60 rounded flex items-center justify-between text-[10px] transition-all group cursor-pointer"
+                        title={`${site.description} (${(site.areaSqm / 10000).toFixed(1)}만㎡) - 클릭 시 3D 시점 이동`}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 group-hover:bg-emerald-400" />
+                          <span className="font-medium text-slate-200 group-hover:text-emerald-200 truncate">
+                            {site.name}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono flex-shrink-0 ml-1 group-hover:text-emerald-300">
+                          {(site.areaSqm / 10000).toFixed(1)}만㎡ ➔
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 카메라 파라미터 정보 */}
+              <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5">
+                <span>3D 피치 {currentRegion.pitch}° · 베어링 {currentRegion.bearing}°</span>
+                <span className="text-emerald-400 font-semibold">Lv {currentRegion.zoom}</span>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* 3. [신규] 사용자 정의 관심 부지(북마크) 로컬 저장 & 복원 */}
+      <section className="p-4 border-b border-[#242f27] space-y-2.5 bg-[#121914]">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <Bookmark className="w-4 h-4" />
+            내 관심 부지 (북마크)
+          </h2>
+          <button
+            onClick={() => setIsAddingBookmark(!isAddingBookmark)}
+            className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-200 flex items-center gap-1 bg-emerald-950/70 border border-emerald-700/60 px-2 py-0.5 rounded transition-all"
+            title="현재 카메라 뷰를 관심 부지로 저장"
+          >
+            <BookmarkPlus className="w-3.5 h-3.5" />
+            <span>현재 위치 저장</span>
+          </button>
+        </div>
+
+        {/* 북마크 입력 폼 */}
+        {isAddingBookmark && (
+          <form onSubmit={handleCreateBookmark} className="p-2.5 bg-[#18221b] border border-emerald-500/50 rounded-lg space-y-2">
+            <label className="text-[11px] text-slate-300 block font-medium">
+              관심 부지 명칭 입력 (현재 시점: 피치 {viewport.pitch.toFixed(0)}°, 베어링 {viewport.bearing.toFixed(0)}°)
+            </label>
+            <div className="flex space-x-1.5">
+              <input
+                type="text"
+                autoFocus
+                value={bookmarkInput}
+                onChange={(e) => setBookmarkInput(e.target.value)}
+                placeholder="예: 00사단 유휴부지, 00비행장 인근"
+                className="flex-1 bg-[#121814] border border-[#2b3a2f] rounded px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="submit"
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded shadow transition-colors"
+              >
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAddingBookmark(false)}
+                className="px-2 py-1 bg-slate-800 text-slate-400 text-xs rounded hover:bg-slate-700"
+              >
+                취소
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* 북마크 리스트 */}
+        <div className="space-y-1.5 max-h-44 overflow-y-auto">
+          {bookmarks.length === 0 ? (
+            <p className="text-[11px] text-slate-400 py-1.5 text-center">
+              저장된 관심 부지가 없습니다.
+            </p>
+          ) : (
+            bookmarks.map((bm: BookmarkItem) => (
+              <div
+                key={bm.id}
+                className="group p-2 rounded-lg bg-[#18201b] border border-[#29352c] hover:border-emerald-500/60 flex items-center justify-between transition-all"
+              >
+                <button
+                  onClick={() => flyToBookmark(bm)}
+                  className="flex-1 text-left min-w-0"
+                  title="클릭 시 1초 만에 해당 시점으로 카메라 복원"
+                >
+                  <div className="text-xs font-semibold text-slate-200 group-hover:text-emerald-300 truncate">
+                    {bm.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                    Lv {bm.viewport.zoom.toFixed(1)} · 피치 {bm.viewport.pitch.toFixed(0)}° · {bm.createdAt}
+                  </div>
+                </button>
+                <button
+                  onClick={() => removeBookmark(bm.id)}
+                  className="p-1 text-slate-500 hover:text-rose-400 transition-colors ml-1"
+                  title="북마크 삭제"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      {/* 4. 군 유휴부지 정밀 구역 지정 및 Turf.js 정량 분석 */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#131d17]/50">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <PenTool className="w-4 h-4" />
+            군 유휴부지 구역 지정
+          </h2>
+          <span className="text-[10px] text-blue-400 font-mono font-medium">
+            정밀 편집 2D/3D
+          </span>
+        </div>
+
+        {/* 서브 모드 탭 (직접 그리기 / 면적 스탬프 / 좌표 입력) */}
+        <div className="grid grid-cols-3 gap-1 bg-[#101712] p-1 rounded-lg border border-[#243328] text-[11px]">
+          <button
+            onClick={() => setBoundaryTab('draw')}
+            className={`py-1.5 rounded-md font-medium transition-all ${
+              boundaryTab === 'draw'
+                ? 'bg-emerald-600 text-white font-bold shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            직접 그리기
+          </button>
+          <button
+            onClick={() => setBoundaryTab('stamp')}
+            className={`py-1.5 rounded-md font-medium transition-all ${
+              boundaryTab === 'stamp'
+                ? 'bg-amber-600 text-white font-bold shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            면적 스탬프
+          </button>
+          <button
+            onClick={() => {
+              setBoundaryTab('coord');
+              setIsCoordModalOpen(true);
+            }}
+            className={`py-1.5 rounded-md font-medium transition-all ${
+              boundaryTab === 'coord'
+                ? 'bg-blue-600 text-white font-bold shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            좌표 입력
+          </button>
+        </div>
+
+        {/* 탭 1: 직접 그리기 모드 */}
+        {boundaryTab === 'draw' && (
+          <div className="space-y-2">
             <button
-              type="button"
-              onClick={() => {
-                if (isSiteSelected && currentMilitarySite) {
-                  selectIdleSite(currentMilitarySite.id);
-                } else {
-                  selectRegion(currentRegionStat.id);
-                }
-              }}
-              className="w-full py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow transition-all active:scale-98"
+              onClick={toggleDrawingMode}
+              className={`w-full py-2.5 px-3 rounded-lg border text-xs font-bold flex items-center justify-center space-x-2 transition-all ${
+                isDrawingMode
+                  ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/40 animate-pulse'
+                  : completedPolygon
+                  ? 'bg-[#1b2b21] border-emerald-500/60 text-emerald-300 hover:bg-[#23382c]'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-md'
+              }`}
             >
-              <Navigation className="w-3.5 h-3.5" />
+              <PenTool className="w-3.5 h-3.5" />
               <span>
-                {isSiteSelected && currentMilitarySite
-                  ? `${currentMilitarySite.shortName} 상공 3D 입체 비행`
-                  : `${currentRegionStat.name} 도심 전경 3D 비행`}
+                {isDrawingMode
+                  ? '2D 평면 정밀 드로잉 중 (지도 클릭)'
+                  : completedPolygon
+                  ? '부지 구역 다시 그리기 (2D 전환)'
+                  : '구역 그리기 시작 (2D 수직 뷰 자동전환)'}
+              </span>
+            </button>
+
+            {isDrawingMode && (
+              <div className="p-2.5 bg-blue-950/40 border border-blue-800/60 rounded-lg text-xs space-y-2">
+                <div className="text-[11px] text-blue-200 leading-snug flex items-start gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 flex-shrink-0 animate-ping" />
+                  <span>
+                    수직 Top-Down 뷰로 전환되었습니다. 지도 위를 클릭해 꼭짓점을 추가하세요. (더블클릭 시 3D 조감도 자동 복귀)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-slate-300 font-mono">
+                    정점: <strong className="text-blue-400">{drawingPoints.length}</strong>개
+                  </span>
+                  <div className="flex space-x-1.5">
+                    <button
+                      disabled={drawingPoints.length < 3}
+                      onClick={completePolygonDrawing}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded flex items-center space-x-1 transition-all ${
+                        drawingPoints.length >= 3
+                          ? 'bg-blue-600 hover:bg-blue-500 text-white shadow'
+                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>작성 완료 (3D 복귀)</span>
+                    </button>
+                    <button
+                      onClick={resetPolygonDrawing}
+                      className="px-2 py-1 text-[11px] font-medium rounded bg-rose-950/60 border border-rose-800/60 text-rose-300 hover:bg-rose-900/60 transition-colors"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 탭 2: 목표 면적(평/㎡) 기반 정형 템플릿(스탬프) 생성기 */}
+        {boundaryTab === 'stamp' && (
+          <div className="p-3 bg-[#18221b] border border-[#2b3a2f] rounded-lg space-y-2.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-200 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                목표 면적 규격 스탬프
+              </span>
+              <span className="text-[10px] text-amber-400 font-mono">
+                약 {(stampAreaPyeong * 3.305785).toLocaleString(undefined, { maximumFractionDigits: 0 })} ㎡
+              </span>
+            </div>
+
+            {/* 퀵 평수 프리셋 버튼 */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[3000, 5000, 10000, 20000].map((py) => (
+                <button
+                  key={py}
+                  type="button"
+                  onClick={() => setStampAreaPyeong(py)}
+                  className={`py-1 text-[11px] rounded font-mono font-semibold transition-all ${
+                    stampAreaPyeong === py
+                      ? 'bg-amber-600 text-white shadow'
+                      : 'bg-[#121814] text-slate-300 hover:bg-[#1f2c22] border border-[#233327]'
+                  }`}
+                >
+                  {py.toLocaleString()}평
+                </button>
+              ))}
+            </div>
+
+            {/* 직접 평수 입력 */}
+            <div className="flex items-center space-x-2 bg-[#121814] p-1.5 rounded border border-[#233327]">
+              <span className="text-[11px] text-slate-400 pl-1">직접 입력:</span>
+              <input
+                type="number"
+                min={100}
+                max={500000}
+                step={500}
+                value={stampAreaPyeong}
+                onChange={(e) => setStampAreaPyeong(Math.max(100, parseInt(e.target.value) || 100))}
+                className="w-24 bg-transparent text-xs font-mono font-bold text-amber-400 focus:outline-none"
+              />
+              <span className="text-[11px] text-slate-400">평</span>
+            </div>
+
+            {/* 형태 선택 (정사각형 / 2:1 직사각형 / 원형) */}
+            <div className="space-y-1">
+              <span className="text-[10.5px] text-slate-400 block">스탬프 형상:</span>
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setStampShape('square')}
+                  className={`py-1 text-[10.5px] rounded flex items-center justify-center gap-1 border transition-all ${
+                    stampShape === 'square'
+                      ? 'bg-amber-950/80 border-amber-500 text-amber-300 font-bold'
+                      : 'bg-[#121814] border-[#233327] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Square className="w-3 h-3" />
+                  정사각형
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStampShape('rectangle')}
+                  className={`py-1 text-[10.5px] rounded flex items-center justify-center gap-1 border transition-all ${
+                    stampShape === 'rectangle'
+                      ? 'bg-amber-950/80 border-amber-500 text-amber-300 font-bold'
+                      : 'bg-[#121814] border-[#233327] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Square className="w-3.5 h-2.5" />
+                  2:1 직사각
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStampShape('circle')}
+                  className={`py-1 text-[10.5px] rounded flex items-center justify-center gap-1 border transition-all ${
+                    stampShape === 'circle'
+                      ? 'bg-amber-950/80 border-amber-500 text-amber-300 font-bold'
+                      : 'bg-[#121814] border-[#233327] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Circle className="w-3 h-3" />
+                  원형
+                </button>
+              </div>
+            </div>
+
+            {/* 지도에 배치 토글 버튼 */}
+            <button
+              onClick={() => setStampMode(!stampMode)}
+              className={`w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-2 transition-all ${
+                stampMode
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/50 animate-pulse'
+                  : 'bg-[#1b2b21] border border-amber-600/70 text-amber-300 hover:bg-[#253d2e]'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>
+                {stampMode ? '지도 위 원하는 위치를 클릭하세요' : '지도에 배치 (스탬프 모드 활성화)'}
               </span>
             </button>
           </div>
+        )}
 
-          {/* 빠른 전환 칩 */}
-          <div className="space-y-1">
-            <div className="text-[9px] text-slate-500">주요 대상지 퀵 비행 바로가기:</div>
-            <div className="flex flex-wrap gap-1">
-              {quickChips.map((chip) => {
-                const isSelected =
-                  chip.type === 'site'
-                    ? selectedIdleSiteId === chip.id
-                    : !selectedIdleSiteId && selectedRegionId === chip.id;
-                return (
+        {/* 탭 3: 정밀 좌표(위경도) 입력 모달 트리거 */}
+        {boundaryTab === 'coord' && (
+          <div className="p-3 bg-[#18221b] border border-[#2b3a2f] rounded-lg space-y-2 text-xs">
+            <div className="text-[11px] text-slate-300 leading-snug">
+              정밀 측량 성과표 또는 군용 좌표 리스트를 줄바꿈으로 붙여넣어 부지를 생성할 수 있습니다.
+            </div>
+            <button
+              onClick={() => setIsCoordModalOpen(true)}
+              className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors shadow"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>정밀 위경도 텍스트 입력창 열기</span>
+            </button>
+          </div>
+        )}
+
+        {/* 부지 렌더링 스타일 피커 (블루, 오렌지, 사선 빗금, 에메랄드) */}
+        <div className="p-2.5 rounded-lg bg-[#18201b] border border-[#29352c] space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-slate-400" />
+              부지 렌더링 스타일
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {polygonStyle === 'hatch'
+                ? '사선 빗금'
+                : polygonStyle === 'orange'
+                ? '보호구역 해제'
+                : polygonStyle === 'emerald'
+                ? '민군 복합'
+                : '군 유휴지'}
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            <button
+              onClick={() => setPolygonStyle('blue')}
+              className={`p-1.5 rounded text-[10px] font-medium border flex flex-col items-center gap-1 transition-all ${
+                polygonStyle === 'blue'
+                  ? 'bg-blue-950/80 border-blue-400 text-blue-200 ring-1 ring-blue-500/50'
+                  : 'bg-[#121713] border-[#212b23] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-3 h-3 rounded bg-blue-500/60 border border-blue-400" />
+              <span>블루</span>
+            </button>
+            <button
+              onClick={() => setPolygonStyle('orange')}
+              className={`p-1.5 rounded text-[10px] font-medium border flex flex-col items-center gap-1 transition-all ${
+                polygonStyle === 'orange'
+                  ? 'bg-orange-950/80 border-orange-400 text-orange-200 ring-1 ring-orange-500/50'
+                  : 'bg-[#121713] border-[#212b23] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-3 h-3 rounded bg-orange-500/60 border border-orange-400" />
+              <span>오렌지</span>
+            </button>
+            <button
+              onClick={() => setPolygonStyle('hatch')}
+              className={`p-1.5 rounded text-[10px] font-medium border flex flex-col items-center gap-1 transition-all ${
+                polygonStyle === 'hatch'
+                  ? 'bg-amber-950/80 border-amber-400 text-amber-200 ring-1 ring-amber-500/50'
+                  : 'bg-[#121713] border-[#212b23] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-3 h-3 rounded border border-amber-400 bg-[linear-gradient(45deg,#F59E0B_25%,transparent_25%,transparent_50%,#F59E0B_50%,#F59E0B_75%,transparent_75%,transparent)] bg-[length:6px_6px]" />
+              <span>사선빗금</span>
+            </button>
+            <button
+              onClick={() => setPolygonStyle('emerald')}
+              className={`p-1.5 rounded text-[10px] font-medium border flex flex-col items-center gap-1 transition-all ${
+                polygonStyle === 'emerald'
+                  ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200 ring-1 ring-emerald-500/50'
+                  : 'bg-[#121713] border-[#212b23] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="w-3 h-3 rounded bg-emerald-500/60 border border-emerald-400" />
+              <span>에메랄드</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 폴리곤 미세 조작 도구 (회전 / 이동 안내) */}
+        {completedPolygon && (
+          <div className="p-2.5 rounded-lg bg-[#18201b] border border-[#29352c] space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                <RotateCw className="w-3 h-3 text-amber-400" />
+                부지 각도 미세 회전
+              </span>
+              <span className="text-[10px] text-slate-400">모서리 핸들러 드래그 가능</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => rotatePolygon(-15)}
+                className="py-1 px-2 rounded bg-[#121713] hover:bg-[#202d23] border border-[#212b23] text-[11px] text-slate-200 font-mono transition-colors"
+                title="반시계 방향 15도 회전"
+              >
+                ↺ -15°
+              </button>
+              <button
+                type="button"
+                onClick={() => rotatePolygon(15)}
+                className="py-1 px-2 rounded bg-[#121713] hover:bg-[#202d23] border border-[#212b23] text-[11px] text-slate-200 font-mono transition-colors"
+                title="시계 방향 15도 회전"
+              >
+                ↻ +15°
+              </button>
+              <button
+                type="button"
+                onClick={() => rotatePolygon(45)}
+                className="py-1 px-2 rounded bg-[#121713] hover:bg-[#202d23] border border-[#212b23] text-[11px] text-slate-200 font-mono transition-colors"
+                title="시계 방향 45도 회전"
+              >
+                ↻ +45°
+              </button>
+            </div>
+            <div className="text-[10px] text-slate-400 flex items-center gap-1 bg-[#121713] p-1.5 rounded">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>초록 점: 중심 드래그 이동 /</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400 ml-1" />
+              <span>황색 점: 모서리 회전</span>
+            </div>
+          </div>
+        )}
+
+        {/* 정량 면적 카드 (가이드 및 거대 면적 경고 배지 포함) */}
+        <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] text-xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-300">
+              부지 면적 정량 분석
+            </span>
+            {polygonArea && (
+              <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-mono">
+                연산 완료
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="p-2.5 bg-[#121713] rounded border border-[#212b23]">
+              <div className="text-[10px] text-slate-400">기준 면적 (㎡)</div>
+              <div className="text-sm font-mono font-bold text-blue-400 mt-1 truncate">
+                {polygonArea ? `${polygonArea.sqm.toLocaleString()} ㎡` : '측정 대기'}
+              </div>
+            </div>
+            <div className="p-2.5 bg-[#121713] rounded border border-[#212b23]">
+              <div className="text-[10px] text-slate-400">환산 면적 (평)</div>
+              <div className="text-sm font-mono font-bold text-emerald-400 mt-1 truncate">
+                {polygonArea ? `약 ${polygonArea.pyeong.toLocaleString()} 평` : '측정 대기'}
+              </div>
+            </div>
+          </div>
+
+          {/* 권장 면적 및 대규모 면적 경고 안내 */}
+          <div className="pt-0.5 text-[10px] space-y-1">
+            <p className="text-slate-400">
+              💡 권장 부지 규모: 1,000평 ~ 50,000평 (축구장 0.5 ~ 25개 규모)
+            </p>
+            {polygonArea && polygonArea.pyeong > 1000000 && (
+              <div className="p-2 rounded bg-amber-950/60 border border-amber-600/70 text-amber-200 flex items-start gap-1.5 leading-snug">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                <span>
+                  광역 규모(100만평 초과)가 감지되었습니다. 지도를 확대(Zoom In)하여 정밀 구역을 지정하세요.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {completedPolygon && (
+            <div className="flex items-center justify-between pt-1 border-t border-[#212b23]">
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                용도: 군사시설보호구역 해제 검토지
+              </span>
+              <button
+                onClick={resetPolygonDrawing}
+                className="text-[10px] text-slate-400 hover:text-rose-400 flex items-center gap-1 transition-colors"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                구역 초기화
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* [3D 개발 구상안(Massing) 올리기] 간이 생성 카드 */}
+        {completedPolygon && (
+          <div className="p-3 rounded-lg bg-[#142018] border border-emerald-600/60 text-xs space-y-2.5 shadow-md">
+            <div className="flex items-center justify-between">
+              <span className="text-[11.5px] font-bold text-slate-100 flex items-center gap-1.5">
+                <Building className="w-4 h-4 text-emerald-400" />
+                3D 개발 구상안(Massing) 올리기
+              </span>
+              <button
+                type="button"
+                onClick={toggleBuildingMass3D}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  showBuildingMass3D ? 'bg-emerald-500' : 'bg-slate-700'
+                }`}
+                title="부지 내 3D 입체 건축 매스 표출 토글"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    showBuildingMass3D ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {showBuildingMass3D && (
+              <div className="space-y-2.5 pt-1.5 border-t border-[#203326]">
+                {/* Threebox 3D 엔진 구동 상태 인디케이터 */}
+                <div className="flex items-center justify-between text-[10px] bg-[#0c1610] px-2.5 py-1.5 rounded border border-[#1b2f21]">
+                  <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Threebox-MapLibre 3D 엔진 가동
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono">
+                    Terrain Clamped
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-[10.5px] text-slate-300">
+                  <span className="font-semibold text-slate-200">건축 구상안 3D 프리셋 (라디오 선택):</span>
+                  <span className="font-mono text-emerald-300 font-bold">
+                    {BUILDING_MASS_PRESETS[buildingMassPreset].height}m 정밀 모델
+                  </span>
+                </div>
+
+                {/* 라디오 버튼 형태의 프리셋 선택기 */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(Object.keys(BUILDING_MASS_PRESETS) as BuildingMassPresetId[]).map((key) => {
+                    const preset = BUILDING_MASS_PRESETS[key];
+                    const isSelected = buildingMassPreset === key && !customGltfUrl;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        onClick={() => {
+                          setBuildingMassPreset(key);
+                          setCustomGltfUrl(null);
+                        }}
+                        className={`p-2 rounded-lg border text-left flex flex-col justify-between transition-all relative ${
+                          isSelected
+                            ? 'bg-emerald-950/80 border-emerald-400 text-white shadow-md ring-1 ring-emerald-400/50'
+                            : 'bg-[#101712] border-[#223326] text-slate-400 hover:text-slate-200 hover:bg-[#18241c]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          {/* 라디오 버튼 원형 불릿 */}
+                          <div
+                            className={`w-3 h-3 rounded-full border flex items-center justify-center transition-colors ${
+                              isSelected
+                                ? 'border-emerald-400 bg-emerald-500/20'
+                                : 'border-slate-600 bg-transparent'
+                            }`}
+                          >
+                            {isSelected && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            )}
+                          </div>
+                          <span className="text-[9px] font-mono text-slate-400 font-bold">
+                            {preset.height}m
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-bold leading-tight line-clamp-2">
+                          {preset.name}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 선택된 프리셋 건축 사양 요약 */}
+                <div className="p-2 rounded bg-[#0d140f] border border-[#1e2e22] text-[10px] text-slate-300 leading-snug">
+                  <div className="flex items-center justify-between text-slate-400 text-[9px] mb-1">
+                    <span className="font-semibold text-emerald-400">■ 건축 세부 특화 요소</span>
+                    <span className="font-mono text-slate-400">
+                      {customGltfUrl ? '외부 glTF 모델' : BUILDING_MASS_PRESETS[buildingMassPreset].name}
+                    </span>
+                  </div>
+                  <div className="text-slate-200 font-medium">
+                    {customGltfUrl
+                      ? `외부 3D 모델 로드 중: ${customGltfUrl.split('/').pop() || customGltfUrl}`
+                      : BUILDING_MASS_PRESETS[buildingMassPreset].description}
+                  </div>
+                  <div className="mt-1.5 pt-1.5 border-t border-[#1b2b1f] text-[9px] text-slate-400 flex items-center justify-between">
+                    <span>지형 표고 자동 밀착</span>
+                    <span className="text-emerald-400 font-mono">BBox Scale & Heading Sync</span>
+                  </div>
+                </div>
+
+                {/* 외부 glTF 3D 모델 로더 확장 드로어 */}
+                <div className="pt-0.5">
                   <button
-                    key={chip.id}
+                    type="button"
+                    onClick={() => setShowGltfDrawer(!showGltfDrawer)}
+                    className="w-full py-1 px-2 rounded bg-[#101913] hover:bg-[#16231a] border border-[#233527] text-[9.5px] text-slate-300 flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-1 text-slate-300">
+                      <span>📁 외부 glTF/GLB 모델 로드</span>
+                      {customGltfUrl && (
+                        <span className="px-1 py-0.2 text-[8px] bg-cyan-950 text-cyan-300 border border-cyan-800 rounded">
+                          커스텀 적용 중
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-slate-500 font-mono text-[9px]">
+                      {showGltfDrawer ? '▲ 닫기' : '▼ 열기'}
+                    </span>
+                  </button>
+
+                  {showGltfDrawer && (
+                    <div className="mt-1.5 p-2 rounded bg-[#0c130e] border border-[#1d2d20] space-y-1.5">
+                      <div className="text-[9px] text-slate-400">
+                        외부 3D 모델 파일 URL (.gltf / .glb):
+                      </div>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={gltfInput}
+                          onChange={(e) => setGltfInput(e.target.value)}
+                          placeholder="https://.../model.glb"
+                          className="flex-1 bg-[#142017] border border-[#243527] rounded px-2 py-1 text-[10px] text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (gltfInput.trim()) {
+                              setCustomGltfUrl(gltfInput.trim());
+                            }
+                          }}
+                          className="px-2 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[9.5px] font-bold"
+                        >
+                          적용
+                        </button>
+                      </div>
+                      {customGltfUrl && (
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[8.5px] text-slate-400 truncate max-w-[180px]">
+                            {customGltfUrl}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomGltfUrl(null);
+                              setGltfInput('');
+                            }}
+                            className="text-[8.5px] text-rose-400 hover:underline"
+                          >
+                            기본 프리셋 복원
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+        </>
+      )}
+
+      {/* [3D 건축/단지 탭: 3D 렌더러 단일 선택 + 시설물 카탈로그] */}
+      {activeSidebarTab === 'buildings_complex' && (
+        <>
+          {/* [핵심 신규] 3D 건축물 렌더링 모드 단일 선택 (Mutual Exclusion) */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111a14]/80">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                3D 건축 렌더링 엔진 선택
+              </h2>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 font-semibold">
+                상호 배타적 실행
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-tight">
+              한 번에 단 하나의 주력 렌더러만 실행하여 GPU VRAM 충돌 및 렉·화면 멈춤(Crash)을 원천 차단합니다.
+            </p>
+
+            <div className="space-y-2 pt-1">
+              {/* 모드 A: 경량 네이티브 모드 */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectRenderMode3D('native')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectRenderMode3D('native');
+                  }
+                }}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  localRenderMode3D === 'native'
+                    ? 'bg-blue-950/40 border-blue-500/80 shadow-md ring-1 ring-blue-500/30'
+                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renderMode3D"
+                  checked={localRenderMode3D === 'native'}
+                  readOnly
+                  className="mt-1 accent-blue-500 pointer-events-none"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-100">
+                      모드 A: 경량 네이티브
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300 border border-blue-700">
+                      MapLibre fill-extrusion
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
+                    기본 3D 각기둥 및 지붕 음영. 저사양 브라우저나 광역 탐색 시 가장 가볍고 빠름 (60fps 유지).
+                  </p>
+                </div>
+              </div>
+
+              {/* 모드 B: 실감 파사드 (LOD2) */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectRenderMode3D('facade')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectRenderMode3D('facade');
+                  }
+                }}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  localRenderMode3D === 'facade'
+                    ? 'bg-amber-950/40 border-amber-500/80 shadow-md ring-1 ring-amber-500/30'
+                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renderMode3D"
+                  checked={localRenderMode3D === 'facade'}
+                  readOnly
+                  className="mt-1 accent-amber-500 pointer-events-none"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-200">
+                      모드 B: 실감 파사드 (LOD2)
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-300 border border-amber-700">
+                      Three.js 절차적 생성
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
+                    한국형 판상형 아파트/상가 파사드, 경사 박공지붕, 옥상 헬리패드, DEM 지형 표고 정밀 밀착.
+                  </p>
+                </div>
+              </div>
+
+              {/* 모드 C: 강원 특화 실측 디지털 트윈 (LOD2+) */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectRenderMode3D('tiles3d')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectRenderMode3D('tiles3d');
+                  }
+                }}
+                className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                  localRenderMode3D === 'tiles3d'
+                    ? 'bg-emerald-950/40 border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
+                    : 'bg-[#18201b] border-[#29352c] hover:bg-[#1e2822]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="renderMode3D"
+                  checked={localRenderMode3D === 'tiles3d'}
+                  readOnly
+                  className="mt-1 accent-emerald-500 pointer-events-none"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-200 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      모드 C: 실측 디지털 트윈 (LOD2+)
+                    </span>
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700">
+                      브이월드 실측 대장 + PBR
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
+                    국토부 브이월드 LT_C_SPBD + 건축HUB 표제부 실측 층수·높이 및 저채도 실사 외벽·지붕 100% 반영.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* [2단계 신규] 3D 시설물 인터랙티브 배치 및 변환 기즈모(TransformControls) */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0f1712]">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-cyan-400" />
+                3D 시설물 배치 카탈로그 & 기즈모
+              </h2>
+          <span className="text-[10px] font-mono font-bold bg-cyan-950/80 text-cyan-300 px-2 py-0.5 rounded border border-cyan-700/60 flex items-center gap-1">
+            배치 {placedFacilities.length}개소
+          </span>
+        </div>
+
+        <p className="text-[10.5px] text-slate-400 leading-tight">
+          국방·도시계획 3D 표준 모델을 지도 위 원하는 위치에 마우스로 즉시 안착시키고, 3축 기즈모(W/E/R)로 정밀 변환합니다.
+        </p>
+
+        {/* 1. 3D 시설물 프리셋 카탈로그 (5종 카드) */}
+        <div className="space-y-1.5">
+          <label className="text-[10.5px] font-semibold text-slate-300 block">
+            시설물 프리셋 선택 및 배치
+          </label>
+          <div className="grid grid-cols-1 gap-2">
+            {(Object.keys(FACILITY_PRESETS) as FacilityPresetId[]).map((key) => {
+              const preset = FACILITY_PRESETS[key];
+              return (
+                <div
+                  key={key}
+                  className="p-2.5 rounded-lg bg-[#142118] border border-[#233829] hover:border-cyan-500/50 transition-all flex items-start justify-between gap-2 text-xs"
+                >
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="w-2 h-2 rounded-full inline-block flex-shrink-0"
+                        style={{ backgroundColor: preset.color }}
+                      />
+                      <span className="font-bold text-slate-100 text-[11px] truncate">
+                        {preset.name}
+                      </span>
+                      <span className="text-[9px] font-mono text-cyan-300 bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-800/60">
+                        {preset.badge}
+                      </span>
+                    </div>
+                    <p className="text-[9.5px] text-slate-400 leading-tight">
+                      {preset.description}
+                    </p>
+                    <div className="text-[9px] text-slate-500 font-mono flex items-center gap-2">
+                      <span>규격: {preset.defaultWidth}m × {preset.defaultDepth}m</span>
+                      <span>·</span>
+                      <span>높이: {preset.defaultHeight}m</span>
+                    </div>
+                  </div>
+
+                  <button
                     type="button"
                     onClick={() => {
-                      if (chip.type === 'site') {
-                        selectIdleSite(chip.id);
-                      } else {
-                        selectRegion(chip.id);
-                      }
+                      const vp = useMapStore.getState().viewport;
+                      const polyCenter = useMapStore.getState().polygonCenter;
+                      const coords: [number, number] = polyCenter || [vp.longitude, vp.latitude];
+                      addPlacedFacility(key, coords);
                     }}
-                    className={`px-2 py-0.5 rounded text-[9px] font-medium border transition-all ${
+                    className="flex-shrink-0 px-2 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[10.5px] flex items-center gap-1 transition-colors shadow-sm"
+                    title="현재 부지 또는 화면 중앙에 즉시 배치"
+                  >
+                    <Plus className="w-3 h-3" />
+                    배치
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2. 배치된 시설물 관리 및 TransformControls 툴바 */}
+        {placedFacilities.length > 0 && (
+          <div className="space-y-2.5 pt-2 border-t border-[#1f3023]">
+            {/* 상단 기즈모 모드 툴바 */}
+            <div className="flex items-center justify-between bg-[#0a120c] p-2 rounded-lg border border-[#1b2b1e]">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400 mr-1 font-semibold">
+                  기즈모:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTransformGizmoMode('translate')}
+                  className={`px-2 py-1 rounded text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                    transformGizmoMode === 'translate'
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold'
+                      : 'bg-[#142017] text-slate-300 border-[#26382a] hover:bg-[#1a2c1f]'
+                  }`}
+                  title="3축 위치 이동 (단축키: W)"
+                >
+                  <Move className="w-3 h-3" />
+                  이동(W)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransformGizmoMode('rotate')}
+                  className={`px-2 py-1 rounded text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                    transformGizmoMode === 'rotate'
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold'
+                      : 'bg-[#142017] text-slate-300 border-[#26382a] hover:bg-[#1a2c1f]'
+                  }`}
+                  title="Y축 방위각 회전 (단축키: E)"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  회전(E)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransformGizmoMode('scale')}
+                  className={`px-2 py-1 rounded text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                    transformGizmoMode === 'scale'
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold'
+                      : 'bg-[#142017] text-slate-300 border-[#26382a] hover:bg-[#1a2c1f]'
+                  }`}
+                  title="균등 크기 조절 (단축키: R)"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  크기(R)
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1">
+                {selectedFacilityId && (
+                  <button
+                    type="button"
+                    onClick={() => selectFacility(null)}
+                    className="text-[9.5px] text-slate-400 hover:text-slate-200 underline px-1"
+                    title="선택 해제 (Esc)"
+                  >
+                    해제
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={clearAllPlacedFacilities}
+                  className="px-1.5 py-1 text-[9.5px] rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 text-rose-300 transition-colors"
+                  title="배치된 모든 시설물 삭제"
+                >
+                  전체 삭제
+                </button>
+              </div>
+            </div>
+
+            {/* 시설물 리스트 */}
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5 custom-scrollbar">
+              {placedFacilities.map((facility) => {
+                const isSelected = selectedFacilityId === facility.id;
+                const isEditing = editingFacilityId === facility.id;
+
+                return (
+                  <div
+                    key={facility.id}
+                    className={`p-2 rounded-lg border text-xs transition-all ${
                       isSelected
-                        ? 'bg-emerald-600 text-white border-emerald-400 font-bold'
-                        : 'bg-[#121915] text-slate-400 border-[#1e2a22] hover:text-slate-200 hover:border-slate-600'
+                        ? 'bg-[#15291d] border-cyan-400 shadow-md ring-1 ring-cyan-400/40'
+                        : 'bg-[#111c14] border-[#223326] hover:bg-[#152319]'
                     }`}
                   >
-                    {chip.label}
-                  </button>
+                    <div className="flex items-center justify-between">
+                      {isEditing ? (
+                        <div className="flex items-center gap-1 flex-1 mr-2">
+                          <input
+                            type="text"
+                            value={editingFacilityName}
+                            onChange={(e) => setEditingFacilityName(e.target.value)}
+                            className="bg-[#0b140e] border border-cyan-500 rounded px-1.5 py-0.5 text-xs text-slate-100 flex-1 outline-none font-medium"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateFacilityTransform(facility.id, {
+                                  name: editingFacilityName.trim() || facility.name,
+                                });
+                                setEditingFacilityId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingFacilityId(null);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateFacilityTransform(facility.id, {
+                                name: editingFacilityName.trim() || facility.name,
+                              });
+                              setEditingFacilityId(null);
+                            }}
+                            className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px]"
+                          >
+                            저장
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          className="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => selectFacility(facility.id)}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full inline-block flex-shrink-0"
+                            style={{
+                              backgroundColor:
+                                FACILITY_PRESETS[facility.presetId]?.color || '#0ea5e9',
+                            }}
+                          />
+                          <span className="font-semibold text-slate-200 truncate text-[11px]">
+                            {facility.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingFacilityId(facility.id);
+                              setEditingFacilityName(facility.name);
+                            }}
+                            className="text-slate-500 hover:text-slate-300 p-0.5"
+                            title="이름 수정"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* 카메라 이동 포커스 */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectFacility(facility.id);
+                            flyToLocation({
+                              longitude: facility.coords[0],
+                              latitude: facility.coords[1],
+                              zoom: 16.5,
+                              pitch: 60,
+                              bearing: (facility.rotationY + 180) % 360,
+                            });
+                          }}
+                          className="p-1 rounded hover:bg-[#1f3524] text-slate-400 hover:text-cyan-300 transition-colors"
+                          title="카메라 포커스"
+                        >
+                          <Focus className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* 삭제 */}
+                        <button
+                          type="button"
+                          onClick={() => removePlacedFacility(facility.id)}
+                          className="p-1 rounded hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 transition-colors"
+                          title="시설물 삭제 (Delete)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 좌표 및 변환 상세 정보 */}
+                    <div className="grid grid-cols-3 gap-1 mt-1 text-[9.5px] font-mono text-slate-400 bg-[#0c140e] p-1 rounded border border-[#1b2b1e]">
+                      <div>
+                        <span className="text-slate-500 block text-[8.5px]">지형 표고</span>
+                        <span className="text-emerald-400 font-semibold">
+                          EL. {facility.elevation}m
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8.5px]">회전각</span>
+                        <span className="text-slate-200">
+                          {facility.rotationY}°
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8.5px]">스케일</span>
+                        <span className="text-cyan-300">
+                          {facility.scale}x
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 );
               })}
             </div>
           </div>
-        </section>
-      </div>
+        )}
 
-      {/* ===================================================================== */}
-      {/* 3. 패널 푸터 */}
-      {/* ===================================================================== */}
-      <div className="p-2.5 bg-[#0d1411] border-t border-[#1e2a22] text-[10px] text-slate-400 flex items-start gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-        <span className="leading-tight">
-          지도에서 <strong className="text-white">건물</strong>이나{' '}
-          <strong className="text-white">필지</strong>를 클릭하면 우측에 실측 건축물대장·지적도 상세 카드가 열립니다.
-        </span>
-      </div>
-    </div>
+        {/* [7. 군 유휴부지 개발 시뮬레이션 기즈모 & 용적률·사업성 자동 계산기] */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#132219] to-[#0c1611] border border-cyan-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-400">
+                <Building2 className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  용적률·건폐율 & 사업성 자동 계산기
+                </span>
+                <span className="text-[10px] text-cyan-300/80 block">
+                  실시간 법정 한도 판정 & 수용/고용 인구 집계
+                </span>
+              </div>
+            </div>
+            {siteFeasibilityResult && (
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                  siteFeasibilityResult.compliance === 'PASS'
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
+                    : 'bg-rose-950 text-rose-300 border-rose-600'
+                }`}
+              >
+                {siteFeasibilityResult.compliance === 'PASS' ? '✅ 법정 규제 적합' : '⚠️ 법정 한도 초과'}
+              </span>
+            )}
+          </div>
+
+          {siteFeasibilityResult && (
+            <div className="space-y-2 text-[10.5px]">
+              {/* 대지면적 & 건축/연면적 */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-1.5 rounded bg-[#0b1610] border border-[#1f3525]">
+                  <span className="text-slate-400 block text-[9px]">부지 총면적</span>
+                  <span className="font-mono font-bold text-slate-200">
+                    {siteFeasibilityResult.siteAreaSqm.toLocaleString()} ㎡
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block">
+                    약 {siteFeasibilityResult.siteAreaPyeong.toLocaleString()} 평
+                  </span>
+                </div>
+                <div className="p-1.5 rounded bg-[#0b1610] border border-[#1f3525]">
+                  <span className="text-slate-400 block text-[9px]">계획 건축면적 / 연면적</span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {siteFeasibilityResult.totalFootprintSqm.toLocaleString()} ㎡
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block font-mono">
+                    연면적: {siteFeasibilityResult.totalGrossFloorAreaSqm.toLocaleString()} ㎡
+                  </span>
+                </div>
+              </div>
+
+              {/* 건폐율 & 용적률 진단 게이지 */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-2 rounded bg-[#0b1610] border border-[#1f3525] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[9.5px]">달성 건폐율(BCR)</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {siteFeasibilityResult.achievedBcr}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${siteFeasibilityResult.achievedBcr <= siteFeasibilityResult.legalMaxBcr ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                      style={{ width: `${Math.min(100, (siteFeasibilityResult.achievedBcr / siteFeasibilityResult.legalMaxBcr) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[8.5px] text-slate-400 font-mono">
+                    <span>계획 {siteFeasibilityResult.achievedBcr}%</span>
+                    <span>법정 {siteFeasibilityResult.legalMaxBcr}%</span>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded bg-[#0b1610] border border-[#1f3525] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-[9.5px]">달성 용적률(FAR)</span>
+                    <span className="font-mono font-bold text-cyan-400">
+                      {siteFeasibilityResult.achievedFar}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${siteFeasibilityResult.achievedFar <= siteFeasibilityResult.legalMaxFar ? 'bg-cyan-500' : 'bg-rose-500'}`}
+                      style={{ width: `${Math.min(100, (siteFeasibilityResult.achievedFar / siteFeasibilityResult.legalMaxFar) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[8.5px] text-slate-400 font-mono">
+                    <span>계획 {siteFeasibilityResult.achievedFar}%</span>
+                    <span>법정 {siteFeasibilityResult.legalMaxFar}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 수용 인구 & 고용 유발 인원 지표 */}
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="p-1.5 rounded bg-cyan-950/40 border border-cyan-800/40">
+                  <span className="text-slate-400 block text-[9px]">예상 수용 인구</span>
+                  <span className="font-mono font-bold text-cyan-200 text-sm">
+                    {siteFeasibilityResult.residentPop.toLocaleString()} 명
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block">33㎡/인 기준</span>
+                </div>
+                <div className="p-1.5 rounded bg-emerald-950/40 border border-emerald-800/40">
+                  <span className="text-slate-400 block text-[9px]">고용 유발 인원</span>
+                  <span className="font-mono font-bold text-emerald-200 text-sm">
+                    {siteFeasibilityResult.employmentPop.toLocaleString()} 명
+                  </span>
+                  <span className="text-[8.5px] text-slate-400 block">25㎡/인(업무·연구)</span>
+                </div>
+              </div>
+
+              {/* 검토 요약 */}
+              <div className="p-1.5 rounded bg-[#0a120d] border border-[#1d3022] text-[9.5px] text-slate-300">
+                {siteFeasibilityResult.summary}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+        </>
+      )}
+
+      {/* [부지정보/접근성 탭 섹션 그룹 (국방규제, 센서/UAV, 탐지돔, 버퍼링)] */}
+      {activeSidebarTab === 'site_access' && (
+        <>
+          {/* 5. 국방 규제 및 비행안전 심층 분석 모듈 */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111914]/70">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                국방 규제 & 비행안전 심층 분석
+              </h2>
+          <span className="text-[10px] text-slate-400 font-mono">
+            {completedPolygon ? '분석 완료' : '부지 대기'}
+          </span>
+        </div>
+
+        {!completedPolygon ? (
+          <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] text-center space-y-1.5">
+            <ShieldAlert className="w-5 h-5 text-slate-500 mx-auto" />
+            <div className="text-[11px] font-medium text-slate-300">
+              부지 구역을 지정하면 규제 판정이 실행됩니다
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              상단 드로잉, 면적 스탬프 또는 좌표 입력으로 부지를 생성하면 군사시설보호구역 3단 분류, 3D 비행안전 고도제한면 및 군 협의 소견서가 자동 산출됩니다.
+            </p>
+          </div>
+        ) : !defenseAnalysisResult ? (
+          <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] text-center text-xs text-slate-400">
+            분석 엔진 계산 중...
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* 1) 군사시설보호구역 3단 분류 판정 요약 카드 */}
+            <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-slate-400">
+                  보호구역 3단 분류 판정
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    defenseAnalysisResult.badgeVariant === 'rose'
+                      ? 'bg-rose-950/80 border-rose-600/80 text-rose-300'
+                      : defenseAnalysisResult.badgeVariant === 'amber'
+                      ? 'bg-amber-950/80 border-amber-600/80 text-amber-300'
+                      : defenseAnalysisResult.badgeVariant === 'blue'
+                      ? 'bg-blue-950/80 border-blue-600/80 text-blue-300'
+                      : 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                  }`}
+                >
+                  {defenseAnalysisResult.feasibilityText}
+                </span>
+              </div>
+
+              <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    defenseAnalysisResult.classification === 'controlled'
+                      ? 'bg-rose-500'
+                      : defenseAnalysisResult.classification === 'flight_safety'
+                      ? 'bg-amber-400'
+                      : defenseAnalysisResult.classification === 'restricted'
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-400'
+                  }`}
+                />
+                <span>{defenseAnalysisResult.zoneName}</span>
+              </div>
+
+              <div className="space-y-1 text-[11px] text-slate-300 bg-[#121713] p-2 rounded border border-[#212b23]">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">근거 법령:</span>
+                  <span className="text-slate-200 font-medium truncate max-w-[190px] text-right">
+                    {defenseAnalysisResult.statute}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">관할 부대:</span>
+                  <span className="text-slate-200 font-medium truncate max-w-[190px] text-right">
+                    {defenseAnalysisResult.jurisdiction}
+                  </span>
+                </div>
+                <div className="pt-1 text-[10px] text-slate-400 leading-tight border-t border-[#1e2720]">
+                  💡 {defenseAnalysisResult.feasibilityDescription}
+                </div>
+              </div>
+
+              {/* 4개 세부 체크포인트 뱃지 리스트 */}
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                {defenseAnalysisResult.keyCheckpoints.map((cp, idx) => (
+                  <div
+                    key={idx}
+                    className="p-1.5 rounded bg-[#131a15] border border-[#202c22] text-[10px] flex flex-col"
+                  >
+                    <span className="text-slate-400">{cp.label}</span>
+                    <span
+                      className={`font-semibold truncate ${
+                        cp.status === 'block'
+                          ? 'text-rose-400'
+                          : cp.status === 'warn'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {cp.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 2) 3D 가상 비행안전 제한고도면(Ceiling) 제어 카드 */}
+            <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                  <Plane className="w-3.5 h-3.5 text-amber-400" />
+                  <span>3D 비행안전 고도제한면 (Ceiling)</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showFlightCeiling3D}
+                    onChange={toggleFlightCeiling3D}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-rose-600"></div>
+                </label>
+              </div>
+
+              {defenseAnalysisResult.hasFlightSafetyZone ? (
+                <div className="space-y-2 text-xs">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-[#121713] rounded border border-[#212b23]">
+                      <span className="text-[10px] text-slate-400 block">지표면 기준 허용고도</span>
+                      <span className="text-sm font-mono font-bold text-rose-400">
+                        +{defenseAnalysisResult.maxSurfaceHeight} m
+                      </span>
+                    </div>
+                    <div className="p-2 bg-[#121713] rounded border border-[#212b23]">
+                      <span className="text-[10px] text-slate-400 block">해발 표고 (EL.)</span>
+                      <span className="text-sm font-mono font-bold text-amber-400">
+                        EL. {defenseAnalysisResult.maxSeaLevelHeight} m
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2 bg-[#121713] rounded border border-[#212b23] flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">권장 건축 규모:</span>
+                    <span className="font-bold text-emerald-400">
+                      {defenseAnalysisResult.recommendedFloors}
+                    </span>
+                  </div>
+
+                  {defenseAnalysisResult.airfield && (
+                    <div className="text-[10px] text-slate-400 bg-black/30 p-2 rounded space-y-0.5">
+                      <div className="text-slate-300 font-semibold">
+                        📍 {defenseAnalysisResult.airfield.name} (이격 {defenseAnalysisResult.distanceToAirfieldKm}km)
+                      </div>
+                      <div className="text-slate-400 font-sans">
+                        {defenseAnalysisResult.airfield.shieldingNotes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-2 rounded bg-[#121713] border border-[#212b23] text-[11px] text-slate-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  <span>반경 12km 이내 군 비행장 직간접 장애물 제한 표면 비저촉</span>
+                </div>
+              )}
+            </div>
+
+            {/* 3) 군 협의 소견서 텍스트 자동 생성 & 클립보드 복사 */}
+            <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  관할 부대 작전성 검토 의견 초안
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyOpinionDraft}
+                  className="px-2 py-1 rounded bg-[#202b23] hover:bg-[#2a3a2e] border border-[#2d3d31] text-[10px] font-semibold text-emerald-300 flex items-center gap-1 transition-all shadow-sm active:scale-95"
+                >
+                  {copiedDraft ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span>복사 완료!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>텍스트 복사</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="relative">
+                <textarea
+                  readOnly
+                  value={defenseAnalysisResult.officialOpinionDraft}
+                  rows={6}
+                  className="w-full bg-[#101512] border border-[#212b23] rounded p-2 text-[10px] font-mono text-slate-300 leading-relaxed resize-none focus:outline-none focus:border-emerald-500/50 selection:bg-emerald-800 selection:text-white"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500">
+                도정·국방 협력관실 브리핑 보고서 및 군 협의 사전신청 서식에 바로 인용 가능합니다.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 5-2. [신규] 국방·보안 브리핑: 3D 감시 센서 콘(Sensor FOV) & UAV 정찰 비행 */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0d1612]/75">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-teal-400" />
+            국방 경계 센서 & UAV 정찰 시뮬레이터
+          </h2>
+          <span className="text-[10px] text-teal-300 font-mono bg-teal-950/80 px-2 py-0.5 rounded border border-teal-700/60 font-semibold">
+            DEFENSE 3D
+          </span>
+        </div>
+
+        {/* 1) 3D 감시 초소/CCTV 센서 콘 (Sensor FOV Frustum) 카드 */}
+        <div className="p-3 rounded-xl bg-[#12231b] border border-teal-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-teal-950 border border-teal-700/60 text-teal-300">
+                <Eye className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 레이더 센서 콘 (Sensor FOV)
+                </span>
+                <span className="text-[10px] text-teal-300/80 block">
+                  초소/CCTV 시계 Frustum & 펄스 스캔
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSensorPlacementMode}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                isSensorPlacementMode
+                  ? 'bg-teal-600 border-teal-400 text-white animate-pulse shadow-md'
+                  : 'bg-[#183628] border-teal-700/60 text-teal-200 hover:bg-[#1f4533]'
+              }`}
+            >
+              {isSensorPlacementMode ? '배치 중...' : '+ 센서 배치'}
+            </button>
+          </div>
+
+          {/* 화각 및 반경 설정 옵션 */}
+          <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-teal-900/50">
+            <div>
+              <span className="text-[10px] text-slate-400 block mb-1">수평 감시 화각 (FOV)</span>
+              <div className="flex gap-1">
+                {[60, 90, 120].map((deg) => (
+                  <button
+                    key={deg}
+                    type="button"
+                    onClick={() => setSelectedSensorFov(deg as 60 | 90 | 120)}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold border transition-all ${
+                      selectedSensorFov === deg
+                        ? 'bg-teal-600 border-teal-400 text-white'
+                        : 'bg-[#183024] border-teal-900/60 text-teal-300 hover:bg-[#204030]'
+                    }`}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 block mb-1">감시 유효 반경 (RNG)</span>
+              <div className="flex gap-1">
+                {[200, 300, 500].map((rng) => (
+                  <button
+                    key={rng}
+                    type="button"
+                    onClick={() => setSelectedSensorRange(rng)}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold border transition-all ${
+                      selectedSensorRange === rng
+                        ? 'bg-teal-600 border-teal-400 text-white'
+                        : 'bg-[#183024] border-teal-900/60 text-teal-300 hover:bg-[#204030]'
+                    }`}
+                  >
+                    {rng}m
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 등록된 센서 목록 */}
+          {surveillanceSensors.length > 0 && (
+            <div className="space-y-1.5 pt-1.5 border-t border-teal-900/50">
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>배치된 감시 센서 ({surveillanceSensors.length}기)</span>
+                <button
+                  type="button"
+                  onClick={clearSurveillanceSensors}
+                  className="text-rose-400 hover:text-rose-300 text-[9.5px] hover:underline"
+                >
+                  전체 삭제
+                </button>
+              </div>
+              <div className="max-h-28 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                {surveillanceSensors.map((sensor, idx) => (
+                  <div
+                    key={sensor.id}
+                    className="p-1.5 rounded bg-[#0b1712] border border-teal-900/60 flex items-center justify-between text-[10px]"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                      <span className="font-bold text-slate-200">
+                        {sensor.name || `센서 ${idx + 1}`}
+                      </span>
+                      <span className="text-teal-300/80 font-mono">
+                        (FOV {sensor.fovDegrees}°, {sensor.rangeMeters}m)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeSurveillanceSensor(sensor.id)}
+                      className="text-slate-400 hover:text-rose-400 p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2) 정찰 드론(UAV) 3D 순찰 비행선 제어 카드 */}
+        <div className="p-3 rounded-xl bg-[#12231b] border border-emerald-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-300">
+                <Radio className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  UAV 3D 정찰 비행 시뮬레이터
+                </span>
+                <span className="text-[10px] text-emerald-300/80 block">
+                  부지 외곽 순찰 비행 & FPV 관측 시점
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={uavFlight.isActive}
+                onChange={toggleUavFlight}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {uavFlight.isActive && (
+            <div className="space-y-2 pt-1 border-t border-emerald-900/50 animate-fade-in text-xs">
+              {/* 관측 뷰포트 전환 */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10.5px] text-slate-300 font-medium">카메라 관측 시점</span>
+                <div className="flex gap-1 bg-[#091711] p-0.5 rounded-lg border border-emerald-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setUavCameraMode('orbit')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                      uavFlight.cameraMode === 'orbit'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300 hover:text-white'
+                    }`}
+                  >
+                    3인칭 궤도
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUavCameraMode('fpv')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                      uavFlight.cameraMode === 'fpv'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300 hover:text-white'
+                    }`}
+                  >
+                    1인칭 FPV 관측
+                  </button>
+                </div>
+              </div>
+
+              {/* 속도 및 고도 조절 */}
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-slate-300 font-mono">
+                    <span>비행 속도</span>
+                    <span className="font-bold text-cyan-300">{uavFlight.speedKmh} km/h</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={20}
+                    max={80}
+                    step={5}
+                    value={uavFlight.speedKmh}
+                    onChange={(e) => setUavFlightSpeed(parseInt(e.target.value, 10))}
+                    className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-400"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-slate-300 font-mono">
+                    <span>대지 고도 (AGL)</span>
+                    <span className="font-bold text-amber-300">{uavFlight.altitudeMeters} m</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={40}
+                    max={150}
+                    step={10}
+                    value={uavFlight.altitudeMeters}
+                    onChange={(e) => setUavFlightAltitude(parseInt(e.target.value, 10))}
+                    className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-emerald-200/80 bg-emerald-950/40 p-2 rounded border border-emerald-800/30 leading-relaxed">
+                💡 베지에 순찰 궤도를 따라 고속 회전 프로펠러와 Bank Turn 선회가 적용된 드론이 비행하며, 1인칭 FPV 모드 시 밀리터리 HUD 조준경이 활성화됩니다.
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 5-3. [3단계 신규] 3D 전술 탐지 돔, 3D 보안 펜스 & 입체 LOS 가시선 분석 */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0d181e]/80">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+            <Target className="w-4 h-4 text-cyan-400" />
+            3D 전술 탐지 돔 & 보안 펜스 & LOS
+          </h2>
+          <span className="text-[10px] text-cyan-300 font-mono bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-700/60 font-semibold">
+            DEFENSE 3D
+          </span>
+        </div>
+
+        {/* 1) 반구형 3D 레이더/방공 센서 탐지 돔 (Hemisphere Threat Dome) */}
+        <div className="p-3 rounded-xl bg-[#102028] border border-cyan-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300">
+                <Radio className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 전술 탐지 돔 (Threat Dome)
+                </span>
+                <span className="text-[10px] text-cyan-300/80 block">
+                  반구형 레이더 돔 & 360° 스위프 빔
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleThreatDome}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                threatDome.enabled
+                  ? 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-900/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {threatDome.enabled ? '돔 활성' : '돔 켜기'}
+            </button>
+          </div>
+
+          {threatDome.enabled && (
+            <div className="space-y-2.5 pt-1 border-t border-[#1e3442]">
+              {/* 반경 조절 슬라이더 */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">탐지 반경 (Radius)</span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {threatDome.radiusMeters >= 1000
+                      ? `${(threatDome.radiusMeters / 1000).toFixed(1)} km`
+                      : `${threatDome.radiusMeters} m`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={500}
+                  max={10000}
+                  step={500}
+                  value={threatDome.radiusMeters}
+                  onChange={(e) =>
+                    setThreatDome({
+                      radiusMeters: parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
+                />
+                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                  <span>500m</span>
+                  <span>3km</span>
+                  <span>5km</span>
+                  <span>10km</span>
+                </div>
+              </div>
+
+              {/* 돔 중심 위치 지정 버튼 */}
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+                    const elev = 100;
+                    setThreatDome({
+                      coords: center,
+                      elevation: elev,
+                    });
+                  }}
+                  className="flex-1 py-1 px-2 rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 text-[10px] font-semibold border border-cyan-800/60 transition-colors flex items-center justify-center gap-1"
+                >
+                  <Crosshair className="w-3 h-3" />
+                  {polygonCenter ? '부지 중심으로 이동' : '현재 화면 중심으로 이동'}
+                </button>
+              </div>
+
+              {/* 색상 선택 */}
+              <div className="flex items-center justify-between text-[10.5px]">
+                <span className="text-slate-400">돔 테마 색상</span>
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { label: '시안', color: '#06B6D4' },
+                    { label: '그린', color: '#10B981' },
+                    { label: '황색', color: '#F59E0B' },
+                    { label: '레드', color: '#EF4444' },
+                  ].map((item) => (
+                    <button
+                      key={item.color}
+                      type="button"
+                      onClick={() => setThreatDome({ color: item.color })}
+                      style={{ backgroundColor: item.color }}
+                      className={`w-4 h-4 rounded-full border transition-transform ${
+                        threatDome.color === item.color
+                          ? 'ring-2 ring-white scale-110 border-white'
+                          : 'border-transparent opacity-70 hover:opacity-100'
+                      }`}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-cyan-200/80 bg-cyan-950/40 p-2 rounded border border-cyan-800/30 leading-relaxed">
+                💡 3D 반구 와이어프레임 표면 및 바닥 4단 등간격 거리 링(25/50/75/100%)과 함께 360° 회전 스위프 빔과 중심 펄스가 가동됩니다.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2) 3D 수직 경계 울타리 (3D Security Perimeter Wall) */}
+        <div className="p-3 rounded-xl bg-[#1a1c15] border border-amber-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-amber-950 border border-amber-700/60 text-amber-300">
+                <ShieldCheck className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 경계 보안벽 (Security Wall)
+                </span>
+                <span className="text-[10px] text-amber-300/80 block">
+                  부지 외곽선 수직 네온 장벽 (3m~15m)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSecurityWall}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                securityWall.enabled
+                  ? 'bg-amber-600 text-white border-amber-400 shadow-lg shadow-amber-900/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {securityWall.enabled ? '보안벽 활성' : '보안벽 켜기'}
+            </button>
+          </div>
+
+          {!completedPolygon ? (
+            <div className="p-2 rounded bg-amber-950/30 border border-amber-800/40 text-[10px] text-amber-300/90 leading-tight">
+              ⚠️ 부지 구역을 먼저 지정(드로잉/스탬프)하면 외곽선에 맞춰 3D 보안벽이 자동 생성됩니다.
+            </div>
+          ) : securityWall.enabled ? (
+            <div className="space-y-2.5 pt-1 border-t border-[#342e1d]">
+              {/* 벽 높이 슬라이더 */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">장벽 높이 (Height)</span>
+                  <span className="font-mono font-bold text-amber-300">
+                    {securityWall.heightMeters} m
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={3}
+                  max={15}
+                  step={1}
+                  value={securityWall.heightMeters}
+                  onChange={(e) =>
+                    setSecurityWall({
+                      heightMeters: parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-400"
+                />
+                <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                  <span>3m</span>
+                  <span>6m (표준)</span>
+                  <span>10m</span>
+                  <span>15m</span>
+                </div>
+              </div>
+
+              {/* 펄스 속도 슬라이더 */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400">네온 펄스 속도</span>
+                  <span className="font-mono font-bold text-amber-300">
+                    {securityWall.pulseSpeed.toFixed(1)}x
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1.0}
+                  step={0.1}
+                  value={securityWall.pulseSpeed}
+                  onChange={(e) =>
+                    setSecurityWall({
+                      pulseSpeed: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-400"
+                />
+              </div>
+
+              {/* 색상 선택 */}
+              <div className="flex items-center justify-between text-[10.5px]">
+                <span className="text-slate-400">장벽 테마 색상</span>
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { label: '황색', color: '#F59E0B' },
+                    { label: '시안', color: '#06B6D4' },
+                    { label: '그린', color: '#10B981' },
+                    { label: '레드', color: '#EF4444' },
+                  ].map((item) => (
+                    <button
+                      key={item.color}
+                      type="button"
+                      onClick={() => setSecurityWall({ color: item.color })}
+                      style={{ backgroundColor: item.color }}
+                      className={`w-4 h-4 rounded-full border transition-transform ${
+                        securityWall.color === item.color
+                          ? 'ring-2 ring-white scale-110 border-white'
+                          : 'border-transparent opacity-70 hover:opacity-100'
+                      }`}
+                      title={item.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-amber-200/80 bg-amber-950/40 p-2 rounded border border-amber-800/30 leading-relaxed">
+                💡 동적 사선 군사 스트라이프(`/ / / /`)와 상향 펄스 그라데이션 및 상단 네온 라인이 지형 요철에 완벽히 밀착 밀봉됩니다.
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* 3) 정밀 3D 가시선 (Line of Sight, LOS) 광선 분석 */}
+        <div className="p-3 rounded-xl bg-[#0f1d22] border border-cyan-500/40 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300">
+                <Target className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 가시선 (LOS) 광선 추적
+                </span>
+                <span className="text-[10px] text-cyan-300/80 block">
+                  초소 A ↔ 목표 B 지형 차폐 물리 연산
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={losAnalysis.isActive ? resetLosAnalysis : startLosAnalysis}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                losAnalysis.isActive
+                  ? 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-900/40'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {losAnalysis.isActive ? '분석 중 (ESC)' : 'LOS 분석 시작'}
+            </button>
+          </div>
+
+          <div className="space-y-2 text-[10.5px]">
+            {/* 상태 단계 안내 */}
+            <div className="p-2 rounded bg-[#13242b] border border-[#1e3945] space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">진행 단계</span>
+                <span className="font-semibold text-cyan-300">
+                  {!losAnalysis.isActive && !losAnalysis.result
+                    ? '대기 상태'
+                    : !losAnalysis.pointA
+                    ? '1단계: 관측점 A 선택 대기'
+                    : !losAnalysis.pointB
+                    ? '2단계: 목표점 B 선택 대기'
+                    : '분석 완료'}
+                </span>
+              </div>
+              <div className="text-[9.5px] text-slate-400 leading-tight">
+                {!losAnalysis.pointA
+                  ? '지도에서 관측점(초소/고지대)을 클릭하면 지표+2.5m 기준 광선이 시작됩니다.'
+                  : !losAnalysis.pointB
+                  ? '지도에서 목표점(접근로/시설)을 클릭하면 140구간 DEM 표고를 대조합니다.'
+                  : '3D 씬에 시계 통과 구간(녹색 실선) 및 차단 구간(붉은 점선/펄스 마커)이 표출 중입니다.'}
+              </div>
+            </div>
+
+            {/* 분석 결과 카드 (결과 있을 시) */}
+            {losAnalysis.result && (
+              <div className="space-y-1.5 pt-1 border-t border-[#1e3945]">
+                <div
+                  className={`p-2 rounded border flex items-center justify-between font-bold text-xs ${
+                    losAnalysis.result.isClear
+                      ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                      : 'bg-rose-950/60 border-rose-500/60 text-rose-300'
+                  }`}
+                >
+                  <span>
+                    {losAnalysis.result.isClear ? '✅ 시계 확보 (Clear LOS)' : '⚠️ 시계 차단 (Blocked LOS)'}
+                  </span>
+                  <span className="text-[10px] font-mono">
+                    {losAnalysis.result.samplingCount}개 샘플
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] bg-[#12222a] p-2 rounded border border-[#1b3542] font-mono">
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">직선 거리</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.result.distanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">수평 거리</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.result.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">고도차</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.result.elevationDiffMeters > 0 ? '+' : ''}
+                      {losAnalysis.result.elevationDiffMeters} m
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px]">시점/종점 표고</span>
+                    <span className="text-slate-200 font-bold">
+                      {losAnalysis.pointA?.elevation}m → {losAnalysis.pointB?.elevation}m
+                    </span>
+                  </div>
+                </div>
+
+                {losAnalysis.result.blockedPoint && (
+                  <div className="p-2 rounded bg-rose-950/40 border border-rose-800/40 text-[10px] text-rose-200 space-y-0.5">
+                    <div className="font-bold flex justify-between">
+                      <span>차단 능선 표고</span>
+                      <span className="font-mono">
+                        EL. {losAnalysis.result.blockedPoint.elevation} m
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-300 text-[9.5px]">
+                      <span>A점으로부터 거리</span>
+                      <span className="font-mono">
+                        {losAnalysis.result.blockedPoint.distanceFromA.toLocaleString()} m
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={resetLosAnalysis}
+                  className="w-full py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  LOS 분석 결과 초기화
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 6. 정량 거리 분석 버퍼 링 */}
+      <section className="p-4 border-b border-[#242f27] space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <Disc className="w-4 h-4" />
+            정량 반경 분석 (Buffer Rings)
+          </h2>
+          <span className="text-[10px] text-emerald-400 font-mono">Turf.js</span>
+        </div>
+
+        <div className="space-y-2 text-xs">
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full border border-emerald-400 bg-emerald-500/30 inline-block flex-shrink-0" />
+              <div>
+                <span className="text-slate-200 font-medium">500m 반경</span>
+                <span className="text-[10px] text-slate-400 ml-1.5">(도보권)</span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={bufferRings.r500m}
+                onChange={() => toggleBufferRing('r500m')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full border border-amber-400 bg-amber-500/30 inline-block flex-shrink-0" />
+              <div>
+                <span className="text-slate-200 font-medium">1.0km 반경</span>
+                <span className="text-[10px] text-slate-400 ml-1.5">(기본 생활권)</span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={bufferRings.r1km}
+                onChange={() => toggleBufferRing('r1km')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <span className="w-3 h-3 rounded-full border border-indigo-400 bg-indigo-500/30 inline-block flex-shrink-0" />
+              <div>
+                <span className="text-slate-200 font-medium">2.0km 반경</span>
+                <span className="text-[10px] text-slate-400 ml-1.5">(차량 접근권)</span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={bufferRings.r2km}
+                onChange={() => toggleBufferRing('r2km')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
+            </label>
+          </div>
+        </div>
+      </section>
+        </>
+      )}
+
+      {/* [지형/인프라 탭: 3D 지형 DEM, 토목분석, 공간 인프라 레이어] */}
+      {activeSidebarTab === 'terrain_infra' && (
+        <>
+          {/* 7. 3D 지형(DEM) 및 베이스맵 스타일 원클릭 전환 */}
+          <section className="p-4 border-b border-[#242f27] space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <Mountain className="w-4 h-4" />
+              3D 지형 (DEM) 및 베이스맵
+            </h2>
+
+        <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+          <div className="flex items-center space-x-2">
+            <Mountain className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-medium text-slate-200">
+              Terrarium 3D 지형 활성화
+            </span>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={terrainEnabled}
+              onChange={(e) => handleSetTerrainEnabled(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+          </label>
+        </div>
+
+        {/* [2단계 신규] 국토지리정보원 수치지형도 1:5,000 정밀 등고선 레이어 토글 */}
+        <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+          <div className="flex items-center space-x-2">
+            <Activity className="w-4 h-4 text-amber-400" />
+            <div>
+              <span className="text-xs font-medium text-slate-200 block">
+                수치지형도 정밀 등고선 표시
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                국토지리정보원 1:5,000 주곡선·간곡선 셰이딩
+              </span>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={layers.demContours}
+              onChange={() => handleToggleLayer('demContours')}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+          </label>
+        </div>
+
+        <div className="p-2.5 rounded bg-[#18201b] border border-[#29352c] space-y-1.5">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-slate-300 flex items-center gap-1">
+              <Sliders className="w-3.5 h-3.5 text-slate-400" />
+              지형 고저차 배율 (Exaggeration)
+            </span>
+            <span className="font-mono text-emerald-400 font-bold">
+              {terrainExaggeration.toFixed(1)}x
+            </span>
+          </div>
+          <input
+            type="range"
+            min="1.0"
+            max="2.5"
+            step="0.1"
+            value={terrainExaggeration}
+            onChange={(e) => setTerrainExaggeration(parseFloat(e.target.value))}
+            className="w-full accent-emerald-500 h-1.5 bg-[#253128] rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+
+        {/* 베이스맵 모드 원클릭 전환 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-300">
+              베이스맵 스타일 원클릭 전환
+            </label>
+            <span className="text-[10px] text-emerald-400 font-mono">레이어 100% 보존</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                setBaseMap('satellite');
+              }}
+              className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
+                baseMap === 'satellite'
+                  ? 'bg-[#1b3425] border-emerald-400 text-emerald-300 font-bold shadow-md ring-1 ring-emerald-500/40'
+                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>위성 영상 모드</span>
+              </div>
+              <span className="text-[9.5px] opacity-75 font-normal">국토부 V-World 항공실사</span>
+            </button>
+            <button
+              onClick={() => {
+                setBaseMap('clean');
+              }}
+              className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
+                baseMap === 'clean'
+                  ? 'bg-[#1b3425] border-emerald-400 text-emerald-300 font-bold shadow-md ring-1 ring-emerald-500/40'
+                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                <span>클린 벡터 모드</span>
+              </div>
+              <span className="text-[9.5px] opacity-75 font-normal">보고서 브리핑 전용</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. [신규] 토목·도시계획 지형 분석 도구 (3단 경사도 격자 & 지형 단면 프로파일) */}
+      <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111a14]/60">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            토목·지형 경사도 & 고도 분석
+          </h2>
+          <span className="text-[10px] text-emerald-300 font-mono font-semibold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/60">
+            DEM 지형 쿼리
+          </span>
+        </div>
+
+        {/* [1. 다목적 3D 측정기 (직선거리 · 건물높이 · 다각형 면적/평수 & 치수선)] */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#14231b] to-[#0c1610] border border-amber-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-amber-950 border border-amber-700/60 text-amber-400">
+                <Ruler className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  다목적 3D 측정기 (Ruler & Area)
+                </span>
+                <span className="text-[10px] text-amber-300/80 block">
+                  직선·경사거리 / 건물높이 / 다각형 면적(평)
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={toggleMeasureMode}
+              className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all ${
+                isMeasureMode
+                  ? 'bg-amber-500 border-amber-300 text-slate-950 shadow-md ring-1 ring-amber-400 animate-pulse'
+                  : 'bg-[#121c16] border-amber-800/60 text-amber-300 hover:bg-[#1a2920]'
+              }`}
+            >
+              {isMeasureMode ? '측정 중 (클릭)' : '측정 시작'}
+            </button>
+          </div>
+
+          {/* 측정 서브타입 선택 (거리 / 높이 / 면적) */}
+          <div className="grid grid-cols-3 gap-1 pt-0.5">
+            {[
+              { type: 'distance' as const, label: '3D 거리/경사', desc: '직선·표고차' },
+              { type: 'height' as const, label: '건물 실측고', desc: '지표~옥상' },
+              { type: 'area' as const, label: '다각형 면적', desc: '㎡ 및 평수' },
+            ].map((st) => (
+              <button
+                key={st.type}
+                type="button"
+                onClick={() => setMeasureSubtype(st.type)}
+                className={`py-1.5 px-1 rounded text-center transition-all border flex flex-col items-center gap-0.5 ${
+                  measureSubtype === st.type
+                    ? 'bg-amber-600/30 border-amber-400 text-amber-200 font-bold shadow-sm'
+                    : 'bg-[#142017] border-[#25382a] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span className="text-[10.5px] font-semibold">{st.label}</span>
+                <span className="text-[8.5px] opacity-75">{st.desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* 측정 안내 문구 */}
+          <div className="text-[9.5px] text-amber-200/80 bg-amber-950/30 p-1.5 rounded border border-amber-800/30">
+            {measureSubtype === 'distance' && '💡 지도 위 2개 지점을 클릭하면 3D 경사거리, 2D 수평거리, 표고차(ΔH), 경사도를 즉시 산출합니다.'}
+            {measureSubtype === 'height' && '💡 건물의 지표면 기단부와 옥상 포인트를 클릭하면 실측 건물 높이와 층수를 계산합니다.'}
+            {measureSubtype === 'area' && '💡 다각형의 모서리를 순서대로 3점 이상 클릭하면 면적(㎡/평), 둘레, 포함 건물/필지 수를 집계합니다.'}
+          </div>
+
+          {/* 실시간 측정 결과 카드 */}
+          {measureResult && (
+            <div className="p-2.5 rounded-lg bg-[#0a140e] border border-amber-500/60 space-y-2 animate-fade-in">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                  실측 연산 결과
+                </span>
+                <button
+                  type="button"
+                  onClick={clearMeasure}
+                  className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+                >
+                  초기화
+                </button>
+              </div>
+
+              {measureResult.subtype === 'distance' && (
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="p-1.5 rounded bg-amber-950/40 border border-amber-800/40">
+                    <span className="text-slate-400 block text-[9px]">3D 실측 거리</span>
+                    <span className="font-mono font-bold text-amber-300 text-sm">
+                      {measureResult.directDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-amber-950/40 border border-amber-800/40">
+                    <span className="text-slate-400 block text-[9px]">수평 투영 거리</span>
+                    <span className="font-mono font-bold text-slate-200 text-sm">
+                      {measureResult.horizontalDistanceMeters.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">표고차 (ΔH)</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {measureResult.elevationDeltaMeters} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">평균 경사도</span>
+                    <span className="font-mono font-bold text-emerald-300">
+                      {measureResult.slopeDegrees}° ({measureResult.slopePercent}%)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {measureResult.subtype === 'height' && (
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="col-span-2 p-2 rounded bg-amber-950/50 border border-amber-700/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">실측 건물 높이</span>
+                      <span className="font-mono font-extrabold text-amber-300 text-base">
+                        {measureResult.buildingHeightMeters?.toFixed(1) || measureResult.elevationDeltaMeters} m
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-bold px-2 py-1 rounded bg-amber-900/60 text-amber-200 border border-amber-600">
+                      지상 약 {Math.max(1, Math.round((measureResult.buildingHeightMeters || measureResult.elevationDeltaMeters) / 3.2))}층
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">지표면 표고</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      EL. {measureResult.elevations[0]} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">옥상 표고</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      EL. {measureResult.elevations[1]} m
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {measureResult.subtype === 'area' && (
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="col-span-2 p-2 rounded bg-emerald-950/50 border border-emerald-700/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">구역 실측 면적</span>
+                      <span className="font-mono font-extrabold text-emerald-300 text-base">
+                        {measureResult.areaSqm?.toLocaleString()} ㎡
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-bold px-2 py-1 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-600">
+                      약 {measureResult.areaPyeong?.toLocaleString()} 평
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">외곽 둘레</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {measureResult.perimeterMeters?.toLocaleString()} m
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-[#101b13] border border-[#213524]">
+                    <span className="text-slate-400 block text-[9px]">포함 건물 / 필지</span>
+                    <span className="font-mono font-bold text-cyan-300">
+                      {measureResult.containedBuildings ?? 0}동 / {measureResult.containedParcels ?? 0}필지
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 3단 경사도 분석 격자 오버레이 토글 */}
+        <div className="flex items-center justify-between p-2.5 rounded bg-[#18221b] border border-[#29382e]">
+          <div>
+            <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+              <span>3단 경사도 분석 격자</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              10x10 격자별 지형 경사각 실시간 연산
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showSlopeAnalysis}
+              onChange={handleToggleSlopeAnalysis}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+          </label>
+        </div>
+
+        {/* [3단계: 3D 조망점·가시권 시뮬레이션 토글] */}
+        <div className="flex items-center justify-between p-2.5 rounded bg-[#18221b] border border-[#29382e]">
+          <div>
+            <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5 text-teal-400" />
+              <span>3D 조망점·가시권 시뮬레이션</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              지형+3D건물 차폐 360° 가시(녹색)·차폐(적색) 연산
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={toggleViewshedMode}
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all ${
+              isViewshedMode
+                ? 'bg-teal-500 border-teal-300 text-teal-950 shadow-md ring-1 ring-teal-400 animate-pulse'
+                : 'bg-[#121c16] border-teal-800/60 text-teal-300 hover:bg-[#1a2920]'
+            }`}
+          >
+            {isViewshedMode ? '클릭 측정 중' : '시뮬레이션'}
+          </button>
+        </div>
+
+        {/* [3D 조망점/가시권 실시간 연산 결과 카드] */}
+        {viewshedResult && (
+          <div className="p-2.5 rounded-lg bg-[#0c1c14] border border-teal-500/50 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-teal-300 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+                360° 가시권(Viewshed) 분석 결과
+              </span>
+              <button
+                type="button"
+                onClick={clearViewshed}
+                className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+              >
+                결과 초기화
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+              <div className="p-1.5 rounded bg-[#07130e] border border-teal-800/40">
+                <span className="text-slate-400 block text-[9px]">관측점 표고</span>
+                <span className="font-mono font-bold text-teal-200">
+                  EL. {viewshedResult.elevation}m (+{viewshedResult.observerHeight}m)
+                </span>
+              </div>
+              <div className="p-1.5 rounded bg-[#07130e] border border-teal-800/40">
+                <span className="text-slate-400 block text-[9px]">가시율 (반경 {viewshedResult.radiusMeters}m)</span>
+                <span className="font-mono font-bold text-emerald-400 text-sm">
+                  {viewshedResult.coverageRatio}%
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-[9.5px] text-slate-300 pt-1 border-t border-teal-900/40">
+              <span className="flex items-center gap-1 font-semibold text-emerald-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+                가시 구역: {(viewshedResult.visibleAreaSqm / 1000000).toFixed(2)}㎢
+              </span>
+              <span className="flex items-center gap-1 font-semibold text-rose-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-sm"></span>
+                차폐 구역: {(viewshedResult.hiddenAreaSqm / 1000000).toFixed(2)}㎢
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 3단 경사도 판정 기준 범례 */}
+        <div className="grid grid-cols-3 gap-1.5 text-[9.5px] font-medium text-center">
+          <div className="p-1.5 rounded bg-emerald-950/50 border border-emerald-700/50 text-emerald-300">
+            <div className="font-bold">15° 이하</div>
+            <div className="text-[8.5px] opacity-80">개발 용이 (녹색)</div>
+          </div>
+          <div className="p-1.5 rounded bg-amber-950/50 border border-amber-700/50 text-amber-300">
+            <div className="font-bold">15° ~ 25°</div>
+            <div className="text-[8.5px] opacity-80">완경사지 (황색)</div>
+          </div>
+          <div className="p-1.5 rounded bg-rose-950/50 border border-rose-700/50 text-rose-300">
+            <div className="font-bold">25° 초과</div>
+            <div className="text-[8.5px] opacity-80">급경사 보전 (적색)</div>
+          </div>
+        </div>
+
+        {/* [신규] 강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이터 */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#0e1f2b] to-[#0c1720] border border-sky-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-sky-950 border border-sky-700/60 text-sky-400">
+                <Waves className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  가상 수위·침수 시뮬레이터
+                </span>
+                <span className="text-[10px] text-sky-300/80 block">
+                  저류지 계획 & 홍수 취약구간 3D 분석
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={waterLevel.enabled}
+                onChange={(e) =>
+                  setWaterLevel({ enabled: e.target.checked })
+                }
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
+            </label>
+          </div>
+
+          {waterLevel.enabled && (
+            <div className="space-y-2.5 pt-1 border-t border-sky-900/50 animate-fade-in">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-medium">
+                  수면 해발고도 (Water Surface EL.)
+                </span>
+                <span className="font-extrabold font-mono text-sky-300 text-sm bg-sky-950/80 px-2 py-0.5 rounded border border-sky-700/60">
+                  EL. {waterLevel.elevation} m
+                  <span className="text-[10px] text-sky-400 font-normal ml-1">
+                    (+{waterLevel.relativeRiseMeters ?? Math.max(0, waterLevel.elevation - 80)}m 상승)
+                  </span>
+                </span>
+              </div>
+
+              {/* 고도 조절 슬라이더 (50m ~ 300m, 1m 단위) */}
+              <input
+                type="range"
+                min={50}
+                max={300}
+                step={1}
+                value={waterLevel.elevation}
+                onChange={(e) =>
+                  setWaterLevel({ elevation: parseInt(e.target.value, 10) })
+                }
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
+              />
+
+              <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                <span>하천기준 EL. 70m</span>
+                <span>EL. 175m</span>
+                <span>EL. 300m (홍수 고지대)</span>
+              </div>
+
+              {/* 수위 상승분 퀵 프리셋 버튼 (+1m ~ +30m) */}
+              <div className="grid grid-cols-6 gap-1 pt-0.5">
+                {[
+                  { label: '+1m', el: 81 },
+                  { label: '+3m', el: 83 },
+                  { label: '+5m', el: 85 },
+                  { label: '+10m', el: 90 },
+                  { label: '+20m', el: 100 },
+                  { label: '+30m', el: 110 },
+                ].map((item) => (
+                  <button
+                    key={item.el}
+                    type="button"
+                    onClick={() => setWaterLevel({ elevation: item.el })}
+                    className={`py-1 px-0.5 rounded text-[9px] font-mono font-bold transition-all border text-center ${
+                      waterLevel.elevation === item.el
+                        ? 'bg-sky-600 border-sky-400 text-white shadow-sm'
+                        : 'bg-[#13222d] border-sky-800/40 text-sky-300 hover:bg-[#1a2d3b]'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* [실시간 침수 위험 건물 자동 집계 카드] */}
+              <div className="p-2.5 rounded-lg bg-[#07131b] border border-sky-800/60 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-sky-300 flex items-center gap-1">
+                    <AlertTriangle
+                      className={`w-3.5 h-3.5 ${
+                        waterLevel.floodRiskLevel === '심각'
+                          ? 'text-rose-400'
+                          : waterLevel.floodRiskLevel === '경보'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    />
+                    실시간 침수 위험 건물 자동 집계
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                      waterLevel.floodRiskLevel === '심각'
+                        ? 'bg-rose-950 text-rose-300 border-rose-700'
+                        : waterLevel.floodRiskLevel === '경보'
+                        ? 'bg-amber-950 text-amber-300 border-amber-700'
+                        : waterLevel.floodRiskLevel === '주의'
+                        ? 'bg-yellow-950 text-yellow-300 border-yellow-700'
+                        : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                    }`}
+                  >
+                    {waterLevel.floodRiskLevel || '안전'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                  <div className="p-1.5 rounded bg-sky-950/60 border border-sky-800/40">
+                    <span className="text-slate-400 block text-[9px]">침수 위험 건물 수</span>
+                    <span className="font-mono font-bold text-rose-400 text-sm">
+                      {waterLevel.floodedBuildingCount ?? 0}
+                      <span className="text-[10px] text-slate-300 font-normal">
+                        {' '}
+                        / {waterLevel.totalBuildingCount ?? 1280}동
+                      </span>
+                    </span>
+                  </div>
+                  <div className="p-1.5 rounded bg-sky-950/60 border border-sky-800/40">
+                    <span className="text-slate-400 block text-[9px]">유역 침수율</span>
+                    <span className="font-mono font-bold text-sky-300 text-sm">
+                      {waterLevel.floodRatio ?? 0}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1 text-[9px] text-center font-mono">
+                  <div className="p-1 rounded bg-rose-950/40 border border-rose-900/60 text-rose-300 font-semibold">
+                    심각(≥3m): {waterLevel.criticalCount ?? 0}동
+                  </div>
+                  <div className="p-1 rounded bg-amber-950/40 border border-amber-900/60 text-amber-300 font-semibold">
+                    경보(1~3m): {waterLevel.alertCount ?? 0}동
+                  </div>
+                  <div className="p-1 rounded bg-yellow-950/40 border border-yellow-900/60 text-yellow-300 font-semibold">
+                    주의(&lt;1m): {waterLevel.warningCount ?? 0}동
+                  </div>
+                </div>
+
+                <div className="text-[9.5px] text-sky-200/90 bg-sky-950/40 p-1.5 rounded border border-sky-800/30 flex items-center justify-between">
+                  <span className="text-slate-400">🌊 취약 하천 유역:</span>
+                  <span className="font-bold text-sky-300">
+                    {waterLevel.primaryBasin || '원주천 및 섬강 유역 저지대'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[9.5px] text-sky-200/80 bg-sky-950/30 p-1.5 rounded border border-sky-800/30 leading-relaxed">
+                💡 실시간 3D 심도 버퍼로 표고 이하의 저지대 지형에 반투명 에메랄드 블루(#0284C7) 수면 메쉬가 실시간 렌더링됩니다.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* [신규] 3D 토공량(절토·성토 Cut & Fill) 계산기 */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#14231b] to-[#0d1812] border border-emerald-500/50 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="p-1 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-400">
+                <Boxes className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  3D 토공량(Cut & Fill) 계산기
+                </span>
+                <span className="text-[10px] text-emerald-300/80 block">
+                  정밀 격자 표고 샘플링 & 덤프트럭 환산
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cutFill.enabled}
+                onChange={toggleCutFill}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {cutFill.enabled && (
+            <div className="space-y-2.5 pt-1 border-t border-emerald-900/50 animate-fade-in">
+              {/* 분석 대상 부지 표시 */}
+              <div className="flex items-center justify-between text-[10.5px] p-2 rounded bg-[#09150e] border border-emerald-900/60">
+                <span className="text-slate-400">분석 대상 부지:</span>
+                <span className="font-bold text-emerald-300">
+                  {completedPolygon
+                    ? `사용자 드로잉 부지 (${(polygonArea?.sqm || 0).toLocaleString()}㎡)`
+                    : '원주 1군지사 이전부지 (310,000㎡)'}
+                </span>
+              </div>
+
+              {/* 정밀 격자 크기 선택 (5m vs 10m) */}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-medium text-[11px]">샘플링 격자 해상도</span>
+                <div className="flex items-center gap-1">
+                  {([10, 5] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setCutFillGridSize(sz)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                        cutFill.gridSizeMeters === sz
+                          ? 'bg-emerald-600 border-emerald-400 text-white shadow-sm'
+                          : 'bg-[#0f1d15] border-emerald-800/40 text-emerald-300 hover:bg-[#152a1e]'
+                      }`}
+                    >
+                      {sz}m x {sz}m {sz === 5 ? '(초정밀)' : '(표준)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 계획 정지 표고 슬라이더 및 수치 */}
+              {cutFill.result && (
+                <div className="space-y-2 bg-[#09150e] p-2.5 rounded-lg border border-[#1a3324]">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-semibold text-[11px]">
+                      계획 정지 표고 (Target EL.)
+                    </span>
+                    <span className="font-extrabold font-mono text-emerald-300 text-sm bg-emerald-950/90 px-2 py-0.5 rounded border border-emerald-700/60">
+                      EL. {cutFill.result.targetElevation} m
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min={Math.floor(cutFill.result.minElevation - 10)}
+                    max={Math.ceil(cutFill.result.maxElevation + 10)}
+                    step={1}
+                    value={cutFill.result.targetElevation}
+                    onChange={(e) => setCutFillTargetElevation(parseInt(e.target.value, 10))}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                  />
+
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>최저 EL. {cutFill.result.minElevation}m</span>
+                    <span>평균 EL. {cutFill.result.avgElevation}m</span>
+                    <span>최고 EL. {cutFill.result.maxElevation}m</span>
+                  </div>
+
+                  {/* 제로 밸런스 버튼 */}
+                  <button
+                    type="button"
+                    onClick={() => setCutFillTargetElevation(Math.round(cutFill.result!.zeroBalanceElevation))}
+                    className="w-full py-1.5 px-2 rounded-lg bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 font-bold text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-sm group"
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-400 group-hover:rotate-12 transition-transform" />
+                    <span>⚡ 토량 평형고(Zero Balance: EL. {Math.round(cutFill.result.zeroBalanceElevation)}m) 자동 맞춤</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 실시간 절토/성토 요약 및 덤프트럭 지표 */}
+              {cutFill.result && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                    <div className="p-2 rounded bg-rose-950/40 border border-rose-800/40 space-y-0.5">
+                      <div className="text-rose-300 font-bold flex items-center gap-1">
+                        <ArrowDown className="w-3 h-3 text-rose-400" />
+                        <span>절토 {cutFill.result.totalCutVolumeM3.toLocaleString()}㎥</span>
+                      </div>
+                      <div className="text-[9.5px] text-rose-200/80 font-mono flex items-center gap-1">
+                        <Truck className="w-2.5 h-2.5 text-rose-400" />
+                        <span>15t 덤프 {cutFill.result.dumpTruck15tCutCount.toLocaleString()}대 반출</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded bg-blue-950/40 border border-blue-800/40 space-y-0.5">
+                      <div className="text-blue-300 font-bold flex items-center gap-1">
+                        <ArrowUp className="w-3 h-3 text-blue-400" />
+                        <span>성토 {cutFill.result.totalFillVolumeM3.toLocaleString()}㎥</span>
+                      </div>
+                      <div className="text-[9.5px] text-blue-200/80 font-mono flex items-center gap-1">
+                        <Truck className="w-2.5 h-2.5 text-blue-400" />
+                        <span>15t 덤프 {cutFill.result.dumpTruck15tFillCount.toLocaleString()}대 반입</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2 rounded bg-[#0b1610] border border-emerald-800/40 flex items-center justify-between text-[10.5px]">
+                    <span className="text-slate-300 font-semibold flex items-center gap-1">
+                      <Scale className="w-3 h-3 text-amber-400" />
+                      순 토공량
+                    </span>
+                    <span className="font-mono font-extrabold text-slate-100">
+                      {Math.abs(cutFill.result.netVolumeM3).toLocaleString()} ㎥{' '}
+                      <span className="text-[9.5px] font-normal text-emerald-400">
+                        ({cutFill.result.netVolumeM3 >= 0 ? '반출' : '반입'} {cutFill.result.dumpTruck15tNetCount.toLocaleString()}대)
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* 25.5톤 덤프트럭 환산 및 추정 토목공사비 산출 */}
+                  <div className="grid grid-cols-2 gap-1.5 text-[9.5px] font-mono bg-[#09150e] p-1.5 rounded border border-[#1b3022]">
+                    <div className="text-rose-300">
+                      25.5t 덤프: {Math.ceil(cutFill.result.totalCutVolumeM3 / 15).toLocaleString()}대 반출
+                    </div>
+                    <div className="text-blue-300">
+                      25.5t 덤프: {Math.ceil(cutFill.result.totalFillVolumeM3 / 15).toLocaleString()}대 반입
+                    </div>
+                  </div>
+
+                  {cutFill.result.estimatedCivilCost && (
+                    <div className="p-2 rounded bg-[#0a140f] border border-emerald-700/60 space-y-1.5 text-[10px]">
+                      <div className="flex items-center justify-between text-emerald-300 font-bold">
+                        <span className="flex items-center gap-1">
+                          <Scale className="w-3 h-3 text-emerald-400" />
+                          추정 토목공사비 산출
+                        </span>
+                        <span className="font-mono text-xs font-extrabold text-amber-300">
+                          {Math.round(cutFill.result.estimatedCivilCost.totalCostKrw / 10000).toLocaleString()} 만원
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 text-[9px] text-slate-400 font-mono">
+                        <div className="flex justify-between">
+                          <span>• 절토 공사비(8,500원/㎥):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.cutCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• 성토 및 다짐비(9,500원/㎥):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.fillCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• 덤프 사토 운반비(12만원/대):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.transportCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>• 부지 정지비(4,000원/㎡):</span>
+                          <span className="text-slate-200">{Math.round(cutFill.result.estimatedCivilCost.siteGradingCostKrw / 10000).toLocaleString()}만원</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 지형 고도 단면 프로파일 모달 열기 버튼 */}
+        <button
+          type="button"
+          onClick={() => setShowTerrainProfile(true)}
+          className="w-full py-2 px-3 rounded-lg bg-[#1a291f] hover:bg-[#223629] border border-emerald-600/50 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm"
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          <span>지형 횡단 고도 프로파일 & 통계 모달 열기</span>
+        </button>
+      </section>
+
+      {/* 9. 공간 데이터 레이어 스위치 */}
+      <section className="p-4 border-b border-[#242f27] space-y-2.5">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+          <Layers className="w-4 h-4" />
+          공간 인프라 레이어
+        </h2>
+
+        <div className="space-y-1.5 text-xs">
+          {/* [2단계 신규: 브이월드 실사 3D 타일 스트리밍 (XDO)] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              브이월드 실사 3D 스트리밍 (XDO)
+            </span>
+            <div className="flex items-center gap-2">
+              {vworldTileStats && vworldTileStats.loadedTiles > 0 && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono">
+                  {vworldTileStats.loadedTiles}타일 (L{vworldTileStats.currentLevel})
+                </span>
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.vworld3DReal}
+                  onChange={() => handleToggleLayer('vworld3DReal')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-600"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* [3단계 신규: 브이월드 전국 실사 3D 교량 (facility_bridge)] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Boxes className="w-3.5 h-3.5 text-blue-400" />
+              브이월드 실사 3D 교량 (Bridge)
+            </span>
+            <div className="flex items-center gap-2">
+              {vworldTileStats && vworldTileStats.loadedBridges > 0 && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono">
+                  {vworldTileStats.loadedBridges}교량
+                </span>
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.vworld3DBridges}
+                  onChange={() => handleToggleLayer('vworld3DBridges')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* [3단계 신규: 브이월드 3D DEM 지형 표고 격자] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Mountain className="w-3.5 h-3.5 text-emerald-400" />
+              브이월드 3D DEM 지형 격자
+            </span>
+            <div className="flex items-center gap-2">
+              {vworldTileStats && vworldTileStats.loadedDemTiles > 0 && (
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono">
+                  {vworldTileStats.loadedDemTiles}격자
+                </span>
+              )}
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.vworldDemTerrain}
+                  onChange={() => handleToggleLayer('vworldDemTerrain')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Building className="w-3.5 h-3.5 text-blue-400" />
+              건축물 3D 돌출 (Extrusion)
+            </span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.buildings3D}
+                onChange={() => handleToggleLayer('buildings3D')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          {/* [3단계: V-World 3D 건물 표현 테마 스타일러] */}
+          {layers.buildings3D && (
+            <div className="p-2.5 rounded-lg bg-[#142018] border border-[#233b2a] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                  V-World 3D 건물 표현 테마
+                </span>
+                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800/60 font-mono">
+                  {buildingTheme === 'photorealistic' ? '실사 포토' : buildingTheme === 'landuse' ? '용도별 색상' : '층수·높이 스펙트럼'}
+                </span>
+              </div>
+
+              {/* 3대 테마 버튼 */}
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setBuildingTheme('photorealistic')}
+                  className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center space-y-0.5 border ${
+                    buildingTheme === 'photorealistic'
+                      ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200 font-bold shadow-md shadow-emerald-950/60 ring-1 ring-emerald-500/40'
+                      : 'bg-[#18231c] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#203126]'
+                  }`}
+                >
+                  <span className="text-[11px]">실사 포토</span>
+                  <span className="text-[9px] opacity-75">창문+지붕</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuildingTheme('landuse')}
+                  className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center space-y-0.5 border ${
+                    buildingTheme === 'landuse'
+                      ? 'bg-amber-600/30 border-amber-400 text-amber-200 font-bold shadow-md shadow-amber-950/60 ring-1 ring-amber-500/40'
+                      : 'bg-[#18231c] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#203126]'
+                  }`}
+                >
+                  <span className="text-[11px]">용도별 색상</span>
+                  <span className="text-[9px] opacity-75">주거/상업/공업</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuildingTheme('height_spectrum')}
+                  className={`p-2 rounded-lg text-center transition-all flex flex-col items-center justify-center space-y-0.5 border ${
+                    buildingTheme === 'height_spectrum'
+                      ? 'bg-cyan-600/30 border-cyan-400 text-cyan-200 font-bold shadow-md shadow-cyan-950/60 ring-1 ring-cyan-500/40'
+                      : 'bg-[#18231c] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#203126]'
+                  }`}
+                >
+                  <span className="text-[11px]">층수·높이</span>
+                  <span className="text-[9px] opacity-75">저층→초고층</span>
+                </button>
+              </div>
+
+              {/* 테마별 색상 가이드 범례 */}
+              {buildingTheme === 'landuse' && (
+                <div className="grid grid-cols-2 gap-1 pt-1 border-t border-[#1d2f23] text-[9.5px]">
+                  <span className="flex items-center gap-1.5 text-amber-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#F59E0B]" />
+                    주거 (아파트/주택)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-red-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#EF4444]" />
+                    상업·업무시설
+                  </span>
+                  <span className="flex items-center gap-1.5 text-purple-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#A855F7]" />
+                    공업·제조물류
+                  </span>
+                  <span className="flex items-center gap-1.5 text-blue-300">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-[#3B82F6]" />
+                    공공청사·군사시설
+                  </span>
+                </div>
+              )}
+
+              {buildingTheme === 'height_spectrum' && (
+                <div className="space-y-1 pt-1 border-t border-[#1d2f23] text-[9.5px]">
+                  <div className="h-2 rounded-full w-full bg-gradient-to-r from-[#06B6D4] via-[#10B981] via-[#F59E0B] via-[#F97316] to-[#EF4444]" />
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>저층 (4m)</span>
+                    <span>중층 (22m)</span>
+                    <span>고층 (55m)</span>
+                    <span>초고층 (75m+)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* [1단계 신규] 디지털 트윈 SSAO 앰비언트 오클루전 & 정밀 조명 후처리 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <div>
+                <span className="text-slate-200 font-medium">SSAO & 블룸 조명 후처리</span>
+                <span className="text-[10px] text-indigo-400/90 ml-1.5 font-mono">
+                  (디지털 트윈)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.ssaoPostProcessing}
+                onChange={() => handleToggleLayer('ssaoPostProcessing')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
+            </label>
+          </div>
+
+          {/* [2단계 신규] 1군지사 미래 개발 구상안(3D 입체) 토글 스위치 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-emerald-500/40">
+            <div className="flex items-center space-x-2">
+              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+              <div>
+                <span className="text-slate-200 font-medium">1군지사 미래 개발 구상안(3D 입체)</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                  (스마트 복합단지)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.firstLogisticsSmartCity}
+                onChange={() => {
+                  const nextVal = !layers.firstLogisticsSmartCity;
+                  startTransition(() => {
+                    requestAnimationFrame(() => {
+                      toggleLayer('firstLogisticsSmartCity');
+                      if (nextVal) {
+                        selectIdleSite('first-logistics-wonju');
+                        setPolygonStyle('emerald');
+                      } else {
+                        setPolygonStyle('blue');
+                      }
+                    });
+                  });
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          {/* 강원 18개 시·군 군 유휴부지 경계 및 3D 배지 토글 스위치 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-emerald-500/40">
+            <div className="flex items-center space-x-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <div>
+                <span className="text-slate-200 font-medium">강원 18개 시·군 군 유휴부지 경계선</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                  (전역 18개 거점)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.militarySites !== false}
+                onChange={() => handleToggleLayer('militarySites')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          {/* [4단계 신규] 🌲 3D 식생·가로수 표시 토글 스위치 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-emerald-500/40">
+            <div className="flex items-center space-x-2">
+              <span className="text-emerald-400 text-sm">🌲</span>
+              <div>
+                <span className="text-slate-200 font-medium">3D 식생·가로수 표시</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                  (1,000+ 그루 Instanced)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.proceduralTrees}
+                onChange={() => handleToggleLayer('proceduralTrees')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          {/* [V-World API 연결 상태 실시간 진단 카드] */}
+          <div className="p-2.5 rounded-lg bg-[#111713] border border-[#243328] space-y-2 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span
+                  className="w-2 h-2 rounded-full inline-block animate-pulse"
+                  style={{
+                    backgroundColor:
+                      vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
+                        ? '#10B981'
+                        : vworldDiagnostic.status === 'error'
+                        ? '#EF4444'
+                        : '#F59E0B',
+                  }}
+                />
+                3D 건축물 공간정보 소스
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
+                    ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                }`}
+              >
+                {vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected' ? '정밀 공간정보' : '오픈 벡터 타일'}
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-400 leading-tight">
+              {vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
+                ? `실시간 정밀 건축물 데이터 연동 가동 중 (${vworldDiagnostic.featureCount.toLocaleString()}건 로드)`
+                : '국토부 브이월드 또는 오픈 벡터 타일을 통해 3D 건물이 렌더링됩니다.'}
+            </p>
+          </div>
+
+          {/* [국토교통부 공공데이터포털(건축HUB & 전국 교량·터널) 실시간 연동 진단 카드] */}
+          <div className="p-2.5 rounded-lg bg-[#111713] border border-[#243328] space-y-2 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span
+                  className="w-2 h-2 rounded-full inline-block animate-pulse"
+                  style={{
+                    backgroundColor: molitDiagnostic.hasApiKey ? '#10B981' : '#F59E0B',
+                  }}
+                />
+                국토교통부 공공데이터포털
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  molitDiagnostic.hasApiKey
+                    ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
+                    : 'bg-amber-950/80 border-amber-600/80 text-amber-300'
+                }`}
+              >
+                {molitDiagnostic.hasApiKey ? '실시간 Live API' : '검증 프리셋 가동'}
+              </span>
+            </div>
+
+            <div className="space-y-1 text-[10px] text-slate-400">
+              <div className="flex items-center justify-between">
+                <span>• 건축HUB 표제부 (층수·구조·지붕):</span>
+                <span className="font-mono text-slate-300">
+                  {molitDiagnostic.hasApiKey ? '실시간 쿼리 연동' : '원주권 검증 프리셋'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• 전국 교량 및 터널 (교통 DB):</span>
+                <span className="font-mono text-cyan-400">
+                  {molitDiagnostic.bridgeTunnelCount > 0
+                    ? `강원권 ${molitDiagnostic.bridgeTunnelCount}개소 입체 표출`
+                    : '연동 완료'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-500 leading-tight">
+              {molitDiagnostic.hasApiKey
+                ? '공공데이터포털 승인 API 키가 정상 등록되어 실시간 표제부 및 교통 시설물이 반영됩니다.'
+                : '키 미입력 시 강원권 실측 검증 프리셋(원주천교, 치악교, 백운터널 등)이 자동 표출됩니다.'}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <span className="flex items-center gap-2 text-slate-300 font-medium">
+              <Route className="w-3.5 h-3.5 text-amber-400" />
+              도로망 위계화 (주간선/보조)
+            </span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.roads}
+                onChange={() => handleToggleLayer('roads')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          {/* [공공데이터포털] 전국 교량 및 터널 현황정보 3D 마커 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <span className="text-cyan-400 text-xs">🌉</span>
+              <div>
+                <span className="text-slate-200 font-medium">교량·터널 현황 (국토부)</span>
+                <span className="text-[10px] text-cyan-400/90 ml-1.5 font-mono">
+                  (원주천교·백운터널 등)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.bridgeTunnel}
+                onChange={() => handleToggleLayer('bridgeTunnel')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+            </label>
+          </div>
+
+          {/* [Phase 2 고도화] 브이월드 연속지적도(필지선) 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <Grid className="w-3.5 h-3.5 text-amber-400" />
+              <div>
+                <span className="text-slate-200 font-medium">지적도 (필지선) 표시</span>
+                <span className="text-[10px] text-amber-400/90 ml-1.5 font-mono">
+                  (브이월드 & 로컬)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={layers.cadastral}
+                onChange={() => handleToggleLayer('cadastral')}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          {/* [Phase 2 신규] 브이월드 국토계획법 용도지역지구 토글 */}
+          <div className="space-y-1.5 p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Palette className="w-3.5 h-3.5 text-emerald-400" />
+                <div>
+                  <span className="text-slate-200 font-medium">용도지역지구 (국토계획법)</span>
+                  <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                    (주거·상업·공업·녹지)
+                  </span>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={layers.zoning}
+                  onChange={() => handleToggleLayer('zoning')}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+              </label>
+            </div>
+            {layers.zoning && (
+              <div className="grid grid-cols-4 gap-1 pt-1 border-t border-[#29352c] text-[9px] text-center font-bold">
+                <div className="p-1 rounded bg-[#fbbf24]/20 border border-[#fbbf24]/50 text-[#fbbf24]">
+                  주거지역
+                </div>
+                <div className="p-1 rounded bg-[#ef4444]/20 border border-[#ef4444]/50 text-[#ef4444]">
+                  상업지역
+                </div>
+                <div className="p-1 rounded bg-[#a855f7]/20 border border-[#a855f7]/50 text-[#a855f7]">
+                  공업지역
+                </div>
+                <div className="p-1 rounded bg-[#22c55e]/20 border border-[#22c55e]/50 text-[#22c55e]">
+                  녹지지역
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* [접경 안보 관제] 군사분계선/민통선 표시 수동 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+              <div>
+                <span className="text-slate-200 font-medium">군사분계선 / 민통선 표시</span>
+                <span className="text-[10px] text-rose-400/90 ml-1.5 font-mono">
+                  {isBorderDistrict ? '(접경 권역 자동 On)' : '(수동 제어)'}
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={borderSecurityVisible}
+                onChange={(e) => {
+                  setBorderSecurityVisible(e.target.checked);
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-rose-600"></div>
+            </label>
+          </div>
+
+          {/* [교통 접근성 분석] 16:9 정량 분석표 표시 토글 */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
+            <div className="flex items-center space-x-2">
+              <Car className="w-3.5 h-3.5 text-emerald-400" />
+              <div>
+                <span className="text-slate-200 font-medium">교통·인프라 접근성 분석표</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+                  (16:9 슬라이드)
+                </span>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAccessibilityTable}
+                onChange={toggleAccessibilityTable}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+
+          {/* [V-World 실사 3D 마스터 렌더러 파이프라인 상태] */}
+          <div className="p-3 rounded-xl bg-gradient-to-b from-[#0f231a] to-[#0a1711] border border-emerald-500/50 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded bg-emerald-950 border border-emerald-700/60 text-emerald-400">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </span>
+                <div>
+                  <span className="text-xs font-bold text-slate-100 block">
+                    V-World 실사 3D 마스터 파이프라인
+                  </span>
+                  <span className="text-[10px] text-emerald-300/80 block">
+                    건축물대장 + 브이월드 LT_C_SPBD + 실사 포토 아틀라스
+                  </span>
+                </div>
+              </div>
+              <span className="text-[9.5px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-600/70">
+                100% 가동
+              </span>
+            </div>
+            <div className="text-[10.5px] text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-emerald-900/40 leading-relaxed">
+              화면 내 모든 건물(원주 반곡동 혁신도시·단구동·무실동·우산동 등)이 실제 높이(최소 7.5m ~ 최대 75m)로 일제히 입체 렌더링되고 있습니다.
+            </div>
+          </div>
+        </div>
+      </section>
+        </>
+      )}
+
+      {/* [부지정보/접근성 탭: 보고서 메타데이터 설정] */}
+      {activeSidebarTab === 'site_access' && (
+        <>
+          {/* 9. 보고서 메타데이터 인라인 편집 */}
+          <section className="p-4 space-y-3 pb-8">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <FileText className="w-4 h-4" />
+              보고서 메타데이터 설정
+            </h2>
+
+        <div className="space-y-2 text-xs">
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">
+              보고서 제목
+            </label>
+            <input
+              type="text"
+              value={metadata.title}
+              onChange={(e) => updateMetadata({ title: e.target.value })}
+              className="w-full bg-[#18201b] border border-[#29352c] rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">
+              부제 / 세부 대상지
+            </label>
+            <input
+              type="text"
+              value={metadata.subtitle}
+              onChange={(e) => updateMetadata({ subtitle: e.target.value })}
+              className="w-full bg-[#18201b] border border-[#29352c] rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1">
+                작성 부서
+              </label>
+              <input
+                type="text"
+                value={metadata.department}
+                onChange={(e) => updateMetadata({ department: e.target.value })}
+                className="w-full bg-[#18201b] border border-[#29352c] rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1">
+                기준 일자
+              </label>
+              <input
+                type="text"
+                value={metadata.date}
+                onChange={(e) => updateMetadata({ date: e.target.value })}
+                className="w-full bg-[#18201b] border border-[#29352c] rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+        </>
+      )}
+
+      {/* 정밀 좌표 텍스트 입력 모달 */}
+      <CoordinateInputModal
+        isOpen={isCoordModalOpen}
+        onClose={() => setIsCoordModalOpen(false)}
+      />
+
+      {/* 3D Tiles 커스텀 URL 및 샘플 테스트 슬롯 모달 */}
+      <Custom3DTilesModal
+        isOpen={isCustom3DTilesModalOpen}
+        onClose={() => setCustom3DTilesModalOpen(false)}
+      />
+    </aside>
   );
 };
