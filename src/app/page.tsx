@@ -137,7 +137,7 @@ export default function Home() {
           className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden border-r border-[#1e2a22] backdrop-blur-xl bg-[#0a0f0c]/90 shadow-2xl relative z-20 ${
             isPresentationMode || isSidebarCollapsed
               ? 'w-0 opacity-0 pointer-events-none'
-              : 'w-[280px] opacity-100'
+              : 'w-[310px] opacity-100'
           }`}
         >
           <ControlPanel />

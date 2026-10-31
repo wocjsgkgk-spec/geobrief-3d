@@ -521,6 +521,7 @@ interface MapStoreState {
   addPlacedFacility: (presetId: FacilityPresetId, coords?: [number, number], elevation?: number) => string;
   removePlacedFacility: (id: string) => void;
   clearAllPlacedFacilities: () => void;
+  clearPlacedFacilities: () => void;
   selectFacility: (id: string | null) => void;
   updateFacilityTransform: (
     id: string,
@@ -540,6 +541,11 @@ interface MapStoreState {
   // [신규] 좌측 분석 패널 3단 탭
   activeSidebarTab: SidebarTab;
   setActiveSidebarTab: (tab: SidebarTab) => void;
+
+  // 우측 하단 접이식 도면 범례(LegendBox) 표시 여부
+  showLegendBox: boolean;
+  setShowLegendBox: (val: boolean) => void;
+  toggleLegendBox: () => void;
 
   // [신규] 3D 타일셋 커스텀 URL 직접 입력 및 테스트 모달 상태
   isCustom3DTilesModalOpen: boolean;
@@ -1657,6 +1663,11 @@ export const useMapStore = create<MapStoreState>()(
       activeSidebarTab: 'terrain_infra',
       setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
 
+      // 우측 하단 접이식 도면 범례(LegendBox)
+      showLegendBox: true,
+      setShowLegendBox: (val) => set({ showLegendBox: val }),
+      toggleLegendBox: () => set((s) => ({ showLegendBox: !s.showLegendBox })),
+
       // [신규] 3D 타일셋 커스텀 URL 직접 입력 및 테스트 모달 상태
       isCustom3DTilesModalOpen: false,
       setCustom3DTilesModalOpen: (open) => set({ isCustom3DTilesModalOpen: open }),
@@ -1695,6 +1706,12 @@ export const useMapStore = create<MapStoreState>()(
         })),
 
       clearAllPlacedFacilities: () =>
+        set({
+          placedFacilities: [],
+          selectedFacilityId: null,
+        }),
+
+      clearPlacedFacilities: () =>
         set({
           placedFacilities: [],
           selectedFacilityId: null,

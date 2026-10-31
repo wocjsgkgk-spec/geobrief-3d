@@ -910,6 +910,7 @@ export const MapViewer: React.FC = () => {
     toggleStreetView,
     isSunPlaying,
     toggleSunPlaying,
+    showLegendBox,
   } = useMapStore();
 
   // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화 엔진]
@@ -7779,6 +7780,9 @@ export const MapViewer: React.FC = () => {
           onStopFlight={handleStopFlight}
           onStopRecording={handleStopRecording}
         />
+
+        {/* [우측 하단] 보고서 도면 범례 (Legend) */}
+        {showLegendBox && <LegendBox />}
 
         {/* 16:9 규격 워터마크 태그 */}
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-10">
