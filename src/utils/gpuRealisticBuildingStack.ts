@@ -611,17 +611,33 @@ export function setGpuBuildingLayersVisibility(
     map.setLayoutProperty('real-bldg-ground-ao', 'visibility', aoVis);
   }
 
-  // 3D 입체 익스트루전 슬라이스 레이어들 가시성 제어
+  // 3D 입체 익스트루전 슬라이스 레이어들 가시성 제어 (중복 겹침 및 Z-Fighting 원천 차단)
   const extrusionLayers = [
     'bldg-tier1-podium',
     'bldg-tier2-mainwall',
     'bldg-tier3-pattern',
     'bldg-tier4-roofcap',
     'bldg-tier5-roofdetail',
+    'real-bldg-tier1-podium',
+    'real-bldg-tier2-mainwall',
+    'real-bldg-tier3-pattern',
+    'real-bldg-tier4-roofcap',
+    'real-bldg-tier5-roofdetail',
+    'fusion-bldg-tier1-podium',
+    'fusion-bldg-tier2-mainwall',
+    'fusion-bldg-tier3-pattern',
+    'fusion-bldg-tier4-roofcap',
+    'fusion-bldg-tier5-roofdetail',
     '3d-buildings',
     '3d-buildings-roof',
+    'buildings-extrusion',
     'fusion-buildings-3d',
     'fusion-buildings-roof',
+    'fusion-buildings-extrusion',
+    'real-buildings-3d',
+    'real-buildings-roof',
+    'vworld-3d-buildings-extrusion',
+    'sample-buildings-extrusion',
   ];
 
   extrusionLayers.forEach((id) => {

@@ -290,29 +290,19 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] GPU 다층 슬라이스 및 3D 볼륨 승격
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
-    'bldg-tier1-podium',
-    'bldg-tier2-mainwall',
-    'bldg-tier3-pattern',
-    'bldg-tier4-roofcap',
-    'real-bldg-tier1-podium',
-    'real-bldg-tier2-mainwall',
-    'real-bldg-tier3-pattern',
-    'real-bldg-tier4-roofcap',
-    'fusion-bldg-tier1-podium',
-    'fusion-bldg-tier2-mainwall',
-    'fusion-bldg-tier3-pattern',
-    'fusion-bldg-tier4-roofcap',
-    '3d-buildings',
-    'flight-ceiling-slab',
-    'procedural-trees-3d-layer',
-    'lod2-building-engine-layer',
-    'threebox-building-layer',
     'realistic-korean-city-layer',
+    'threebox-building-layer',
+    'lod2-building-engine-layer',
+    'procedural-trees-3d-layer',
+    'building-highlight-fill',
+    'flight-ceiling-slab',
   ];
   for (const id of bldgLayerIds) {
     if (mapInstance.getLayer(id)) {
       try {
-        mapInstance.moveLayer(id);
+        if (mapInstance.getLayoutProperty(id, 'visibility') !== 'none') {
+          mapInstance.moveLayer(id);
+        }
       } catch {}
     }
   }
@@ -1422,6 +1412,24 @@ export const MapViewer: React.FC = () => {
             attribution: 'OpenStreetMap, CartoDB',
             maxzoom: 19,
           },
+          'google-satellite-tiles': {
+            type: 'raster',
+            tiles: [
+              'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+            ],
+            tileSize: 256,
+            attribution: 'Google Hybrid Satellite',
+            maxzoom: 20,
+          },
+          'google-roadmap-tiles': {
+            type: 'raster',
+            tiles: [
+              'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+            ],
+            tileSize: 256,
+            attribution: 'Google Roadmap',
+            maxzoom: 20,
+          },
           'openmaptiles-vector': {
             type: 'vector',
             url: 'https://tiles.openfreemap.org/planet',
@@ -1596,12 +1604,34 @@ export const MapViewer: React.FC = () => {
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
+          // [Google 위성/하이브리드 맵]
+          {
+            id: 'google-satellite-layer',
+            type: 'raster',
+            source: 'google-satellite-tiles',
+            paint: {
+              'raster-opacity': 1.0,
+              'raster-fade-duration': 0,
+            },
+            layout: { visibility: baseMap === 'google-satellite' ? 'visible' : 'none' },
+          },
           // 베이스맵 레이어 (클린 벡터)
           {
             id: 'clean-layer',
             type: 'raster',
             source: 'clean-tiles',
             layout: { visibility: baseMap === 'clean' ? 'visible' : 'none' },
+          },
+          // [Google 로드맵 레이어]
+          {
+            id: 'google-roadmap-layer',
+            type: 'raster',
+            source: 'google-roadmap-tiles',
+            paint: {
+              'raster-opacity': 1.0,
+              'raster-fade-duration': 0,
+            },
+            layout: { visibility: baseMap === 'google-roadmap' ? 'visible' : 'none' },
           },
           // [지형 힐셰이드(Hillshade) 입체 음영 레이어 - 위성 타일 가림 방지를 위해 기본 비활성화]
           {
@@ -4144,6 +4174,7 @@ export const MapViewer: React.FC = () => {
       deck3DTilesManager: deck3DTilesManagerRef.current,
       threeboxLayer: threeboxLayerRef.current,
       placedFacilitiesCount: placedFacilities.length,
+      tile3DStream,
     });
 
     if (bldgVis) {
@@ -4351,18 +4382,66 @@ export const MapViewer: React.FC = () => {
     syncExternalSpatialBuildings(map);
   }, [isMapLoaded, layers.buildings3D, syncExternalSpatialBuildings]);
 
-  // 9. 베이스맵 전환
+  // 9. 베이스맵 전환 (4종 원클릭: 국토부 V-World 항공실사, Google 위성, V-World 클린, Google 로드맵)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const isSatellite = baseMap === 'satellite';
+    const isVworldSatellite = baseMap === 'satellite';
+    const isGoogleSatellite = baseMap === 'google-satellite';
+    const isClean = baseMap === 'clean';
+    const isGoogleRoadmap = baseMap === 'google-roadmap';
+    const isAnySatellite = isVworldSatellite || isGoogleSatellite;
+
+    // 동적 소스/레이어 등록 가드
+    if (!map.getSource('google-satellite-tiles')) {
+      try {
+        map.addSource('google-satellite-tiles', {
+          type: 'raster',
+          tiles: ['https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'],
+          tileSize: 256,
+          maxzoom: 20,
+        });
+      } catch {}
+    }
+    if (!map.getLayer('google-satellite-layer') && map.getSource('google-satellite-tiles')) {
+      try {
+        const beforeId = map.getLayer('satellite-base-layer') ? 'satellite-base-layer' : undefined;
+        map.addLayer({
+          id: 'google-satellite-layer',
+          type: 'raster',
+          source: 'google-satellite-tiles',
+          layout: { visibility: isGoogleSatellite ? 'visible' : 'none' },
+        }, beforeId);
+      } catch {}
+    }
+
+    if (!map.getSource('google-roadmap-tiles')) {
+      try {
+        map.addSource('google-roadmap-tiles', {
+          type: 'raster',
+          tiles: ['https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'],
+          tileSize: 256,
+          maxzoom: 20,
+        });
+      } catch {}
+    }
+    if (!map.getLayer('google-roadmap-layer') && map.getSource('google-roadmap-tiles')) {
+      try {
+        map.addLayer({
+          id: 'google-roadmap-layer',
+          type: 'raster',
+          source: 'google-roadmap-tiles',
+          layout: { visibility: isGoogleRoadmap ? 'visible' : 'none' },
+        });
+      } catch {}
+    }
 
     if (map.getLayer('satellite-base-layer')) {
       map.setLayoutProperty(
         'satellite-base-layer',
         'visibility',
-        isSatellite ? 'visible' : 'none'
+        isVworldSatellite ? 'visible' : 'none'
       );
       map.setPaintProperty('satellite-base-layer', 'raster-saturation', 0.0);
       map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.0);
@@ -4374,19 +4453,33 @@ export const MapViewer: React.FC = () => {
       map.setLayoutProperty(
         'satellite-layer',
         'visibility',
-        isSatellite ? 'visible' : 'none'
+        isVworldSatellite ? 'visible' : 'none'
+      );
+    }
+    if (map.getLayer('google-satellite-layer')) {
+      map.setLayoutProperty(
+        'google-satellite-layer',
+        'visibility',
+        isGoogleSatellite ? 'visible' : 'none'
       );
     }
     if (map.getLayer('clean-layer')) {
       map.setLayoutProperty(
         'clean-layer',
         'visibility',
-        baseMap === 'clean' ? 'visible' : 'none'
+        isClean ? 'visible' : 'none'
+      );
+    }
+    if (map.getLayer('google-roadmap-layer')) {
+      map.setLayoutProperty(
+        'google-roadmap-layer',
+        'visibility',
+        isGoogleRoadmap ? 'visible' : 'none'
       );
     }
 
     // [2단계: 벡터 토지피복 산림/녹지 블렌딩 - 위성 모드 시 완전히 꺼서 원본 위성사진 100% 선명 노출]
-    const landuseVis = isSatellite ? 'none' : 'visible';
+    const landuseVis = isAnySatellite ? 'none' : 'visible';
     for (const lid of KOREAN_LANDUSE_LAYER_IDS) {
       if (map.getLayer(lid)) {
         map.setLayoutProperty(lid, 'visibility', landuseVis);
@@ -4410,7 +4503,7 @@ export const MapViewer: React.FC = () => {
         map.setLayoutProperty(
           lid,
           'visibility',
-          isSatellite ? 'none' : (layers?.roads === false ? 'none' : 'visible')
+          isAnySatellite ? 'none' : (layers?.roads === false ? 'none' : 'visible')
         );
       }
     }
@@ -4671,7 +4764,9 @@ export const MapViewer: React.FC = () => {
   // [브이월드 실사 3D 건물·교량·DEM 통합 스트리밍 레이어 토글 동기화]
   useEffect(() => {
     if (!isMapLoaded || !vworld3DTileLayerRef.current) return;
-    vworld3DTileLayerRef.current.setBuildingsVisible(!!layers.vworld3DReal && !!layers.buildings3D);
+    const hasRealisticBuildings = Boolean(realisticKoreanCityLayerRef.current?.getVisible?.() ?? true);
+    // 실사 Three.js 건물 메쉬 가동 시에는 XDO 합성 더미 건물이 중복 렌더링되지 않도록 상호 배타 가드 적용
+    vworld3DTileLayerRef.current.setBuildingsVisible(!!layers.vworld3DReal && !!layers.buildings3D && !hasRealisticBuildings);
     vworld3DTileLayerRef.current.setBridgesVisible(!!layers.vworld3DBridges && !!layers.buildings3D);
     vworld3DTileLayerRef.current.setDemVisible(!!layers.vworldDemTerrain);
   }, [layers.vworld3DReal, layers.vworld3DBridges, layers.vworldDemTerrain, layers.buildings3D, isMapLoaded]);

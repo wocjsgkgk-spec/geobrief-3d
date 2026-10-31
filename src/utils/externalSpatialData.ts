@@ -323,6 +323,10 @@ out body geom qt;`;
         };
 
         const metrics = calculateGeometryMetrics(geom);
+        // [신규] 보행로/화단/담장 등 세장형 비건물 30m 판돌 압출 원천 필터링 (minWidth >= 5.5m)
+        if (metrics.dimMin < 5.5 || (metrics.dimMin < 7.0 && metrics.aspectRatio > 4.5 && !el.tags.name && !el.tags.buld_nm)) {
+          continue;
+        }
         const skyline = applyKoreanSkylineRules(el.tags, metrics);
 
         const feat: ExternalSpatialBuildingFeature = {

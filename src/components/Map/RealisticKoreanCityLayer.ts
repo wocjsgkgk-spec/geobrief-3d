@@ -219,6 +219,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.tunnelGroup.visible = visible && this.isBridgeTunnelVisible;
   }
 
+  public getVisible(): boolean {
+    return this.isVisible;
+  }
+
   public setBridgeTunnelVisible(visible: boolean): void {
     this.isBridgeTunnelVisible = visible;
     this.bridgeGroup.visible = visible;
@@ -984,15 +988,24 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       const spanX = Math.max(1, maxX - minX);
       const spanZ = Math.max(1, maxZ - minZ);
+      const minWidth = Math.min(spanX, spanZ);
 
-      // [1단계: 마스터 전역 기하 필터] 면적 5,500㎡ 초과 비건물 및 찢어짐 폴리곤 100% 영구 차단
+      // [1단계: 마스터 전역 기하 필터] 면적 4,000㎡ 초과 비건물 및 찢어짐 폴리곤 100% 영구 차단
       const featProps = (feat.properties || {}) as Record<string, any>;
-      if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen)) {
+      if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth)) {
         continue;
       }
 
       // [1단계: 화면 중앙 붉은색/검은색 삼각형 찢어짐(Polygon Tearing) 원천 차단]
       if (maxEdgeLen > 220 || spanX > 260 || spanZ > 260) {
+        continue;
+      }
+
+      // [신규: 아파트 단지 내부 보행로/화단/담장 등 세장형 비건물 30m 갈색 판 돌출 원천 차단]
+      if (minWidth < 5.5) {
+        continue;
+      }
+      if (minWidth < 7.0 && Math.max(spanX, spanZ) / minWidth > 4.5 && !featProps.buld_nm && !featProps.mgmBldrgstPk) {
         continue;
       }
 
@@ -1024,8 +1037,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
         }
       }
-
-      const minWidth = Math.min(spanX, spanZ);
 
       // [1단계: 전 데이터 전수 검증 및 3D 실측 속성 1:1 강제 동기화]
       if (!featProps.realHeight || !featProps.realUse) {

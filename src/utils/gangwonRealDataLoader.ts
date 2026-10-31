@@ -416,6 +416,23 @@ export async function fetchOverpassBulkBuildings(
           ring.push([first[0], first[1]]);
         }
 
+        // [신규] 보행로/화단/담장 등 세장형 비건물 30m 판돌 압출 원천 필터링 (minWidth >= 5.5m)
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const pt of ring) {
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+        const midLat = (minY + maxY) / 2;
+        const spanX = (maxX - minX) * 111320 * Math.cos((midLat * Math.PI) / 180);
+        const spanZ = (maxY - minY) * 111132;
+        const minW = Math.min(spanX, spanZ);
+        const maxSpan = Math.max(spanX, spanZ);
+        if (minW < 5.5 || (minW < 7.0 && maxSpan / Math.max(0.1, minW) > 4.5 && !el.tags.buld_nm && !el.tags.name)) {
+          continue;
+        }
+
         const geom: GeoJSON.Polygon = {
           type: 'Polygon',
           coordinates: [ring],

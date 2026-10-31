@@ -1836,6 +1836,212 @@ export const ControlPanel: React.FC = () => {
             </div>
           </section>
 
+          {/* [고정밀 3D 타일셋(3D Tiles) 스트리밍 & 엔드포인트 설정 카드] */}
+          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0a1820]/70 border-l-2 border-l-cyan-500">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-cyan-400" />
+                <div>
+                  <h3 className="text-xs font-bold text-cyan-200">
+                    고정밀 3D 타일셋(3D Tiles) 스트리밍
+                  </h3>
+                  <span className="text-[10px] text-cyan-400/80 block">
+                    Deck.gl Tile3DLayer · Google / V-World / Cesium / LiDAR
+                  </span>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tile3DStream.enabled}
+                  onChange={toggleTile3DStream}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+              </label>
+            </div>
+
+            {/* 3D 타일셋 OGC 스트리밍 엔드포인트 설정 모달 열기 버튼 */}
+            <button
+              type="button"
+              onClick={() => setCustom3DTilesModalOpen(true)}
+              className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-950 to-[#0e2738] hover:from-cyan-900 hover:to-[#13354c] border border-cyan-500/50 text-cyan-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md group"
+            >
+              <Sliders className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-45 transition-transform" />
+              <span>[3D Tiles OGC 스트리밍 엔드포인트 설정]</span>
+            </button>
+
+            {tile3DStream.enabled && (
+              <div className="space-y-2.5 pt-1.5 border-t border-cyan-900/50 text-[11px]">
+                {/* 스트리밍 상태 및 타일 수치 표시 */}
+                <div className="flex items-center justify-between bg-[#081219] p-2 rounded-lg border border-[#142837]">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        tile3DStream.isLoading
+                          ? 'bg-amber-400 animate-ping'
+                          : 'bg-emerald-400'
+                      }`}
+                    />
+                    <span className="text-[10px] text-slate-300 font-mono truncate max-w-[170px]">
+                      {tile3DStream.statusText || '정상 스트리밍 가동 중'}
+                    </span>
+                  </div>
+                  {tile3DStream.tilesLoadedCount ? (
+                    <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60">
+                      {tile3DStream.tilesLoadedCount}개 타일
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-emerald-400/90 font-mono">
+                      실사 메쉬 폴백 보호
+                    </span>
+                  )}
+                </div>
+
+                {/* 3D 타일셋 6대 프리셋 빠른 선택 */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-slate-300 font-semibold">
+                      3D 타일셋 스트림 소스
+                    </label>
+                    <span className="text-[9px] text-cyan-400 font-mono">
+                      OGC 3D Tiles 1.0
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'vworld_3d_buildings', label: '🇰🇷 브이월드 OGC 실사 3D' },
+                      { id: 'google_3d', label: '🌍 Google Photorealistic 3D' },
+                      { id: 'cesium_osm', label: '🌐 Cesium Ion OSM' },
+                      { id: 'sample_pointcloud', label: '📡 LiDAR RGB 점군 (pnts)' },
+                      { id: 'sample_city', label: '🏙️ 도시 모델 (b3dm)' },
+                      { id: 'custom', label: '⚙️ 사용자 지정 URL' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (item.id === 'custom' && !tile3DStream.url) {
+                            setCustom3DTilesModalOpen(true);
+                          } else {
+                            setTile3DStreamPreset(item.id as any);
+                          }
+                        }}
+                        className={`py-1.5 px-2 rounded-lg text-[9.5px] font-bold transition-all border text-left truncate ${
+                          tile3DStream.presetId === item.id
+                            ? 'bg-cyan-600 border-cyan-400 text-white shadow-sm ring-1 ring-cyan-400/40'
+                            : 'bg-[#0a1620] border-cyan-900/50 text-cyan-300 hover:bg-[#112332]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 사용자 정의 URL 입력창 */}
+                {tile3DStream.presetId === 'custom' && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-slate-400 block">
+                        3D Tiles 엔드포인트 URL (tileset.json)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setCustom3DTilesModalOpen(true)}
+                        className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-mono"
+                      >
+                        상세 진단
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="https://.../tileset.json"
+                      value={tile3DStream.url}
+                      onChange={(e) => setTile3DStreamUrl(e.target.value)}
+                      className="w-full bg-[#081219] border border-cyan-800/60 rounded px-2 py-1 text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+                )}
+
+                {/* LOD 프러스텀 컬링 세밀도 (Screen Space Error: 8/16/24) */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-300 font-semibold">LOD 렌더링 품질 (SSE)</span>
+                    <span className="font-mono text-cyan-300 font-bold">
+                      {tile3DStream.maximumScreenSpaceError === 8
+                        ? '8 (초정밀)'
+                        : tile3DStream.maximumScreenSpaceError === 16
+                        ? '16 (균형/표준)'
+                        : '24 (고성능)'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      { sse: 8, label: '초정밀 (8)' },
+                      { sse: 16, label: '균형 (16)' },
+                      { sse: 24, label: '고성능 (24)' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.sse}
+                        type="button"
+                        onClick={() => setTile3DStreamSse(opt.sse)}
+                        className={`py-1 px-1 rounded text-[9.5px] font-semibold border ${
+                          tile3DStream.maximumScreenSpaceError === opt.sse
+                            ? 'bg-cyan-600 border-cyan-400 text-white font-bold'
+                            : 'bg-[#08141d] border-cyan-900/40 text-slate-300 hover:bg-[#10222f]'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-slate-400 leading-tight">
+                    * 미로드 구역은 Three.js 로컬 실사 건물 메쉬가 무중단 폴백 가드로 항상 100% 유지됩니다.
+                  </p>
+                </div>
+
+                {/* 불투명도 및 점 크기 조절 */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-cyan-900/40">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[9.5px]">
+                      <span className="text-slate-400">투명도</span>
+                      <span className="font-mono text-cyan-300 font-bold">
+                        {Math.round(tile3DStream.opacity * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.0}
+                      max={1.0}
+                      step={0.05}
+                      value={tile3DStream.opacity}
+                      onChange={(e) => setTile3DStreamOpacity(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[9.5px]">
+                      <span className="text-slate-400">점군 크기</span>
+                      <span className="font-mono text-cyan-300 font-bold">
+                        {tile3DStream.pointSize}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={10}
+                      step={0.5}
+                      value={tile3DStream.pointSize}
+                      onChange={(e) => setTile3DStreamPointSize(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
           {/* [2단계 신규] 3D 시설물 인터랙티브 배치 및 변환 기즈모(TransformControls) */}
           <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0f1712]">
             <div className="flex items-center justify-between">
@@ -3202,43 +3408,78 @@ export const ControlPanel: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-semibold text-slate-300">
-              베이스맵 스타일 원클릭 전환
+              베이스맵 스타일 원클릭 전환 (4종)
             </label>
             <span className="text-[10px] text-emerald-400 font-mono">레이어 100% 보존</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
+            {/* 1. 국토부 V-World 항공실사 */}
             <button
-              onClick={() => {
-                setBaseMap('satellite');
-              }}
+              type="button"
+              onClick={() => setBaseMap('satellite')}
               className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
                 baseMap === 'satellite'
                   ? 'bg-[#1b3425] border-emerald-400 text-emerald-300 font-bold shadow-md ring-1 ring-emerald-500/40'
-                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200'
+                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#202c24]'
               }`}
             >
               <div className="flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>위성 영상 모드</span>
+                <span>🇰🇷 V-World 항공실사</span>
               </div>
-              <span className="text-[9.5px] opacity-75 font-normal">국토부 V-World 항공실사</span>
+              <span className="text-[9px] opacity-75 font-normal">국토부 고해상도 정사영상</span>
             </button>
+
+            {/* 2. Google 위성/하이브리드 */}
             <button
-              onClick={() => {
-                setBaseMap('clean');
-              }}
+              type="button"
+              onClick={() => setBaseMap('google-satellite')}
+              className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
+                baseMap === 'google-satellite'
+                  ? 'bg-[#142838] border-cyan-400 text-cyan-200 font-bold shadow-md ring-1 ring-cyan-500/40'
+                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#202c24]'
+              }`}
+            >
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>🌍 Google 위성/하이브리드</span>
+              </div>
+              <span className="text-[9px] opacity-75 font-normal">글로벌 고해상도 위성 영상</span>
+            </button>
+
+            {/* 3. V-World 일반/클린 벡터 맵 */}
+            <button
+              type="button"
+              onClick={() => setBaseMap('clean')}
               className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
                 baseMap === 'clean'
                   ? 'bg-[#1b3425] border-emerald-400 text-emerald-300 font-bold shadow-md ring-1 ring-emerald-500/40'
-                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200'
+                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#202c24]'
               }`}
             >
               <div className="flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                <span>클린 벡터 모드</span>
+                <span>🗺️ V-World 일반/클린</span>
               </div>
-              <span className="text-[9.5px] opacity-75 font-normal">보고서 브리핑 전용</span>
+              <span className="text-[9px] opacity-75 font-normal">보고서 브리핑 클린 벡터</span>
+            </button>
+
+            {/* 4. Google 로드맵 */}
+            <button
+              type="button"
+              onClick={() => setBaseMap('google-roadmap')}
+              className={`p-2.5 text-xs rounded-lg border flex flex-col items-center justify-center space-y-1 transition-all ${
+                baseMap === 'google-roadmap'
+                  ? 'bg-[#142838] border-cyan-400 text-cyan-200 font-bold shadow-md ring-1 ring-cyan-500/40'
+                  : 'bg-[#18201b] border-[#29352c] text-slate-400 hover:text-slate-200 hover:bg-[#202c24]'
+              }`}
+            >
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>🛣️ Google 로드맵</span>
+              </div>
+              <span className="text-[9px] opacity-75 font-normal">상세 도로망 및 지명 벡터</span>
             </button>
           </div>
         </div>
@@ -3894,6 +4135,40 @@ export const ControlPanel: React.FC = () => {
         </h2>
 
         <div className="space-y-1.5 text-xs">
+          {/* [고정밀 3D 타일셋(3D Tiles) 스트리밍] */}
+          <div className="flex items-center justify-between p-2 rounded bg-[#10202a] border border-[#1b3b4f]">
+            <div className="flex items-center gap-2">
+              <Boxes className="w-3.5 h-3.5 text-cyan-400" />
+              <div>
+                <span className="text-slate-200 font-medium block text-xs">
+                  고정밀 3D 타일셋 (OGC 3D Tiles)
+                </span>
+                <span className="text-[9.5px] text-cyan-400 font-mono">
+                  {tile3DStream.enabled ? '스트리밍 가동 중' : '비활성 (Three.js 실사 가동)'}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCustom3DTilesModalOpen(true)}
+                className="px-2 py-0.5 text-[9.5px] font-bold rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 transition-all flex items-center gap-1 shadow-sm"
+              >
+                <Sliders className="w-3 h-3 text-cyan-400" />
+                <span>설정</span>
+              </button>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tile3DStream.enabled}
+                  onChange={toggleTile3DStream}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-600"></div>
+              </label>
+            </div>
+          </div>
+
           {/* [2단계 신규: 브이월드 실사 3D 타일 스트리밍 (XDO)] */}
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
             <span className="flex items-center gap-2 text-slate-300 font-medium">

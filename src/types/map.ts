@@ -6,7 +6,7 @@ export interface ViewportState {
   bearing: number;
 }
 
-export type BaseMapType = 'satellite' | 'clean' | 'topo';
+export type BaseMapType = 'satellite' | 'google-satellite' | 'clean' | 'google-roadmap' | 'topo';
 
 export type BuildingThemeType = 'photorealistic' | 'landuse' | 'height_spectrum';
 
