@@ -183,14 +183,14 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // 3. [단지 내부 보행로/담장/화단/경계석 세장형 비건물 30m 압출 원천 차단]
+  // 3. [단지 내부 보행로/담장/화단/경계석 세장형 비건물 압출 차단 (소형 단독주택/상가/원룸 100% 보존)]
   const calculatedMinWidth = typeof minWidth === 'number' ? minWidth : Math.min(spanX, spanZ);
-  if (calculatedMinWidth < 5.5) {
-    return false;
+  if (calculatedMinWidth < 2.5) {
+    return false; // 폭 2.5m 미만은 건물이 아닌 담장/화단/보행로 파편
   }
   const maxSpan = Math.max(spanX, spanZ);
-  if (calculatedMinWidth < 7.0 && maxSpan / calculatedMinWidth > 4.5 && !featProps.buld_nm && !featProps.mgmBldrgstPk) {
-    return false;
+  if (calculatedMinWidth < 4.5 && maxSpan / calculatedMinWidth > 7.0 && !featProps.buld_nm && !featProps.mgmBldrgstPk && !featProps.building) {
+    return false; // 폭 4.5m 미만이면서 세장비 7배 이상인 극단적 선형 비건물만 차단
   }
 
   // 3. 건물이 아닌 순수 레이어/비건물 속성만 엄격 차단 (OpenFreeMap/OpenMapTiles 건축물 폴리곤 100% 보존)

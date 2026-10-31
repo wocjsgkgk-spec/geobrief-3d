@@ -271,9 +271,20 @@ export class VworldRealRenderer {
     const uvShopShowcase = getDiverseFacadeSlotUV('comm_ground_shop');
     const uvRoofFloor = getDiverseFacadeSlotUV(palette.roofSlot || arch.roofSlot);
     const uvParapet = getDiverseFacadeSlotUV('parapet_concrete');
+    const uvRoofCap = getDiverseFacadeSlotUV('crown_frame');
+    const uvPodium = getDiverseFacadeSlotUV('apt_sand_beige');
+    const uvSchool = getDiverseFacadeSlotUV('school_terracotta_brick');
+
+    // 상가 층별 간판 슬롯 순환 풀
+    const commSignSlots = [
+      getDiverseFacadeSlotUV('comm_sign_clinic_pharmacy'),
+      getDiverseFacadeSlotUV('comm_sign_academy_study'),
+      getDiverseFacadeSlotUV('comm_sign_cafe_bakery'),
+      getDiverseFacadeSlotUV('comm_sign_fitness_yoga'),
+    ];
 
     // -------------------------------------------------------------------------
-    // [A] 외벽 생성 (Apartment / Commercial / Low-rise 분기)
+    // [A] 외벽 생성 (Apartment / Commercial / School / Low-rise 분기)
     // -------------------------------------------------------------------------
     for (let i = 0; i < ptCount; i++) {
       const j = (i + 1) % ptCount;
@@ -290,7 +301,7 @@ export class VworldRealRenderer {
       const nz = dx / edgeLen;
       const norm: [number, number, number] = [nx, 0, nz];
 
-      // 1) 고층 아파트 단지
+      // 1) 한국형 아파트 단지 (15~25층)
       if (isApartment) {
         const isSideWall = sideWallEdgeIndices.has(i);
 
@@ -306,30 +317,41 @@ export class VworldRealRenderer {
             cleanWhiteRgb
           );
         } else {
-          // 전·배면 (1층 석재 필로티 + 기준층 발코니 창문 격자 + 슬래브 줄눈)
-          const podiumH = 3.3;
-          const corniceH = 0.8;
+          // 전·배면 (하단 1~3층 따뜻한 브라운/황토 기단부 + 기준층 발코니 창문 3.5m x 3.0m 격자 + 최상단 옥상캡)
+          const podiumH = height >= 25.0 ? 8.5 : (height >= 15.0 ? 5.5 : 3.2);
+          const corniceH = 1.0;
           const midH = Math.max(0, height - podiumH - corniceH);
 
-          // 1층 필로티 기단부
+          // (1) 하단 1~3층 브라운/황토/테라코타 기단부 (가로 3.5m 단위로 석재 블록 분할 매핑)
           const y1 = baseElev + podiumH;
-          const uvPodium = getDiverseFacadeSlotUV('apt_sand_beige');
-          addQuad(
-            [p1.x, baseElev, p1.z],
-            [p2.x, baseElev, p2.z],
-            [p2.x, y1, p2.z],
-            [p1.x, y1, p1.z],
-            norm,
-            uvPodium,
-            cleanWhiteRgb
-          );
+          const podiumBayW = 3.5;
+          const numPodiumBays = Math.max(1, Math.round(edgeLen / podiumBayW));
+          for (let b = 0; b < numPodiumBays; b++) {
+            const t0 = b / numPodiumBays;
+            const t1 = (b + 1) / numPodiumBays;
+            const bx0 = p1.x + dx * t0;
+            const bz0 = p1.z + dz * t0;
+            const bx1 = p1.x + dx * t1;
+            const bz1 = p1.z + dz * t1;
 
-          // 기준층 발코니 창문 격자 (3.2m 층고마다 선명한 슬래브 줄눈과 PVC 십자 격자창)
-          const floorH = 3.2;
+            addQuad(
+              [bx0, baseElev, bz0],
+              [bx1, baseElev, bz1],
+              [bx1, y1, bz1],
+              [bx0, y1, bz0],
+              norm,
+              uvPodium,
+              cleanWhiteRgb
+            );
+          }
+
+          // (2) 기준층 발코니 창문 격자: 가로 3.5m당 1 U, 층고 3.0m당 1 V 스케일 직결
+          // 15층 아파트면 15개 층의 베란다 창문 줄이 정확히 칼같이 박힘!
+          const floorH = 3.0;
           const numFloors = Math.max(1, Math.round(midH / floorH));
           const dFH = midH / numFloors;
 
-          const bayW = 6.2;
+          const bayW = 3.5;
           const numBays = Math.max(1, Math.round(edgeLen / bayW));
 
           for (let f = 0; f < numFloors; f++) {
@@ -357,52 +379,152 @@ export class VworldRealRenderer {
             }
           }
 
-          // 최상단 코니스
+          // (3) 최상단 지붕캡 및 테두리 파라펫
           if (corniceH > 0.1) {
             const yTop0 = topElev - corniceH;
-            addQuad(
-              [p1.x, yTop0, p1.z],
-              [p2.x, yTop0, p2.z],
-              [p2.x, topElev, p2.z],
-              [p1.x, topElev, p1.z],
-              norm,
-              uvParapet,
-              cleanWhiteRgb
-            );
+            for (let b = 0; b < numBays; b++) {
+              const t0 = b / numBays;
+              const t1 = (b + 1) / numBays;
+              const bx0 = p1.x + dx * t0;
+              const bz0 = p1.z + dz * t0;
+              const bx1 = p1.x + dx * t1;
+              const bz1 = p1.z + dz * t1;
+
+              addQuad(
+                [bx0, yTop0, bz0],
+                [bx1, yTop0, bz1],
+                [bx1, topElev, bz1],
+                [bx0, topElev, bz0],
+                norm,
+                uvRoofCap,
+                cleanWhiteRgb
+              );
+            }
           }
         }
       }
       // 2) 중·저층 상가 및 원룸 (1층 쇼윈도 + 2층 이상 한국형 간판 패치)
-      else if (isCommercial || (height >= 11.0 && !isLowRise)) {
-        const podiumH = Math.min(3.8, height * 0.45);
+      else if (isCommercial || (height >= 10.0 && !isLowRise && !isSchoolBldg)) {
+        const podiumH = Math.min(3.8, height * 0.40);
         const yPodiumTop = baseElev + podiumH;
 
-        // 1층 쇼윈도 & 간판 밴드
-        addQuad(
-          [p1.x, baseElev, p1.z],
-          [p2.x, baseElev, p2.z],
-          [p2.x, yPodiumTop, p2.z],
-          [p1.x, yPodiumTop, p1.z],
-          norm,
-          uvShopShowcase,
-          cleanWhiteRgb
-        );
+        // (1) 1층 쇼윈도 통유리 (가로 3.8m 단위)
+        const shopBayW = 3.8;
+        const numShopBays = Math.max(1, Math.round(edgeLen / shopBayW));
+        for (let b = 0; b < numShopBays; b++) {
+          const t0 = b / numShopBays;
+          const t1 = (b + 1) / numShopBays;
+          const bx0 = p1.x + dx * t0;
+          const bz0 = p1.z + dz * t0;
+          const bx1 = p1.x + dx * t1;
+          const bz1 = p1.z + dz * t1;
 
-        // 2층 이상 상층부 외벽 (한국어 간판 + 개별 창문 격자)
+          addQuad(
+            [bx0, baseElev, bz0],
+            [bx1, baseElev, bz1],
+            [bx1, yPodiumTop, bz1],
+            [bx0, yPodiumTop, bz0],
+            norm,
+            uvShopShowcase,
+            cleanWhiteRgb
+          );
+        }
+
+        // (2) 2층 이상 상층부 외벽 (한국어 간판 + 개별 창문 격자, 가로 3.5m x 층고 3.2m)
         if (height > podiumH + 0.5) {
           const upperH = height - podiumH;
-          const numUpperFloors = Math.max(1, Math.round(upperH / 3.3));
+          const floorH = 3.2;
+          const numUpperFloors = Math.max(1, Math.round(upperH / floorH));
           const dUH = upperH / numUpperFloors;
+
+          const bayW = 3.5;
+          const numBays = Math.max(1, Math.round(edgeLen / bayW));
 
           for (let f = 0; f < numUpperFloors; f++) {
             const uy0 = yPodiumTop + f * dUH;
             const uy1 = yPodiumTop + (f + 1) * dUH;
 
+            // 층마다 다양한 한국어 간판 슬롯 순환 선택
+            const signUv = commSignSlots[(f + i + Math.floor(seed * 10)) % commSignSlots.length];
+
+            for (let b = 0; b < numBays; b++) {
+              const t0 = b / numBays;
+              const t1 = (b + 1) / numBays;
+              const bx0 = p1.x + dx * t0;
+              const bz0 = p1.z + dz * t0;
+              const bx1 = p1.x + dx * t1;
+              const bz1 = p1.z + dz * t1;
+
+              addQuad(
+                [bx0, uy0, bz0],
+                [bx1, uy0, bz1],
+                [bx1, uy1, bz1],
+                [bx0, uy1, bz0],
+                norm,
+                signUv,
+                cleanWhiteRgb
+              );
+            }
+          }
+        }
+      }
+      // 3) 학교 및 교육·공공시설 (3~6층 오렌지 테라코타/살구색 교사동)
+      else if (isSchoolBldg || isPublic) {
+        const floorH = 3.3;
+        const numFloors = Math.max(1, Math.round(height / floorH));
+        const dFH = height / numFloors;
+        const bayW = 3.5;
+        const numBays = Math.max(1, Math.round(edgeLen / bayW));
+
+        for (let f = 0; f < numFloors; f++) {
+          const fy0 = baseElev + f * dFH;
+          const fy1 = baseElev + (f + 1) * dFH;
+
+          for (let b = 0; b < numBays; b++) {
+            const t0 = b / numBays;
+            const t1 = (b + 1) / numBays;
+            const bx0 = p1.x + dx * t0;
+            const bz0 = p1.z + dz * t0;
+            const bx1 = p1.x + dx * t1;
+            const bz1 = p1.z + dz * t1;
+
             addQuad(
-              [p1.x, uy0, p1.z],
-              [p2.x, uy0, p2.z],
-              [p2.x, uy1, p2.z],
-              [p1.x, uy1, p1.z],
+              [bx0, fy0, bz0],
+              [bx1, fy0, bz1],
+              [bx1, fy1, bz1],
+              [bx0, fy1, bz0],
+              norm,
+              uvSchool,
+              cleanWhiteRgb
+            );
+          }
+        }
+      }
+      // 4) 저층 단독주택·빌라·군부대 막사 (1~4층, 가로 3.5m x 층고 3.0m 단위 블록)
+      else {
+        const floorH = 3.0;
+        const numFloors = Math.max(1, Math.round(height / floorH));
+        const dFH = height / numFloors;
+        const bayW = 3.5;
+        const numBays = Math.max(1, Math.round(edgeLen / bayW));
+
+        for (let f = 0; f < numFloors; f++) {
+          const fy0 = baseElev + f * dFH;
+          const fy1 = baseElev + (f + 1) * dFH;
+
+          for (let b = 0; b < numBays; b++) {
+            const t0 = b / numBays;
+            const t1 = (b + 1) / numBays;
+            const bx0 = p1.x + dx * t0;
+            const bz0 = p1.z + dz * t0;
+            const bx1 = p1.x + dx * t1;
+            const bz1 = p1.z + dz * t1;
+
+            addQuad(
+              [bx0, fy0, bz0],
+              [bx1, fy0, bz1],
+              [bx1, fy1, bz1],
+              [bx0, fy1, bz0],
               norm,
               uvMainWall,
               cleanWhiteRgb
@@ -410,22 +532,14 @@ export class VworldRealRenderer {
           }
         }
       }
-      // 3) 저층 단독주택·빌라·군부대 막사 및 학교
-      else {
-        addQuad(
-          [p1.x, baseElev, p1.z],
-          [p2.x, baseElev, p2.z],
-          [p2.x, topElev, p2.z],
-          [p1.x, topElev, p1.z],
-          norm,
-          uvMainWall,
-          cleanWhiteRgb
-        );
-      }
     }
 
-    // 내부 중정 벽면 처리
+    // 내부 중정 벽면 처리 (3.5m x 3.0m 단위 타일링)
     if (innerRings2D && innerRings2D.length > 0) {
+      const holeFloorH = 3.0;
+      const numHoleFloors = Math.max(1, Math.round(height / holeFloorH));
+      const dHoleH = height / numHoleFloors;
+
       for (const hole of innerRings2D) {
         const hCount = hole.length;
         for (let i = 0; i < hCount; i++) {
@@ -437,15 +551,32 @@ export class VworldRealRenderer {
           const elen = Math.hypot(dx, dz);
           if (elen < 0.2) continue;
 
-          addQuad(
-            [p1.x, baseElev, p1.z],
-            [p2.x, baseElev, p2.z],
-            [p2.x, topElev, p2.z],
-            [p1.x, topElev, p1.z],
-            [-dz / elen, 0, dx / elen],
-            uvMainWall,
-            cleanWhiteRgb
-          );
+          const hNorm: [number, number, number] = [-dz / elen, 0, dx / elen];
+          const numHoleBays = Math.max(1, Math.round(elen / 3.5));
+
+          for (let f = 0; f < numHoleFloors; f++) {
+            const fy0 = baseElev + f * dHoleH;
+            const fy1 = baseElev + (f + 1) * dHoleH;
+
+            for (let b = 0; b < numHoleBays; b++) {
+              const t0 = b / numHoleBays;
+              const t1 = (b + 1) / numHoleBays;
+              const bx0 = p1.x + dx * t0;
+              const bz0 = p1.z + dz * t0;
+              const bx1 = p1.x + dx * t1;
+              const bz1 = p1.z + dz * t1;
+
+              addQuad(
+                [bx0, fy0, bz0],
+                [bx1, fy0, bz1],
+                [bx1, fy1, bz1],
+                [bx0, fy1, bz0],
+                hNorm,
+                uvMainWall,
+                cleanWhiteRgb
+              );
+            }
+          }
         }
       }
     }

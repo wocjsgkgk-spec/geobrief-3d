@@ -289,12 +289,12 @@ export function extractRenderedVectorBuildings(
       buildingOverzoomCache.set(k, uf);
     }
 
-    // [Overzoom 방어 2] 줌 12.0 이상 뷰포트에서 오버줌 캐시 결합 (주변 1.5km 건물 무중단 유지)
+    // [Overzoom 방어 2] 줌 12.0 이상 뷰포트에서 오버줌 캐시 결합 (원경·북측·동측 시가지 100% 무중단 유지)
     if (map.getZoom && map.getZoom() >= 12.0 && map.getBounds) {
       try {
         const b = map.getBounds();
-        const lngPadding = (b.getEast() - b.getWest()) * 0.8;
-        const latPadding = (b.getNorth() - b.getSouth()) * 0.8;
+        const lngPadding = (b.getEast() - b.getWest()) * 1.4;
+        const latPadding = (b.getNorth() - b.getSouth()) * 1.8;
         const minX = b.getWest() - lngPadding;
         const maxX = b.getEast() + lngPadding;
         const minY = b.getSouth() - latPadding;
@@ -318,9 +318,9 @@ export function extractRenderedVectorBuildings(
       }
     }
 
-    // 캐시 용량 제어 (LRU)
-    if (buildingOverzoomCache.size > 8000) {
-      let toDelete = 3000;
+    // 캐시 용량 제어 (25,000동 이상 넉넉한 시가지 버짓 보장)
+    if (buildingOverzoomCache.size > 25000) {
+      let toDelete = 5000;
       for (const k of buildingOverzoomCache.keys()) {
         buildingOverzoomCache.delete(k);
         if (--toDelete <= 0) break;

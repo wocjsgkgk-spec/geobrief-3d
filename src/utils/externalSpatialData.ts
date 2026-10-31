@@ -433,10 +433,10 @@ export function extractOpenFreeMapBuildings(
     if (vectorSources.length === 0) return [];
 
     const bounds = map.getBounds();
-    const minLng = bounds.getWest() - 0.025;
-    const maxLng = bounds.getEast() + 0.025;
+    const minLng = bounds.getWest() - 0.030;
+    const maxLng = bounds.getEast() + 0.040;
     const minLat = bounds.getSouth() - 0.025;
-    const maxLat = bounds.getNorth() + 0.025;
+    const maxLat = bounds.getNorth() + 0.045;
 
     const seen = new Set<string>();
     const results: ExternalSpatialBuildingFeature[] = [];

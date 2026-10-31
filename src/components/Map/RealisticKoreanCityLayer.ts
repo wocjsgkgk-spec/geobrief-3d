@@ -281,20 +281,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.map = map;
 
     try {
-      // 1. 조명 설정 (한국 도심 자연광: 2.2배 주간 태양광 + 하늘빛 필라이트 + 1.2배 풍부한 환경광/헤미스피어)
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
+      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 과노출 방지 및 선명한 텍스처 대비 보존)
+      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.45);
       this.sunLight.position.set(120, 160, 90).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.95);
+      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.45);
       this.fillLight.position.set(-100, 120, -80).normalize();
       this.scene.add(this.fillLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.20);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
       this.scene.add(this.ambientLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 0.60);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 3단계] 4096px 고해상도 실사 파사드 아틀라스 & Streets-GL 접지 AO 셰이더 직결
@@ -541,7 +541,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   public updateSunLight(
     dirOrAlt: [number, number, number] | THREE.Vector3 | number,
     colorOrAz?: string | number,
-    intensity: number = 1.85,
+    intensity: number = 1.45,
     fogColor?: string,
     fogDensity?: number
   ): void {
@@ -1001,11 +1001,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      // [신규: 아파트 단지 내부 보행로/화단/담장 등 세장형 비건물 30m 갈색 판 돌출 원천 차단]
-      if (minWidth < 5.5) {
+      // [신규: 아파트 단지 내부 보행로/화단/담장 등 세장형 비건물 돌출 차단 (소형 단독주택/상가 100% 보존)]
+      if (minWidth < 2.5) {
         continue;
       }
-      if (minWidth < 7.0 && Math.max(spanX, spanZ) / minWidth > 4.5 && !featProps.buld_nm && !featProps.mgmBldrgstPk) {
+      if (minWidth < 4.5 && Math.max(spanX, spanZ) / minWidth > 7.0 && !featProps.buld_nm && !featProps.mgmBldrgstPk && !featProps.building) {
         continue;
       }
 

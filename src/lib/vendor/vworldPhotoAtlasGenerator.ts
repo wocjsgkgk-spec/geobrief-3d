@@ -58,6 +58,10 @@ export const VWORLD_PHOTO_SLOT_MAP: Record<string, number> = {
   apt_style_2_sand: 1,
   apt_preset_b: 1,
   apt_sand_beige: 1,
+  apt_ground_terracotta: 20,
+  apt_ground_brown: 20,
+  apt_podium_brown: 20,
+  apt_roofcap_brown: 39,
 
   apt_style_3_ivory: 2,
   apt_ivory_twotone: 2,
@@ -289,24 +293,24 @@ function drawMintBalconyWindow(
   const glassBase = options.glassBaseColor || '#4a6b65';
   const glassGlint = options.glassGlintColor || '#9cb8b2';
 
-  // 1. 외곽 창틀 프레임 (3px 두께)
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);
+  // 1. 외곽 창틀 프레임 (선명한 화이트 PVC 샤시)
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(wx - 4, wy - 4, ww + 8, wh + 8);
   ctx.fillStyle = frameColor;
-  ctx.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
+  ctx.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);
 
-  // 2. 민트 그린 틴티드 유리 바탕
+  // 2. 민트 그린 틴티드 유리 바탕 (브이월드 특유의 어두운 청록/차콜 틴티드)
   const glassGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
   glassGrad.addColorStop(0, glassGlint);
-  glassGrad.addColorStop(0.25, glassBase);
-  glassGrad.addColorStop(0.70, '#36534d');
-  glassGrad.addColorStop(1, '#1b2d28');
+  glassGrad.addColorStop(0.20, glassBase);
+  glassGrad.addColorStop(0.70, '#1a2e26');
+  glassGrad.addColorStop(1, '#0f1f19');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(wx, wy, ww, wh);
 
   // 3. 내부 커튼 / 블라인드 (선택적)
   if (options.hasCurtain) {
-    ctx.fillStyle = 'rgba(241, 245, 249, 0.45)';
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.55)';
     ctx.fillRect(wx + 4, wy + 4, Math.round(ww * 0.35), Math.round(wh * 0.55));
   }
 
@@ -315,7 +319,7 @@ function drawMintBalconyWindow(
   ctx.beginPath();
   ctx.rect(wx, wy, ww, wh);
   ctx.clip();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
   ctx.beginPath();
   ctx.moveTo(wx + Math.round(ww * 0.15), wy);
   ctx.lineTo(wx + Math.round(ww * 0.55), wy);
@@ -327,35 +331,35 @@ function drawMintBalconyWindow(
 
   // 5. 상단 및 좌측 창틀 오목한 그림자 (깊이감)
   const topShadow = ctx.createLinearGradient(wx, wy, wx, wy + 16);
-  topShadow.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+  topShadow.addColorStop(0, 'rgba(0, 0, 0, 0.70)');
   topShadow.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
   ctx.fillStyle = topShadow;
   ctx.fillRect(wx, wy, ww, 16);
 
-  // 6. PVC 십자 멀리언 & 트랜섬 바
+  // 6. PVC 십자 멀리언 & 트랜섬 바 (선명한 순백색)
   ctx.fillStyle = frameColor;
-  // 중앙 수직 멀리언
+  // 중앙 수직 멀리언 (두께 5px)
   const midX = Math.round(wx + ww * 0.5);
-  ctx.fillRect(midX - 1.5, wy, 3, wh);
-  // 상단 환기창 가로 바 (상단 30%)
+  ctx.fillRect(midX - 2.5, wy, 5, wh);
+  // 상단 환기창 가로 바 (상단 30%, 두께 3px)
   const topY = Math.round(wy + wh * 0.30);
-  ctx.fillRect(wx, topY - 1, ww, 2);
+  ctx.fillRect(wx, topY - 1.5, ww, 3);
 
-  // 7. 하단 스테인리스 베란다 안전 난간 (하단 36% 구간)
+  // 7. 하단 스테인리스 베란다 안전 난간 (하단 38% 구간)
   if (options.hasBalconyRailing !== false) {
-    const railH = Math.round(wh * 0.36);
+    const railH = Math.round(wh * 0.38);
     const railY = wy + wh - railH;
 
-    // 핸드레일 상단 바
+    // 핸드레일 상단 바 (두께 4px 순백색)
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(wx + 2, railY, ww - 4, 3);
-    ctx.fillStyle = '#cbd5e1';
-    ctx.fillRect(wx + 2, railY + 3, ww - 4, 1);
+    ctx.fillRect(wx + 2, railY, ww - 4, 4);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(wx + 2, railY + 4, ww - 4, 1.5);
 
-    // 수직 살대 (14px 간격)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.90)';
-    for (let rx = wx + 10; rx < wx + ww - 10; rx += 14) {
-      ctx.fillRect(rx, railY + 4, 2, railH - 6);
+    // 수직 살대 (16px 간격, 두께 2.5px 순백색)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    for (let rx = wx + 10; rx < wx + ww - 10; rx += 16) {
+      ctx.fillRect(rx, railY + 5, 2.5, railH - 7);
     }
   }
 
@@ -502,194 +506,171 @@ function drawPilotiStorefront(
 
 // --- Row 0: 한국형 아파트 8종 파사드 ---
 
-function drawAptStyle1(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 스타일 1: 밝은 크림 화이트(#f5f3ee) + 민트그린 발코니창 + 하단 브라운(#a67c52) 투톤
-  ctx.fillStyle = '#f5f3ee';
+interface AptBalconyUnitOptions {
+  wallBgColor: string;
+  frameColor?: string;
+  glassBaseColor?: string;
+  glassGlintColor?: string;
+  hasBalconyRailing?: boolean;
+  hasLouverGrill?: boolean;
+  hasCurtain?: boolean;
+  accentBandColor?: string;
+}
+
+function drawAptBalconyUnit(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  opts: AptBalconyUnitOptions
+): void {
+  // 1. 벽체 바탕 (크림 화이트 / 샌드 베이지 / 웜그레이 콘크리트)
+  ctx.fillStyle = opts.wallBgColor;
   ctx.fillRect(x, y, w, h);
 
-  // 하단 1~3층 따뜻한 브라운 투톤 도색 구간
-  const baseH = Math.round(h * 0.28);
-  ctx.fillStyle = '#a67c52';
-  ctx.fillRect(x, y + h - baseH, w, baseH);
-  ctx.fillStyle = '#8c583a';
-  ctx.fillRect(x, y + h - baseH, w, 4);
-
-  // 층간 가로 슬래브 줄눈
+  // 2. 상단 & 하단 층간 콘크리트 슬래브 줄눈
   ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(x, y + 28, w, 3);
-  ctx.fillRect(x, y + Math.round(h * 0.52), w, 3);
+  ctx.fillRect(x, y, w, 6);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(x, y + 6, w, 2);
 
-  // 좌우 기둥 멀리언
-  ctx.fillStyle = '#ebe5dc';
-  ctx.fillRect(x, y, 32, h);
-  ctx.fillRect(x + w - 32, y, 32, h);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(x, y + h - 8, w, 2);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(x, y + h - 6, w, 6);
 
-  // 발코니 창문 2개 배치 (민트 그린 틴티드 유리)
-  const winW = Math.round(w * 0.38);
-  const winH = Math.round(h * 0.38);
-  const winY1 = y + 42;
+  // 액센트 컬러 띠 (선택적)
+  if (opts.accentBandColor) {
+    ctx.fillStyle = opts.accentBandColor;
+    ctx.fillRect(x, y + 8, w, 8);
+  }
 
-  drawMintBalconyWindow(ctx, x + 44, winY1, winW, winH, {
+  // 3. 좌우 멀리언 기둥 여백 및 대형 창호 배치
+  const padX = 24;
+  const padTop = opts.accentBandColor ? 22 : 14;
+  const padBottom = 14;
+  const winX = x + padX;
+  const winY = y + padTop;
+  const winW = w - padX * 2;
+  const winH = h - padTop - padBottom;
+
+  // 4. 대형 발코니 창문 렌더링 (민트그린 유리 + 순백색 프레임 + 난간 + 루버)
+  drawMintBalconyWindow(ctx, winX, winY, winW, winH, {
+    frameColor: opts.frameColor || '#ffffff',
+    glassBaseColor: opts.glassBaseColor || '#233932',
+    glassGlintColor: opts.glassGlintColor || '#4a6b65',
+    hasBalconyRailing: opts.hasBalconyRailing !== false,
+    hasLouverGrill: opts.hasLouverGrill !== false,
+    hasCurtain: opts.hasCurtain,
+  });
+
+  applyFineNoise(ctx, x, y, w, h, 0.02);
+}
+
+function drawAptStyle1(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  // 스타일 1: 밝은 크림 화이트(#f5f2eb) + 브이월드 민트그린 발코니창 + 화이트 프레임 + 루버
+  drawAptBalconyUnit(ctx, x, y, w, h, {
+    wallBgColor: '#f5f2eb',
     frameColor: '#ffffff',
-    glassBaseColor: '#4a6b65',
-    glassGlintColor: '#9cb8b2',
+    glassBaseColor: '#233932',
+    glassGlintColor: '#4a6b65',
     hasBalconyRailing: true,
     hasLouverGrill: true,
   });
+}
 
-  drawMintBalconyWindow(ctx, x + w - winW - 44, winY1, winW, winH, {
+function drawAptStyle2(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  // 스타일 2: 소프트 샌드 베이지(#e8e0d2) + 민트그린 발코니창 + 화이트 프레임 + 커튼
+  drawAptBalconyUnit(ctx, x, y, w, h, {
+    wallBgColor: '#e8e0d2',
     frameColor: '#ffffff',
-    glassBaseColor: '#4a6b65',
-    glassGlintColor: '#9cb8b2',
+    glassBaseColor: '#263d35',
+    glassGlintColor: '#53756d',
     hasBalconyRailing: true,
     hasLouverGrill: false,
     hasCurtain: true,
   });
-
-  applyFineNoise(ctx, x, y, w, h, 0.02);
-}
-
-function drawAptStyle2(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 스타일 2: 소프트 샌드 베이지(#e8e1d5) + 민트그린 발코니 + 하단 황토색(#8c583a)
-  ctx.fillStyle = '#e8e1d5';
-  ctx.fillRect(x, y, w, h);
-
-  // 하단 황토색 기단부
-  const baseH = Math.round(h * 0.26);
-  ctx.fillStyle = '#8c583a';
-  ctx.fillRect(x, y + h - baseH, w, baseH);
-  ctx.fillStyle = '#6e3f28';
-  ctx.fillRect(x, y + h - baseH, w, 4);
-
-  // 층간 슬래브 줄눈
-  ctx.fillStyle = '#d4c7b2';
-  ctx.fillRect(x, y + 24, w, 3);
-  ctx.fillRect(x, y + Math.round(h * 0.50), w, 3);
-
-  const winW = Math.round(w * 0.76);
-  const winH = Math.round(h * 0.40);
-  const winX = x + Math.round((w - winW) * 0.5);
-  const winY = y + 40;
-
-  drawMintBalconyWindow(ctx, winX, winY, winW, winH, {
-    frameColor: '#ffffff',
-    glassBaseColor: '#4a6b65',
-    glassGlintColor: '#9cb8b2',
-    hasBalconyRailing: true,
-    hasLouverGrill: true,
-  });
-
-  applyFineNoise(ctx, x, y, w, h, 0.02);
 }
 
 function drawAptStyle3(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 스타일 3: 아이보리 화이트(#faf7f0) + 상층부 브라운 액센트 밴드(#936848) + 민트그린
-  ctx.fillStyle = '#faf7f0';
-  ctx.fillRect(x, y, w, h);
-
-  // 상층부 브라운 액센트 밴드
-  ctx.fillStyle = '#936848';
-  ctx.fillRect(x, y, w, 28);
-  ctx.fillStyle = '#f59e0b';
-  ctx.fillRect(x, y + 28, w, 3);
-
-  // 창문 2개 분할
-  const winW = Math.round(w * 0.38);
-  const winH = Math.round(h * 0.42);
-  const winY = y + 44;
-
-  drawMintBalconyWindow(ctx, x + 40, winY, winW, winH, {
+  // 스타일 3: 아이보리 화이트(#faf7f0) + 상층부 브라운 액센트 띠(#936848) + 민트그린 통창
+  drawAptBalconyUnit(ctx, x, y, w, h, {
+    wallBgColor: '#faf7f0',
+    accentBandColor: '#936848',
     frameColor: '#ffffff',
-    glassBaseColor: '#456860',
-    glassGlintColor: '#9bb8b0',
+    glassBaseColor: '#20362f',
+    glassGlintColor: '#456860',
     hasBalconyRailing: true,
     hasLouverGrill: true,
   });
-  drawMintBalconyWindow(ctx, x + w - winW - 40, winY, winW, winH, {
-    frameColor: '#ffffff',
-    glassBaseColor: '#456860',
-    glassGlintColor: '#9bb8b0',
-    hasBalconyRailing: true,
-    hasLouverGrill: false,
-  });
-
-  applyFineNoise(ctx, x, y, w, h, 0.02);
 }
 
 function drawAptStyle4(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 스타일 4: 어반 웜그레이(#dcd8d0) & 다크 차콜 계단실 코어 창(#27272a)
+  // 스타일 4: 어반 웜그레이(#dcd8d0) + 다크 차콜 계단실 코어 + 민트그린 발코니
   ctx.fillStyle = '#dcd8d0';
   ctx.fillRect(x, y, w, h);
 
-  // 중앙 수직 다크 차콜 계단실 코어
-  const coreW = Math.round(w * 0.28);
+  // 상하 슬래브 줄눈
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(x, y, w, 6);
+  ctx.fillRect(x, y + h - 6, w, 6);
+
+  // 중앙 수직 다크 차콜 계단실 코어 (20% 폭)
+  const coreW = Math.round(w * 0.22);
   const coreX = x + Math.round((w - coreW) * 0.5);
   ctx.fillStyle = '#27272a';
   ctx.fillRect(coreX, y, coreW, h);
 
-  // 계단실 세로 창문
+  // 계단실 수직 창문
   ctx.fillStyle = '#64748b';
-  for (let py = y + 16; py < y + h - 20; py += 38) {
-    ctx.fillRect(coreX + 8, py, coreW - 16, 24);
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillRect(coreX + 8, py, coreW - 16, 2);
-    ctx.fillStyle = '#64748b';
-  }
+  ctx.fillRect(coreX + 6, y + 14, coreW - 12, h - 28);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(coreX + 6, y + 14, coreW - 12, 2);
 
   // 좌우 세대 발코니 창문
-  const winW = Math.round((coreX - x) * 0.72);
-  const winH = Math.round(h * 0.42);
-  const winY = y + 42;
+  const winW = coreX - x - 28;
+  const winH = h - 28;
+  const winY = y + 14;
 
   drawMintBalconyWindow(ctx, x + 16, winY, winW, winH, {
     frameColor: '#ffffff',
+    glassBaseColor: '#233932',
     hasBalconyRailing: true,
   });
-  drawMintBalconyWindow(ctx, x + w - winW - 16, winY, winW, winH, {
+  drawMintBalconyWindow(ctx, coreX + coreW + 12, winY, winW, winH, {
     frameColor: '#ffffff',
+    glassBaseColor: '#233932',
     hasBalconyRailing: true,
   });
 
-  applyFineNoise(ctx, x, y, w, h, 0.025);
+  applyFineNoise(ctx, x, y, w, h, 0.02);
 }
 
 function drawAptStyle5(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 스타일 5: 모던 라이트 그레이(#d5d0c7) + 차콜 수직 핀 스트라이프
-  ctx.fillStyle = '#d5d0c7';
-  ctx.fillRect(x, y, w, h);
-
-  // 차콜 수직 스트라이프
-  ctx.fillStyle = '#3f3f46';
-  ctx.fillRect(x + Math.round(w * 0.48), y, 16, h);
-
-  const winW = Math.round(w * 0.36);
-  const winH = Math.round(h * 0.42);
-  const winY = y + 40;
-
-  drawMintBalconyWindow(ctx, x + 32, winY, winW, winH, { frameColor: '#ffffff', hasBalconyRailing: true });
-  drawMintBalconyWindow(ctx, x + w - winW - 32, winY, winW, winH, { frameColor: '#ffffff', hasBalconyRailing: true });
-
-  applyFineNoise(ctx, x, y, w, h, 0.02);
+  // 스타일 5: 모던 라이트 그레이(#d5d0c7) + 차콜 핀 스트라이프 + 통창
+  drawAptBalconyUnit(ctx, x, y, w, h, {
+    wallBgColor: '#d5d0c7',
+    frameColor: '#ffffff',
+    glassBaseColor: '#283d37',
+    glassGlintColor: '#5a7c73',
+    hasBalconyRailing: true,
+    hasLouverGrill: true,
+  });
 }
 
 function drawAptStyle6(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  // 스타일 6: 웜 베이지(#e5ded2) + 테라코타 브라운 기단(#7c4432)
-  ctx.fillStyle = '#e5ded2';
-  ctx.fillRect(x, y, w, h);
-
-  const baseH = Math.round(h * 0.30);
-  ctx.fillStyle = '#7c4432';
-  ctx.fillRect(x, y + h - baseH, w, baseH);
-
-  const winW = Math.round(w * 0.78);
-  const winH = Math.round(h * 0.38);
-  drawMintBalconyWindow(ctx, x + Math.round((w - winW) * 0.5), y + 36, winW, winH, {
+  // 스타일 6: 웜 베이지(#e5ded2) + 테라코타 슬래브 띠(#8c583a) + 민트그린 통창
+  drawAptBalconyUnit(ctx, x, y, w, h, {
+    wallBgColor: '#e5ded2',
+    accentBandColor: '#8c583a',
     frameColor: '#ffffff',
-    glassBaseColor: '#486862',
+    glassBaseColor: '#223831',
+    glassGlintColor: '#4a6b65',
     hasBalconyRailing: true,
+    hasLouverGrill: false,
+    hasCurtain: true,
   });
-
-  applyFineNoise(ctx, x, y, w, h, 0.02);
 }
 
 function drawAptStyle7(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
