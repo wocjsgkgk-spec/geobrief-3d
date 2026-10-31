@@ -664,7 +664,7 @@ export const useMapStore = create<MapStoreState>()(
         bridgeTunnel: true, // [공공데이터포털] 국토부 전국 교량 및 터널 현황정보 3D 마커 기본 ON
         ssaoPostProcessing: false, // 디지털 트윈 SSAO & Bloom 후처리 (WebGL 검은 화면 방지를 위해 기본 바이패스)
         firstLogisticsSmartCity: false, // [1단계: 가상 더미 박스 비활성화]
-        proceduralTrees: false, // [4단계: 3D 식생·가로수 표시 기본 OFF]
+        proceduralTrees: true, // [3단계: 3D 식생·가로수 표시 기본 ON]
         vworld3DReal: true, // [브이월드 실사 3D 건물 (XDO 스트리밍) 기본 ON]
         vworld3DBridges: true, // [브이월드 실사 3D 교량 기본 ON]
         vworldDemTerrain: false, // [브이월드 DEM 지형 격자 기본 OFF]
@@ -2301,7 +2301,7 @@ export const useMapStore = create<MapStoreState>()(
                 bridgeTunnel: true,
                 ssaoPostProcessing: false,
                 firstLogisticsSmartCity: false,
-                proceduralTrees: false,
+                proceduralTrees: true,
                 vworld3DReal: true,
                 vworld3DBridges: true,
                 vworldDemTerrain: false,

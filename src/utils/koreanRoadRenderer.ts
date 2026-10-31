@@ -144,7 +144,7 @@ export function getKoreanRoadLayerDefinitions(
       },
     },
 
-    // 0-2. [3단계: osmbuildings 벤더링] 원주천·섬강·소양강·북한강·호수 짙은 에메랄드/다크 틸 수면 폴리곤 (korean-water-fill)
+    // 0-2. [3단계: osmbuildings 벤더링] 원주천·섬강 등 강줄기 깊은 다크 에메랄드/틸 수면 폴리곤
     {
       id: 'korean-water-fill',
       type: 'fill',
@@ -157,11 +157,11 @@ export function getKoreanRoadLayerDefinitions(
           'interpolate',
           ['linear'],
           ['zoom'],
-          9, '#163832',  // 원경(호수/대하천): 짙은 에메랄드 틸 (#163832)
-          13, '#1b4332', // 중경(본류 하천): 자연스러운 딥 틸 (#1b4332)
-          16, '#204f3b', // 근경(하천/지류): 맑은 에메랄드 청정 수면 (#204f3b)
+          9, '#0f2942',  // 원경(호수/대하천): 깊은 다크 틸 (#0f2942)
+          13, '#163832', // 중경(본류 하천): 짙은 다크 에메랄드 (#163832)
+          16, '#1b4332', // 근경(원주천 등): 맑고 깊은 딥 틸 (#1b4332)
         ],
-        'fill-opacity': 0.78, // 지형 및 위성사진과 자연스럽게 어우러지는 불투명도
+        'fill-opacity': 0.75, // 위성사진과 조화를 이루는 자연스러운 투명도
         'fill-antialias': true,
       },
       layout: {
@@ -502,7 +502,8 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // [2단계] 왕복 4차선 이상 간선도로 선명한 황색 중앙선 (road-centerline)
+    // [3단계] 왕복 4차선 이상 간선도로 얇고 정교한 규격 황색 중앙선 (과장된 줄무늬 교정)
+    // - 브이월드 실사 항공위성 사진의 실제 아스팔트와 차선이 자연스럽게 드러나도록 1px, 투명도 0.65 적용
     // -------------------------------------------------------------------------
     {
       id: 'road-centerline',
@@ -511,18 +512,11 @@ export function getKoreanRoadLayerDefinitions(
       'source-layer': sourceLayer,
       minzoom: 13,
       maxzoom: 24,
-      filter: arterialFilter, // 오직 왕복 4차선 이상 주간선도로에만 표출
+      filter: arterialFilter,
       paint: {
-        'line-color': '#eab308', // 규격 황색 중앙선
-        'line-opacity': 0.98,
-        'line-width': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          13, 1.0,
-          15, 1.6,
-          18, 2.4,
-        ],
+        'line-color': '#d97706', // 자연스러운 웜 앰버 황색 중앙선
+        'line-opacity': 0.65,    // 과도한 노란색 덧칠 방지 (투명도 0.65)
+        'line-width': 1.0,       // 1px 정교한 슬림 라인
       },
       layout: {
         'line-cap': 'round',
@@ -545,14 +539,8 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#ffffff',
         'line-dasharray': [3, 4],
-        'line-opacity': 0.85,
-        'line-width': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          15, 1.0,
-          18, 1.8,
-        ],
+        'line-opacity': 0.60,
+        'line-width': 1.0,
       },
       layout: {
         'line-cap': 'butt',

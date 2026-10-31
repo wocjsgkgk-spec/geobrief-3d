@@ -517,10 +517,10 @@ export function generateTreeDistribution(
     }
   });
 
-  // [1단계: 성능 최적화] 화면 중앙 반경 500m 이내 필터링 및 최대 150그루 엄격 제한
+  // [3단계: 실사 시가지 수목 렌더링] 반경 1,800m 확장 및 2,200그루 넉넉한 식생 인스턴싱 보장 (단일 Draw Call 유지)
   const filteredTrees = trees
-    .filter((t) => Math.hypot(t.x, t.z) <= 500)
-    .slice(0, 150);
+    .filter((t) => Math.hypot(t.x, t.z) <= 1800)
+    .slice(0, 2200);
 
   return filteredTrees;
 }
@@ -760,11 +760,11 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         dummy.updateMatrix();
         this.coniferTreeMesh.setMatrixAt(i, dummy.matrix);
 
-        // 강원 소나무/잣나무 특유의 짙은 상록 침엽수 (#1e3f20) 베이스 변주
-        // RGB: 0.118, 0.247, 0.125
-        const r = 0.10 + (item.scale * 0.02);
-        const g = 0.23 + (item.scale * 0.03);
-        const b = 0.12 + (item.scale * 0.01);
+        // [3단계: 브이월드 레퍼런스 실사 짙은 녹색/올리브 톤 (#2d4c3b)]
+        // RGB: 0.176, 0.298, 0.231
+        const r = 0.16 + (item.scale * 0.02);
+        const g = 0.28 + (item.scale * 0.03);
+        const b = 0.21 + (item.scale * 0.02);
         tempColor.setRGB(r, g, b);
         this.coniferTreeMesh.setColorAt(i, tempColor);
       }
@@ -807,19 +807,19 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         dummy.updateMatrix();
         this.deciduousTreeMesh.setMatrixAt(i, dummy.matrix);
 
-        // 수종별 PBR 컬러 변주
+        // [3단계: 브이월드 레퍼런스 실사 올리브 그린 톤 (#3a5a40 / #2d4c3b)]
         if (item.species === 'oak') {
           // 참나무: 깊은 한국 산림 녹색 (#3a5a40 / RGB: 0.227, 0.353, 0.251)
-          tempColor.setRGB(0.21 + item.scale * 0.02, 0.35 + item.scale * 0.02, 0.24);
+          tempColor.setRGB(0.22 + item.scale * 0.02, 0.35 + item.scale * 0.02, 0.25);
         } else if (item.species === 'birch') {
-          // 자작나무: 은은하고 맑은 숲빛 (#406646)
-          tempColor.setRGB(0.24 + item.scale * 0.02, 0.40 + item.scale * 0.03, 0.27);
+          // 자작나무: 은은하고 맑은 올리브 숲빛 (#36523c)
+          tempColor.setRGB(0.21 + item.scale * 0.02, 0.33 + item.scale * 0.03, 0.24);
         } else if (item.species === 'ginkgo') {
-          // 은행나무: 화사한 라임 옐로우-그린 (#84cc16)
-          tempColor.setRGB(0.52 + item.scale * 0.03, 0.80, 0.12);
+          // 은행나무: 차분한 웜 올리브-그린 (#5a7832)
+          tempColor.setRGB(0.35 + item.scale * 0.03, 0.48, 0.20);
         } else {
-          // 느티나무: 풍성하고 생동감 넘치는 녹색 (#15803d)
-          tempColor.setRGB(0.08 + item.scale * 0.02, 0.50 + item.scale * 0.03, 0.24);
+          // 느티나무: 자연스러운 짙은 녹색 (#2d4c3b)
+          tempColor.setRGB(0.18 + item.scale * 0.02, 0.30 + item.scale * 0.03, 0.23);
         }
         this.deciduousTreeMesh.setColorAt(i, tempColor);
       }
