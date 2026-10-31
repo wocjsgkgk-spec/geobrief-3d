@@ -105,54 +105,47 @@ export interface VworldRealRenderOptions {
 }
 
 /**
- * 브이월드 3D 정밀 컬러 규격 (VWORLD_REA_COLOR_SPEC)
+ * 브이월드 3D 정밀 컬러 규격 (VWORLD_AUTHENTIC_COLORS 기반 동기화)
  */
 export const VWORLD_REA_COLORS = {
   // 아파트 외벽 바탕 75%
-  aptCreamWhite: '#f4f1ea',
-  aptSoftIvory: '#ebe5d8',
-  aptLightSandBeige: '#e2dacb',
-  aptLightWarmGray: '#dcd8d0',
+  aptCreamWhite: VWORLD_AUTHENTIC_COLORS.aptWalls[0],
+  aptSoftIvory: VWORLD_AUTHENTIC_COLORS.aptWalls[1],
+  aptLightSandBeige: VWORLD_AUTHENTIC_COLORS.aptWalls[2],
+  aptLightWarmGray: VWORLD_AUTHENTIC_COLORS.aptWalls[3],
 
-  // 아파트 측벽 4대 브랜드 수직 도색 라인
-  aptBrandBrown: '#6b4423',
-  aptBrandNavy: '#1e3a5f',
-  aptBrandTerracotta: '#8c3b2b',
-  aptBrandWarmGray: '#57534e',
+  // 아파트 측벽 4대 브랜드 수직 도색 라인 (저채도 규격)
+  aptBrandBrown: VWORLD_AUTHENTIC_COLORS.aptSideBrands[0].colorHex,
+  aptBrandNavy: VWORLD_AUTHENTIC_COLORS.aptSideBrands[1].colorHex,
+  aptBrandTerracotta: VWORLD_AUTHENTIC_COLORS.aptSideBrands[2].colorHex,
+  aptBrandWarmGray: VWORLD_AUTHENTIC_COLORS.aptSideBrands[3].colorHex,
 
-  // 아파트 지붕 3종
-  aptRoofFlatDarkGray: '#57534e',
-  aptRoofGabledBrownCap: '#6b3426',
-  aptRoofGabledNavyCap: '#334155',
+  // 아파트 지붕 2종
+  aptRoofFlatDarkGray: VWORLD_AUTHENTIC_COLORS.aptRoofs[0].hex,
+  aptRoofFlatMocha: VWORLD_AUTHENTIC_COLORS.aptRoofs[1].hex,
 
-  // 시내 상가 6대 외벽
-  commRedBrick: '#8c3b2b',
-  commDarkBrownBrick: '#5c3d2e',
-  commGraniteBeige: '#dcd4c6',
-  commCharcoalZinc: '#475569',
-  commWarmGrayConcrete: '#94a3b8',
-  commCreamStucco: '#ebe5d8',
+  // 시내 상가 외벽 6대 소재
+  commRedBrick: VWORLD_AUTHENTIC_COLORS.commWalls[0].hex,
+  commDarkBrownBrick: VWORLD_AUTHENTIC_COLORS.commWalls[1].hex,
+  commGraniteBeige: VWORLD_AUTHENTIC_COLORS.commWalls[2].hex,
+  commWarmGrayConcrete: VWORLD_AUTHENTIC_COLORS.commWalls[3].hex,
+  commCharcoalZinc: VWORLD_AUTHENTIC_COLORS.commWalls[4].hex,
+  commSkyGlass: VWORLD_AUTHENTIC_COLORS.commWalls[5].hex,
 
   // 상가 옥상 3대 실측 분포 (45% : 35% : 20%)
-  roofUrethaneSage: '#2e6f4e',
-  roofCementGray: '#8c8881',
-  roofTerracottaRed: '#7c3626',
+  roofUrethaneSage: VWORLD_AUTHENTIC_COLORS.commRoofs[0].hex,
+  roofCementGray: VWORLD_AUTHENTIC_COLORS.commRoofs[1].hex,
+  roofTerracottaRed: VWORLD_AUTHENTIC_COLORS.commRoofs[2].hex,
 
-  // 저층 주택 지붕 3종
-  lowriseTerracottaTile: '#7c3626',
-  lowriseBlueZinc: '#1e40af',
-  lowriseSlateGray: '#475569',
+  // 저층 단독주택 외벽
+  detachedRedBrick: VWORLD_AUTHENTIC_COLORS.detachedHouseWalls[0],
+  detachedStucco: VWORLD_AUTHENTIC_COLORS.detachedHouseWalls[1],
 };
 
 /**
- * 아파트 브랜드 측벽 라인 매핑 (seed % 4)
+ * 아파트 브랜드 측벽 라인 매핑 (VWORLD_AUTHENTIC_COLORS.aptSideBrands 동기화)
  */
-export const VWORLD_APT_SIDE_BRANDS = [
-  { name: '브라운 브랜드 라인', colorHex: '#6b4423', slot: 'apt_side_brown' },
-  { name: '네이비 브랜드 라인', colorHex: '#1e3a5f', slot: 'apt_side_navy' },
-  { name: '테라코타 브랜드 라인', colorHex: '#8c3b2b', slot: 'apt_side_terracotta' },
-  { name: '웜그레이 브랜드 라인', colorHex: '#57534e', slot: 'apt_side_warmgray' },
-];
+export const VWORLD_APT_SIDE_BRANDS = VWORLD_AUTHENTIC_COLORS.aptSideBrands;
 
 export class VworldRealRenderer {
   /**

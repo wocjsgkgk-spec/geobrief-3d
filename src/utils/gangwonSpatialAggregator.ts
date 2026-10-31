@@ -166,10 +166,10 @@ function computePolygonGeometryMetrics(coords: [number, number][]): {
 
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
-    const x0 = coords[i][0] * mPerLng;
-    const y0 = coords[i][1] * mPerLat;
-    const x1 = coords[j][0] * mPerLng;
-    const y1 = coords[j][1] * mPerLat;
+    const x0 = (coords[i][0] - centroid[0]) * mPerLng;
+    const y0 = (coords[i][1] - centroid[1]) * mPerLat;
+    const x1 = (coords[j][0] - centroid[0]) * mPerLng;
+    const y1 = (coords[j][1] - centroid[1]) * mPerLat;
 
     area2D += x0 * y1 - x1 * y0;
     const edgeDist = Math.hypot(x1 - x0, y1 - y0);

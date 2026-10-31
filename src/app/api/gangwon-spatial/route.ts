@@ -504,16 +504,17 @@ export async function GET(req: NextRequest) {
 
     let areaSum = 0;
     const n = coords.length;
+    const cLng = coords[0][0];
     const cLat = coords[0][1];
     const cosLat = Math.cos((cLat * Math.PI) / 180);
     const mPerLng = 111320 * cosLat;
     const mPerLat = 110574;
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      const x1 = coords[i][0] * mPerLng;
-      const y1 = coords[i][1] * mPerLat;
-      const x2 = coords[j][0] * mPerLng;
-      const y2 = coords[j][1] * mPerLat;
+      const x1 = (coords[i][0] - cLng) * mPerLng;
+      const y1 = (coords[i][1] - cLat) * mPerLat;
+      const x2 = (coords[j][0] - cLng) * mPerLng;
+      const y2 = (coords[j][1] - cLat) * mPerLat;
       areaSum += x1 * y2 - x2 * y1;
     }
     const areaSqm = Math.abs(areaSum) * 0.5;
@@ -560,16 +561,17 @@ export async function GET(req: NextRequest) {
     if (coords && coords.length >= 3) {
       let areaSum = 0;
       const n = coords.length;
+      const cLng = coords[0][0];
       const cLat = coords[0][1];
       const cosLat = Math.cos((cLat * Math.PI) / 180);
       const mPerLng = 111320 * cosLat;
       const mPerLat = 110574;
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
-        const x1 = coords[i][0] * mPerLng;
-        const y1 = coords[i][1] * mPerLat;
-        const x2 = coords[j][0] * mPerLng;
-        const y2 = coords[j][1] * mPerLat;
+        const x1 = (coords[i][0] - cLng) * mPerLng;
+        const y1 = (coords[i][1] - cLat) * mPerLat;
+        const x2 = (coords[j][0] - cLng) * mPerLng;
+        const y2 = (coords[j][1] - cLat) * mPerLat;
         areaSum += x1 * y2 - x2 * y1;
       }
       const areaSqm = Math.abs(areaSum) * 0.5;
