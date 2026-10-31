@@ -214,8 +214,24 @@ export class VworldRealRenderer {
     const isLowRise = arch.category === 'low_rise_residential';
     const isPublic = arch.category === 'public_office_landmark';
 
-    // [2단계: V-World 실사 컬러 그레이딩 및 팔레트 직결]
-    const palette = resolveAuthenticPalette(arch.category, seed, areaSqm, height);
+    // 학교 및 교육 연구 시설 판정
+    const bldgName = String(featProps.buld_nm || featProps.name || featProps['name:ko'] || '').toLowerCase();
+    const purps = String(featProps.main_purps_nm || featProps.building || featProps.amenity || '').toLowerCase();
+    const isSchoolBldg =
+      bldgName.includes('초등') ||
+      bldgName.includes('중학') ||
+      bldgName.includes('고등') ||
+      bldgName.includes('학교') ||
+      bldgName.includes('캠퍼스') ||
+      purps.includes('school') ||
+      purps.includes('education') ||
+      purps.includes('교육');
+
+    // [2단계: V-World 실사 컬러 그레이딩 및 4096px 포토 아틀라스 팔레트 직결]
+    const palette = resolveAuthenticPalette(arch.category, seed, areaSqm, height, isSchoolBldg);
+
+    // 4096px 고해상도 아틀라스 텍스처 본연의 민트그린/간판/테라코타 색상 100% 보존 (중복 곱셈 왜곡 차단)
+    const cleanWhiteRgb: [number, number, number] = [1, 1, 1];
 
     const wallCol = new THREE.Color(palette.wallColor || arch.wallColor);
     const wallRgb: [number, number, number] = [wallCol.r, wallCol.g, wallCol.b];
@@ -239,14 +255,14 @@ export class VworldRealRenderer {
       }
     }
 
-    // 아파트 측벽 브랜드 컬러 (차분한 브라운 / 웜그레이)
+    // 아파트 측벽 브랜드 컬러 및 UV 슬롯 (101, 102, 103, 105동 슬롯 분기)
     const sideBrandHex = palette.sideBrandColor || '#6b5344';
     const sideBrandCol = new THREE.Color(sideBrandHex);
     const sideBrandRgb: [number, number, number] = [sideBrandCol.r, sideBrandCol.g, sideBrandCol.b];
 
     // UV 슬롯 취득
     const uvMainWall = getDiverseFacadeSlotUV(palette.wallSlot || arch.wallSlot);
-    const uvAptSide = getDiverseFacadeSlotUV('apt_side');
+    const uvAptSide = getDiverseFacadeSlotUV(palette.sideWallSlot || 'apt_side');
     const uvShopShowcase = getDiverseFacadeSlotUV('comm_ground_shop');
     const uvRoofFloor = getDiverseFacadeSlotUV(palette.roofSlot || arch.roofSlot);
     const uvParapet = getDiverseFacadeSlotUV('parapet_concrete');
@@ -274,7 +290,7 @@ export class VworldRealRenderer {
         const isSideWall = sideWallEdgeIndices.has(i);
 
         if (isSideWall) {
-          // 측벽 (창문 없는 매끈한 밝은 아이보리 콘크리트 + 단지별 브랜드 수직 라인)
+          // 측벽 (창문 없는 매끈한 밝은 아이보리 콘크리트 + 단지별 브랜드 수직 라인 + 101/102동 번호)
           addQuad(
             [p1.x, baseElev, p1.z],
             [p2.x, baseElev, p2.z],
@@ -282,7 +298,7 @@ export class VworldRealRenderer {
             [p1.x, topElev, p1.z],
             norm,
             uvAptSide,
-            sideBrandRgb
+            cleanWhiteRgb
           );
         } else {
           // 전·배면 (1층 석재 필로티 + 기준층 발코니 창문 격자 + 슬래브 줄눈)
@@ -300,7 +316,7 @@ export class VworldRealRenderer {
             [p1.x, y1, p1.z],
             norm,
             uvPodium,
-            wallRgb
+            cleanWhiteRgb
           );
 
           // 기준층 발코니 창문 격자 (3.2m 층고마다 선명한 슬래브 줄눈과 PVC 십자 격자창)
@@ -331,7 +347,7 @@ export class VworldRealRenderer {
                 [bx0, fy1, bz0],
                 norm,
                 uvMainWall,
-                wallRgb
+                cleanWhiteRgb
               );
             }
           }
@@ -346,12 +362,12 @@ export class VworldRealRenderer {
               [p1.x, topElev, p1.z],
               norm,
               uvParapet,
-              wallRgb
+              cleanWhiteRgb
             );
           }
         }
       }
-      // 2) 중·저층 상가 및 원룸 (1층 어두운 화강석 쇼윈도 + 간판 밴드 + 2층 이상 6대 소재)
+      // 2) 중·저층 상가 및 원룸 (1층 쇼윈도 + 2층 이상 한국형 간판 패치)
       else if (isCommercial || (height >= 11.0 && !isLowRise)) {
         const podiumH = Math.min(3.8, height * 0.45);
         const yPodiumTop = baseElev + podiumH;
@@ -364,10 +380,10 @@ export class VworldRealRenderer {
           [p1.x, yPodiumTop, p1.z],
           norm,
           uvShopShowcase,
-          wallRgb
+          cleanWhiteRgb
         );
 
-        // 2층 이상 상층부 외벽 (개별 창문 격자)
+        // 2층 이상 상층부 외벽 (한국어 간판 + 개별 창문 격자)
         if (height > podiumH + 0.5) {
           const upperH = height - podiumH;
           const numUpperFloors = Math.max(1, Math.round(upperH / 3.3));
@@ -384,12 +400,12 @@ export class VworldRealRenderer {
               [p1.x, uy1, p1.z],
               norm,
               uvMainWall,
-              wallRgb
+              cleanWhiteRgb
             );
           }
         }
       }
-      // 3) 저층 단독주택·빌라·군부대 막사
+      // 3) 저층 단독주택·빌라·군부대 막사 및 학교
       else {
         addQuad(
           [p1.x, baseElev, p1.z],
@@ -398,7 +414,7 @@ export class VworldRealRenderer {
           [p1.x, topElev, p1.z],
           norm,
           uvMainWall,
-          wallRgb
+          cleanWhiteRgb
         );
       }
     }
@@ -423,7 +439,7 @@ export class VworldRealRenderer {
             [p1.x, topElev, p1.z],
             [-dz / elen, 0, dx / elen],
             uvMainWall,
-            wallRgb
+            cleanWhiteRgb
           );
         }
       }
@@ -431,9 +447,6 @@ export class VworldRealRenderer {
 
     // -------------------------------------------------------------------------
     // [B] 지붕 3D 조형 생성: 100% 완전 수평 평면 슬래브(Flat Roof) + 회백색 콘크리트 난간(Parapet)
-    // - 삼각형 뿔(피라미드/박공/우진각) 종이접기 기하 왜곡 영구 완전 삭제
-    // - earcut(flatCoords, holeIndices, 2) 기반 내측 슬래브 완벽 분할
-    // - 난간 테두리(#d4d4d8 회백색 콘크리트)와 안쪽 바닥(우레탄 세이지/콘크리트 슬래브) 100% 분리
     // -------------------------------------------------------------------------
     const parapetH = palette.parapetHeight || 0.8;
     const parapetThick = 0.35;
@@ -465,7 +478,7 @@ export class VworldRealRenderer {
         [cur.x, parapetTopElev, cur.z],
         [nx, 0, nz],
         uvParapet,
-        parapetRgb
+        cleanWhiteRgb
       );
 
       // 2. 내측 인셋 오프셋
@@ -500,7 +513,7 @@ export class VworldRealRenderer {
         [inCur.x, parapetTopElev, inCur.z],
         [0, 1, 0],
         uvParapet,
-        parapetRgb
+        cleanWhiteRgb
       );
 
       // 내측벽 (Inner Wall, 침하 난간 내측)
@@ -514,7 +527,7 @@ export class VworldRealRenderer {
         [inCur.x, parapetTopElev, inCur.z],
         [inDz / inLen, 0, -inDx / inLen],
         uvParapet,
-        parapetRgb
+        cleanWhiteRgb
       );
     }
 
@@ -553,7 +566,7 @@ export class VworldRealRenderer {
         [uvRoofFloor.u0, uvRoofFloor.v0],
         [uvRoofFloor.u1, uvRoofFloor.v0],
         [uvRoofFloor.u1, uvRoofFloor.v1],
-        roofRgb
+        cleanWhiteRgb
       );
     }
 
@@ -583,7 +596,7 @@ export class VworldRealRenderer {
             [cp0[0], cTopY, cp0[1]],
             [-cdz / clen, 0, cdx / clen],
             uvCore,
-            wallRgb
+            cleanWhiteRgb
           );
         }
 
@@ -595,7 +608,7 @@ export class VworldRealRenderer {
           [cPts[3][0], cTopY, cPts[3][1]],
           [0, 1, 0],
           uvRoofFloor,
-          roofRgb
+          cleanWhiteRgb
         );
       }
     }

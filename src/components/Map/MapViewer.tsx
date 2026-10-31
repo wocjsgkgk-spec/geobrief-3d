@@ -441,11 +441,11 @@ const baseStyle: maplibregl.StyleSpecification = {
       source: 'satellite-tiles',
       paint: {
         'raster-opacity': 1.0,
-        'raster-saturation': -0.25,
-        'raster-contrast': 0.05,
-        'raster-brightness-min': 0.08,
-        'raster-brightness-max': 0.92,
-        'raster-fade-duration': 300,
+        'raster-saturation': 0.0,
+        'raster-contrast': 0.0,
+        'raster-brightness-min': 0.0,
+        'raster-brightness-max': 1.0,
+        'raster-fade-duration': 0,
       },
     },
   ],
@@ -495,11 +495,11 @@ export function safeSetTerrain(
               source: map.getSource('satellite-tiles') ? 'satellite-tiles' : 'satellite-source',
               paint: {
                 'raster-opacity': 1.0,
-                'raster-saturation': -0.25,
-                'raster-contrast': 0.05,
-                'raster-brightness-min': 0.08,
-                'raster-brightness-max': 0.92,
-                'raster-fade-duration': 300,
+                'raster-saturation': 0.0,
+                'raster-contrast': 0.0,
+                'raster-brightness-min': 0.0,
+                'raster-brightness-max': 1.0,
+                'raster-fade-duration': 0,
               },
               layout: { visibility: 'visible' },
             },
@@ -1588,11 +1588,11 @@ export const MapViewer: React.FC = () => {
             source: 'satellite-tiles',
             paint: {
               'raster-opacity': 1.0,
-              'raster-saturation': -0.25,
-              'raster-contrast': 0.05,
-              'raster-brightness-min': 0.08,
-              'raster-brightness-max': 0.92,
-              'raster-fade-duration': 300,
+              'raster-saturation': 0.0,
+              'raster-contrast': 0.0,
+              'raster-brightness-min': 0.0,
+              'raster-brightness-max': 1.0,
+              'raster-fade-duration': 0,
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
           },
@@ -4087,11 +4087,25 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const roadVis = layers?.roads === false ? 'none' : 'visible';
+    const isSatellite = baseMap === 'satellite';
 
     for (const lid of KOREAN_ROAD_LAYER_IDS) {
       if (map.getLayer(lid)) {
         if (lid.startsWith('korean-water') || lid.startsWith('korean-riverbank')) {
           map.setLayoutProperty(lid, 'visibility', 'visible');
+        } else if (
+          isSatellite &&
+          (lid === 'road-asphalt' ||
+            lid === 'road-curb-casing' ||
+            lid === 'complex-service-asphalt' ||
+            lid === 'complex-parking-area' ||
+            lid === 'complex-service-casing' ||
+            lid === 'complex-pedestrian-path' ||
+            lid === 'complex-parking-bays' ||
+            lid === 'korean-roads-surface')
+        ) {
+          // [2단계] 위성 모드 시 인위적인 아스팔트/블록 채우기를 꺼서 브이월드 원본 항공사진 노면 100% 노출
+          map.setLayoutProperty(lid, 'visibility', 'none');
         } else {
           map.setLayoutProperty(lid, 'visibility', roadVis);
         }
@@ -4342,23 +4356,25 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
+    const isSatellite = baseMap === 'satellite';
+
     if (map.getLayer('satellite-base-layer')) {
       map.setLayoutProperty(
         'satellite-base-layer',
         'visibility',
-        baseMap === 'satellite' ? 'visible' : 'none'
+        isSatellite ? 'visible' : 'none'
       );
-      map.setPaintProperty('satellite-base-layer', 'raster-saturation', -0.25);
-      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.05);
-      map.setPaintProperty('satellite-base-layer', 'raster-brightness-min', 0.08);
-      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 0.92);
-      map.setPaintProperty('satellite-base-layer', 'raster-fade-duration', 300);
+      map.setPaintProperty('satellite-base-layer', 'raster-saturation', 0.0);
+      map.setPaintProperty('satellite-base-layer', 'raster-contrast', 0.0);
+      map.setPaintProperty('satellite-base-layer', 'raster-brightness-min', 0.0);
+      map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 1.0);
+      map.setPaintProperty('satellite-base-layer', 'raster-fade-duration', 0);
     }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(
         'satellite-layer',
         'visibility',
-        baseMap === 'satellite' ? 'visible' : 'none'
+        isSatellite ? 'visible' : 'none'
       );
     }
     if (map.getLayer('clean-layer')) {
@@ -4369,14 +4385,36 @@ export const MapViewer: React.FC = () => {
       );
     }
 
-    // [3단계: 벡터 토지피복(Landuse/Landcover) 디테일 블렌딩 가시성 동기화]
-    const landuseVis = baseMap === 'satellite' ? 'visible' : 'none';
+    // [2단계: 벡터 토지피복 산림/녹지 블렌딩 - 위성 모드 시 완전히 꺼서 원본 위성사진 100% 선명 노출]
+    const landuseVis = isSatellite ? 'none' : 'visible';
     for (const lid of KOREAN_LANDUSE_LAYER_IDS) {
       if (map.getLayer(lid)) {
         map.setLayoutProperty(lid, 'visibility', landuseVis);
       }
     }
-  }, [baseMap, isMapLoaded]);
+
+    // [2단계: 위성 모드 시 노면을 덮는 인위적 아스팔트/블록 채우기 레이어 일괄 OFF]
+    const groundCoveringLayers = [
+      'complex-parking-area',
+      'complex-parking-curb',
+      'complex-service-casing',
+      'complex-service-asphalt',
+      'complex-pedestrian-path',
+      'complex-parking-bays',
+      'road-curb-casing',
+      'road-asphalt',
+      'korean-roads-surface',
+    ];
+    for (const lid of groundCoveringLayers) {
+      if (map.getLayer(lid)) {
+        map.setLayoutProperty(
+          lid,
+          'visibility',
+          isSatellite ? 'none' : (layers?.roads === false ? 'none' : 'visible')
+        );
+      }
+    }
+  }, [baseMap, isMapLoaded, layers?.roads]);
 
   // 10. 3D 지형 On/Off 및 고저차 배율 반영 (소스 존재 검증 및 캐시 초기화)
   useEffect(() => {

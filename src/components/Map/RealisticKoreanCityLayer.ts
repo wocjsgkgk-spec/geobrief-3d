@@ -292,22 +292,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 1.20);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 2단계] 16종 실사 파사드 아틀라스 & 순수 MeshStandardMaterial 정통 PBR 재질 초기화
+      // 2. [GeoBrief 3D 2단계] 4096px 고해상도 실사 파사드 아틀라스 & 순수 MeshStandardMaterial 정통 PBR 재질 초기화
       const atlasTex = getDiverseKoreanFacadeAtlasTexture();
       this.masterMaterial = new THREE.MeshStandardMaterial({
         map: atlasTex || undefined,
-        color: new THREE.Color('#e5e0d8'),
+        color: new THREE.Color(0xffffff),
         vertexColors: true,
-        roughness: 0.65,
+        roughness: 0.55,
         metalness: 0.08,
         side: THREE.DoubleSide,
       });
 
       this.rooftopMaterial = new THREE.MeshStandardMaterial({
         map: atlasTex || undefined,
-        color: new THREE.Color('#e5e0d8'),
+        color: new THREE.Color(0xffffff),
         vertexColors: true,
-        roughness: 0.70,
+        roughness: 0.65,
         metalness: 0.05,
         side: THREE.DoubleSide,
         transparent: false,
