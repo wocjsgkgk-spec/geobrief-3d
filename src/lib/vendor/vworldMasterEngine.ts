@@ -175,13 +175,13 @@ export class VworldMasterEngine {
     }
 
     // -------------------------------------------------------------------------
-    // [규격 4: 소형 단독주택·다가구 (area < 220㎡)]
-    // 스펙: 7.5m ~ 11m (2층 ~ 3.5층) - 절대 연필 기둥처럼 솟지 않도록 엄격 캡
+    // [규격 4: 소형 단독주택·다가구 (area < 200㎡)]
+    // 스펙: 4.5m ~ 7.5m (1층 ~ 2층) - 절대 연필 기둥처럼 솟지 않도록 엄격 캡
     // -------------------------------------------------------------------------
-    if (areaSqm < 220) {
-      const resH = 7.5 + (seed % 5) * 0.85; // 7.5m ~ 10.9m
-      const safeMaxWidth = Math.max(6.0, minWidth);
-      return Math.min(resH, safeMaxWidth * 2.5); // 세장비 2.5 이내 제한
+    if (areaSqm < 200) {
+      const resH = 4.5 + (seed % 4) * 1.0; // 4.5m ~ 7.5m (1~2층)
+      const safeMaxWidth = Math.max(5.0, minWidth);
+      return Math.min(resH, safeMaxWidth * 2.0); // 세장비 2.0 이내 제한
     }
 
     // 기본 보증 높이 (모든 건물 입체화 보증: 12m ~ 22m)
@@ -197,9 +197,9 @@ export class VworldMasterEngine {
     minWidth: number,
     seed: number
   ): number {
-    if (areaSqm < 220) {
-      // 220㎡ 미만 소형 건물은 최대 11.5m 이하로 엄격 캡
-      return Math.min(rawH, 7.5 + (seed % 4) * 0.9);
+    if (areaSqm < 200) {
+      // 200㎡ 미만 소형 건물은 최대 7.5m 이하로 엄격 캡
+      return Math.min(rawH, 4.5 + (seed % 4) * 1.0);
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = Math.max(14.0, safeW * 4.0);
@@ -259,10 +259,10 @@ export class VworldMasterEngine {
       buildingType = 'residential';
       typeName = '단독주택·빌라·군막사';
       wallSlot = seed % 3 === 0 ? 'villa_red_brick' : seed % 3 === 1 ? 'villa_brown_brick' : 'villa_granite_stone';
-      roofSlot = 'roof_terracotta_tile';
-      hasParapet = false;
+      roofSlot = seed % 3 === 0 ? 'roof_urethane_sage' : seed % 3 === 1 ? 'roof_concrete_warmgray' : 'roof_terracotta_tile';
+      hasParapet = true;
       hasPenthouse = false;
-      roofStyle = seed % 2 === 0 ? 'gabled' : 'hipped'; // 3D 경사 지붕
+      roofStyle = 'flat_parapet'; // 완전 수평 평면 슬래브 + 0.8m 난간
     }
 
     return {

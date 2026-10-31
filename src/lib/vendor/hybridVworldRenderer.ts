@@ -337,16 +337,11 @@ export class HybridVworldRenderer {
     if (landmarkInfo) {
       tier = 'tier3_landmark_pitched';
       roofStyle = 'landmark_multipart';
-    } else if (
-      master.roofCdNm.includes('기와') ||
-      master.roofCdNm.includes('박공') ||
-      master.roofCdNm.includes('경사') ||
-      (!isHighRiseApt && finalHeight <= 14.0 && areaSqm < 280)
-    ) {
-      tier = 'tier3_landmark_pitched';
-      roofStyle = diverseArch.roofStyle === 'hipped' ? 'hipped' : 'gabled';
     } else if (master.isRegistered) {
       tier = 'tier1_registered';
+      roofStyle = 'flat_parapet';
+    } else {
+      roofStyle = 'flat_parapet';
     }
 
     const wallSlot = featProps.realWallSlot || diverseArch.wallSlot;

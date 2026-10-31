@@ -48,6 +48,10 @@ import {
   DiverseBuildingArchitecture,
 } from '@/lib/vendor/diverseBuildingGenerator';
 import {
+  resolveAuthenticPalette,
+  VWORLD_AUTHENTIC_COLORS,
+} from '@/lib/vendor/vworldAuthenticPalette';
+import {
   buildLandmarkBuildingMesh,
   detectLandmarkType,
   LandmarkInfo,
@@ -189,7 +193,9 @@ export class VworldRealRenderer {
       if (elen < minEdge) minEdge = elen;
     }
 
-    const height = Math.max(7.5, opts.height || 10.0);
+    // [소형 단독주택 높이 제약 (4.5m ~ 7.5m, 1~2층)]
+    const minH = areaSqm < 200 ? 4.5 : 7.5;
+    const height = Math.max(minH, opts.height || (areaSqm < 200 ? 5.5 : 10.0));
     const topElev = baseElev + height;
 
     // 2. 관공서 / 공공청사 랜드마크 3단 복합 조형 (포디움 + 셋백 타워 + 옥상 조경)
@@ -215,10 +221,16 @@ export class VworldRealRenderer {
     const isLowRise = arch.category === 'low_rise_residential';
     const isPublic = arch.category === 'public_office_landmark';
 
-    const wallCol = new THREE.Color(arch.wallColor || VWORLD_REA_COLORS.aptCreamWhite);
+    // [2단계: V-World 실사 컬러 그레이딩 및 팔레트 직결]
+    const palette = resolveAuthenticPalette(arch.category, seed, areaSqm, height);
+
+    const wallCol = new THREE.Color(palette.wallColor || arch.wallColor);
     const wallRgb: [number, number, number] = [wallCol.r, wallCol.g, wallCol.b];
-    const roofCol = new THREE.Color(arch.roofColor || VWORLD_REA_COLORS.roofUrethaneSage);
+    const roofCol = new THREE.Color(palette.roofColor || arch.roofColor);
     const roofRgb: [number, number, number] = [roofCol.r, roofCol.g, roofCol.b];
+
+    const parapetCol = new THREE.Color(palette.parapetColor || '#d4d4d8');
+    const parapetRgb: [number, number, number] = [parapetCol.r, parapetCol.g, parapetCol.b];
 
     // 4. 아파트 측벽(Side Wall) 양 끝단 검출: 좁은 2개 변
     const sideWallEdgeIndices = new Set<number>();
@@ -234,17 +246,16 @@ export class VworldRealRenderer {
       }
     }
 
-    // 아파트 측벽 브랜드 컬러 선정 (seed % 4)
-    const brandIdx = seed % 4;
-    const sideBrand = VWORLD_APT_SIDE_BRANDS[brandIdx];
-    const sideBrandCol = new THREE.Color(sideBrand.colorHex);
+    // 아파트 측벽 브랜드 컬러 (차분한 브라운 / 웜그레이)
+    const sideBrandHex = palette.sideBrandColor || '#6b5344';
+    const sideBrandCol = new THREE.Color(sideBrandHex);
     const sideBrandRgb: [number, number, number] = [sideBrandCol.r, sideBrandCol.g, sideBrandCol.b];
 
     // UV 슬롯 취득
-    const uvMainWall = getDiverseFacadeSlotUV(arch.wallSlot);
-    const uvAptSide = getDiverseFacadeSlotUV(sideBrand.slot);
+    const uvMainWall = getDiverseFacadeSlotUV(palette.wallSlot || arch.wallSlot);
+    const uvAptSide = getDiverseFacadeSlotUV('apt_side');
     const uvShopShowcase = getDiverseFacadeSlotUV('comm_ground_shop');
-    const uvRoofFloor = getDiverseFacadeSlotUV(arch.roofSlot);
+    const uvRoofFloor = getDiverseFacadeSlotUV(palette.roofSlot || arch.roofSlot);
     const uvParapet = getDiverseFacadeSlotUV('parapet_concrete');
 
     // -------------------------------------------------------------------------
@@ -426,11 +437,12 @@ export class VworldRealRenderer {
     }
 
     // -------------------------------------------------------------------------
-    // [B] 지붕 3D 조형 생성: 100% 완전 수평 평면 슬래브(Flat Roof) + 0.8m 옥상 돌출 난간(Parapet)
+    // [B] 지붕 3D 조형 생성: 100% 완전 수평 평면 슬래브(Flat Roof) + 회백색 콘크리트 난간(Parapet)
     // - 삼각형 뿔(피라미드/박공/우진각) 종이접기 기하 왜곡 영구 완전 삭제
     // - earcut(flatCoords, holeIndices, 2) 기반 내측 슬래브 완벽 분할
+    // - 난간 테두리(#d4d4d8 회백색 콘크리트)와 안쪽 바닥(우레탄 세이지/콘크리트 슬래브) 100% 분리
     // -------------------------------------------------------------------------
-    const parapetH = 0.8;
+    const parapetH = palette.parapetHeight || 0.8;
     const parapetThick = 0.35;
     const parapetTopElev = topElev + parapetH;
 
@@ -450,7 +462,7 @@ export class VworldRealRenderer {
         continue;
       }
 
-      // 1. 난간 외벽
+      // 1. 난간 외벽 (회백색 콘크리트 테두리)
       const nx = -edz / elen;
       const nz = edx / elen;
       addRooftopQuad(
@@ -460,7 +472,7 @@ export class VworldRealRenderer {
         [cur.x, parapetTopElev, cur.z],
         [nx, 0, nz],
         uvParapet,
-        roofRgb
+        parapetRgb
       );
 
       // 2. 내측 인셋 오프셋
@@ -479,7 +491,7 @@ export class VworldRealRenderer {
       innerPts.push({ x: inX, z: inZ });
     }
 
-    // 3. 난간 상단 캡 및 내측벽
+    // 3. 난간 상단 캡 및 내측벽 (회백색 콘크리트 테두리 유지)
     for (let i = 0; i < ptCount; i++) {
       const next = (i + 1) % ptCount;
       const cur = pts2D[i];
@@ -495,10 +507,10 @@ export class VworldRealRenderer {
         [inCur.x, parapetTopElev, inCur.z],
         [0, 1, 0],
         uvParapet,
-        roofRgb
+        parapetRgb
       );
 
-      // 내측벽 (Inner Wall, 0.9m 침하)
+      // 내측벽 (Inner Wall, 침하 난간 내측)
       const inDx = inNext.x - inCur.x;
       const inDz = inNext.z - inCur.z;
       const inLen = Math.hypot(inDx, inDz) || 1;
@@ -509,7 +521,7 @@ export class VworldRealRenderer {
         [inCur.x, parapetTopElev, inCur.z],
         [inDz / inLen, 0, -inDx / inLen],
         uvParapet,
-        roofRgb
+        parapetRgb
       );
     }
 

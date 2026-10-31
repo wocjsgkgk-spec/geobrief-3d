@@ -182,8 +182,8 @@ export function sanitizeBuildingHeight(
   centerLngLat?: [number, number]
 ): number {
   if (rawHeight > 0) {
-    if (areaSqm < 220) {
-      return Math.min(rawHeight, 7.5 + (seed % 5) * 0.85); // 7.5m ~ 10.9m
+    if (areaSqm < 200) {
+      return Math.min(rawHeight, 4.5 + (seed % 4) * 1.0); // 4.5m ~ 7.5m (단독주택 1~2층 엄격 제약)
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
