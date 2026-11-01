@@ -60,6 +60,10 @@ import {
   detectLandmarkType,
   LandmarkInfo,
 } from '@/utils/landmarkBuildingBuilder';
+import {
+  VworldUniversalStyler,
+  UniversalStyleResult,
+} from '@/lib/vendor/vworldUniversalStyler';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -211,39 +215,36 @@ export class VworldRealRenderer {
       return;
     }
 
-    // 3. 24종 다중 건축 양식 판정
+    // 3. [2단계: V-World 실사 파사드·옥상·주변환경 100% 동기화 마스터 엔진 연동]
+    const aspectRatio = minEdge > 0 && maxEdge > 0 ? maxEdge / minEdge : 1.0;
+    const uniStyle: UniversalStyleResult = VworldUniversalStyler.resolveUniversalBuildingStyle(
+      featProps,
+      areaSqm,
+      height,
+      aspectRatio,
+      minEdge,
+      centerLngLat,
+      seed
+    );
+
     const arch = DiverseBuildingGenerator.resolveArchitecture(featProps, height, areaSqm, centerLngLat);
 
-    const isApartment = arch.category === 'high_rise_apartment';
-    const isCommercial = arch.category === 'mid_rise_commercial';
-    const isLowRise = arch.category === 'low_rise_residential';
-    const isPublic = arch.category === 'public_office_landmark';
-
-    // 학교 및 교육 연구 시설 판정
-    const bldgName = String(featProps.buld_nm || featProps.name || featProps['name:ko'] || '').toLowerCase();
-    const purps = String(featProps.main_purps_nm || featProps.building || featProps.amenity || '').toLowerCase();
-    const isSchoolBldg =
-      bldgName.includes('초등') ||
-      bldgName.includes('중학') ||
-      bldgName.includes('고등') ||
-      bldgName.includes('학교') ||
-      bldgName.includes('캠퍼스') ||
-      purps.includes('school') ||
-      purps.includes('education') ||
-      purps.includes('교육');
-
-    // [2단계: V-World 실사 컬러 그레이딩 및 4096px 포토 아틀라스 팔레트 직결]
-    const palette = resolveAuthenticPalette(arch.category, seed, areaSqm, height, isSchoolBldg);
+    const isApartment = uniStyle.category === 'apartment';
+    const isCommercial = uniStyle.category === 'commercial';
+    const isLowRise = uniStyle.category === 'lowrise_residential';
+    const isPublic = uniStyle.category === 'public_office';
+    const isSchoolBldg = uniStyle.category === 'school';
+    const isMilitary = uniStyle.category === 'military';
 
     // 4096px 고해상도 아틀라스 텍스처 본연의 민트그린/간판/테라코타 색상 100% 보존 (중복 곱셈 왜곡 차단)
     const cleanWhiteRgb: [number, number, number] = [1, 1, 1];
 
-    const wallCol = new THREE.Color(palette.wallColor || arch.wallColor);
+    const wallCol = new THREE.Color(uniStyle.wallColor || '#f5f3ee');
     const wallRgb: [number, number, number] = [wallCol.r, wallCol.g, wallCol.b];
-    const roofCol = new THREE.Color(palette.roofColor || arch.roofColor);
+    const roofCol = new THREE.Color(uniStyle.roofColor || '#828282');
     const roofRgb: [number, number, number] = [roofCol.r, roofCol.g, roofCol.b];
 
-    const parapetCol = new THREE.Color(palette.parapetColor || '#d4d4d8');
+    const parapetCol = new THREE.Color(uniStyle.parapetColor || '#d4d4d8');
     const parapetRgb: [number, number, number] = [parapetCol.r, parapetCol.g, parapetCol.b];
 
     // 4. 아파트 측벽(Side Wall) 양 끝단 검출: 좁은 2개 변
@@ -261,27 +262,20 @@ export class VworldRealRenderer {
     }
 
     // 아파트 측벽 브랜드 컬러 및 UV 슬롯 (101, 102, 103, 105동 슬롯 분기)
-    const sideBrandHex = palette.sideBrandColor || '#6b5344';
+    const sideBrandHex = uniStyle.sideBrandColor || '#6b5344';
     const sideBrandCol = new THREE.Color(sideBrandHex);
     const sideBrandRgb: [number, number, number] = [sideBrandCol.r, sideBrandCol.g, sideBrandCol.b];
 
-    // UV 슬롯 취득
-    const uvMainWall = getDiverseFacadeSlotUV(palette.wallSlot || arch.wallSlot);
-    const uvAptSide = getDiverseFacadeSlotUV(palette.sideWallSlot || 'apt_side');
-    const uvShopShowcase = getDiverseFacadeSlotUV('comm_ground_shop');
-    const uvRoofFloor = getDiverseFacadeSlotUV(palette.roofSlot || arch.roofSlot);
-    const uvParapet = getDiverseFacadeSlotUV('parapet_concrete');
-    const uvRoofCap = getDiverseFacadeSlotUV('crown_frame');
-    const uvPodium = getDiverseFacadeSlotUV('apt_sand_beige');
-    const uvSchool = getDiverseFacadeSlotUV('school_terracotta_brick');
-
-    // 상가 층별 간판 슬롯 순환 풀
-    const commSignSlots = [
-      getDiverseFacadeSlotUV('comm_sign_clinic_pharmacy'),
-      getDiverseFacadeSlotUV('comm_sign_academy_study'),
-      getDiverseFacadeSlotUV('comm_sign_cafe_bakery'),
-      getDiverseFacadeSlotUV('comm_sign_fitness_yoga'),
-    ];
+    // UV 슬롯 취득 (VworldUniversalStyler 규격 1:1 직결)
+    const uvMainWall = uniStyle.uvMainWall;
+    const uvAptSide = uniStyle.uvAptSide;
+    const uvShopShowcase = uniStyle.uvShopShowcase;
+    const uvRoofFloor = uniStyle.uvRoofFloor;
+    const uvParapet = uniStyle.uvParapet;
+    const uvRoofCap = uniStyle.uvRoofCap;
+    const uvPodium = uniStyle.uvPodium;
+    const uvSchool = uniStyle.uvSchool;
+    const commSignSlots = uniStyle.commSignSlots;
 
     // -------------------------------------------------------------------------
     // [A] 외벽 생성 (Apartment / Commercial / School / Low-rise 분기)
@@ -584,7 +578,7 @@ export class VworldRealRenderer {
     // -------------------------------------------------------------------------
     // [B] 지붕 3D 조형 생성: 100% 완전 수평 평면 슬래브(Flat Roof) + 회백색 콘크리트 난간(Parapet)
     // -------------------------------------------------------------------------
-    const parapetH = palette.parapetHeight || 0.8;
+    const parapetH = uniStyle.parapetHeight || 0.8;
     const parapetThick = 0.35;
     const parapetTopElev = topElev + parapetH;
 
@@ -707,7 +701,7 @@ export class VworldRealRenderer {
     }
 
     // 5. [3단계: Streets-GL 벤더링] 엘리베이터 옥탑 권상기실 & 냉각탑/실외기 박스 옥상 설비 복합 메쉬
-    if (arch.hasPenthouseCore || isApartment || isCommercial) {
+    if (uniStyle.hasElevatorPenthouse || arch.hasPenthouseCore || isApartment || isCommercial) {
       buildStreetsGlRooftopEquipment({
         innerPts,
         topElev,

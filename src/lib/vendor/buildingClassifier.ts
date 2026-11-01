@@ -206,7 +206,7 @@ export function classifyBuildingWithVendor(
   properties: Record<string, any> = {}
 ): ClassifiedBuildingInfo {
   const metrics = calculatePolygonMetrics(coords);
-  const { areaSqm, perimeter, aspectRatio, firstLng, firstLat, centerLng, centerLat } = metrics;
+  const { areaSqm, perimeter, aspectRatio, minWidth, firstLng, firstLat, centerLng, centerLat } = metrics;
 
   // 1. [2단계] DiverseBuildingGenerator 24대 아키텍처 해시 시드 연동 (좌표 기반 고유 시드)
   const seed = DiverseBuildingGenerator.calculateSeed(firstLng, firstLat);
@@ -350,14 +350,22 @@ export function classifyBuildingWithVendor(
       name.includes('복지관') || (name.includes('상가') && isAptKeyword)
     );
 
-  // [진짜 아파트 동] 바닥면적 450㎡ 이상이면서 (장단축비율 2.2 이상인 판상형/ㄱ자형/타워형이거나 건축물대장 공동주택(아파트))
+  // [진짜 아파트 동] 바닥면적 320㎡ 이상이면서 (판상형/타워형 기하학 또는 건축물대장 공동주택(아파트))
+  const isAptGeometry =
+    areaSqm >= 320 &&
+    (minWidth >= 8.5 || areaSqm >= 420) &&
+    (aspectRatio >= 1.6 || areaSqm >= 420);
+
   const isTrueApartmentBlock =
-    areaSqm >= 450 &&
     !isAuxiliaryInApt &&
+    !isPublicTag &&
+    !isIndustrialTag &&
     (
       isExplicitAptRegister ||
-      (aspectRatio >= 2.2 && (isNearAptAnchor || isAptKeyword || zone.includes('2종') || zone.includes('3종') || zone.includes('제2종') || zone.includes('제3종'))) ||
-      (isAptKeyword && areaSqm >= 500)
+      (isAptKeyword && areaSqm >= 250) ||
+      isAptGeometry ||
+      (isNearAptAnchor && areaSqm >= 300) ||
+      (aspectRatio >= 1.6 && areaSqm >= 320 && (zone.includes('2종') || zone.includes('3종') || zone.includes('제2종') || zone.includes('제3종')))
     );
 
   const isCommercialTag =
@@ -685,8 +693,8 @@ export function classifyBuildingWithVendor(
   // [절대 규칙 1: 세장비 제한 (Slenderness Ratio Limit)]
   // 어떤 건물이든 건물 바닥의 짧은 변 폭(minWidth) 대비 높이가 3.5배를 넘을 수 없음!
   // ---------------------------------------------------------------------------
-  const minWidth = Math.max(1, metrics.minWidth || Math.sqrt(areaSqm));
-  const maxAllowedBySlenderness = Math.max(8.0, minWidth * 3.5);
+  const effectiveMinWidth = Math.max(1, minWidth || Math.sqrt(areaSqm));
+  const maxAllowedBySlenderness = Math.max(8.0, effectiveMinWidth * 3.5);
   if (height > maxAllowedBySlenderness) {
     height = Math.min(height, Math.max(8.0, maxAllowedBySlenderness));
     floors = Math.max(2, Math.round(height / 3.3));

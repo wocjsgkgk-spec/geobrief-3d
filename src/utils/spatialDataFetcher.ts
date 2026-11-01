@@ -189,15 +189,15 @@ export function extractRenderedVectorBuildings(
         name.includes('호반') || name.includes('중흥') || name.includes('센트럴') ||
         usageType.includes('apartment');
 
-      // (c) 아파트 기하학적 형태 판정 (한국형 판상형: 폭 10~18m, 길이 32~95m, 바닥면적 450㎡ 이상, 세장비 2.2 이상)
+      // (c) 아파트 기하학적 형태 판정 (한국형 판상형: 폭 8.5~24m, 바닥면적 320㎡ 이상, 세장비 1.6 이상)
       const isAptByGeometry =
         !isMilitary &&
-        approxArea >= 450 &&
-        ((dimMin >= 9.0 && dimMin <= 24.0 && dimMax >= 32.0 && aspectRatio >= 2.2) ||
-         (dimMin >= 12.0 && dimMax >= 35.0 && approxArea >= 500));
+        approxArea >= 320 &&
+        ((dimMin >= 8.5 && dimMax >= 25.0 && aspectRatio >= 1.6) ||
+         (dimMin >= 10.0 && approxArea >= 420));
 
-      // 소형 필지(area < 280㎡)는 절대로 아파트 불가!
-      const isApartment = approxArea >= 280 && (isAptByName && approxArea >= 400 || isAptByGeometry);
+      // 소형 필지(area < 250㎡)는 절대로 아파트 불가!
+      const isApartment = approxArea >= 250 && ((isAptByName && approxArea >= 280) || isAptByGeometry);
 
       // (d) 중대형 상업/오피스 판정
       const isCommercialName =
@@ -234,7 +234,7 @@ export function extractRenderedVectorBuildings(
           // 군 표준 병영막사: 1층~3층 (4.5m~9.5m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
           renderHeight = 4.5 + seed * 4.5;
-        } else if (isApartment && approxArea >= 450) {
+        } else if (isApartment && approxArea >= 320) {
           // 진짜 아파트 단지 동: 14층~24층 (42m~72m)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
           renderHeight = 42.0 + seed * 30.0; // 42m ~ 72m

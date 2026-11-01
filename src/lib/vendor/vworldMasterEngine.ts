@@ -148,19 +148,20 @@ export class VworldMasterEngine {
       usage.includes('apartments');
 
     // -------------------------------------------------------------------------
-    // [규격 1: 아파트 단지 (apartments 또는 면적 350㎡ 이상 단지형/장방형)]
-    // 스펙: 45m ~ 75m (15층 ~ 25층 고층 스카이라인 100% 강제 보장)
+    // [규격 1: 아파트 단지 (apartments 또는 면적 320㎡ 이상 단지형/장방형)]
+    // 스펙: 45m ~ 75m (15층 ~ 25층 고층 스카이라인 100% 강제 보장, 전 지역 공통)
     // -------------------------------------------------------------------------
-    if (isApartmentTag || (areaSqm >= 350 && !hasPublicTag && !isBangokArea)) {
+    const isApartmentShape = areaSqm >= 320 && (minWidth >= 8.5 || areaSqm >= 420);
+    if (isApartmentTag || (isApartmentShape && !hasPublicTag)) {
       const aptH = 45.0 + (seed % 31) * 1.0; // 45.0m ~ 75.0m
       return aptH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 2: 반곡동 혁신도시 공공기관·관공서·대형 빌딩 (area >= 700㎡ 또는 혁신도시 구역)]
+    // [규격 2: 공공기관·관공서·대형 빌딩 (area >= 700㎡ 또는 관공서 태그)]
     // 스펙: 24m ~ 48m (7층 ~ 15층 랜드마크 조형)
     // -------------------------------------------------------------------------
-    if (areaSqm >= 700 || hasPublicTag || isBangokArea) {
+    if (areaSqm >= 700 || hasPublicTag || (isBangokArea && areaSqm >= 400 && hasPublicTag)) {
       const officeH = 24.0 + (seed % 25) * 1.0; // 24.0m ~ 48.0m
       return officeH;
     }

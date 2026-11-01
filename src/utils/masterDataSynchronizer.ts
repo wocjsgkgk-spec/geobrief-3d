@@ -523,12 +523,14 @@ export function stampBuildingWithMasterData(
 
     const isNearApt = isNearApartmentAnchor(centroid[0], centroid[1]);
     const isAptKeyword = APT_KEYWORDS.some((kw) => rawName.includes(kw));
+    const isApartmentShape = areaSqm >= 320 && (aspectRatio >= 1.6 || areaSqm >= 420);
 
-    // 1. 용도 추론
+    // 1. 용도 추론 (전역 18개 시·군 무제한 아파트 자동 분류)
     if (
       isAptKeyword ||
-      (isNearApt && areaSqm >= 350) ||
-      (zoneStr.includes('주거') && areaSqm >= 450 && aspectRatio >= 2.0)
+      isApartmentShape ||
+      (isNearApt && areaSqm >= 300) ||
+      (zoneStr.includes('주거') && areaSqm >= 320)
     ) {
       realUse = '공동주택(아파트)';
       realStruct = '철근콘크리트조';

@@ -570,7 +570,7 @@ export class DiverseBuildingGenerator {
     const isBangokZone = VworldMasterEngine.isBangokInnovationZone(lng, lat);
 
     const isPublicOffice =
-      isBangokZone ||
+      (isBangokZone && (areaSqm >= 500 || height >= 18.0)) ||
       name.includes('공단') ||
       name.includes('공사') ||
       name.includes('건강보험') ||
