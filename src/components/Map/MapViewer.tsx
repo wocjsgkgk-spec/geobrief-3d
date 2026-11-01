@@ -2842,15 +2842,11 @@ export const MapViewer: React.FC = () => {
         // ---------------------------------------------------------------------
         // [2단계: 한국형 실측 도로망(아스팔트 노면·차선·횡단보도·보도블록 연석) 정밀 렌더링]
         // ---------------------------------------------------------------------
-        // 1) 교차로 횡단보도 및 회전교차로 GeoJSON 소스 초기화
+        // 1) [1단계: 화면 중심 및 교차로 직사각형 줄무늬 박스 영구 삭제] 빈 FeatureCollection으로 초기화
         if (!map.getSource('crosswalks-source')) {
-          const crosswalkData = generateCrosswalksGeoJSON(
-            undefined,
-            polygonCenter ? polygonCenter : undefined
-          );
           map.addSource('crosswalks-source', {
             type: 'geojson',
-            data: crosswalkData,
+            data: { type: 'FeatureCollection', features: [] },
           });
         }
 
@@ -2892,6 +2888,11 @@ export const MapViewer: React.FC = () => {
               rLayer.id === 'road-curb-casing' ||
               rLayer.id === 'road-bridge-casing' ||
               rLayer.id === 'road-bridge-deck' ||
+              rLayer.id === 'road-centerline' ||
+              rLayer.id === 'korean-crosswalk-stripes' ||
+              rLayer.id === 'korean-crosswalk-stoplines' ||
+              rLayer.id === 'korean-roundabout-island' ||
+              rLayer.id === 'korean-roundabout-lane' ||
               rLayer.id === 'korean-roads-surface';
             const configuredLayer: any = {
               ...rLayer,
@@ -3069,7 +3070,7 @@ export const MapViewer: React.FC = () => {
             source: 'vworld-zoning-source',
             minzoom: 10,
             paint: {
-              'line-color': ['coalesce', ['get', 'strokeColor'], '#92400e'],
+              'line-color': ['coalesce', ['get', 'strokeColor'], '#2563eb'],
               'line-width': 1.5,
               'line-opacity': 0.85,
             },
@@ -4098,10 +4099,10 @@ export const MapViewer: React.FC = () => {
         src2k.setData(b2k);
       }
 
-      // 교차로 횡단보도 및 회전교차로 GeoJSON 동기화
+      // [1단계: 화면 중심 및 교차로 직사각형 줄무늬 박스 영구 삭제] 빈 FeatureCollection 유지
       const crosswalkSrc = map.getSource('crosswalks-source') as maplibregl.GeoJSONSource;
       if (crosswalkSrc && typeof crosswalkSrc.setData === 'function') {
-        crosswalkSrc.setData(generateCrosswalksGeoJSON(undefined, centerLngLat));
+        crosswalkSrc.setData({ type: 'FeatureCollection', features: [] });
       }
     } catch (err) {
       console.error('Failed to compute buffer rings:', err);
@@ -4157,6 +4158,11 @@ export const MapViewer: React.FC = () => {
           lid === 'road-curb-casing' ||
           lid === 'road-bridge-casing' ||
           lid === 'road-bridge-deck' ||
+          lid === 'road-centerline' ||
+          lid === 'korean-crosswalk-stripes' ||
+          lid === 'korean-crosswalk-stoplines' ||
+          lid === 'korean-roundabout-island' ||
+          lid === 'korean-roundabout-lane' ||
           lid === 'korean-roads-surface';
         if (lid.startsWith('korean-water') || lid.startsWith('korean-riverbank')) {
           map.setLayoutProperty(lid, 'visibility', 'visible');

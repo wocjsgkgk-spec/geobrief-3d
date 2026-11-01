@@ -301,7 +301,7 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: ['match', ['get', 'class'], ['path', 'pedestrian', 'footway', 'steps'], true, false],
       paint: {
-        'line-color': '#c49a7c', // 웜톤 인터로킹 보도블록 보행로
+        'line-color': 'rgba(0,0,0,0)',
         'line-opacity': 0.0,
         'line-width': 0.0,
       },
@@ -428,14 +428,14 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: arterialFilter,
       paint: {
-        'line-color': '#d97706', // 자연스러운 웜 앰버 황색 중앙선
-        'line-opacity': 0.65,    // 과도한 노란색 덧칠 방지 (투명도 0.65)
-        'line-width': 1.0,       // 1px 정교한 슬림 라인
+        'line-color': 'rgba(80,80,85,0.4)', // 갈색/황색 띠 제거 -> 아스팔트 회색/투명화
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 
@@ -464,7 +464,7 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // [2단계] 주요 사거리 교차로 정밀 횡단보도(Crosswalk) 스트라이프 & 정지선
+    // [2단계] 주요 사거리 교차로 정밀 횡단보도(Crosswalk) 스트라이프 & 정지선 - 비활성화
     // -------------------------------------------------------------------------
     {
       id: 'korean-crosswalk-stripes',
@@ -474,12 +474,12 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: ['==', ['get', 'type'], 'crosswalk-stripe'],
       paint: {
-        'fill-color': '#ffffff', // 백색 횡단보도 스트라이프
-        'fill-opacity': 0.95,
-        'fill-antialias': true,
+        'fill-color': '#ffffff',
+        'fill-opacity': 0.0,
+        'fill-antialias': false,
       },
       layout: {
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -490,21 +490,14 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: ['==', ['get', 'type'], 'stop-line'],
       paint: {
-        'line-color': '#ffffff', // 백색 교차로 전방 정지선
-        'line-opacity': 0.95,
-        'line-width': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          14, 1.6,
-          16, 2.5,
-          18, 3.8,
-        ],
+        'line-color': '#ffffff',
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -515,12 +508,12 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: ['==', ['get', 'type'], 'roundabout-island'],
       paint: {
-        'fill-color': '#2d5a3c', // 회전교차로 중앙 원형 교통섬 녹지
-        'fill-opacity': 0.92,
-        'fill-antialias': true,
+        'fill-color': 'rgba(0,0,0,0)',
+        'fill-opacity': 0.0,
+        'fill-antialias': false,
       },
       layout: {
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -531,15 +524,15 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: ['==', ['get', 'type'], 'roundabout-circulating-lane'],
       paint: {
-        'line-color': '#ffffff',
+        'line-color': 'rgba(0,0,0,0)',
         'line-dasharray': [2, 3],
-        'line-opacity': 0.85,
-        'line-width': 1.6,
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
   ];

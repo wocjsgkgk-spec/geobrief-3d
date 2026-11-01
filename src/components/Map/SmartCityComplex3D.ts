@@ -1601,14 +1601,14 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   private fillLight: THREE.DirectionalLight | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
 
-  private isVisible = true;
+  private isVisible = false; // [1단계: 더미 복합단지/군 막사 기본 노출 영구 차단]
   private currentMode: 'current_military' | 'future_masterplan' = 'future_masterplan';
   private currentSiteId = 'first-logistics-wonju';
   private centerLngLat: [number, number] = FIRST_LOGISTICS_WONJU_CENTER;
   private clampedAltitude = 0;
   private rotationDeg = -12; // 부지 주축 각도
-  private scaleY = 1; // 3D 건축물 즉각 100% 온전 렌더링
-  private targetScaleY = 1;
+  private scaleY = 0; // 초기 스케일 0
+  private targetScaleY = 0;
 
   constructor(initialSiteId = 'first-logistics-wonju') {
     this.currentSiteId = initialSiteId;
@@ -1733,12 +1733,14 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       this.fillLight.position.set(-80, 100, 80).normalize();
       this.scene.add(this.fillLight);
 
-      // 3. 현재 거점에 대응하는 스마트 복합단지 절차적 생성
+      // 3. 현재 거점에 대응하는 스마트 복합단지 절차적 생성 (기본은 비활성화 유지)
       this.complexMesh = buildComplexForSite(this.currentSiteId, this.materials, this.currentMode);
       this.complexMesh.traverse((child) => {
         child.frustumCulled = false;
       });
-      this.scene.add(this.complexMesh);
+      if (this.isVisible) {
+        this.scene.add(this.complexMesh);
+      }
 
       // 4. WebGLRenderer 연동
       try {

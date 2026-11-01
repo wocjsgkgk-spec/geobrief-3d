@@ -269,41 +269,13 @@ export const WONJU_AUTHENTIC_BRIDGES: AuthenticBridgeSpec[] = [
 ];
 
 /**
- * 교량 제원 라벨 GeoJSON FeatureCollection 생성
- * - 실제 교량 중앙점에 `🌉 원주교 (연장 180m · 폭 25m)` 라벨 바인딩
+ * [1단계: 화면 중심 및 도로 위 가짜 교량 3D 박스/라벨 영구 삭제]
+ * 교량 제원 라벨 GeoJSON FeatureCollection 생성 (빈 피처 반환)
  */
 export function generateBridgeLabelsGeoJSON(): FeatureCollection<Point> {
-  const features: Feature<Point>[] = WONJU_AUTHENTIC_BRIDGES.map((b) => {
-    // 중심 좌표 계산
-    const midIdx = Math.floor(b.path.length / 2);
-    const center = b.path[midIdx] || b.path[0];
-    const labelText = `🌉 ${b.name} (연장 ${b.lengthM}m · 폭 ${b.widthM}m)`;
-
-    return {
-      type: 'Feature',
-      id: b.id,
-      properties: {
-        id: b.id,
-        name: b.name,
-        riverName: b.riverName,
-        roadRoute: b.roadRoute,
-        lengthM: b.lengthM,
-        widthM: b.widthM,
-        lanes: b.lanes,
-        structureType: b.structureType,
-        labelText,
-        badgeHtml: `<div class="geobrief-bridge-tag"><strong>🌉 ${b.name}</strong><br/><span>${b.roadRoute}</span><br/><span style="color:#38bdf8">연장 ${b.lengthM}m · 폭 ${b.widthM}m</span></div>`,
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: center,
-      },
-    };
-  });
-
   return {
     type: 'FeatureCollection',
-    features,
+    features: [],
   };
 }
 
@@ -387,15 +359,16 @@ export function setupBridgeLabelsLayer(map: any): void {
 }
 
 /**
- * Streets-GL 벤더링: 교량 선형(LineString)을 따라 3D 대교 지오메트리 메쉬 그룹 생성
+ * [1단계: 화면 중심 및 도로 위 가짜 교량 3D 박스/상판 영구 삭제]
+ * 도로 위에 생성되던 가짜 3D 교량 상판, 거더, 교각 박스 메쉬 생성을 원천 차단하고 빈 Group 반환
  */
 export function buildAuthenticBridgeMeshGroup(
-  bridgeSpecs: AuthenticBridgeSpec[] = WONJU_AUTHENTIC_BRIDGES,
-  originLngLat: [number, number] = [127.935, 37.359],
-  getTerrainElev: (lngLat: [number, number]) => number = () => 0
+  _bridgeSpecs: AuthenticBridgeSpec[] = WONJU_AUTHENTIC_BRIDGES,
+  _originLngLat: [number, number] = [127.935, 37.359],
+  _getTerrainElev: (lngLat: [number, number]) => number = () => 0
 ): THREE.Group {
-  const masterGroup = new THREE.Group();
-  masterGroup.name = 'authentic-bridges-master-group';
+  return new THREE.Group();
+  /*
 
   const cosLat = Math.cos((originLngLat[1] * Math.PI) / 180);
   const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
@@ -682,4 +655,5 @@ export function buildAuthenticBridgeMeshGroup(
   }
 
   return masterGroup;
+  */
 }

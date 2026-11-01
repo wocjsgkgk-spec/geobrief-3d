@@ -243,6 +243,16 @@ export class VWorldXDOParser {
     } = {}
   ): VWorldParsedXDO {
     const buffer = data instanceof Uint8Array ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data;
+    if (!buffer || buffer.byteLength < 50) {
+      return {
+        records: [],
+        geometries: [],
+        materials: [],
+        group: new THREE.Group(),
+        totalVertices: 0,
+        totalTriangles: 0,
+      };
+    }
     const view = new DataView(buffer);
     let offset = 0;
     const byteLength = buffer.byteLength;
@@ -459,9 +469,10 @@ export class VWorldXDOParser {
   }
 
   /**
-   * 단위 테스트 및 오프라인 폴백용: 유효한 .xdo 바이너리 패킷 생성기
+   * [1단계: 화면 중심을 따라다니는 검은색 직사각형 7~8개 및 가짜 교량 영구 삭제]
+   * 더미 큐브 및 가짜 교량 메쉬 생성을 원천 차단하고 빈 ArrayBuffer 반환
    */
-  public static createSyntheticXDO(options: {
+  public static createSyntheticXDO(_options: {
     objectID?: number;
     width?: number;
     depth?: number;
@@ -469,95 +480,14 @@ export class VWorldXDOParser {
     altitude?: number;
     imageName?: string;
   } = {}): ArrayBuffer {
-    const objectID = options.objectID || 1001;
-    const w = options.width || 20;
-    const d = options.depth || 30;
-    const h = options.height || 45;
-    const alt = options.altitude || 120;
-    const img = options.imageName || 'facade_sample.png';
-
-    // 큐브 24개 정점 (각 면 4개)
-    const vertexCount = 24;
-    const indexCount = 36;
-    const key = `OBJ_${objectID}`;
-
-    const totalSize =
-      1 + // version
-      1 + // type
-      4 + // objectID
-      1 + key.length + // keyLen + key
-      48 + // bbox
-      4 + // altitude
-      1 + // faceNum
-      4 + // vertexCount
-      vertexCount * (4 * 3 + 4 * 3 + 4 * 2) + // vertices (32B each = 768B)
-      4 + // indexCount
-      indexCount * 2 + // indices (72B)
-      4 + // color
-      1 + // imageLevel
-      1 + img.length; // imageNameLen + imageName
-
-    const buffer = new ArrayBuffer(totalSize);
-    const view = new DataView(buffer);
-    let o = 0;
-
-    view.setUint8(o++, 1); // version
-    view.setUint8(o++, 1); // type
-    view.setUint32(o, objectID, true);
-    o += 4;
-
-    view.setUint8(o++, key.length);
-    for (let i = 0; i < key.length; i++) view.setUint8(o++, key.charCodeAt(i));
-
-    // BBox
-    view.setFloat64(o, -w / 2, true); o += 8;
-    view.setFloat64(o, -d / 2, true); o += 8;
-    view.setFloat64(o, 0, true); o += 8;
-    view.setFloat64(o, w / 2, true); o += 8;
-    view.setFloat64(o, d / 2, true); o += 8;
-    view.setFloat64(o, h, true); o += 8;
-
-    view.setFloat32(o, alt, true); o += 4;
-    view.setUint8(o++, 6); // faceNum
-
-    view.setUint32(o, vertexCount, true); o += 4;
-
-    // 24개 정점 쓰기
-    for (let i = 0; i < vertexCount; i++) {
-      view.setFloat32(o, ((i % 4 === 1 || i % 4 === 2) ? w / 2 : -w / 2), true); o += 4;
-      view.setFloat32(o, ((i % 4 < 2) ? -d / 2 : d / 2), true); o += 4;
-      view.setFloat32(o, (i >= 12 ? h : 0), true); o += 4;
-      // normal
-      view.setFloat32(o, 0, true); o += 4;
-      view.setFloat32(o, 0, true); o += 4;
-      view.setFloat32(o, 1, true); o += 4;
-      // uv
-      view.setFloat32(o, (i % 2 === 0 ? 0 : 1), true); o += 4;
-      view.setFloat32(o, (i % 4 < 2 ? 0 : 1), true); o += 4;
-    }
-
-    view.setUint32(o, indexCount, true); o += 4;
-    for (let f = 0; f < 6; f++) {
-      const b = f * 4;
-      const idxs = [b, b + 1, b + 2, b, b + 2, b + 3];
-      for (const idx of idxs) {
-        view.setUint16(o, idx % vertexCount, true);
-        o += 2;
-      }
-    }
-
-    view.setUint32(o, 0xffffffff, true); o += 4; // color
-    view.setUint8(o++, 1); // imageLevel
-    view.setUint8(o++, img.length);
-    for (let i = 0; i < img.length; i++) view.setUint8(o++, img.charCodeAt(i));
-
-    return buffer;
+    return new ArrayBuffer(0);
   }
 
   /**
-   * 브이월드 전국 교량(facility_bridge) 실사 규격 바이너리 생성기
+   * [1단계: 화면 중심을 따라다니는 검은색 직사각형 7~8개 및 가짜 교량 영구 삭제]
+   * 가짜 교량 상판 메쉬 생성을 원천 차단하고 빈 ArrayBuffer 반환
    */
-  public static createSyntheticBridgeXDO(options: {
+  public static createSyntheticBridgeXDO(_options: {
     objectID?: number;
     deckWidth?: number;
     deckLength?: number;
@@ -565,21 +495,7 @@ export class VWorldXDOParser {
     altitude?: number;
     imageName?: string;
   } = {}): ArrayBuffer {
-    const objectID = options.objectID || 5001;
-    const w = options.deckWidth || 18;
-    const d = options.deckLength || 90;
-    const h = options.deckHeight || 3.5;
-    const alt = options.altitude || 115;
-    const img = options.imageName || 'bridge_concrete_deck.png';
-
-    return this.createSyntheticXDO({
-      objectID,
-      width: w,
-      depth: d,
-      height: h,
-      altitude: alt,
-      imageName: img,
-    });
+    return new ArrayBuffer(0);
   }
 }
 

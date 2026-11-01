@@ -133,43 +133,23 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // 3D 교량(.xdo) 폴백 바이너리 생성
-  if (layer === 'facility_bridge') {
-    const bridgeBuffer = VWorldXDOParser.createSyntheticBridgeXDO({
-      objectID: Math.abs((idx * 2000 + idy) % 999999) + 50000,
-      deckWidth: 18,
-      deckLength: 95,
-      deckHeight: 3.6,
-      altitude: 112,
-      imageName: dataFile || 'bridge_concrete_deck.png',
-    });
-
-    return new NextResponse(bridgeBuffer, {
-      status: 200,
+  // [1단계: 화면 중심을 따라다니는 검은색 직사각형 7~8개 및 가짜 교량 영구 삭제]
+  // 업스트림 실패 시 가짜 3D 박스나 가짜 교량 바이너리를 일절 생성하지 않고 404 반환
+  if (layer === 'facility_bridge' || layer === 'facility_build') {
+    return new NextResponse(null, {
+      status: 404,
       headers: {
-        'Content-Type': 'application/octet-stream',
         'Cache-Control': 'public, max-age=86400',
-        'X-VWorld-Source': 'synthetic-bridge',
+        'X-VWorld-Source': 'not-found',
       },
     });
   }
 
-  // 3D 건물(.xdo) 폴백 바이너리 생성
-  const syntheticBuffer = VWorldXDOParser.createSyntheticXDO({
-    objectID: Math.abs((idx * 1000 + idy) % 999999) + 10000,
-    width: 24,
-    depth: 32,
-    height: 48,
-    altitude: 125,
-    imageName: dataFile || 'apt_realistic_facade.png',
-  });
-
-  return new NextResponse(syntheticBuffer, {
-    status: 200,
+  return new NextResponse(null, {
+    status: 404,
     headers: {
-      'Content-Type': 'application/octet-stream',
       'Cache-Control': 'public, max-age=86400',
-      'X-VWorld-Source': 'synthetic-xdo',
+      'X-VWorld-Source': 'not-found',
     },
   });
 }

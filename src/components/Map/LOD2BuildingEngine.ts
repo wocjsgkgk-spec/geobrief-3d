@@ -2012,15 +2012,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       newHvacMesh.frustumCulled = false;
     }
 
-    // [지면 접지 그림자 및 실시간 태양광 투영 그림자 메쉬]
-    if (shadowPositions.length > 0 && this.contactShadowMaterial) {
-      const shadowGeo = new THREE.BufferGeometry();
-      shadowGeo.setAttribute('position', new THREE.Float32BufferAttribute(shadowPositions, 3));
-      shadowGeo.setAttribute('color', new THREE.Float32BufferAttribute(shadowColors, 4));
-      shadowGeo.computeBoundingSphere();
-      newContactShadowMesh = new THREE.Mesh(shadowGeo, this.contactShadowMaterial);
-      newContactShadowMesh.frustumCulled = false;
-      newContactShadowMesh.renderOrder = -1;
+    // [1단계: 바닥 검은색 직사각형 접지 그림자 메쉬 영구 삭제]
+    if (this.contactShadowMesh) {
+      this.scene.remove(this.contactShadowMesh);
+      this.contactShadowMesh.geometry?.dispose();
+      this.contactShadowMesh = null;
     }
 
     // [Double Buffering 원자적 교체 (Atomic Swap)]
@@ -2148,24 +2144,13 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       this.updateDemTexture(result.demBounds);
     }
 
-    // 지면 접지 그림자 메쉬
-    if (result.shadowPositions && result.shadowPositions.length > 0 && this.contactShadowMaterial) {
-      const shadowGeo = new THREE.BufferGeometry();
-      shadowGeo.setAttribute('position', new THREE.BufferAttribute(result.shadowPositions, 3));
-      shadowGeo.setAttribute('color', new THREE.BufferAttribute(result.shadowColors, 4));
-      shadowGeo.computeBoundingSphere();
-
-      if (this.contactShadowMesh) {
-        this.scene.remove(this.contactShadowMesh);
-        if (this.contactShadowMesh.geometry) {
-          this.contactShadowMesh.geometry.dispose();
-        }
+    // [1단계: 바닥 검은색 직사각형 접지 그림자 메쉬 영구 삭제]
+    if (this.contactShadowMesh) {
+      this.scene.remove(this.contactShadowMesh);
+      if (this.contactShadowMesh.geometry) {
+        this.contactShadowMesh.geometry.dispose();
       }
-
-      this.contactShadowMesh = new THREE.Mesh(shadowGeo, this.contactShadowMaterial);
-      (this.contactShadowMesh as any).frustumCulled = false;
-      this.contactShadowMesh.renderOrder = -1;
-      this.scene.add(this.contactShadowMesh);
+      this.contactShadowMesh = null;
     }
 
     this.buildingCount = result.buildingCount;

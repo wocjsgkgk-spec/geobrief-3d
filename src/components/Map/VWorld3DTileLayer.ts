@@ -91,8 +91,8 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
 
   private activeLevel = 15;
   private maxCachedTiles = 48;
-  private isBuildingsVisible = true;
-  private isBridgesVisible = true;
+  private isBuildingsVisible = false; // [1단계: 화면 중심을 따라다니는 검은색 직사각형 7~8개 방지: 기본 비활성화]
+  private isBridgesVisible = false;   // [1단계: 가짜 교량 상판 방지: 기본 비활성화]
   private isDemVisible = false;
   private isDestroyed = false;
   private moveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -361,7 +361,7 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
       }
 
       const buffer = await res.arrayBuffer();
-      if (this.isDestroyed || buffer.byteLength === 0) {
+      if (this.isDestroyed || !buffer || buffer.byteLength < 50) {
         this.pendingFetches.delete(key);
         return;
       }
@@ -382,6 +382,11 @@ export class VWorld3DTileLayer implements maplibregl.CustomLayerInterface {
         originCenter: [0, 0, 0],
         scale: 1.0,
       });
+
+      if (!parsed || parsed.totalVertices === 0 || !parsed.group.children.length) {
+        this.pendingFetches.delete(key);
+        return;
+      }
 
       // 교량의 경우 고급 콘크리트 상판 및 금속 재질 적용
       if (layer === 'facility_bridge') {

@@ -234,75 +234,15 @@ function buildRoundaboutFeatures(
 }
 
 /**
- * 뷰포트 또는 지정 교차로 리스트에 대한 전체 정밀 횡단보도/정지선 FeatureCollection 생성
+ * [1단계: 화면 중심을 따라다니는 검은색/갈색 직사각형 및 교차로 줄무늬 박스 100% 영구 삭제]
+ * 도로 위에 생성되던 가짜 횡단보도 스트라이프/정지선/교통섬 박스 폴리곤을 원천 차단하고 빈 FeatureCollection 반환
  */
 export function generateCrosswalksGeoJSON(
-  intersections: IntersectionPoint[] = MAJOR_INTERSECTIONS,
-  customCenter?: [number, number]
+  _intersections?: IntersectionPoint[],
+  _customCenter?: [number, number]
 ): GeoJSON.FeatureCollection {
-  const allFeatures: GeoJSON.Feature[] = [];
-
-  const targetList = [...intersections];
-
-  // 만약 사용자 지정 중심점(예: 활성 대상지 부지 중심)이 제공되었고 기존 목록과 800m 이상 떨어져 있다면 추가
-  if (customCenter && customCenter[0] && customCenter[1]) {
-    const isNearby = targetList.some((pt) => {
-      const dLng = pt.coordinates[0] - customCenter[0];
-      const dLat = pt.coordinates[1] - customCenter[1];
-      return Math.hypot(dLng, dLat) < 0.005;
-    });
-
-    if (!isNearby) {
-      targetList.push({
-        id: 'target-site-main-x',
-        name: '대상 부지 주진입 교차로',
-        coordinates: customCenter,
-        arms: [0, 90, 180, 270],
-      });
-
-      // 대상 부지 주변 주요 도심 교차로망 (동·서·남·북 250m~380m) 자동 연동
-      const offsets = [
-        { id: 'site-north-x', name: '북측 연계 사거리', dx: 0, dy: 300, arms: [0, 90, 180, 270] },
-        { id: 'site-south-x', name: '남측 연계 삼거리', dx: 0, dy: -280, arms: [0, 90, 270] },
-        { id: 'site-east-x', name: '동측 간선 사거리', dx: 340, dy: 40, arms: [0, 90, 180, 270] },
-        { id: 'site-west-x', name: '서측 진입 삼거리', dx: -320, dy: -30, arms: [90, 180, 270] },
-      ];
-
-      for (const off of offsets) {
-        const coord = offsetMetersToLngLat(customCenter[0], customCenter[1], off.dx, off.dy);
-        targetList.push({
-          id: off.id,
-          name: off.name,
-          coordinates: coord,
-          arms: off.arms,
-        });
-      }
-    }
-  }
-
-  for (const item of targetList) {
-    if (item.isRoundabout) {
-      const rFeatures = buildRoundaboutFeatures(
-        item.coordinates[0],
-        item.coordinates[1],
-        item.roundaboutRadius || 18.0
-      );
-      for (let i = 0; i < rFeatures.length; i++) {
-        allFeatures.push(rFeatures[i]);
-      }
-    }
-
-    const arms = item.arms && item.arms.length > 0 ? item.arms : [0, 90, 180, 270];
-    for (const arm of arms) {
-      const armFeatures = buildCrosswalkForArm(item.coordinates[0], item.coordinates[1], arm);
-      for (let i = 0; i < armFeatures.length; i++) {
-        allFeatures.push(armFeatures[i]);
-      }
-    }
-  }
-
   return {
     type: 'FeatureCollection',
-    features: allFeatures,
+    features: [],
   };
 }
