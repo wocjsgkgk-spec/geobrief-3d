@@ -53,7 +53,11 @@ import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
 import { BORDER_DISTRICT_IDS } from '@/constants/borderSecurityZones';
 import { MILITARY_IDLE_SITES, MilitaryIdleSite } from '@/constants/militaryIdleSites';
 import { GANGWON_MILITARY_SITES, getGangwonMilitarySiteById } from '@/constants/gangwonMilitarySites';
-import { GANGWON_18_MILITARY_SITES, getGangwon18MilitarySiteById } from '@/constants/gangwon18MilitarySites';
+import {
+  GANGWON_18_MILITARY_SITES,
+  getGangwon18MilitarySiteById,
+  getMilitarySitesByRegionId,
+} from '@/constants/gangwon18MilitarySites';
 import { generateStrategicFacilities, STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { generateSpiralPreset, generateApproachPreset } from '@/utils/cinematicPathInterpolator';
 import type { CloudProject } from '@/lib/supabase';
@@ -714,6 +718,10 @@ export const useMapStore = create<MapStoreState>()(
         if (found) {
           const isBorder = (BORDER_DISTRICT_IDS as readonly string[]).includes(regionId);
 
+          // 해당 시·군의 대표 군 유휴부지 검색 및 100% 동기화
+          const regionSites = getMilitarySitesByRegionId(regionId);
+          const repSite = regionSites.length > 0 ? regionSites[0] : null;
+
           // 접경 5개 군 선택 시: 정북(bearing: 0~10도, pitch: 55도) 전방 조망 카메라 세팅
           let pitch = found.pitch;
           let bearing = found.bearing;
@@ -722,18 +730,39 @@ export const useMapStore = create<MapStoreState>()(
             bearing = found.bearing >= 0 && found.bearing <= 10 ? found.bearing : 5;
           }
 
-          const targetVp: ViewportState = {
-            longitude: found.center[0],
-            latitude: found.center[1],
-            zoom: found.zoom,
-            pitch,
-            bearing,
-          };
+          const targetVp: ViewportState = repSite
+            ? {
+                longitude: repSite.center[0],
+                latitude: repSite.center[1],
+                zoom: repSite.recommendedCamera?.zoom || found.zoom,
+                pitch,
+                bearing,
+              }
+            : {
+                longitude: found.center[0],
+                latitude: found.center[1],
+                zoom: found.zoom,
+                pitch,
+                bearing,
+              };
+
+          const poly = repSite?.polygon || null;
+          const center = repSite?.center || found.center;
+          const sqm = repSite?.areaSqm || 0;
+          const pyeong = repSite?.areaPyeong || 0;
+          const defResult = poly ? analyzeDefenseRegulations(poly, center) : get().defenseAnalysisResult;
+          const accessResult = analyzeAccessibility(center, get().accessibilityResult?.rows);
+
           set({
             selectedRegionId: regionId,
-            selectedIdleSiteId: null,
+            selectedIdleSiteId: repSite ? repSite.id : null,
             isBorderDistrict: isBorder,
             borderSecurityVisible: isBorder, // 접경지역 선택 시 즉시 visible, 비접경지는 none
+            completedPolygon: poly,
+            polygonCenter: center,
+            polygonArea: poly ? { sqm, pyeong } : get().polygonArea,
+            defenseAnalysisResult: defResult,
+            accessibilityResult: accessResult,
             viewport: targetVp,
             flyToSignal: {
               ...targetVp,
@@ -742,7 +771,10 @@ export const useMapStore = create<MapStoreState>()(
             },
             metadata: {
               ...get().metadata,
-              subtitle: `${found.name} (${found.subregion}) 일원 공간 분석 및 지형 브리핑`,
+              title: repSite ? `${repSite.name} 공간 분석 보고서` : `${found.name} 공간 분석 보고서`,
+              subtitle: repSite
+                ? `${found.name} (${found.subregion}) | ${repSite.themeTitle || repSite.devVision}`
+                : `${found.name} (${found.subregion}) 일원 공간 분석 및 지형 브리핑`,
             },
           });
         }

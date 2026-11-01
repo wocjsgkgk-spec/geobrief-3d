@@ -422,8 +422,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.isMoving = false;
       this.extractAndBuildFromMap();
     };
-    // 250ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
-    this.moveEndTimer = setTimeout(checkAndComplete, 250);
+    // 300ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
+    this.moveEndTimer = setTimeout(checkAndComplete, 300);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -472,7 +472,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
    * MapLibre 맵 소스 및 캐시로부터 화면 내 건물을 추출하여 3D 빌드 실행 (100% 입체화)
    */
   public extractAndBuildFromMap(): void {
-    if (!this.map || this.isBuildingGeometry) return;
+    if (!this.map || this.isBuildingGeometry || this.isMoving) return;
     if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
       return;
     }

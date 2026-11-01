@@ -1844,14 +1844,14 @@ export const MapViewer: React.FC = () => {
             },
             layout: { visibility: 'visible' },
           },
-          // 부지 드로잉 완성 폴리곤 에메랄드 외곽선 (#10B981, width 3.0)
+          // 부지 드로잉 완성 폴리곤 에메랄드 외곽선 (#10B981, width 4.0)
           {
             id: 'drawing-polygon-line',
             type: 'line',
             source: 'drawing-polygon-source',
             paint: {
               'line-color': '#10B981',
-              'line-width': 3,
+              'line-width': 4,
             },
             layout: { visibility: 'visible' },
           },
@@ -4905,7 +4905,7 @@ export const MapViewer: React.FC = () => {
       map.setPaintProperty('drawing-polygon-fill', 'fill-pattern', 'hatch-pattern');
       map.setPaintProperty('drawing-polygon-fill', 'fill-opacity', 0.5);
       map.setPaintProperty('drawing-polygon-line', 'line-color', '#10B981');
-      map.setPaintProperty('drawing-polygon-line', 'line-width', 3);
+      map.setPaintProperty('drawing-polygon-line', 'line-width', 4);
     } else {
       map.setPaintProperty('drawing-polygon-fill', 'fill-pattern', undefined);
       const colors = {
@@ -4917,7 +4917,7 @@ export const MapViewer: React.FC = () => {
       map.setPaintProperty('drawing-polygon-fill', 'fill-color', colors.fill);
       map.setPaintProperty('drawing-polygon-fill', 'fill-opacity', colors.opacity);
       map.setPaintProperty('drawing-polygon-line', 'line-color', colors.line);
-      map.setPaintProperty('drawing-polygon-line', 'line-width', 3);
+      map.setPaintProperty('drawing-polygon-line', 'line-width', 4);
     }
   }, [polygonStyle, isMapLoaded]);
 
@@ -7192,29 +7192,38 @@ export const MapViewer: React.FC = () => {
             </div>
           )}
 
-        {/* 폴리곤 중심 실시간 3D 정량 면적 라벨 콜아웃 */}
+        {/* 폴리곤 중심 실시간 3D 정량 면적 라벨 콜아웃 [🛡️ 부지명 | 총면적 ㎡ (평) | 용도지역] */}
         {completedPolygon && polygonArea && labelScreenPos && (
           <div
             id="polygon-center-label-wrap"
-            className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3 z-10 transition-transform duration-75 select-none"
+            className="absolute pointer-events-none transform -translate-x-1/2 -translate-y-full mb-4 z-20 transition-transform duration-75 select-none"
             style={{
               left: `${labelScreenPos.x}px`,
               top: `${labelScreenPos.y}px`,
             }}
           >
-            <div className="bg-[#101b2b]/95 backdrop-blur-md border border-emerald-400/80 px-3 py-2 rounded-lg shadow-2xl text-center flex flex-col items-center min-w-[130px]">
-              <div className="flex items-center space-x-1 text-[10px] text-emerald-300 font-semibold mb-0.5">
-                <Ruler className="w-3 h-3 text-emerald-400" />
-                <span>군 유휴부지 산출구역</span>
-              </div>
-              <div className="text-sm font-mono font-extrabold text-white">
-                {polygonArea.sqm.toLocaleString()} ㎡
-              </div>
-              <div className="text-[11px] font-mono font-bold text-emerald-400">
-                약 {polygonArea.pyeong.toLocaleString()} 평
-              </div>
-              <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-emerald-400/80 absolute -bottom-[6px] left-1/2 -translate-x-1/2" />
-            </div>
+            {(() => {
+              const activeSite = getGangwon18MilitarySiteById(selectedIdleSiteId || '');
+              const siteName = activeSite?.name || '군 유휴부지 산출구역';
+              const zoningName = activeSite?.zoning || '준주거지역 (개발구상구역)';
+              return (
+                <div className="bg-[#0b1410]/95 backdrop-blur-xl border-2 border-emerald-400/90 px-3.5 py-2.5 rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.35)] text-center flex flex-col items-center min-w-[200px] ring-1 ring-emerald-500/50">
+                  <div className="flex items-center space-x-1 text-xs text-emerald-300 font-extrabold mb-1">
+                    <span>🛡️ {siteName}</span>
+                  </div>
+                  <div className="flex items-baseline space-x-1.5 text-sm font-mono font-black text-white">
+                    <span>{polygonArea.sqm.toLocaleString()} ㎡</span>
+                    <span className="text-xs font-bold text-emerald-400">
+                      (약 {polygonArea.pyeong.toLocaleString()}평)
+                    </span>
+                  </div>
+                  <div className="mt-1 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[10.5px] font-medium text-emerald-300">
+                    용도지역: {zoningName}
+                  </div>
+                  <div className="w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-t-[7px] border-t-emerald-400/90 absolute -bottom-[7px] left-1/2 -translate-x-1/2" />
+                </div>
+              );
+            })()}
           </div>
         )}
 
