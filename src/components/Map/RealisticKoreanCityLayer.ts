@@ -67,10 +67,8 @@ import {
   updatePhotorealisticPbrUniforms,
 } from '@/lib/vendor/photorealisticPbrShader';
 import { applyAtmosphericPerspectiveFog } from '@/lib/vendor/openSource3DEnhancer';
-import {
-  buildAuthenticBridgeMeshGroup,
-  WONJU_AUTHENTIC_BRIDGES,
-} from '@/utils/authenticBridgeBuilder';
+// 교량 및 터널 가짜 3D 박스 메쉬 완전 제거 (위성사진 및 2D 벡터 원본 노출)
+// import { buildAuthenticBridgeMeshGroup, WONJU_AUTHENTIC_BRIDGES } from '@/utils/authenticBridgeBuilder';
 import {
   detectLandmarkType,
   buildLandmarkBuildingMesh,
@@ -215,18 +213,18 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
       this.rooftopMesh.visible = visible && t > 0.01;
     }
-    this.bridgeGroup.visible = visible && this.isBridgeTunnelVisible;
-    this.tunnelGroup.visible = visible && this.isBridgeTunnelVisible;
+    this.bridgeGroup.visible = false;
+    this.tunnelGroup.visible = false;
   }
 
   public getVisible(): boolean {
     return this.isVisible;
   }
 
-  public setBridgeTunnelVisible(visible: boolean): void {
-    this.isBridgeTunnelVisible = visible;
-    this.bridgeGroup.visible = visible;
-    this.tunnelGroup.visible = visible;
+  public setBridgeTunnelVisible(_visible: boolean): void {
+    this.isBridgeTunnelVisible = false;
+    this.bridgeGroup.visible = false;
+    this.tunnelGroup.visible = false;
     if (this.map) {
       this.map.triggerRepaint();
     }
@@ -341,10 +339,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         side: THREE.DoubleSide,
       });
 
-      this.bridgeGroup.visible = this.isBridgeTunnelVisible;
-      this.tunnelGroup.visible = this.isBridgeTunnelVisible;
-      this.scene.add(this.bridgeGroup);
-      this.scene.add(this.tunnelGroup);
+      // [1단계: 화면 중심 검은색 직사각형 7~8개 방지] 3D 가짜 교량/터널 박스 씬 추가 원천 차단
+      this.bridgeGroup.visible = false;
+      this.tunnelGroup.visible = false;
 
       // 3. WebGLRenderer 바인딩
       this.renderer = new THREE.WebGLRenderer({
@@ -1428,11 +1425,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
    * 국토교통부 전국 교량 및 터널 실측 제원 기반 3D 입체 교량(상판, 방호벽, 교각) & 터널 갱문 모델링
    */
   private buildBridgesAndTunnelsMesh(): void {
-    if (!this.map || !this.bridgeMaterial || !this.guardrailMaterial || !this.tunnelArchMaterial || !this.tunnelInteriorMaterial) {
-      return;
-    }
-
-    // 기존 지오메트리 안전 정리
+    // [1단계: 화면 중심을 따라다니는 검은색 직사각형 7~8개 영구 삭제]
+    // 가짜 교량 상판 및 터널 캐비티 3D 박스 메쉬 생성을 100% 차단하고 기존 지오메트리 완전 폐기
     while (this.bridgeGroup.children.length > 0) {
       const child = this.bridgeGroup.children[0] as THREE.Group;
       this.bridgeGroup.remove(child);
@@ -1453,106 +1447,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       });
     }
 
-    const cosLat = Math.cos((this.originLngLat[1] * Math.PI) / 180);
-    const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
-    const metersPerLat = (Math.PI / 180) * 6378137;
-
-    // -------------------------------------------------------------------------
-    // [1단계: 하천·도로 횡단 '대교(Bridge)' 실제 도로 선형 기반 3D 입체 구조물 생성]
-    // - Streets-GL 벤더링: 실제 하천(원주천, 섬강 등)을 건너는 교량 선형(LineString)을 따라
-    //   다크 아스팔트 상판(#26292e), 1.6m 거더(#64748b), 1.2m 방호벽(#e2e8f0), 30m 간격 교각(#94a3b8)
-    // -------------------------------------------------------------------------
-    const getTerrainElev = (p: [number, number]) => {
-      if (!this.map) return 0;
-      return (
-        elevationCache.getFromMap(this.map, p) ||
-        (this.map.queryTerrainElevation ? this.map.queryTerrainElevation(p) || 0 : 0)
-      );
-    };
-
-    const authenticBridgesMeshGroup = buildAuthenticBridgeMeshGroup(
-      WONJU_AUTHENTIC_BRIDGES,
-      this.originLngLat,
-      getTerrainElev
-    );
-    this.bridgeGroup.add(authenticBridgesMeshGroup);
-
-    // [드로우콜 최적화: Draw Calls < 10 엄격 준수]
-    // 뷰포트 중심 2.5km 이내의 주요 터널 2개소만 선별하여 3D 갱문 모델링 생성 (총 Draw Calls <= 8 보장)
-    const nearbyTunnels = (this.bridgesAndTunnelsData || [])
-      .filter((item) => item.type === 'tunnel' && item.coordinates && Array.isArray(item.coordinates))
-      .map((item) => {
-        const [lng, lat] = item.coordinates;
-        const dist = Math.hypot((lng - this.originLngLat[0]) * metersPerLng, (lat - this.originLngLat[1]) * metersPerLat);
-        return { item, dist };
-      })
-      .filter((entry) => entry.dist < 2500)
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, 2);
-
-    for (const { item } of nearbyTunnels) {
-      if (!item.coordinates || !Array.isArray(item.coordinates) || item.coordinates.length < 2) continue;
-      const [lng, lat] = item.coordinates;
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
-
-      const mx = (lng - this.originLngLat[0]) * metersPerLng;
-      const mz = -(lat - this.originLngLat[1]) * metersPerLat;
-
-      // [요구사항 1] 공중부양 교량 3D 박스 메쉬 전면 삭제
-      // 교량(Bridge)은 국토부 단일 좌표에 가짜 박스를 띄우지 않고, 실제 도로 선형(LineString)을 따라가며
-      // MapLibre DEM 지형에 밀착된 콘크리트 상판(#e2e8f0) 및 난간 라인과 마커 배지로만 표출합니다.
-      if (item.type === 'tunnel') {
-        const widthM = Number(item.widthM || 14.0);
-        const heightM = Number(item.heightM || 6.5);
-        const headingRad = (((item.heading || 40)) * Math.PI) / 180;
-
-        const tunnelSubGroup = new THREE.Group();
-        tunnelSubGroup.position.set(mx, 0, mz);
-        tunnelSubGroup.rotation.y = headingRad;
-
-        // 1. Concrete Headwall (포털 전면 사각 프레임)
-        const wallW = widthM + 4.0;
-        const wallH = heightM + 3.0;
-        const wallThick = 2.0;
-
-        const portalShape = new THREE.Shape();
-        portalShape.moveTo(-wallW / 2, 0);
-        portalShape.lineTo(wallW / 2, 0);
-        portalShape.lineTo(wallW / 2, wallH);
-        portalShape.lineTo(-wallW / 2, wallH);
-        portalShape.closePath();
-
-        const archHole = new THREE.Path();
-        const r = widthM / 2;
-        archHole.moveTo(-r, 0);
-        archHole.lineTo(r, 0);
-        archHole.lineTo(r, heightM - r);
-        archHole.absarc(0, heightM - r, r, 0, Math.PI, false);
-        archHole.lineTo(-r, 0);
-        portalShape.holes.push(archHole);
-
-        const portalGeo = new THREE.ExtrudeGeometry(portalShape, { depth: wallThick, bevelEnabled: false });
-        const portalMesh = new THREE.Mesh(portalGeo, this.tunnelArchMaterial);
-        portalMesh.position.set(0, 0, -wallThick / 2);
-        tunnelSubGroup.add(portalMesh);
-
-        // 2. Dark Tunnel Interior Cavity (암흑 내부 진입 통로)
-        const interiorDepth = 25.0;
-        const cavityShape = new THREE.Shape();
-        cavityShape.moveTo(-r, 0);
-        cavityShape.lineTo(r, 0);
-        cavityShape.lineTo(r, heightM - r);
-        cavityShape.absarc(0, heightM - r, r, 0, Math.PI, false);
-        cavityShape.closePath();
-
-        const cavityGeo = new THREE.ExtrudeGeometry(cavityShape, { depth: interiorDepth, bevelEnabled: false });
-        const cavityMesh = new THREE.Mesh(cavityGeo, this.tunnelInteriorMaterial);
-        cavityMesh.position.set(0, 0, -interiorDepth);
-        tunnelSubGroup.add(cavityMesh);
-
-        this.tunnelGroup.add(tunnelSubGroup);
-      }
+    if (this.bridgeGroup.parent) {
+      this.scene.remove(this.bridgeGroup);
     }
+    if (this.tunnelGroup.parent) {
+      this.scene.remove(this.tunnelGroup);
+    }
+
+    this.bridgeGroup.visible = false;
+    this.tunnelGroup.visible = false;
 
     if (this.map) {
       this.map.triggerRepaint();

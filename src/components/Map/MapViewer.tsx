@@ -2871,11 +2871,21 @@ export const MapViewer: React.FC = () => {
               rLayer.id.startsWith('korean-water') ||
               rLayer.id.startsWith('korean-riverbank');
             const isComplexHidden = rLayer.id.startsWith('complex-');
+            const isGroundBand =
+              rLayer.id === 'road-asphalt' ||
+              rLayer.id === 'road-curb-casing' ||
+              rLayer.id === 'road-bridge-casing' ||
+              rLayer.id === 'road-bridge-deck' ||
+              rLayer.id === 'korean-roads-surface';
             const configuredLayer: any = {
               ...rLayer,
               layout: {
                 ...(rLayer.layout || {}),
-                visibility: isWater ? 'visible' : (isComplexHidden ? 'none' : initialRoadVis),
+                visibility: isWater
+                  ? 'visible'
+                  : isComplexHidden || isGroundBand
+                  ? 'none'
+                  : initialRoadVis,
               },
             };
             map.addLayer(configuredLayer, beforeRoads);
@@ -4122,16 +4132,16 @@ export const MapViewer: React.FC = () => {
 
     for (const lid of KOREAN_ROAD_LAYER_IDS) {
       if (map.getLayer(lid)) {
+        const isGroundBand =
+          lid === 'road-asphalt' ||
+          lid === 'road-curb-casing' ||
+          lid === 'road-bridge-casing' ||
+          lid === 'road-bridge-deck' ||
+          lid === 'korean-roads-surface';
         if (lid.startsWith('korean-water') || lid.startsWith('korean-riverbank')) {
           map.setLayoutProperty(lid, 'visibility', 'visible');
-        } else if (
-          lid.startsWith('complex-') ||
-          (isSatellite &&
-            (lid === 'road-asphalt' ||
-              lid === 'road-curb-casing' ||
-              lid === 'korean-roads-surface'))
-        ) {
-          // [2단계] 위성 모드 시 인위적인 아스팔트/블록 채우기를 꺼서 브이월드 원본 항공사진 노면 100% 노출
+        } else if (lid.startsWith('complex-') || isGroundBand) {
+          // [1단계] 위성사진 노면을 가리는 인위적인 아스팔트/연석/교량 띠 오버레이 영구 OFF
           map.setLayoutProperty(lid, 'visibility', 'none');
         } else {
           map.setLayoutProperty(lid, 'visibility', roadVis);
@@ -4483,7 +4493,7 @@ export const MapViewer: React.FC = () => {
       }
     }
 
-    // [2단계: 위성 모드 시 노면을 덮는 인위적 아스팔트/블록 채우기 레이어 일괄 OFF]
+    // [1단계: 위성 모드 시 노면을 덮는 인위적 도로 오버레이/블록 채우기 레이어 일괄 OFF]
     const groundCoveringLayers = [
       'complex-parking-area',
       'complex-parking-curb',
@@ -4493,21 +4503,13 @@ export const MapViewer: React.FC = () => {
       'complex-parking-bays',
       'road-curb-casing',
       'road-asphalt',
+      'road-bridge-casing',
+      'road-bridge-deck',
       'korean-roads-surface',
     ];
     for (const lid of groundCoveringLayers) {
       if (map.getLayer(lid)) {
-        map.setLayoutProperty(
-          lid,
-          'visibility',
-          lid.startsWith('complex-')
-            ? 'none'
-            : isAnySatellite
-            ? 'none'
-            : layers?.roads === false
-            ? 'none'
-            : 'visible'
-        );
+        map.setLayoutProperty(lid, 'visibility', 'none');
       }
     }
   }, [baseMap, isMapLoaded, layers?.roads]);

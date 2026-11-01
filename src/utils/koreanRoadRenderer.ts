@@ -337,7 +337,8 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // 교량 외곽 방호벽/상판 2D 벡터 베이스
+    // [1단계: 위성사진 노면 100% 노출] 인위적인 도로/교량 아스팔트 및 연석 띠 레이어 완전 비활성화
+    // - 위성사진 고해상도 아스팔트와 실제 도로가 가려지지 않도록 visibility: 'none' 및 line-width: 0.0 적용
     // -------------------------------------------------------------------------
     {
       id: 'road-bridge-casing',
@@ -349,23 +350,13 @@ export function getKoreanRoadLayerDefinitions(
       filter: bridgeFilter,
       paint: {
         'line-color': '#64748b',
-        'line-opacity': 0.98,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          11, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 4.5, ['secondary', 'tertiary'], 3.0, 2.0],
-          13, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 8.2, ['secondary', 'tertiary'], 5.0, 3.0],
-          15, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 15.0, ['secondary', 'tertiary'], 8.2, 4.8],
-          16.5, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 23.5, ['secondary', 'tertiary'], 12.5, 7.2],
-          18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 38.0, ['secondary', 'tertiary'], 18.5, 10.5],
-          20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 68.0, ['secondary', 'tertiary'], 31.0, 16.5],
-        ],
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -377,31 +368,16 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: bridgeFilter,
       paint: {
-        'line-color': '#26292e', // 다크 아스팔트 교량 도로 상판
-        'line-opacity': 0.96,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          11, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 3.2, ['secondary', 'tertiary'], 2.0, 1.2],
-          13, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 6.4, ['secondary', 'tertiary'], 3.8, 2.2],
-          15, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 12.5, ['secondary', 'tertiary'], 6.5, 3.6],
-          16.5, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 20.0, ['secondary', 'tertiary'], 10.2, 5.6],
-          18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 33.5, ['secondary', 'tertiary'], 15.5, 8.5],
-          20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 60.0, ['secondary', 'tertiary'], 26.5, 13.5],
-        ],
+        'line-color': '#26292e',
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
-
-    // -------------------------------------------------------------------------
-    // [2단계] 한국형 실측 도로망: 밝은 연석 테두리 (road-curb-casing)
-    // - 도로 양옆에 밝은 연석 테두리(#94a3b8)를 깔아 도시 블록 구획이 칼같이 정돈됨
-    // -------------------------------------------------------------------------
     {
       id: 'road-curb-casing',
       type: 'line',
@@ -410,31 +386,16 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#94a3b8', // 밝은 콘크리트 연석 테두리
-        'line-opacity': 0.96,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          11, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 3.8, ['secondary', 'tertiary'], 2.6, 1.8],
-          13, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 7.2, ['secondary', 'tertiary'], 4.6, 2.8],
-          15, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 13.5, ['secondary', 'tertiary'], 7.5, 4.4],
-          16.5, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 21.5, ['secondary', 'tertiary'], 11.8, 6.8],
-          18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 35.5, ['secondary', 'tertiary'], 17.5, 9.8],
-          20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 63.0, ['secondary', 'tertiary'], 29.5, 15.5],
-        ],
+        'line-color': '#94a3b8',
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
-
-    // -------------------------------------------------------------------------
-    // [2단계] 도로 본체 다크 아스팔트 노면 포장 (road-asphalt)
-    // - 위성사진의 흐릿한 타이어 자국을 완전히 덮는 실제 아스팔트 포장(#2a2d34)
-    // -------------------------------------------------------------------------
     {
       id: 'road-asphalt',
       type: 'line',
@@ -443,32 +404,14 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#2a2d34', // 실제 아스팔트 노면 컬러
-        'line-opacity': [
-          'match',
-          ['get', 'class'],
-          ['motorway', 'trunk', 'primary'],
-          0.96, // 주간선도로 완전 덮음
-          ['secondary', 'tertiary'],
-          0.94,
-          0.90, // 골목길 및 보조도로
-        ],
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          11, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 2.4, ['secondary', 'tertiary'], 1.5, 0.8],
-          13, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 5.2, ['secondary', 'tertiary'], 3.0, 1.5],
-          15, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 10.8, ['secondary', 'tertiary'], 5.4, 2.6],
-          16.5, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 17.5, ['secondary', 'tertiary'], 8.8, 4.4],
-          18, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 30.0, ['secondary', 'tertiary'], 13.8, 7.0],
-          20, ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], 55.0, ['secondary', 'tertiary'], 24.5, 11.5],
-        ],
+        'line-color': '#2a2d34',
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 
