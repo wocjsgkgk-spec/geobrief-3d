@@ -204,7 +204,13 @@ export class EnvironmentRealismEngine {
       this.scene.remove(this.bridgeMasterGroup);
       this.bridgeMasterGroup.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
-          (obj as THREE.Mesh).geometry?.dispose();
+          const mesh = obj as THREE.Mesh;
+          mesh.geometry?.dispose();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => m.dispose());
+          } else if (mesh.material) {
+            mesh.material.dispose();
+          }
         }
       });
       this.bridgeMasterGroup = null;
@@ -261,7 +267,13 @@ export class EnvironmentRealismEngine {
       this.scene.remove(this.bridgeMasterGroup);
       this.bridgeMasterGroup.traverse((obj) => {
         if ((obj as THREE.Mesh).isMesh) {
-          (obj as THREE.Mesh).geometry?.dispose();
+          const mesh = obj as THREE.Mesh;
+          mesh.geometry?.dispose();
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => m.dispose());
+          } else if (mesh.material) {
+            mesh.material.dispose();
+          }
         }
       });
       this.bridgeMasterGroup = null;
@@ -275,12 +287,22 @@ export class EnvironmentRealismEngine {
     if (this.coniferMesh) {
       this.scene.remove(this.coniferMesh);
       this.coniferMesh.geometry?.dispose();
+      if (Array.isArray(this.coniferMesh.material)) {
+        this.coniferMesh.material.forEach((m) => m.dispose());
+      } else if (this.coniferMesh.material) {
+        this.coniferMesh.material.dispose();
+      }
       this.coniferMesh.dispose();
       this.coniferMesh = null;
     }
     if (this.deciduousMesh) {
       this.scene.remove(this.deciduousMesh);
       this.deciduousMesh.geometry?.dispose();
+      if (Array.isArray(this.deciduousMesh.material)) {
+        this.deciduousMesh.material.forEach((m) => m.dispose());
+      } else if (this.deciduousMesh.material) {
+        this.deciduousMesh.material.dispose();
+      }
       this.deciduousMesh.dispose();
       this.deciduousMesh = null;
     }

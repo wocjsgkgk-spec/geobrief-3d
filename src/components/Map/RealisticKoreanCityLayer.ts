@@ -1629,6 +1629,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.masterGeometry?.dispose();
       this.masterMesh = null;
     }
+    if (this.masterMaterial) {
+      this.masterMaterial.dispose();
+      this.masterMaterial = null;
+    }
     if (this.rooftopMesh) {
       this.scene.remove(this.rooftopMesh);
       this.rooftopGeometry?.dispose();
@@ -1637,9 +1641,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
     if (this.bridgeGroup) {
       this.scene.remove(this.bridgeGroup);
+      this.bridgeGroup.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          (obj as THREE.Mesh).geometry?.dispose();
+        }
+      });
+      this.bridgeGroup.clear();
     }
     if (this.tunnelGroup) {
       this.scene.remove(this.tunnelGroup);
+      this.tunnelGroup.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          (obj as THREE.Mesh).geometry?.dispose();
+        }
+      });
+      this.tunnelGroup.clear();
     }
     this.bridgeMaterial?.dispose();
     this.guardrailMaterial?.dispose();
