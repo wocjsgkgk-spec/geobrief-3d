@@ -3619,9 +3619,10 @@ export const MapViewer: React.FC = () => {
     mapRef.current = map;
     if (typeof window !== 'undefined') {
       (window as any).__map = map;
-    (window as any).__mapLibreMap = map;
-    (window as any).__geobrief_map = map;
-    (window as any).map = map;
+      (window as any).__mapLibreMap = map;
+      (window as any).__geobrief_map = map;
+      (window as any).__mapInstance = map;
+      (window as any).map = map;
     }
 
     const resizeObserver = new ResizeObserver(() => {

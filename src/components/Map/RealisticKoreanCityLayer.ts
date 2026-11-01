@@ -295,7 +295,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xdbeafe, 0.85);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 3단계] 4096px 고해상도 실사 파사드 아틀라스 & Streets-GL 접지 AO 셰이더 직결
+      // 2. [GeoBrief 3D 2단계] 16종 실사 파사드 아틀라스 & Streets-GL 접지 AO 셰이더 직결
       const atlasTex = getDiverseKoreanFacadeAtlasTexture();
       const rmaTex = getDiverseFacadeRmaTexture();
       this.masterMaterial = createPhotorealisticPbrMaterial({
@@ -304,15 +304,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         roughness: 0.45,
         metalness: 0.12,
         specularGlintIntensity: 2.8,
-        aoIntensity: 0.45,
+        aoIntensity: 0.35,
       });
 
-      this.rooftopMaterial = createPhotorealisticPbrMaterial({
-        map: atlasTex || undefined,
-        rmaMap: rmaTex || undefined,
-        roughness: 0.55,
-        metalness: 0.08,
-        aoIntensity: 0.45,
+      // [2단계: 지붕 옥상 윗면 5대 실측 톤 완전 분리]
+      // 벽면 창문 텍스처(map)를 전면 제거하고 5대 한국 실측 옥상 컬러(vertexColors: true) 100% 표출
+      this.rooftopMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.65,
+        metalness: 0.05,
+        side: THREE.DoubleSide,
       });
 
       // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
