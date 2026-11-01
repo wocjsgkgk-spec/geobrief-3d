@@ -24,21 +24,21 @@ export const VWORLD_AUTHENTIC_COLORS = {
     {
       id: 0,
       name: '아파트 스타일 1: 밝은 크림 화이트 & 브라운 투톤 (민트그린 발코니)',
-      wallColor: '#f5f3ee',
+      wallColor: '#f8fafc',
       wallSlot: 'apt_style_1_cream',
       sideBrandColor: '#6b5344',
       sideWallSlot: 'apt_side_brown',
-      roofColor: '#78716c',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
       id: 1,
       name: '아파트 스타일 2: 소프트 샌드 베이지 & 황토색 기단 (민트그린 발코니)',
-      wallColor: '#e8e1d5',
+      wallColor: '#f5ede0',
       wallSlot: 'apt_style_2_sand',
-      sideBrandColor: '#64635e',
-      sideWallSlot: 'apt_side_warmgray',
-      roofColor: '#57534e',
+      sideBrandColor: '#8c3b2b',
+      sideWallSlot: 'apt_side_terracotta',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
@@ -46,69 +46,69 @@ export const VWORLD_AUTHENTIC_COLORS = {
       name: '아파트 스타일 3: 아이보리 화이트 & 상층부 브라운 액센트',
       wallColor: '#faf7f0',
       wallSlot: 'apt_style_3_ivory',
-      sideBrandColor: '#8c3b2b',
-      sideWallSlot: 'apt_side_terracotta',
-      roofColor: '#78716c',
+      sideBrandColor: '#6b5344',
+      sideWallSlot: 'apt_side_brown',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
       id: 3,
       name: '아파트 스타일 4: 어반 웜그레이 & 다크 차콜 계단실 코어',
-      wallColor: '#dcd8d0',
+      wallColor: '#e5e2db',
       wallSlot: 'apt_style_4_warmgray',
       sideBrandColor: '#1e3a5f',
       sideWallSlot: 'apt_side_navy',
-      roofColor: '#57534e',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
       id: 4,
       name: '아파트 스타일 5: 모던 라이트 그레이 & 차콜 수직 핀',
-      wallColor: '#d5d0c7',
+      wallColor: '#e2ded7',
       wallSlot: 'apt_style_5_modern',
-      sideBrandColor: '#5e4b3c',
-      sideWallSlot: 'apt_side_brown',
-      roofColor: '#78716c',
+      sideBrandColor: '#334155',
+      sideWallSlot: 'apt_side_navy',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
       id: 5,
       name: '아파트 스타일 6: 웜 베이지 & 테라코타 브라운 기단',
-      wallColor: '#e5ded2',
+      wallColor: '#ede7db',
       wallSlot: 'apt_style_6_terracotta',
-      sideBrandColor: '#7c4432',
+      sideBrandColor: '#8c3b2b',
       sideWallSlot: 'apt_side_terracotta',
-      roofColor: '#57534e',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
       id: 6,
       name: '아파트 스타일 7: 주상복합 하이엔드 에메랄드 통유리 커튼월',
-      wallColor: '#2c5f56',
+      wallColor: '#38bdf8',
       wallSlot: 'apt_style_7_highrise_emerald',
-      sideBrandColor: '#1b3f38',
+      sideBrandColor: '#0284c7',
       sideWallSlot: 'apt_side_navy',
-      roofColor: '#57534e',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
     {
       id: 7,
       name: '아파트 스타일 8: 신축 타워 블루그레이 반사 통유리 & 루버',
-      wallColor: '#334e68',
+      wallColor: '#93c5fd',
       wallSlot: 'apt_style_8_highrise_bluegray',
-      sideBrandColor: '#1b2d3d',
-      sideWallSlot: 'apt_side_warmgray',
-      roofColor: '#78716c',
+      sideBrandColor: '#1e40af',
+      sideWallSlot: 'apt_side_navy',
+      roofColor: '#cbd5e1',
       roofSlot: 'roof_concrete_warmgray' as const,
     },
   ],
 
   // 하위 호환 아파트 벽체
   aptWalls: [
-    '#f5f3ee', // 1) 밝은 크림 화이트
-    '#e8e1d5', // 2) 소프트 샌드 베이지
+    '#f8fafc', // 1) 눈부신 크림 화이트
+    '#f5ede0', // 2) 소프트 샌드 베이지
     '#faf7f0', // 3) 아이보리 화이트
-    '#dcd8d0', // 4) 라이트 웜그레이
+    '#e5e2db', // 4) 라이트 웜그레이
   ],
 
   // 아파트 발코니 창문 & 프레임 (민트그린 실사)
@@ -120,15 +120,15 @@ export const VWORLD_AUTHENTIC_COLORS = {
   // 아파트 측벽(Side Wall) 4대 브랜드 수직 도색 라인
   aptSideBrands: [
     { name: '차분한 브라운 브랜드 라인 (101동)', colorHex: '#6b5344', slot: 'apt_side_brown' },
-    { name: '웜그레이 브랜드 라인 (102동)', colorHex: '#57534e', slot: 'apt_side_warmgray' },
     { name: '테라코타 브랜드 라인 (103동)', colorHex: '#8c3b2b', slot: 'apt_side_terracotta' },
     { name: '클래식 네이비 브랜드 라인 (105동)', colorHex: '#1e3a5f', slot: 'apt_side_navy' },
+    { name: '웜그레이 브랜드 라인 (102동)', colorHex: '#57534e', slot: 'apt_side_warmgray' },
   ],
 
-  // 아파트 옥상 평슬래브 (65%: 콘크리트 그레이, 35%: 다크 브라운 슬레이트)
+  // 아파트 옥상 평슬래브 (밝은 콘크리트 그레이)
   aptRoofs: [
-    { hex: '#78716c', slot: 'roof_concrete_warmgray', ratio: 0.65 },
-    { hex: '#57534e', slot: 'roof_concrete_warmgray', ratio: 0.35 },
+    { hex: '#cbd5e1', slot: 'roof_concrete_warmgray', ratio: 0.65 },
+    { hex: '#94a3b8', slot: 'roof_concrete_warmgray', ratio: 0.35 },
   ],
 
   // 2. 시내 중·저층 상가·원룸·오피스 외벽 8대 소재 (한국어 간판 패치 포함)
@@ -138,8 +138,8 @@ export const VWORLD_AUTHENTIC_COLORS = {
     { name: '파리바게뜨·투썸 카페 간판 & 화강석 타일', hex: '#e2dacb', slot: 'comm_sign_cafe_bakery' },
     { name: '피트니스 GYM·필라테스 간판 & 모던 메탈', hex: '#3f3f46', slot: 'comm_sign_fitness_yoga' },
     { name: '사비석/화강석 베이지 오피스', hex: '#d6cfc2', slot: 'comm_granite_tile' },
-    { name: '스카이블루 반사 유리 커튼월', hex: '#64748b', slot: 'comm_sky_curtain' },
-    { name: '에메랄드 그린 틴티드 유리 빌딩', hex: '#047857', slot: 'comm_emerald_glass' },
+    { name: '스카이블루 반사 유리 커튼월', hex: '#38bdf8', slot: 'comm_sky_curtain' },
+    { name: '에메랄드 그린 틴티드 유리 빌딩', hex: '#10b981', slot: 'comm_emerald_glass' },
     { name: '다크 차콜 알루미늄 복합패널', hex: '#27272a', slot: 'comm_charcoal_panel' },
   ],
 
@@ -147,16 +147,16 @@ export const VWORLD_AUTHENTIC_COLORS = {
   commGroundShowcase: '#1e293b',
   commGroundShowcaseDark: '#0f172a',
 
-  // 상가 옥상 3대 실측 분포 (45% : 35% : 20%)
+  // 상가 옥상 3대 실측 분포 (50% 우레탄 세이지 그린 : 50% 밝은 콘크리트 그레이)
   commRoofs: [
-    { name: '저채도 우레탄 방수 세이지 그린 (45%)', hex: '#3b6e52', slot: 'roof_urethane_sage' as const },
-    { name: '노후 시멘트/콘크리트 그레이 슬래브 (35%)', hex: '#828282', slot: 'roof_concrete_warmgray' as const },
-    { name: '차분한 테라코타 브라운 기와 (20%)', hex: '#6e3f32', slot: 'roof_terracotta_tile' as const },
+    { name: '선명한 우레탄 방수 세이지 그린 (50%)', hex: '#3b7a57', slot: 'roof_urethane_sage' as const },
+    { name: '밝은 시멘트/콘크리트 그레이 슬래브 (50%)', hex: '#cbd5e1', slot: 'roof_concrete_warmgray' as const },
+    { name: '밝은 콘크리트 슬래브 (보조)', hex: '#94a3b8', slot: 'roof_concrete_warmgray' as const },
   ],
 
   // 옥상 테두리 회백색 콘크리트 난간(Parapet)
-  parapetConcrete: '#d4d4d8',
-  parapetConcreteCap: '#e4e4e7',
+  parapetConcrete: '#e2e8f0',
+  parapetConcreteCap: '#ffffff',
 
   // 3. 저층 단독주택·빌라 (4대 외벽 & 4대 옥상)
   detachedHouseWalls: [

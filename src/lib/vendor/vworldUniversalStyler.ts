@@ -75,9 +75,9 @@ export interface UniversalStyleResult {
 export const VWORLD_UNIVERSAL_PALETTE = {
   // 1. 한국형 아파트 외벽 바탕 3대 실사 톤 (image_7c6d3f, image_7c1b86 1:1 직결)
   aptWallColors: [
-    '#f5f3ee', // 크림 화이트
-    '#e8e1d5', // 소프트 샌드 베이지
-    '#dcd8d0', // 라이트 웜그레이
+    '#f8fafc', // 눈부신 크림 화이트
+    '#f5ede0', // 소프트 샌드 베이지
+    '#e5e2db', // 라이트 웜그레이
   ],
   aptWallSlots: [
     'apt_style_1_cream',
@@ -94,29 +94,29 @@ export const VWORLD_UNIVERSAL_PALETTE = {
 
   // 아파트 하단 기단부(1~3층) 및 지붕캡 따뜻한 브라운/황토/테라코타 투톤
   aptPodiumColors: [
-    '#6b4423', // 따뜻한 브라운
-    '#8c583a', // 테라코타 브라운
-    '#7c4432', // 황토 테라코타
+    '#7c4d32', // 따뜻한 브라운
+    '#8c432d', // 테라코타 브라운
+    '#334155', // 모던 슬레이트
   ],
   aptPodiumSlot: 'apt_ground_brown',
-  aptRoofCapSlot: 'apt_roofcap_brown',
+  aptRoofCapSlot: 'crown_frame',
 
   // 아파트 측벽 4대 브랜드 수직 도색 라인
   aptSideBrandColors: [
     '#6b5344', // 101동 브라운
-    '#57534e', // 102동 웜그레이
     '#8c3b2b', // 103동 테라코타
     '#1e3a5f', // 105동 네이비
+    '#57534e', // 102동 웜그레이
   ],
   aptSideSlots: [
     'apt_side_brown',
-    'apt_side_warmgray',
     'apt_side_terracotta',
     'apt_side_navy',
+    'apt_side_warmgray',
   ],
 
-  // 아파트 옥상 다크 슬래브
-  aptRoofColors: ['#57534e', '#78716c'],
+  // 아파트 옥상: 밝고 깨끗한 콘크리트 회색 슬래브 (#cbd5e1 / #94a3b8)
+  aptRoofColors: ['#cbd5e1', '#b8c2cc'],
 
   // 2. 상가 및 오피스 빌딩
   commGroundShowcase: '#1e293b',
@@ -127,52 +127,50 @@ export const VWORLD_UNIVERSAL_PALETTE = {
     'comm_sign_fitness_yoga',
   ],
 
-  // 상가 옥상 3대 실측 분포 (45% : 35% : 20%)
+  // 상가 옥상 2대 실측 분포 (50% 우레탄 세이지 그린 : 50% 밝은 시멘트 슬래브)
   commRoofs: [
-    { name: '우레탄 방수 세이지 그린 (45%)', hex: '#3b6e52', slot: 'roof_urethane_sage' as const },
-    { name: '콘크리트 회색 슬래브 (35%)', hex: '#828282', slot: 'roof_concrete_warmgray' as const },
-    { name: '테라코타 브라운 (20%)', hex: '#6e3f32', slot: 'roof_terracotta_tile' as const },
+    { name: '우레탄 방수 세이지 그린 (50%)', hex: '#3b7a57', slot: 'roof_urethane_sage' as const },
+    { name: '콘크리트 회색 슬래브 (50%)', hex: '#cbd5e1', slot: 'roof_concrete_warmgray' as const },
   ],
 
-  // 옥상 테두리 난간 (Parapet)
-  parapetColor: '#d4d4d8',
-  parapetHeight: 0.8,
+  // 옥상 테두리 난간 (Parapet, 밝은 회백색)
+  parapetColor: '#e2e8f0',
+  parapetHeight: 0.85,
 
-  // 3. 관공서 / 공공기관 랜드마크
-  govPodiumGranite: '#dcd4c6',
-  govTowerCurtainSky: '#475569',
-  govTowerCurtainReflect: '#64748b',
+  // 3. 관공서 / 공공기관 랜드마크 (은청색/스카이블루 통유리 커튼월 + 화이트 프레임)
+  govPodiumGranite: '#f1f5f9',
+  govTowerCurtainSky: '#38bdf8',
+  govTowerCurtainReflect: '#93c5fd',
 
   // 4. 학교 교사동
   schoolWalls: [
-    '#d97746', // 오렌지 테라코타
     '#e89065', // 살구색
+    '#d97746', // 오렌지 테라코타
     '#9c4936', // 따뜻한 적벽돌
   ],
   schoolRoofs: [
     { hex: '#2e6b5d', slot: 'roof_school_green' as const },
-    { hex: '#6e3f32', slot: 'roof_terracotta_tile' as const },
-    { hex: '#828282', slot: 'roof_concrete_warmgray' as const },
+    { hex: '#cbd5e1', slot: 'roof_concrete_warmgray' as const },
   ],
 
   // 5. 저층 주택가
   villaWalls: [
-    { hex: '#8c3f30', slot: 'villa_red_brick' },     // 적벽돌
+    { hex: '#9a3b26', slot: 'villa_red_brick' },     // 적벽돌
     { hex: '#9a6b4c', slot: 'villa_brown_brick' },   // 황토 파벽돌
     { hex: '#dcd4c6', slot: 'villa_granite' },       // 베이지 화강석
     { hex: '#ebe5d8', slot: 'villa_stucco_ivory' },  // 아이보리 드라이비트
   ],
   villaRoofs: [
-    { hex: '#3b6e52', slot: 'roof_urethane_sage' as const },    // 45% 우레탄 세이지 그린
-    { hex: '#828282', slot: 'roof_concrete_warmgray' as const }, // 35% 콘크리트 슬래브
-    { hex: '#6e3f32', slot: 'roof_terracotta_tile' as const },   // 20% 적갈색 기와
+    { hex: '#9a3b26', slot: 'roof_terracotta_tile' as const },   // 40% 적갈색 기와
+    { hex: '#2563eb', slot: 'roof_zinc_blue' as const },        // 30% 코발트 블루 징크
+    { hex: '#3b7a57', slot: 'roof_urethane_sage' as const },    // 30% 우레탄 세이지 그린
   ],
 };
 
 export class VworldUniversalStyler {
   /**
    * 전역(강원 18개 시·군 전역) 무결점 건물 건축 양식 판정기
-   * - 거리 제한, POI 앵커 제한, 슬라이스 제한 전면 0% 해제
+   * - 공공기관 & 대형 랜드마크 우선 판정 (아파트 오분류 원천 차단)
    */
   public static classifyBuilding(
     properties: Record<string, any> = {},
@@ -211,6 +209,8 @@ export class VworldUniversalStyler {
       name.includes('병영') ||
       name.includes('사령부') ||
       name.includes('보급대') ||
+      name.includes('군사') ||
+      name.includes('위병소') ||
       usage.includes('military') ||
       usage.includes('barracks');
     if (isMilitary) return 'military';
@@ -223,12 +223,66 @@ export class VworldUniversalStyler {
       name.includes('학교') ||
       name.includes('캠퍼스') ||
       name.includes('대학') ||
+      name.includes('교사동') ||
       usage.includes('school') ||
       usage.includes('education') ||
       usage.includes('교육');
     if (isSchool) return 'school';
 
-    // 3. 한국형 아파트 단지 판정 (18개 시·군 전역 기하학 + 태그 완전 보장)
+    // 3. [최우선] 반곡동 혁신도시 공공기관 & 대형 랜드마크 타워 판정
+    // (아파트 판정보다 먼저 검사하여 공공기관이 아파트로 오분류되는 버그 100% 원천 차단)
+    const isPublicNameOrUsage =
+      name.includes('청사') ||
+      name.includes('시청') ||
+      name.includes('군청') ||
+      name.includes('구청') ||
+      name.includes('도청') ||
+      name.includes('공단') ||
+      name.includes('공사') ||
+      name.includes('건강보험') ||
+      name.includes('심평원') ||
+      name.includes('국과수') ||
+      name.includes('광해') ||
+      name.includes('도로교통') ||
+      name.includes('산림항공') ||
+      name.includes('석탄') ||
+      name.includes('관광공사') ||
+      name.includes('법원') ||
+      name.includes('검찰') ||
+      name.includes('경찰') ||
+      name.includes('소방') ||
+      name.includes('우체국') ||
+      name.includes('도서관') ||
+      name.includes('정부') ||
+      name.includes('공공') ||
+      name.includes('연구원') ||
+      name.includes('혁신센터') ||
+      name.includes('복합혁신') ||
+      name.includes('의회') ||
+      name.includes('지방청') ||
+      name.includes('병원') ||
+      name.includes('의료원') ||
+      usage.includes('public') ||
+      usage.includes('government') ||
+      usage.includes('hospital') ||
+      usage.includes('civic') ||
+      usage.includes('office') ||
+      usage.includes('administration');
+
+    // 대형 랜드마크 기하학: 바닥면적 800㎡ 이상 또는 정방형/비정형 대형 블록 (폭 22m 이상 & 세장비 1.7 미만)
+    const isLargePublicGeometry =
+      (areaSqm >= 800) ||
+      (areaSqm >= 500 && minWidth >= 22.0 && aspectRatio < 1.7) ||
+      (height >= 32.0 && aspectRatio < 1.6);
+
+    const isPublic =
+      isPublicNameOrUsage ||
+      (isLargePublicGeometry && !name.includes('아파트') && !name.includes('자이') && !name.includes('푸르지오'));
+
+    if (isPublic) return 'public_office';
+
+    // 4. 한국형 아파트 단지 판정 (동 호수 정규식, 브랜드명, 판상형 주동 기하학)
+    const hasAptUnitRegex = /\d{1,4}\s*동\b/.test(name) || /동\s*\d{1,4}호/.test(name);
     const isAptTag =
       name.includes('아파트') ||
       name.includes('자이') ||
@@ -248,51 +302,31 @@ export class VworldUniversalStyler {
       name.includes('동보') ||
       name.includes('청솔') ||
       name.includes('에버빌') ||
-      name.includes('동') ||
+      name.includes('포레나') ||
+      name.includes('센트럴') ||
+      name.includes('우미린') ||
+      hasAptUnitRegex ||
       usage.includes('apartments') ||
       usage.includes('공동주택') ||
-      usage.includes('아파트') ||
       properties.building === 'apartments' ||
       properties.type === 'apartments';
 
-    // 한국형 판상형 아파트 기하: 바닥면적 320㎡ 이상, 폭 9~24m, 세장비 1.7 이상
-    const isAptGeometry =
-      areaSqm >= 320 &&
+    // 한국형 판상형 아파트 엄격 기하학:
+    // 전형적 아파트 주동은 폭 9~26m의 좁고 긴 판상형 구조 (세장비 >= 1.6, 높이 20m 이상)
+    const isAptSlabGeometry =
+      areaSqm >= 280 &&
       minWidth >= 8.5 &&
-      (aspectRatio >= 1.7 || areaSqm >= 420);
+      minWidth <= 26.0 &&
+      aspectRatio >= 1.6 &&
+      height >= 20.0;
 
     const isApartment =
-      (isAptTag && areaSqm >= 250) ||
-      (isAptGeometry && !name.includes('청사') && !name.includes('시청') && !name.includes('공단')) ||
-      (height >= 24.0 && areaSqm >= 300 && !name.includes('시청') && !name.includes('공단'));
+      (isAptTag && (areaSqm >= 250 || height >= 18.0)) ||
+      isAptSlabGeometry;
 
     if (isApartment) return 'apartment';
 
-    // 4. 관공서 / 공공기관 랜드마크 판정
-    const isPublic =
-      name.includes('청사') ||
-      name.includes('시청') ||
-      name.includes('군청') ||
-      name.includes('구청') ||
-      name.includes('법원') ||
-      name.includes('경찰') ||
-      name.includes('소방') ||
-      name.includes('공단') ||
-      name.includes('공사') ||
-      name.includes('건강보험') ||
-      name.includes('심평원') ||
-      name.includes('관광공사') ||
-      name.includes('광해') ||
-      name.includes('병원') ||
-      name.includes('의료원') ||
-      usage.includes('public') ||
-      usage.includes('government') ||
-      usage.includes('hospital') ||
-      (areaSqm >= 700 && height >= 20.0);
-
-    if (isPublic) return 'public_office';
-
-    // 5. 시내 상업 및 오피스 빌딩 판정
+    // 5. 시내 상업 및 오피스 빌딩 판정 (2~6층 근린생활시설, 상가, 학원, 클리닉)
     const isCommercial =
       name.includes('빌딩') ||
       name.includes('타워') ||
@@ -301,18 +335,21 @@ export class VworldUniversalStyler {
       name.includes('상가') ||
       name.includes('마트') ||
       name.includes('호텔') ||
+      name.includes('의원') ||
+      name.includes('약국') ||
+      name.includes('학원') ||
+      name.includes('카페') ||
       usage.includes('commercial') ||
       usage.includes('retail') ||
       usage.includes('office') ||
       usage.includes('근린생활') ||
       usage.includes('업무') ||
       usage.includes('판매') ||
-      (height >= 11.0 && areaSqm >= 180) ||
-      (areaSqm >= 200 && areaSqm < 700);
+      (height >= 9.0 && (areaSqm >= 120 || aspectRatio < 2.0));
 
     if (isCommercial) return 'commercial';
 
-    // 6. 저층 주택가 및 다세대 빌라
+    // 6. 저층 단독주택 및 다세대 빌라 (1~3층)
     return 'lowrise_residential';
   }
 
@@ -342,35 +379,58 @@ export class VworldUniversalStyler {
 
     // 1) [한국형 아파트 단지] (브이월드 image_7c6d3f.jpg, image_7c1b86.jpg 스타일 100% 직결)
     if (category === 'apartment') {
-      const aptH = Math.max(45.0, height > 0 ? height : 45.0 + (absSeed % 31)); // 45m ~ 75m
-      const wallColor = VWORLD_UNIVERSAL_PALETTE.aptWallColors[absSeed % VWORLD_UNIVERSAL_PALETTE.aptWallColors.length];
-      const wallSlot = VWORLD_UNIVERSAL_PALETTE.aptWallSlots[absSeed % VWORLD_UNIVERSAL_PALETTE.aptWallSlots.length];
-      const podiumColor = VWORLD_UNIVERSAL_PALETTE.aptPodiumColors[absSeed % VWORLD_UNIVERSAL_PALETTE.aptPodiumColors.length];
-      const roofCapColor = VWORLD_UNIVERSAL_PALETTE.aptPodiumColors[(absSeed + 1) % VWORLD_UNIVERSAL_PALETTE.aptPodiumColors.length];
-      const sideBrandColor = VWORLD_UNIVERSAL_PALETTE.aptSideBrandColors[absSeed % VWORLD_UNIVERSAL_PALETTE.aptSideBrandColors.length];
-      const sideWallSlot = VWORLD_UNIVERSAL_PALETTE.aptSideSlots[absSeed % VWORLD_UNIVERSAL_PALETTE.aptSideSlots.length];
-      const roofColor = VWORLD_UNIVERSAL_PALETTE.aptRoofColors[absSeed % VWORLD_UNIVERSAL_PALETTE.aptRoofColors.length];
+      const aptH = Math.max(36.0, height > 0 ? height : 45.0 + (absSeed % 31)); // 36m ~ 75m
+      
+      // 단지별 3대 클러스터 차별화 (단지별 고유 색상 및 브랜드 수직선)
+      const complexCluster = Math.abs(
+        Math.floor((centerLngLat[0] * 1200 + centerLngLat[1] * 1200 + absSeed * 5))
+      ) % 3;
+
+      let wallColor = '#f8fafc'; // 1단지: 눈부신 크림 화이트
+      let wallSlot = 'apt_style_1_cream';
+      let podiumColor = '#7c4d32'; // 따뜻한 브라운
+      let sideBrandColor = '#6b5344'; // 101동 브라운
+      let sideWallSlot = 'apt_side_brown';
+
+      if (complexCluster === 1) {
+        // 2단지: 소프트 베이지 + 테라코타 포인트
+        wallColor = '#f5ede0';
+        wallSlot = 'apt_style_2_sand';
+        podiumColor = '#8c432d';
+        sideBrandColor = '#8c3b2b';
+        sideWallSlot = 'apt_side_terracotta';
+      } else if (complexCluster === 2) {
+        // 3단지: 라이트 웜그레이 콘크리트 + 네이비/슬레이트 포인트
+        wallColor = '#e5e2db';
+        wallSlot = 'apt_style_4_warmgray';
+        podiumColor = '#334155';
+        sideBrandColor = '#1e3a5f';
+        sideWallSlot = 'apt_side_navy';
+      }
+
+      // 지붕: 밝은 콘크리트 회색 슬래브 (#cbd5e1 / #94a3b8)
+      const roofColor = '#cbd5e1';
 
       return {
         category,
-        categoryLabel: '한국형 고층 아파트 단지',
+        categoryLabel: `한국형 고층 아파트 단지 (${complexCluster === 0 ? '크림화이트' : complexCluster === 1 ? '샌드베이지' : '웜그레이'})`,
         wallColor,
         wallSlot,
         roofColor,
         roofSlot: 'roof_concrete_warmgray',
         podiumColor,
-        podiumSlot: VWORLD_UNIVERSAL_PALETTE.aptPodiumSlot,
-        roofCapColor,
-        roofCapSlot: VWORLD_UNIVERSAL_PALETTE.aptRoofCapSlot,
+        podiumSlot: 'apt_ground_brown',
+        roofCapColor: '#e2e8f0',
+        roofCapSlot: 'crown_frame',
         sideBrandColor,
         sideWallSlot,
-        parapetColor: VWORLD_UNIVERSAL_PALETTE.parapetColor,
-        parapetHeight: VWORLD_UNIVERSAL_PALETTE.parapetHeight,
+        parapetColor: '#e2e8f0',
+        parapetHeight: 0.85,
         hasElevatorPenthouse: true,
         hasHvacCooling: true,
-        balconyGlassColor: absSeed % 2 === 0 ? VWORLD_UNIVERSAL_PALETTE.aptBalconyMintGray : VWORLD_UNIVERSAL_PALETTE.aptBalconyCharcoal,
-        windowFrameColor: VWORLD_UNIVERSAL_PALETTE.aptWhiteFrame,
-        slabShadowColor: VWORLD_UNIVERSAL_PALETTE.aptSlabShadow,
+        balconyGlassColor: '#2c3e35',
+        windowFrameColor: '#ffffff',
+        slabShadowColor: '#cbd5e1',
         targetHeight: aptH,
         uvMainWall: getDiverseFacadeSlotUV(wallSlot),
         uvAptSide: getDiverseFacadeSlotUV(sideWallSlot),
@@ -378,42 +438,46 @@ export class VworldUniversalStyler {
         uvRoofFloor: getDiverseFacadeSlotUV('roof_concrete_warmgray'),
         uvParapet,
         uvRoofCap,
-        uvPodium,
+        uvPodium: getDiverseFacadeSlotUV('apt_ground_brown'),
         uvSchool,
         commSignSlots,
       };
     }
 
-    // 2) [혁신도시 공공기관 & 시내 상업/오피스 빌딩] (image_7c1b86.jpg 우측 상가 스타일)
+    // 2) [혁신도시 공공기관 & 대형 랜드마크 타워] (밝은 은청색/스카이블루 통유리 커튼월 + 화이트 프레임)
     if (category === 'public_office') {
-      const officeH = Math.max(24.0, height > 0 ? height : 24.0 + (absSeed % 25)); // 24m ~ 48m
-      const roofDef = VWORLD_UNIVERSAL_PALETTE.commRoofs[1]; // 회색 슬래브 기본
+      const officeH = Math.max(28.0, height > 0 ? height : 35.0 + (absSeed % 28)); // 28m ~ 63m
+      
+      // 지붕: 밝은 실버 메탈 슬래브 (#e2e8f0) 및 옥상 조경 녹지 (#3b7a57)
+      const hasGardenRoof = (absSeed % 2 === 0) || areaSqm >= 900;
+      const roofSlot = hasGardenRoof ? 'terrace_garden' : 'roof_concrete_warmgray';
+      const roofColor = hasGardenRoof ? '#3b7a57' : '#e2e8f0';
 
       return {
         category,
-        categoryLabel: '공공기관 및 관공서 랜드마크 타워',
-        wallColor: VWORLD_UNIVERSAL_PALETTE.govTowerCurtainSky,
+        categoryLabel: '공공기관 및 혁신도시 랜드마크 타워',
+        wallColor: '#38bdf8', // 맑은 스카이블루 반사유리
         wallSlot: 'gov_tower',
-        roofColor: roofDef.hex,
-        roofSlot: roofDef.slot,
-        podiumColor: VWORLD_UNIVERSAL_PALETTE.govPodiumGranite,
+        roofColor,
+        roofSlot: roofSlot as any,
+        podiumColor: '#f1f5f9', // 밝은 화강석 포디움
         podiumSlot: 'gov_podium',
-        roofCapColor: '#334155',
+        roofCapColor: '#e2e8f0',
         roofCapSlot: 'crown_frame',
-        sideBrandColor: '#1e293b',
-        sideWallSlot: 'comm_charcoal_panel',
-        parapetColor: VWORLD_UNIVERSAL_PALETTE.parapetColor,
-        parapetHeight: VWORLD_UNIVERSAL_PALETTE.parapetHeight,
+        sideBrandColor: '#0284c7',
+        sideWallSlot: 'gov_tower',
+        parapetColor: '#e2e8f0',
+        parapetHeight: 0.9,
         hasElevatorPenthouse: true,
         hasHvacCooling: true,
-        balconyGlassColor: '#475569',
+        balconyGlassColor: '#38bdf8',
         windowFrameColor: '#ffffff',
         slabShadowColor: '#cbd5e1',
         targetHeight: officeH,
         uvMainWall: getDiverseFacadeSlotUV('gov_tower'),
-        uvAptSide: getDiverseFacadeSlotUV('comm_charcoal_panel'),
+        uvAptSide: getDiverseFacadeSlotUV('gov_tower'),
         uvShopShowcase,
-        uvRoofFloor: getDiverseFacadeSlotUV(roofDef.slot),
+        uvRoofFloor: getDiverseFacadeSlotUV(roofSlot),
         uvParapet,
         uvRoofCap,
         uvPodium: getDiverseFacadeSlotUV('gov_podium'),
@@ -422,43 +486,47 @@ export class VworldUniversalStyler {
       };
     }
 
+    // 3) [중·저층 상가 및 근린생활시설] (1층 통유리 쇼윈도 + 간판 밴드 + 화강석/적벽돌/모던그레이)
     if (category === 'commercial') {
       const commH = Math.max(12.0, height > 0 ? height : 12.0 + (absSeed % 11)); // 12m ~ 22m
-      // 옥상 3대 실측 분포: 45% 우레탄 세이지, 35% 콘크리트 회색, 20% 테라코타
-      const roofPick = absSeed % 100;
-      const roofDef = roofPick < 45
-        ? VWORLD_UNIVERSAL_PALETTE.commRoofs[0]
-        : roofPick < 80
-        ? VWORLD_UNIVERSAL_PALETTE.commRoofs[1]
-        : VWORLD_UNIVERSAL_PALETTE.commRoofs[2];
+
+      // 상가 옥상 2대 배분: 50% 세이지 그린 우레탄 (#3b7a57), 50% 밝은 시멘트 회색 (#cbd5e1 / #9ca3af)
+      const isUrethane = (absSeed % 2 === 0);
+      const roofColor = isUrethane ? '#3b7a57' : '#cbd5e1';
+      const roofSlot = isUrethane ? 'roof_urethane_sage' : 'roof_concrete_warmgray';
 
       const signSlot = VWORLD_UNIVERSAL_PALETTE.commSignSlots[absSeed % VWORLD_UNIVERSAL_PALETTE.commSignSlots.length];
 
+      // 상가 외벽 소재 혼합 (화강석 베이지 #dcd4c6, 적벽돌 #9a3b26, 모던 그레이 #64748b)
+      const wallPick = absSeed % 3;
+      const wallColor = wallPick === 0 ? '#dcd4c6' : wallPick === 1 ? '#9a3b26' : '#64748b';
+      const sideSlot = wallPick === 0 ? 'comm_granite_tile' : wallPick === 1 ? 'school_red_brick' : 'comm_charcoal_panel';
+
       return {
         category,
-        categoryLabel: '중·저층 상가 및 오피스 빌딩',
-        wallColor: '#dfd8cc',
+        categoryLabel: '중·저층 상가 및 근린생활시설',
+        wallColor,
         wallSlot: signSlot,
-        roofColor: roofDef.hex,
-        roofSlot: roofDef.slot,
-        podiumColor: VWORLD_UNIVERSAL_PALETTE.commGroundShowcase,
+        roofColor,
+        roofSlot,
+        podiumColor: '#1e293b',
         podiumSlot: 'comm_ground_shop',
-        roofCapColor: '#475569',
+        roofCapColor: '#e2e8f0',
         roofCapSlot: 'crown_frame',
-        sideBrandColor: '#3f3f46',
-        sideWallSlot: 'comm_granite_tile',
-        parapetColor: VWORLD_UNIVERSAL_PALETTE.parapetColor,
-        parapetHeight: VWORLD_UNIVERSAL_PALETTE.parapetHeight,
+        sideBrandColor: wallColor,
+        sideWallSlot: sideSlot,
+        parapetColor: '#e2e8f0',
+        parapetHeight: 0.8,
         hasElevatorPenthouse: true,
         hasHvacCooling: true,
         balconyGlassColor: '#1e293b',
         windowFrameColor: '#ffffff',
-        slabShadowColor: '#94a3b8',
+        slabShadowColor: '#cbd5e1',
         targetHeight: commH,
         uvMainWall: getDiverseFacadeSlotUV(signSlot),
-        uvAptSide: getDiverseFacadeSlotUV('comm_granite_tile'),
+        uvAptSide: getDiverseFacadeSlotUV(sideSlot),
         uvShopShowcase,
-        uvRoofFloor: getDiverseFacadeSlotUV(roofDef.slot),
+        uvRoofFloor: getDiverseFacadeSlotUV(roofSlot),
         uvParapet,
         uvRoofCap,
         uvPodium: uvShopShowcase,
@@ -467,26 +535,28 @@ export class VworldUniversalStyler {
       };
     }
 
-    // 3) [학교 및 교육 연구 시설] (4~5층, 12m~18m, 오렌지 테라코타 교사동 + 청록/갈색 지붕)
+    // 4) [학교 및 교육 연구 시설] (4층 내외, 살구/오렌지 테라코타 & 적벽돌 투톤 + 청록/회색 지붕)
     if (category === 'school') {
       const schoolH = Math.max(12.0, height > 0 ? height : 14.0 + (absSeed % 5)); // 14m ~ 18m
-      const wallColor = VWORLD_UNIVERSAL_PALETTE.schoolWalls[absSeed % VWORLD_UNIVERSAL_PALETTE.schoolWalls.length];
-      const roofDef = VWORLD_UNIVERSAL_PALETTE.schoolRoofs[absSeed % VWORLD_UNIVERSAL_PALETTE.schoolRoofs.length];
+      const wallColor = (absSeed % 2 === 0) ? '#e89065' : '#9c4936';
+      const wallSlot = (absSeed % 2 === 0) ? 'school_terracotta_brick' : 'school_red_brick';
+      const roofSlot = (absSeed % 2 === 0) ? 'roof_school_green' : 'roof_concrete_warmgray';
+      const roofColor = (absSeed % 2 === 0) ? '#2e6b5d' : '#cbd5e1';
 
       return {
         category,
         categoryLabel: '초·중·고 및 대학교 교육시설',
         wallColor,
-        wallSlot: 'school_terracotta_brick',
-        roofColor: roofDef.hex,
-        roofSlot: roofDef.slot,
+        wallSlot,
+        roofColor,
+        roofSlot,
         podiumColor: '#7c3f30',
         podiumSlot: 'school_brick_facade',
-        roofCapColor: '#57534e',
+        roofCapColor: '#e2e8f0',
         roofCapSlot: 'crown_frame',
         sideBrandColor: '#7c3f30',
         sideWallSlot: 'school_brick_facade',
-        parapetColor: VWORLD_UNIVERSAL_PALETTE.parapetColor,
+        parapetColor: '#e2e8f0',
         parapetHeight: 0.8,
         hasElevatorPenthouse: false,
         hasHvacCooling: true,
@@ -494,10 +564,10 @@ export class VworldUniversalStyler {
         windowFrameColor: '#ffffff',
         slabShadowColor: '#cbd5e1',
         targetHeight: schoolH,
-        uvMainWall: getDiverseFacadeSlotUV('school_terracotta_brick'),
+        uvMainWall: getDiverseFacadeSlotUV(wallSlot),
         uvAptSide: getDiverseFacadeSlotUV('school_brick_facade'),
         uvShopShowcase,
-        uvRoofFloor: getDiverseFacadeSlotUV(roofDef.slot),
+        uvRoofFloor: getDiverseFacadeSlotUV(roofSlot),
         uvParapet,
         uvRoofCap,
         uvPodium: getDiverseFacadeSlotUV('school_brick_facade'),

@@ -128,26 +128,26 @@ export const VWORLD_REA_COLORS = {
   aptBrandTerracotta: VWORLD_AUTHENTIC_COLORS.aptSideBrands[2].colorHex,
   aptBrandWarmGray: VWORLD_AUTHENTIC_COLORS.aptSideBrands[3].colorHex,
 
-  // 아파트 지붕 2종
-  aptRoofFlatDarkGray: VWORLD_AUTHENTIC_COLORS.aptRoofs[0].hex,
-  aptRoofFlatMocha: VWORLD_AUTHENTIC_COLORS.aptRoofs[1].hex,
+  // 아파트 지붕 2종 (밝은 콘크리트 회색 슬래브 동기화)
+  aptRoofFlatDarkGray: VWORLD_AUTHENTIC_COLORS.aptRoofs[0]?.hex || '#cbd5e1',
+  aptRoofFlatMocha: VWORLD_AUTHENTIC_COLORS.aptRoofs[1]?.hex || '#94a3b8',
 
   // 시내 상가 외벽 6대 소재
-  commRedBrick: VWORLD_AUTHENTIC_COLORS.commWalls[0].hex,
-  commDarkBrownBrick: VWORLD_AUTHENTIC_COLORS.commWalls[1].hex,
-  commGraniteBeige: VWORLD_AUTHENTIC_COLORS.commWalls[2].hex,
-  commWarmGrayConcrete: VWORLD_AUTHENTIC_COLORS.commWalls[3].hex,
-  commCharcoalZinc: VWORLD_AUTHENTIC_COLORS.commWalls[4].hex,
-  commSkyGlass: VWORLD_AUTHENTIC_COLORS.commWalls[5].hex,
+  commRedBrick: VWORLD_AUTHENTIC_COLORS.commWalls[0]?.hex || '#9a3b26',
+  commDarkBrownBrick: VWORLD_AUTHENTIC_COLORS.commWalls[1]?.hex || '#5c3d2e',
+  commGraniteBeige: VWORLD_AUTHENTIC_COLORS.commWalls[2]?.hex || '#dcd4c6',
+  commWarmGrayConcrete: VWORLD_AUTHENTIC_COLORS.commWalls[3]?.hex || '#94a3b8',
+  commCharcoalZinc: VWORLD_AUTHENTIC_COLORS.commWalls[4]?.hex || '#475569',
+  commSkyGlass: VWORLD_AUTHENTIC_COLORS.commWalls[5]?.hex || '#38bdf8',
 
-  // 상가 옥상 3대 실측 분포 (45% : 35% : 20%)
-  roofUrethaneSage: VWORLD_AUTHENTIC_COLORS.commRoofs[0].hex,
-  roofCementGray: VWORLD_AUTHENTIC_COLORS.commRoofs[1].hex,
-  roofTerracottaRed: VWORLD_AUTHENTIC_COLORS.commRoofs[2].hex,
+  // 상가 옥상 3대 실측 분포 (50% 우레탄 세이지 그린, 50% 밝은 시멘트 슬래브)
+  roofUrethaneSage: VWORLD_AUTHENTIC_COLORS.commRoofs[0]?.hex || '#3b7a57',
+  roofCementGray: VWORLD_AUTHENTIC_COLORS.commRoofs[1]?.hex || '#cbd5e1',
+  roofTerracottaRed: VWORLD_AUTHENTIC_COLORS.commRoofs[2]?.hex || '#94a3b8',
 
   // 저층 단독주택 외벽
-  detachedRedBrick: VWORLD_AUTHENTIC_COLORS.detachedHouseWalls[0],
-  detachedStucco: VWORLD_AUTHENTIC_COLORS.detachedHouseWalls[1],
+  detachedRedBrick: VWORLD_AUTHENTIC_COLORS.detachedHouseWalls?.[0] || '#9a3b26',
+  detachedStucco: VWORLD_AUTHENTIC_COLORS.detachedHouseWalls?.[1] || '#ebe5d8',
 };
 
 /**
@@ -397,7 +397,66 @@ export class VworldRealRenderer {
           }
         }
       }
-      // 2) 중·저층 상가 및 원룸 (1층 쇼윈도 + 2층 이상 한국형 간판 패치)
+      // 2) [혁신도시 공공기관 & 대형 랜드마크] (밝은 은청색/스카이블루 통유리 커튼월 + 화이트 프레임)
+      else if (isPublic) {
+        const podiumH = Math.min(6.5, Math.max(3.5, height * 0.22)); // 1~2층 포디움 기단부
+        const yPodiumTop = baseElev + podiumH;
+        const bayW = 3.2; // 3.2m 간격 커튼월 멀리온 모듈
+        const numBays = Math.max(1, Math.round(edgeLen / bayW));
+
+        // (1) 1~2층 화강석/대리석 포디움 기단부
+        for (let b = 0; b < numBays; b++) {
+          const t0 = b / numBays;
+          const t1 = (b + 1) / numBays;
+          const bx0 = p1.x + dx * t0;
+          const bz0 = p1.z + dz * t0;
+          const bx1 = p1.x + dx * t1;
+          const bz1 = p1.z + dz * t1;
+
+          addQuad(
+            [bx0, baseElev, bz0],
+            [bx1, baseElev, bz1],
+            [bx1, yPodiumTop, bz1],
+            [bx0, yPodiumTop, bz0],
+            norm,
+            uvPodium,
+            cleanWhiteRgb
+          );
+        }
+
+        // (2) 3층~최상층: 은청색/스카이블루 통유리 커튼월 타워
+        if (height > podiumH + 0.5) {
+          const upperH = height - podiumH;
+          const floorH = 3.3; // 층고 3.3m
+          const numUpperFloors = Math.max(1, Math.round(upperH / floorH));
+          const dUH = upperH / numUpperFloors;
+
+          for (let f = 0; f < numUpperFloors; f++) {
+            const uy0 = yPodiumTop + f * dUH;
+            const uy1 = yPodiumTop + (f + 1) * dUH;
+
+            for (let b = 0; b < numBays; b++) {
+              const t0 = b / numBays;
+              const t1 = (b + 1) / numBays;
+              const bx0 = p1.x + dx * t0;
+              const bz0 = p1.z + dz * t0;
+              const bx1 = p1.x + dx * t1;
+              const bz1 = p1.z + dz * t1;
+
+              addQuad(
+                [bx0, uy0, bz0],
+                [bx1, uy0, bz1],
+                [bx1, uy1, bz1],
+                [bx0, uy1, bz0],
+                norm,
+                uvMainWall, // gov_tower (은청색/스카이블루 반사 통유리 커튼월)
+                cleanWhiteRgb
+              );
+            }
+          }
+        }
+      }
+      // 3) 중·저층 상가 및 근린생활시설 (1층 쇼윈도 + 2층 이상 한국형 간판 패치)
       else if (isCommercial || (height >= 10.0 && !isLowRise && !isSchoolBldg)) {
         const podiumH = Math.min(3.8, height * 0.40);
         const yPodiumTop = baseElev + podiumH;
@@ -462,8 +521,8 @@ export class VworldRealRenderer {
           }
         }
       }
-      // 3) 학교 및 교육·공공시설 (3~6층 오렌지 테라코타/살구색 교사동)
-      else if (isSchoolBldg || isPublic) {
+      // 4) 학교 및 교육 연구 시설 (3~6층 살구/오렌지 테라코타 & 적벽돌 교사동)
+      else if (isSchoolBldg) {
         const floorH = 3.3;
         const numFloors = Math.max(1, Math.round(height / floorH));
         const dFH = height / numFloors;
@@ -494,7 +553,7 @@ export class VworldRealRenderer {
           }
         }
       }
-      // 4) 저층 단독주택·빌라·군부대 막사 (1~4층, 가로 3.5m x 층고 3.0m 단위 블록)
+      // 5) 저층 단독주택·빌라·군부대 막사 (1~4층, 가로 3.5m x 층고 3.0m 단위 블록)
       else {
         const floorH = 3.0;
         const numFloors = Math.max(1, Math.round(height / floorH));

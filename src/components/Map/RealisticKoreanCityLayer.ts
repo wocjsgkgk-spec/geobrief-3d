@@ -279,37 +279,40 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.map = map;
 
     try {
-      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 과노출 방지 및 선명한 텍스처 대비 보존)
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.45);
+      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 화사하고 눈부신 주광 + 하늘빛 환경광)
+      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
       this.sunLight.position.set(120, 160, 90).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.45);
+      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.75);
       this.fillLight.position.set(-100, 120, -80).normalize();
       this.scene.add(this.fillLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
       this.scene.add(this.ambientLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xa0aec0, 0.60);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xdbeafe, 0.85);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 3단계] 4096px 고해상도 실사 파사드 아틀라스 & Streets-GL 접지 AO 셰이더 직결
       const atlasTex = getDiverseKoreanFacadeAtlasTexture();
+      const rmaTex = getDiverseFacadeRmaTexture();
       this.masterMaterial = createPhotorealisticPbrMaterial({
         map: atlasTex || undefined,
-        roughness: 0.55,
-        metalness: 0.08,
-        specularGlintIntensity: 2.5,
-        aoIntensity: 1.0,
+        rmaMap: rmaTex || undefined,
+        roughness: 0.45,
+        metalness: 0.12,
+        specularGlintIntensity: 2.8,
+        aoIntensity: 0.45,
       });
 
       this.rooftopMaterial = createPhotorealisticPbrMaterial({
         map: atlasTex || undefined,
-        roughness: 0.65,
-        metalness: 0.05,
-        aoIntensity: 1.0,
+        rmaMap: rmaTex || undefined,
+        roughness: 0.55,
+        metalness: 0.08,
+        aoIntensity: 0.45,
       });
 
       // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
@@ -700,9 +703,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const u = this.accUvIdx;
     const h = this.accHeightIdx;
     const baseElev = this.currentBuildingBaseElev;
-    const cr = color ? color[0] : 0.90;
-    const cg = color ? color[1] : 0.88;
-    const cb = color ? color[2] : 0.85;
+    const cr = color ? color[0] : 1.0;
+    const cg = color ? color[1] : 1.0;
+    const cb = color ? color[2] : 1.0;
 
     this.accPosBuf[p] = p0[0];
     this.accPosBuf[p + 1] = p0[1];
@@ -794,9 +797,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const u = this.accRooftopUvIdx;
     const h = this.accRooftopHeightIdx;
     const baseElev = this.currentBuildingBaseElev;
-    const cr = color ? color[0] : 0.85;
-    const cg = color ? color[1] : 0.83;
-    const cb = color ? color[2] : 0.80;
+    const cr = color ? color[0] : 1.0;
+    const cg = color ? color[1] : 1.0;
+    const cb = color ? color[2] : 1.0;
 
     this.accRooftopPosBuf[p] = p0[0];
     this.accRooftopPosBuf[p + 1] = p0[1];

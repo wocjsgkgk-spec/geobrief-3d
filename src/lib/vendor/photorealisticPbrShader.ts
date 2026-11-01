@@ -26,6 +26,7 @@
  */
 
 import * as THREE from 'three';
+import { getVworldPhotoRmaTexture } from '@/lib/vendor/vworldPhotoAtlasGenerator';
 
 export interface PhotorealisticPbrMaterialOptions {
   map?: THREE.Texture | null;
@@ -71,150 +72,7 @@ let cachedRmaTexture: THREE.CanvasTexture | null = null;
 
 export function getOrCreatePbrRmaTexture(diffuseCanvas?: HTMLCanvasElement): THREE.CanvasTexture {
   if (cachedRmaTexture) return cachedRmaTexture;
-
-  if (typeof document === 'undefined') {
-    // SSR 환경 fallback
-    const dummyCanvas = { width: 16, height: 16 } as any;
-    return new THREE.CanvasTexture(dummyCanvas);
-  }
-
-  const size = 2048;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  // 1. 기본 배경 (벽체: Roughness 0.85 = 217, Metalness 0.04 = 10, AO 1.0 = 255)
-  ctx.fillStyle = 'rgb(217, 10, 255)';
-  ctx.fillRect(0, 0, size, size);
-
-  // 6열 x 4행 슬롯 크기 (341 x 512)
-  const cellW = Math.floor(size / 6);
-  const cellH = Math.floor(size / 4);
-
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 6; col++) {
-      const slotId = row * 6 + col;
-      const x = col * cellW;
-      const y = row * cellH;
-
-      if (slotId >= 0 && slotId <= 3) {
-        // [아파트 전·배면 파사드]: 대형 발코니 창문 영역 RMA
-        // 창문: Roughness 0.15 = 38, Metalness 0.85 = 217, AO 0.85 = 217
-        const winY = y + 36;
-        const winH = Math.round(cellH * 0.50);
-        const winW = cellW - 40;
-        const winX = x + 20;
-
-        ctx.fillStyle = 'rgb(38, 217, 220)';
-        ctx.fillRect(winX, winY, winW, winH);
-
-        // 창틀 드롭 섀도우 AO
-        ctx.fillStyle = 'rgb(180, 100, 120)';
-        ctx.fillRect(winX, winY, winW, 8);
-        ctx.fillRect(winX, winY, 6, winH);
-
-        // 에어컨 실외기 루버 (금속성 0.80 = 204, 거칠기 0.35 = 89)
-        const louverW = Math.round(winW * 0.30);
-        const louverH = 32;
-        const louverX = winX + winW - louverW - 4;
-        const louverY = winY + winH - louverH - 4;
-        ctx.fillStyle = 'rgb(89, 204, 180)';
-        ctx.fillRect(louverX, louverY, louverW, louverH);
-      } else if (slotId === 8 || slotId === 9) {
-        // [상가 커튼월 & 1층 쇼윈도]: 전면 통유리 RMA
-        // 커튼월/쇼윈도: Roughness 0.12 = 30, Metalness 0.90 = 230, AO 0.95 = 242
-        const shopY = y + 20;
-        const shopH = cellH - 40;
-        const shopW = cellW - 24;
-        const shopX = x + 12;
-
-        ctx.fillStyle = 'rgb(30, 230, 242)';
-        ctx.fillRect(shopX, shopY, shopW, shopH);
-      } else if (slotId === 5 || slotId === 6 || slotId === 7) {
-        // [중층 상업 빌딩]: 2~5층 창문 격자 RMA
-        for (let fy = y + 40; fy < y + cellH - 40; fy += 90) {
-          for (let fx = x + 24; fx < x + cellW - 50; fx += 80) {
-            ctx.fillStyle = 'rgb(38, 217, 220)';
-            ctx.fillRect(fx, fy, 55, 60);
-            ctx.fillStyle = 'rgb(180, 100, 120)';
-            ctx.fillRect(fx, fy, 55, 6);
-          }
-        }
-      } else if (slotId === 10 || slotId === 11 || slotId === 12) {
-        // [빌라 & 단독주택]: 아담한 주택 창문 RMA
-        const wX = x + 35;
-        const wY = y + 45;
-        const wW = cellW - 70;
-        const wH = Math.round(cellH * 0.48);
-        ctx.fillStyle = 'rgb(45, 200, 220)';
-        ctx.fillRect(wX, wY, wW, wH);
-      } else if (slotId === 17) {
-        // [옥상: 우레탄 방수 세이지/딥그린]: 약간의 광택 Satin Sheen (Roughness 0.35 = 89, Metalness 0.08 = 20)
-        ctx.fillStyle = 'rgb(89, 20, 230)';
-        ctx.fillRect(x, y, cellW, cellH);
-        // 난간 내측 그림자 Corner AO
-        ctx.fillStyle = 'rgb(120, 20, 100)';
-        ctx.fillRect(x, y, cellW, 30);
-        ctx.fillRect(x, y + cellH - 30, cellW, 30);
-        ctx.fillRect(x, y, 30, cellH);
-        ctx.fillRect(x + cellW - 30, y, 30, cellH);
-      } else if (slotId === 14 || slotId === 15) {
-        // [옥상: 노후 콘크리트 슬래브 & 차콜 아스팔트]: 무광 웨더링 (Roughness 0.82 = 209, Metalness 0.02 = 5)
-        ctx.fillStyle = 'rgb(209, 5, 230)';
-        ctx.fillRect(x, y, cellW, cellH);
-        // 테두리 난간 AO
-        ctx.fillStyle = 'rgb(209, 5, 95)';
-        ctx.fillRect(x, y, cellW, 26);
-        ctx.fillRect(x, y + cellH - 26, cellW, 26);
-        ctx.fillRect(x, y, 26, cellH);
-        ctx.fillRect(x + cellW - 26, y, 26, cellH);
-      } else if (slotId === 16) {
-        // [옥상: 적갈색 기와/슁글]: 거친 테라코타 (Roughness 0.78 = 199, Metalness 0.03 = 8)
-        ctx.fillStyle = 'rgb(199, 8, 220)';
-        ctx.fillRect(x, y, cellW, cellH);
-      } else if (slotId === 18) {
-        // [옥상: 청색 징크 강판]: 금속성 (Roughness 0.38 = 97, Metalness 0.70 = 178)
-        ctx.fillStyle = 'rgb(97, 178, 240)';
-        ctx.fillRect(x, y, cellW, cellH);
-      } else if (slotId === 20) {
-        // [옥상 옥탑/냉각탑 메탈 루버]: 금속성 0.80, 거칠기 0.35
-        ctx.fillStyle = 'rgb(89, 204, 230)';
-        ctx.fillRect(x, y, cellW, cellH);
-      } else if (slotId === 22) {
-        // [아파트 1층 필로티 현관 로비 유리창]: 거칠기 0.15, 금속성 0.85
-        const winY = y + 40;
-        const winH = cellH - 80;
-        const winW = cellW - 50;
-        const winX = x + 25;
-        ctx.fillStyle = 'rgb(38, 217, 220)';
-        ctx.fillRect(winX, winY, winW, winH);
-      } else if (slotId === 23) {
-        // [공공청사 / 군부대 막사 규격 사각 창호]: 거칠기 0.15, 금속성 0.85
-        const winX = x + 24;
-        const winW = cellW - 48;
-        const winY = y + 36;
-        const winH = Math.round(cellH * 0.50);
-        ctx.fillStyle = 'rgb(38, 217, 220)';
-        ctx.fillRect(winX, winY, winW, winH);
-      }
-    }
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = true;
-  if ('colorSpace' in texture) {
-    (texture as any).colorSpace = THREE.NoColorSpace; // Linear Data Texture
-  }
-
-  cachedRmaTexture = texture;
+  cachedRmaTexture = getVworldPhotoRmaTexture();
   return cachedRmaTexture;
 }
 
@@ -338,12 +196,12 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   }
 
   // 4. [F4map & OSMBuildings 벤더링] 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion)
-  // 건물이 지형에 견고하게 맞닿도록 0.0m ~ 4.0m 구간 짙은 그라데이션 섀도우 적용
-  float shadowFactor = smoothstep(0.0, 4.0, max(0.0, vHeight));
-  float finalGroundingAo = mix(0.40, 1.0, shadowFactor);
+  // 건물이 지형에 견고하게 맞닿도록 부드러운 접지 음영 적용 (과도한 0.40 어두움 폐기 -> 0.85로 밝게 상향)
+  float shadowFactor = smoothstep(0.0, 3.5, max(0.0, vHeight));
+  float finalGroundingAo = mix(0.85, 1.0, shadowFactor);
 
-  // 차폐 음영 및 텍스처 미세 AO 결합 적용
-  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity));
+  // 차폐 음영 및 텍스처 미세 AO 결합 적용 (텍스처 본연의 화사한 색상 100% 보존)
+  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.35));
 `;
 
 /**
