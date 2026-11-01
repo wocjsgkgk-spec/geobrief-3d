@@ -148,48 +148,47 @@ export class VworldMasterEngine {
       usage.includes('apartments');
 
     // -------------------------------------------------------------------------
-    // [규격 1: 아파트 단지 (apartments 또는 단지형)]
-    // 스펙: 45m ~ 75m (15층 ~ 25층 고층 스카이라인)
+    // [규격 1: 아파트 단지 (apartments 또는 면적 350㎡ 이상 단지형/장방형)]
+    // 스펙: 45m ~ 75m (15층 ~ 25층 고층 스카이라인 100% 강제 보장)
     // -------------------------------------------------------------------------
-    if (isApartmentTag || (areaSqm >= 450 && (seed % 10 < 7) && !hasPublicTag && !isBangokArea)) {
+    if (isApartmentTag || (areaSqm >= 350 && !hasPublicTag && !isBangokArea)) {
       const aptH = 45.0 + (seed % 31) * 1.0; // 45.0m ~ 75.0m
       return aptH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 2: 중대형 오피스·공공청사 (area >= 500㎡ 또는 혁신도시 공공기관)]
-    // 스펙: 20m ~ 42m (6층 ~ 13층 랜드마크 조형)
+    // [규격 2: 반곡동 혁신도시 공공기관·관공서·대형 빌딩 (area >= 700㎡ 또는 혁신도시 구역)]
+    // 스펙: 24m ~ 48m (7층 ~ 15층 랜드마크 조형)
     // -------------------------------------------------------------------------
-    if (areaSqm >= 500 || hasPublicTag || isBangokArea) {
-      const officeH = 20.0 + (seed % 23) * 1.0; // 20.0m ~ 42.0m
+    if (areaSqm >= 700 || hasPublicTag || isBangokArea) {
+      const officeH = 24.0 + (seed % 25) * 1.0; // 24.0m ~ 48.0m
       return officeH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 3: 시내 상가·원룸·근린생활시설 (220㎡ <= area < 500㎡)]
-    // 스펙: 12m ~ 22m (3.5층 ~ 6층)
+    // [규격 3: 시내 일반 상가·원룸·근린생활 블록 (200㎡ <= area < 700㎡)]
+    // 스펙: 12m ~ 22m (4층 ~ 7층)
     // -------------------------------------------------------------------------
-    if (areaSqm >= 220 && areaSqm < 500) {
+    if (areaSqm >= 200 && areaSqm < 700) {
       const commH = 12.0 + (seed % 11) * 1.0; // 12.0m ~ 22.0m
       return commH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 4: 소형 단독주택·다가구 (area < 200㎡)]
-    // 스펙: 4.5m ~ 7.5m (1층 ~ 2층) - 절대 연필 기둥처럼 솟지 않도록 엄격 캡
+    // [규격 4: 단독주택·다세대 빌라 (50㎡ <= area < 200㎡)]
+    // 스펙: 7.5m ~ 11.5m (2.5층 ~ 3.5층 - 절대 납작한 0~1m 평면 금지)
     // -------------------------------------------------------------------------
-    if (areaSqm < 200) {
-      const resH = 4.5 + (seed % 4) * 1.0; // 4.5m ~ 7.5m (1~2층)
-      const safeMaxWidth = Math.max(5.0, minWidth);
-      return Math.min(resH, safeMaxWidth * 2.0); // 세장비 2.0 이내 제한
+    if (areaSqm >= 50 && areaSqm < 200) {
+      const resH = 7.5 + (seed % 5) * 1.0; // 7.5m ~ 11.5m
+      return resH;
     }
 
-    // 기본 보증 높이 (모든 건물 입체화 보증: 12m ~ 22m)
-    return 12.0 + (seed % 11) * 1.0;
+    // 기본 보증 높이 (모든 건물 입체화 보증: 최소 7.5m ~ 12m)
+    return Math.max(7.5, 7.5 + (seed % 5) * 1.0);
   }
 
   /**
-   * 세장비 및 소형 필지 안전 캡
+   * 세장비 및 소형 필지 안전 캡 (절대 0~1m 반환 금지, 최소 7.5m 보장)
    */
   private static clampSafetyHeight(
     rawH: number,
@@ -198,8 +197,8 @@ export class VworldMasterEngine {
     seed: number
   ): number {
     if (areaSqm < 200) {
-      // 200㎡ 미만 소형 건물은 최대 7.5m 이하로 엄격 캡
-      return Math.min(rawH, 4.5 + (seed % 4) * 1.0);
+      // 200㎡ 미만 소형 건물도 최소 7.5m ~ 11.5m 보장
+      return Math.max(7.5, Math.min(rawH, 7.5 + (seed % 5) * 1.0));
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = Math.max(14.0, safeW * 4.0);

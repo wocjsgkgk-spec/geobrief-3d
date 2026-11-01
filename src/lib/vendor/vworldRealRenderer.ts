@@ -191,9 +191,9 @@ export class VworldRealRenderer {
       if (elen < minEdge) minEdge = elen;
     }
 
-    // [소형 단독주택 높이 제약 (4.5m ~ 7.5m, 1~2층)]
-    const minH = areaSqm < 200 ? 4.5 : 7.5;
-    const height = Math.max(minH, opts.height || (areaSqm < 200 ? 5.5 : 10.0));
+    // [1단계: 건물 높이 절대 하한선 7.5m 보장 (0~1m 납작 바닥 매몰 원천 방지)]
+    const minH = 7.5;
+    const height = Math.max(minH, opts.height || 7.5);
     const topElev = baseElev + height;
 
     // 2. 관공서 / 공공청사 랜드마크 3단 복합 조형 (포디움 + 셋백 타워 + 옥상 조경)

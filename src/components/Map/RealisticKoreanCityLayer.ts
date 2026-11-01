@@ -1001,11 +1001,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      // [신규: 아파트 단지 내부 보행로/화단/담장 등 세장형 비건물 돌출 차단 (소형 단독주택/상가 100% 보존)]
-      if (minWidth < 2.5) {
+      // [신규: 폭 6m 미만 또는 세장비 8.0 초과 도로/보행로/옹벽/방음벽 등 비건물 수직 장벽 100% 원천 차단]
+      if (minWidth < 6.0) {
         continue;
       }
-      if (minWidth < 4.5 && Math.max(spanX, spanZ) / minWidth > 7.0 && !featProps.buld_nm && !featProps.mgmBldrgstPk && !featProps.building) {
+      if (Math.max(spanX, spanZ) / minWidth > 8.0) {
         continue;
       }
 
@@ -1086,22 +1086,49 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
-      // 지형 표고: 실제 지형 고도(m) 직접 안착 (고도 중복 편차 및 0m 누락 완전 해결)
+      // 지형 표고: 실제 지형 고도(m) 직접 안착 (지형 아래 매몰 및 0m 누락 완전 해결)
+      const hasTerrain = Boolean(map.getTerrain());
       let rawElev = 0;
-      try {
-        if (map.queryTerrainElevation) {
-          const q = map.queryTerrainElevation([cLng, cLat]);
-          if (typeof q === 'number' && Number.isFinite(q) && q > 0) rawElev = q;
-        }
-        if (rawElev <= 0) {
-          const cached = elevationCache.getFromMap(map, [cLng, cLat]);
-          if (cached > 0) rawElev = cached;
-        }
-      } catch {}
 
-      // 원주 등 강원권 평균 표고(138m) 안전 기본값 (DEM 타일 로드 전이라도 지표면에 밀착)
-      if (rawElev <= 0) {
-        rawElev = 138.0;
+      if (hasTerrain) {
+        try {
+          if (typeof map.queryTerrainElevation === 'function') {
+            const q = map.queryTerrainElevation([cLng, cLat]);
+            if (typeof q === 'number' && Number.isFinite(q) && q > 0) {
+              rawElev = q;
+            } else if (rawCoords && rawCoords.length > 0) {
+              // 중심점 고도 누락 시 외곽 정점 샘플링으로 최대 지형고도 획득 (땅속 매몰 원천 방지)
+              for (let k = 0; k < Math.min(rawCoords.length, 6); k++) {
+                const eq = map.queryTerrainElevation([rawCoords[k][0], rawCoords[k][1]]);
+                if (typeof eq === 'number' && Number.isFinite(eq) && eq > rawElev) {
+                  rawElev = eq;
+                }
+              }
+            }
+          }
+          if (rawElev <= 0) {
+            const cached = elevationCache.getFromMap(map, [cLng, cLat]);
+            if (cached > 0) rawElev = cached;
+          }
+        } catch {}
+
+        // 지형 타일 로드 대기 중 안전 표고: 지역별 실측 지형 고도 동적 추정
+        if (rawElev <= 0) {
+          if (cLat >= 37.31 && cLat <= 37.35 && cLng >= 127.96 && cLng <= 128.01) {
+            rawElev = 162.0; // 원주 반곡동 혁신도시 지형 표고
+          } else if (cLat >= 37.30 && cLat <= 37.38 && cLng >= 127.90 && cLng <= 127.98) {
+            rawElev = 142.0; // 원주 도심권
+          } else if (cLat >= 37.84 && cLat <= 37.92 && cLng >= 127.68 && cLng <= 127.76) {
+            rawElev = 76.0;  // 춘천 도심권
+          } else if (cLat >= 37.72 && cLat <= 37.80 && cLng >= 128.85 && cLng <= 128.93) {
+            rawElev = 22.0;  // 강릉 도심권
+          } else {
+            rawElev = 135.0; // 강원 평균
+          }
+        }
+      } else {
+        // 지형 비활성화 시 해수면 0m 평면에 칼같이 밀착
+        rawElev = 0;
       }
 
       const baseElev = rawElev;

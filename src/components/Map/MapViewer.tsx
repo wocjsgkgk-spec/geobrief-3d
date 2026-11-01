@@ -2870,11 +2870,12 @@ export const MapViewer: React.FC = () => {
             const isWater =
               rLayer.id.startsWith('korean-water') ||
               rLayer.id.startsWith('korean-riverbank');
+            const isComplexHidden = rLayer.id.startsWith('complex-');
             const configuredLayer: any = {
               ...rLayer,
               layout: {
                 ...(rLayer.layout || {}),
-                visibility: isWater ? 'visible' : initialRoadVis,
+                visibility: isWater ? 'visible' : (isComplexHidden ? 'none' : initialRoadVis),
               },
             };
             map.addLayer(configuredLayer, beforeRoads);
@@ -4124,15 +4125,11 @@ export const MapViewer: React.FC = () => {
         if (lid.startsWith('korean-water') || lid.startsWith('korean-riverbank')) {
           map.setLayoutProperty(lid, 'visibility', 'visible');
         } else if (
-          isSatellite &&
-          (lid === 'road-asphalt' ||
-            lid === 'road-curb-casing' ||
-            lid === 'complex-service-asphalt' ||
-            lid === 'complex-parking-area' ||
-            lid === 'complex-service-casing' ||
-            lid === 'complex-pedestrian-path' ||
-            lid === 'complex-parking-bays' ||
-            lid === 'korean-roads-surface')
+          lid.startsWith('complex-') ||
+          (isSatellite &&
+            (lid === 'road-asphalt' ||
+              lid === 'road-curb-casing' ||
+              lid === 'korean-roads-surface'))
         ) {
           // [2단계] 위성 모드 시 인위적인 아스팔트/블록 채우기를 꺼서 브이월드 원본 항공사진 노면 100% 노출
           map.setLayoutProperty(lid, 'visibility', 'none');
@@ -4503,7 +4500,13 @@ export const MapViewer: React.FC = () => {
         map.setLayoutProperty(
           lid,
           'visibility',
-          isAnySatellite ? 'none' : (layers?.roads === false ? 'none' : 'visible')
+          lid.startsWith('complex-')
+            ? 'none'
+            : isAnySatellite
+            ? 'none'
+            : layers?.roads === false
+            ? 'none'
+            : 'visible'
         );
       }
     }

@@ -402,8 +402,7 @@ export function createGpuBuildingStackLayers(
     ['!', ['has', 'leisure']],
   ];
 
-  // Tier 0: 건물 바닥 접지 음영 (Ambient Occlusion Contact Shadow)
-  // - 위성사진과 건물 바닥 경계선에 얇고 선명한 음영을 주어 건물이 바닥에 정확히 뿌리박혀 보이도록 정합
+  // Tier 0: 건물 바닥 접지 음영 (위성사진을 가리는 검은색 테두리 선 완전 제거)
   const tier0GroundAO: maplibregl.LayerSpecification = {
     id: `${p}bldg-ground-ao`,
     type: 'line',
@@ -413,39 +412,14 @@ export function createGpuBuildingStackLayers(
     minzoom: 12,
     maxzoom: 24,
     paint: {
-      'line-color': '#020617', // 심층 차콜 블랙 접지 음영
-      'line-opacity': [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        13.0, 0.0,
-        14.5, 0.55,
-        16.0, 0.82,
-        18.0, 0.95,
-      ],
-      'line-width': [
-        'interpolate',
-        ['exponential', 1.5],
-        ['zoom'],
-        13.0, 0.8,
-        14.5, 2.2,
-        16.0, 4.5,
-        18.0, 8.5,
-      ],
-      'line-blur': [
-        'interpolate',
-        ['exponential', 1.5],
-        ['zoom'],
-        13.0, 0.6,
-        14.5, 1.4,
-        16.0, 2.6,
-        18.0, 5.0,
-      ],
+      'line-color': '#000000',
+      'line-opacity': 0.0, // 시커먼 덧칠 테두리 완전 투명화 제거
+      'line-width': 0.0,
     },
     layout: {
       'line-cap': 'round',
       'line-join': 'round',
-      visibility: 'visible',
+      visibility: 'none',
     },
   };
 
@@ -600,15 +574,15 @@ export function setGpuBuildingLayersVisibility(
   const vis = visible ? 'visible' : 'none';
   const aoVis = (visible || keepGroundAO) ? 'visible' : 'none';
 
-  // 접지 음영(bldg-ground-ao)은 건물 표시가 켜져 있으면 상시 유지 (Three.js 및 3D 타일셋 하단 접지력 강화)
+  // 접지 음영(bldg-ground-ao)은 위성사진 가림 및 검은색 테두리 평면 버그를 방지하기 위해 완전 'none' 유지
   if (map.getLayer('bldg-ground-ao')) {
-    map.setLayoutProperty('bldg-ground-ao', 'visibility', aoVis);
+    map.setLayoutProperty('bldg-ground-ao', 'visibility', 'none');
   }
   if (map.getLayer('fusion-bldg-ground-ao')) {
-    map.setLayoutProperty('fusion-bldg-ground-ao', 'visibility', aoVis);
+    map.setLayoutProperty('fusion-bldg-ground-ao', 'visibility', 'none');
   }
   if (map.getLayer('real-bldg-ground-ao')) {
-    map.setLayoutProperty('real-bldg-ground-ao', 'visibility', aoVis);
+    map.setLayoutProperty('real-bldg-ground-ao', 'visibility', 'none');
   }
 
   // 3D 입체 익스트루전 슬라이스 레이어들 가시성 제어 (중복 겹침 및 Z-Fighting 원천 차단)

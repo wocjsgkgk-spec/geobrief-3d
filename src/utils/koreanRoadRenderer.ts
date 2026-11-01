@@ -217,7 +217,7 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // 단지 및 상업지구 지상 인프라 (주차장 구역, 보도블록 연석, 보행로)
+    // 단지 및 상업지구 지상 인프라 (위성사진 노면을 가리는 인위적 레이어 기본 OFF)
     // -------------------------------------------------------------------------
     {
       id: 'complex-parking-area',
@@ -229,11 +229,11 @@ export function getKoreanRoadLayerDefinitions(
       filter: ['match', ['get', 'class'], ['parking', 'garages'], true, false],
       paint: {
         'fill-color': '#22262f', // 깔끔한 다크 아스팔트 주차장 포장 톤
-        'fill-opacity': 0.94,
+        'fill-opacity': 0.0,
         'fill-antialias': true,
       },
       layout: {
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -246,12 +246,12 @@ export function getKoreanRoadLayerDefinitions(
       filter: ['match', ['get', 'class'], ['parking', 'garages'], true, false],
       paint: {
         'line-color': '#94a3b8', // 선명한 콘크리트/화강석 주차장 연석 라인
-        'line-opacity': 0.95,
-        'line-width': 2.0,
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -264,23 +264,13 @@ export function getKoreanRoadLayerDefinitions(
       filter: ['match', ['get', 'class'], ['service', 'residential', 'living_street', 'unclassified'], true, false],
       paint: {
         'line-color': '#94a3b8', // 단지 내부 도로 보도블록 연석 테두리 라인
-        'line-opacity': 0.96,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          13, 3.4,
-          14, 5.4,
-          15, 9.2,
-          16.5, 15.2,
-          18, 25.0,
-          20, 42.0,
-        ],
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -293,23 +283,13 @@ export function getKoreanRoadLayerDefinitions(
       filter: ['match', ['get', 'class'], ['service', 'residential', 'living_street', 'unclassified'], true, false],
       paint: {
         'line-color': '#26292e', // 깔끔한 단지 내부 다크 아스팔트 노면 포장
-        'line-opacity': 0.95,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          13, 2.0,
-          14, 3.8,
-          15, 6.8,
-          16.5, 11.8,
-          18, 20.5,
-          20, 35.5,
-        ],
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -322,22 +302,13 @@ export function getKoreanRoadLayerDefinitions(
       filter: ['match', ['get', 'class'], ['path', 'pedestrian', 'footway', 'steps'], true, false],
       paint: {
         'line-color': '#c49a7c', // 웜톤 인터로킹 보도블록 보행로
-        'line-opacity': 0.95,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          14, 1.8,
-          15, 3.4,
-          16.5, 6.0,
-          18, 10.0,
-          20, 17.5,
-        ],
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -355,13 +326,13 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#ffffff', // 선명한 주차 구획선
         'line-dasharray': [2, 3],
-        'line-opacity': 0.85,
-        'line-width': 1.4,
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 
