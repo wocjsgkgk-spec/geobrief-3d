@@ -992,8 +992,8 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
 
       this.camera.projectionMatrix = m.multiply(l);
 
-      // 3. WebGL 상태 보존 및 렌더링
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
+      // 3. WebGL 상태 보존 및 렌더링 (GPU 파이프라인 스톨 방지)
+      const prevFbo = (options as any)?.defaultFramebuffer ?? null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();

@@ -156,9 +156,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private hasInitialBuilt: boolean = false;
   private options: RealisticKoreanCityLayerOptions;
 
-  // [3단계 고성능 엔진] 4ms 타임슬라이싱 및 사전할당 Float32Array 버퍼
+  // [3단계 고성능 엔진] 3ms 타임슬라이싱 및 사전할당 Float32Array 버퍼
   private builtBuildingKeys: Set<string> = new Set();
-  private activeBuildSliceRaf: number | null = null;
+  private activeBuildIdleId: any = null;
   private activeBuildTaskId: number = 0;
 
   // 단일 대용량 버퍼 사전 할당 (재할당/push 오버헤드 0%, Draw Call = 1)
@@ -379,7 +379,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   private handleSourceData = (e: any): void => {
+    // 최초 1회 빌드 전까지만 소스 로드 완료 시 초기 빌드 트리거 (이후 이동 중 중복 연산 100% 차단)
     if (
+      !this.hasInitialBuilt &&
       (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'fusion-buildings-source') &&
       e.isSourceLoaded &&
       !this.isMoving
@@ -389,7 +391,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   };
 
   private handleMapIdle = (): void => {
-    if (!this.isMoving && this.map) {
+    if (!this.hasInitialBuilt && !this.isMoving && this.map) {
       this.extractAndBuildFromMap();
     }
   };
@@ -401,9 +403,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.moveEndTimer = null;
     }
     // [인터랙션 잠금: 카메라 이동/회전/줌 중 연산 100% 완전 중단]
-    if (this.activeBuildSliceRaf !== null) {
-      cancelAnimationFrame(this.activeBuildSliceRaf);
-      this.activeBuildSliceRaf = null;
+    if (this.activeBuildIdleId !== null) {
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(this.activeBuildIdleId);
+      } else {
+        clearTimeout(this.activeBuildIdleId);
+      }
+      this.activeBuildIdleId = null;
       this.isBuildingGeometry = false;
     }
   };
@@ -422,8 +428,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.isMoving = false;
       this.extractAndBuildFromMap();
     };
-    // 300ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
-    this.moveEndTimer = setTimeout(checkAndComplete, 300);
+    // 400ms 디바운스 후 카메라 이동/회전이 완전히 멈춘 뒤 신규 영역 업데이트 (깜빡임 0%, 60fps 보장)
+    this.moveEndTimer = setTimeout(checkAndComplete, 400);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -507,8 +513,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     // 2) 외부 실측 피처와 벡터 피처 스마트 결합 (건물 탈락 0%)
     const combined = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);
 
-    // [건물 ID 기반 증분 캐시 & 연산 100% 생략]
+    // [건물 ID 기반 증분 캐시 & 신규 미빌드 건물만 선별]
     let unbuiltCount = 0;
+    const newFeaturesToBuild: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
     for (let i = 0; i < combined.length; i++) {
       const f = combined[i];
       const key = getBuildingFeatureKey(f);
@@ -518,6 +525,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       if (!this.builtBuildingKeys.has(key)) {
         unbuiltCount++;
+        newFeaturesToBuild.push(f);
       }
     }
 
@@ -532,9 +540,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.cachedFeatures.forEach((f) => stampBuildingWithMasterData(f));
     }
 
-    if (this.cachedFeatures.length > 0) {
+    if (newFeaturesToBuild.length > 0 || !this.masterMesh) {
       this.hasInitialBuilt = true;
-      this.buildRealisticCityMesh(this.cachedFeatures);
+      // 신규 건물만 백그라운드 idle slice에서 조용히 추가 (기존 메쉬 파괴 0회, 60fps 유지)
+      this.buildRealisticCityMesh(this.masterMesh ? newFeaturesToBuild : this.cachedFeatures);
     }
   }
 
@@ -583,11 +592,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (newOriginLngLat && Array.isArray(newOriginLngLat) && newOriginLngLat.length === 2) {
       const dLng = Math.abs(newOriginLngLat[0] - this.originLngLat[0]);
       const dLat = Math.abs(newOriginLngLat[1] - this.originLngLat[1]);
-      if (dLng > 0.08 || dLat > 0.08 || !this.fixedOriginInitialized) {
+      if (dLng > 0.35 || dLat > 0.35 || !this.fixedOriginInitialized) {
         this.originLngLat = [newOriginLngLat[0], newOriginLngLat[1]];
         this.fixedOriginInitialized = true;
-        // 다른 시·군으로 원거리 이동 시(20km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
-        if (dLng > 0.20 || dLat > 0.20) {
+        // 다른 시·군으로 원거리 이동 시(40km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
+        if (dLng > 0.40 || dLat > 0.40) {
           this.persistentBuildingMap.clear();
         }
         this.resetAccumulatedBuffers();
@@ -596,6 +605,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     let unbuiltCount = 0;
     let modifiedCount = 0;
+    const newFeaturesToBuild: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
       const key = getBuildingFeatureKey(f);
@@ -603,12 +613,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       if (!ex) {
         this.persistentBuildingMap.set(key, f);
         unbuiltCount++;
+        newFeaturesToBuild.push(f);
       } else {
         const exH = Number(ex.properties?.height || ex.properties?.hei || 0);
         const newH = Number(f.properties?.height || f.properties?.hei || 0);
         if (newH > exH + 0.5) {
           this.persistentBuildingMap.set(key, f);
           modifiedCount++;
+          newFeaturesToBuild.push(f);
         }
       }
       if (!this.builtBuildingKeys.has(key)) {
@@ -616,7 +628,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    if (modifiedCount > 200) {
+    if (modifiedCount > 500) {
       this.resetAccumulatedBuffers();
     } else if (this.masterMesh && unbuiltCount === 0) {
       return;
@@ -625,12 +637,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
 
     if (this.isBuildingGeometry) {
-      this.pendingFeatures = this.cachedFeatures;
+      this.pendingFeatures = newFeaturesToBuild.length > 0 ? newFeaturesToBuild : this.cachedFeatures;
       return;
     }
 
     if (!this.isMoving) {
-      this.buildRealisticCityMesh(this.cachedFeatures);
+      this.buildRealisticCityMesh(this.masterMesh ? newFeaturesToBuild : this.cachedFeatures);
     }
   }
 
@@ -1194,9 +1206,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
     this.isMoving = false;
 
-    if (this.activeBuildSliceRaf !== null) {
-      cancelAnimationFrame(this.activeBuildSliceRaf);
-      this.activeBuildSliceRaf = null;
+    if (this.activeBuildIdleId !== null) {
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(this.activeBuildIdleId);
+      } else {
+        clearTimeout(this.activeBuildIdleId);
+      }
+      this.activeBuildIdleId = null;
     }
 
     this.isBuildingGeometry = true;
@@ -1213,7 +1229,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
-        if (dLng > 0.08 || dLat > 0.08) {
+        if (dLng > 0.35 || dLat > 0.35) {
           this.originLngLat = [center.lng, center.lat];
           this.resetAccumulatedBuffers();
         }
@@ -1226,27 +1242,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const metersPerLat = (Math.PI / 180) * 6378137;
 
       const maxLimit = this.options.maxBuildings || 35000;
-      const centerLng = center.lng;
-      const centerLat = center.lat;
-
-      // 뷰포트 중심 거리순 정렬: 화면 중심(사용자 시야)의 건물을 0ms 최우선으로 즉시 빌드
-      const sorted = rawFeatures.slice();
-      sorted.sort((a: any, b: any) => {
-        const cA = a.geometry?.type === 'Polygon' ? a.geometry.coordinates?.[0]?.[0] : a.geometry?.coordinates?.[0]?.[0]?.[0];
-        const cB = b.geometry?.type === 'Polygon' ? b.geometry.coordinates?.[0]?.[0] : b.geometry?.coordinates?.[0]?.[0]?.[0];
-        if (!cA || !cB) return 0;
-        const dA = (cA[0] - centerLng) * (cA[0] - centerLng) + (cA[1] - centerLat) * (cA[1] - centerLat);
-        const dB = (cB[0] - centerLng) * (cB[0] - centerLng) + (cB[1] - centerLat) * (cB[1] - centerLat);
-        return dA - dB;
-      });
-
-      const features = sorted.slice(0, maxLimit);
+      const features = rawFeatures.length > maxLimit ? rawFeatures.slice(0, maxLimit) : rawFeatures;
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 8.0; // 프레임당 최대 8.0ms 이내 연산 엄격 보장 (60fps 무결점)
+      const FRAME_BUDGET_MS = 3.0; // [60fps 엄격 보장] 프레임당 최대 3.0ms 이내 연산 엄격 보장
 
-      const executeSlice = () => {
+      const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
         if (!this.map) {
           this.isBuildingGeometry = false;
@@ -1254,20 +1256,25 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         // [인터랙션 잠금: 카메라 이동/회전/줌 중에는 즉시 중단하고 대기]
-        if (this.isMoving) {
-          this.activeBuildSliceRaf = null;
+        if (this.isMoving || (this.map && (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()))) {
+          this.activeBuildIdleId = null;
           this.isBuildingGeometry = false;
           this.pendingFeatures = features;
           return;
         }
 
         const sliceStartTime = performance.now();
-        const FRAME_BUDGET_MS = 12.0; // 프레임당 최대 12ms 이내 보장 (60fps 무결점)
         let sliceCount = 0;
 
         while (featureIdx < features.length) {
-          if (sliceCount >= 100 && performance.now() - sliceStartTime >= FRAME_BUDGET_MS) {
-            break;
+          if (sliceCount >= 20) {
+            const elapsed = performance.now() - sliceStartTime;
+            if (
+              elapsed >= FRAME_BUDGET_MS ||
+              (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 1.0)
+            ) {
+              break;
+            }
           }
           sliceCount++;
           const feat = features[featureIdx++];
@@ -1285,28 +1292,25 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
         }
 
-        const sliceDuration = performance.now() - sliceStartTime;
-        if (typeof window !== 'undefined') {
-          (window as any).__lastSliceDuration = sliceDuration;
-          (window as any).__maxSliceDuration = Math.max((window as any).__maxSliceDuration || 0, sliceDuration);
-          (window as any).__totalSlices = ((window as any).__totalSlices || 0) + 1;
-        }
-
         if (featureIdx < features.length) {
-          // 최초 화면 즉시 표시: 1개 이상 생성 시 즉각 1차 표출하여 사용자 대기 0초 달성
-          if (this.accPosIdx > 0 && (!this.masterMesh || newlyAddedCount >= 30)) {
+          // 최초 화면 즉시 표시: 메쉬가 아직 전혀 없을 때만 첫 60동 생성 후 1차 표출하여 초기 로딩 지연 0초
+          if (!this.masterMesh && this.accPosIdx > 0 && newlyAddedCount >= 60) {
             this.commitAccumulatedGeometry();
             newlyAddedCount = 0;
           }
-          // 아직 처리할 건물이 남아있으면 다음 프레임에 슬라이스 계속
-          this.activeBuildSliceRaf = requestAnimationFrame(executeSlice);
+          // 아직 처리할 건물이 남아있으면 다음 idle callback에 스케줄링 (프레임 드랍 0%)
+          if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 1000 });
+          } else {
+            this.activeBuildIdleId = setTimeout(executeSlice, 16);
+          }
         } else {
           // 전체 피처 슬라이싱 완료!
-          this.activeBuildSliceRaf = null;
+          this.activeBuildIdleId = null;
           this.isBuildingGeometry = false;
 
-          // 최종 원자적 더블 버퍼링 커밋
-          if (this.accPosIdx > 0) {
+          // 전체 슬라이스 완료 시 단 1회만 커밋 (중간 메쉬 파괴 및 재생성 0회 보장)
+          if (newlyAddedCount > 0 || !this.masterMesh) {
             this.commitAccumulatedGeometry();
           }
 
@@ -1318,8 +1322,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       };
 
-      // 타임슬라이싱 즉시 1회차 시작
-      executeSlice();
+      // 타임슬라이싱 즉시 1회차 시작 (requestIdleCallback 활용)
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 1000 });
+      } else {
+        this.activeBuildIdleId = setTimeout(executeSlice, 16);
+      }
     } catch (buildErr) {
       console.warn('[RealisticKoreanCityLayer] buildRealisticCityMesh exception:', buildErr);
       this.isBuildingGeometry = false;
@@ -1520,12 +1528,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         (this.renderer.state as any).buffers?.depth?.setTest(true);
       } catch {}
 
-      const prevFbo =
-        options?.defaultFramebuffer !== undefined
-          ? options.defaultFramebuffer
-          : gl
-          ? gl.getParameter(gl.FRAMEBUFFER_BINDING)
-          : null;
+      // GPU 파이프라인 스톨(gl.getParameter) 방지 및 FBO 상태 보존
+      const prevFbo = options?.defaultFramebuffer ?? null;
 
       if (this.renderer.info) {
         this.renderer.info.reset();
@@ -1549,9 +1553,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     moveStartEvents.forEach((evt) => map.off(evt, this.handleMoveStart));
     moveEndEvents.forEach((evt) => map.off(evt, this.handleMoveEnd));
 
-    if (this.activeBuildSliceRaf !== null) {
-      cancelAnimationFrame(this.activeBuildSliceRaf);
-      this.activeBuildSliceRaf = null;
+    if (this.activeBuildIdleId !== null) {
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(this.activeBuildIdleId);
+      } else {
+        clearTimeout(this.activeBuildIdleId);
+      }
+      this.activeBuildIdleId = null;
     }
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);

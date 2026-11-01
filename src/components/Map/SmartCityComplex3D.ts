@@ -1831,8 +1831,8 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
 
       this.camera.projectionMatrix = m.multiply(l);
 
-      // 5. 렌더링 및 WebGL 상태 완전 복원
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
+      // 5. 렌더링 및 WebGL 상태 완전 복원 (GPU 파이프라인 스톨 방지)
+      const prevFbo = options?.defaultFramebuffer ?? null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();

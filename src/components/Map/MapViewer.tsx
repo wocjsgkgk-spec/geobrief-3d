@@ -737,8 +737,11 @@ export const MapViewer: React.FC = () => {
     [getBuildingFeatureKey]
   );
 
+  // [3단계: 60fps 고정] viewport 상태 변경으로 인한 MapViewer 전체 리렌더링 차단 (초기값 Ref 캐싱)
+  const initialViewportRef = useRef(useMapStore.getState().viewport);
+  const initialViewport = initialViewportRef.current;
+
   const {
-    viewport,
     setViewport,
     selectedIdleSiteId,
     terrainEnabled,
@@ -1198,11 +1201,11 @@ export const MapViewer: React.FC = () => {
 
   // [2단계: React 리렌더링 차단] 지도 이동 중 리렌더링 0회 달성을 위한 카메라 텔레메트리 Ref
   const cameraTelemetryRef = useRef({
-    bearing: viewport.bearing,
-    pitch: viewport.pitch,
-    zoom: viewport.zoom,
-    lat: viewport.latitude,
-    lng: viewport.longitude,
+    bearing: initialViewport.bearing,
+    pitch: initialViewport.pitch,
+    zoom: initialViewport.zoom,
+    lat: initialViewport.latitude,
+    lng: initialViewport.longitude,
   });
 
   // [1단계: 인터랙션 잠금(Interaction Lock)] 회전/피치/이동 중 연산 및 리렌더링 완전 차단 플래그
@@ -1213,10 +1216,10 @@ export const MapViewer: React.FC = () => {
   spatialPinsRef.current = spatialPins;
 
   // 오버레이 실시간 렌더링용 로컬 상태 (시네마틱 모드 등에서만 필요시 동기화)
-  const [currentBearing, setCurrentBearing] = useState<number>(viewport.bearing);
-  const [currentPitch, setCurrentPitch] = useState<number>(viewport.pitch);
-  const [currentZoom, setCurrentZoom] = useState<number>(viewport.zoom);
-  const [currentLat, setCurrentLat] = useState<number>(viewport.latitude);
+  const [currentBearing, setCurrentBearing] = useState<number>(initialViewport.bearing);
+  const [currentPitch, setCurrentPitch] = useState<number>(initialViewport.pitch);
+  const [currentZoom, setCurrentZoom] = useState<number>(initialViewport.zoom);
+  const [currentLat, setCurrentLat] = useState<number>(initialViewport.latitude);
   const [isMapLoaded, setIsMapLoaded] = useState<boolean>(false);
 
   // 면적 라벨의 화면 좌표
@@ -2296,10 +2299,10 @@ export const MapViewer: React.FC = () => {
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: initialMapStyle,
-      center: [viewport.longitude, viewport.latitude],
-      zoom: viewport.zoom,
-      pitch: SAFE_MODE ? 0 : viewport.pitch,
-      bearing: SAFE_MODE ? 0 : viewport.bearing,
+      center: [initialViewport.longitude, initialViewport.latitude],
+      zoom: initialViewport.zoom,
+      pitch: SAFE_MODE ? 0 : initialViewport.pitch,
+      bearing: SAFE_MODE ? 0 : initialViewport.bearing,
       minZoom: 3,
       maxZoom: 20,
       maxPitch: 85,
@@ -2590,16 +2593,31 @@ export const MapViewer: React.FC = () => {
         if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) return;
 
         const c = map.getCenter();
-        setViewport({
-          longitude: c.lng,
-          latitude: c.lat,
-          zoom: map.getZoom(),
-          pitch: map.getPitch(),
-          bearing: map.getBearing(),
+        const b = map.getBearing();
+        const p = map.getPitch();
+        const z = map.getZoom();
+
+        cameraTelemetryRef.current = {
+          bearing: b,
+          pitch: p,
+          zoom: z,
+          lat: c.lat,
+          lng: c.lng,
+        };
+
+        // Zustand 뷰포트 상태를 조용히 갱신하여 MapViewer 불필요한 전체 리렌더링 차단 (0ms)
+        useMapStore.setState({
+          viewport: {
+            longitude: c.lng,
+            latitude: c.lat,
+            zoom: z,
+            pitch: p,
+            bearing: b,
+          },
         });
         syncExternalSpatialBuildings(map);
         updateRealtimeMetrics();
-      }, 300);
+      }, 400); // [60fps 보장] 400ms 디바운스
     };
     map.on('moveend', handleViewportMoveEnd);
 
@@ -2609,9 +2627,7 @@ export const MapViewer: React.FC = () => {
     };
     map.on('sourcedata', handleSourceData);
 
-    map.on('zoom', () => {
-      updateRealtimeMetrics();
-    });
+    // [60fps 최적화] 줌 매 프레임 리얼타임 메트릭스 setState 호출 완전 제거 (moveend 시점에만 갱신)
 
     let hasInitializedMapLayers = false;
     const handleMapReady = () => {
@@ -4052,8 +4068,12 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    // 기준점: 부지 중심 또는 현재 뷰포트 중심
-    const centerLngLat = polygonCenter || [viewport.longitude, viewport.latitude];
+    // 기준점: 부지 중심 또는 고정 기준점
+    const centerLngLat =
+      polygonCenter ||
+      (map
+        ? [map.getCenter().lng, map.getCenter().lat]
+        : [initialViewport.longitude, initialViewport.latitude]);
     const centerPt = turf.point(centerLngLat);
 
     try {
@@ -4086,7 +4106,7 @@ export const MapViewer: React.FC = () => {
     } catch (err) {
       console.error('Failed to compute buffer rings:', err);
     }
-  }, [polygonCenter, viewport.longitude, viewport.latitude, isMapLoaded]);
+  }, [polygonCenter, isMapLoaded]);
 
   // 6. [Phase 3] 버퍼 링 가시성(Visibility) 토글
   useEffect(() => {
@@ -4641,6 +4661,9 @@ export const MapViewer: React.FC = () => {
     };
 
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) {
+        return;
+      }
       if (!activeDrag || !lastPos) {
         if (completedPolygon) {
           const hovered = map.queryRenderedFeatures(e.point, {
@@ -5075,9 +5098,14 @@ export const MapViewer: React.FC = () => {
       '3d-buildings',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
-    // 마우스 호버 커서 처리
+    // 마우스 호버 커서 처리 (RAF 스로틀링 및 드래그 중 쿼리 100% 완전 차단)
+    let hoverRafId: number | null = null;
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (
+        isInteractingRef.current ||
+        map.isMoving() ||
+        map.isRotating() ||
+        map.isZooming() ||
         isDrawingMode ||
         stampMode ||
         isViewshedMode ||
@@ -5086,11 +5114,31 @@ export const MapViewer: React.FC = () => {
         isArrowMode ||
         isSensorPlacementMode ||
         losAnalysis.isActive
-      )
+      ) {
         return;
-      const features = buildingLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: buildingLayers }) : [];
-      const hasRealisticBldg = features.length === 0 && realisticKoreanCityLayerRef.current ? Boolean(realisticKoreanCityLayerRef.current.findBuildingNear(e.lngLat.lng, e.lngLat.lat, 20)) : false;
-      map.getCanvas().style.cursor = (features.length > 0 || hasRealisticBldg) ? 'pointer' : '';
+      }
+
+      if (hoverRafId !== null) return;
+      const point = e.point;
+      const lngLat = e.lngLat;
+      hoverRafId = requestAnimationFrame(() => {
+        hoverRafId = null;
+        if (
+          isInteractingRef.current ||
+          map.isMoving() ||
+          map.isRotating() ||
+          map.isZooming()
+        ) {
+          return;
+        }
+        const features =
+          buildingLayers.length > 0 ? map.queryRenderedFeatures(point, { layers: buildingLayers }) : [];
+        const hasRealisticBldg =
+          features.length === 0 && realisticKoreanCityLayerRef.current
+            ? Boolean(realisticKoreanCityLayerRef.current.findBuildingNear(lngLat.lng, lngLat.lat, 20))
+            : false;
+        map.getCanvas().style.cursor = features.length > 0 || hasRealisticBldg ? 'pointer' : '';
+      });
     };
 
     // 건물 클릭 처리
@@ -5657,12 +5705,16 @@ export const MapViewer: React.FC = () => {
   const polygonMeanElev = useMemo(() => {
     if (!completedPolygon || !mapRef.current) return 142;
     try {
-      const c = polygonCenter || [viewport.longitude, viewport.latitude];
+      const c =
+        polygonCenter ||
+        (mapRef.current
+          ? [mapRef.current.getCenter().lng, mapRef.current.getCenter().lat]
+          : [initialViewport.longitude, initialViewport.latitude]);
       return Math.round(elevationCache.getFromMap(mapRef.current, c) || 142);
     } catch {
       return 142;
     }
-  }, [completedPolygon, polygonCenter, viewport]);
+  }, [completedPolygon, polygonCenter]);
 
   const polygonSlopeDeg = useMemo(() => {
     return slopeAnalysisResult?.avgSlope ? Math.round(slopeAnalysisResult.avgSlope * 10) / 10 : 4.5;
@@ -5689,8 +5741,16 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const lat = polygonCenter ? polygonCenter[1] : viewport.latitude;
-    const lng = polygonCenter ? polygonCenter[0] : viewport.longitude;
+    const lat = polygonCenter
+      ? polygonCenter[1]
+      : map
+      ? map.getCenter().lat
+      : initialViewport.latitude;
+    const lng = polygonCenter
+      ? polygonCenter[0]
+      : map
+      ? map.getCenter().lng
+      : initialViewport.longitude;
     const sunConfig = calculateSunLight(sunHour, lat, lng);
 
     try {
@@ -5811,7 +5871,7 @@ export const MapViewer: React.FC = () => {
     } catch (e) {
       console.warn('[3D Building] Failed to update sun light and shadows:', e);
     }
-  }, [sunHour, isMapLoaded, polygonCenter, viewport.latitude, viewport.longitude]);
+  }, [sunHour, isMapLoaded, polygonCenter]);
 
   // 20. [3D 가시권(Viewshed/사계) 분석 인터랙션 & GeoJSON 동기화]
   useEffect(() => {
@@ -6011,7 +6071,11 @@ export const MapViewer: React.FC = () => {
 
   // 21-1. [3D 일조권 및 연속 일조 시간 시뮬레이션 동기화]
   useEffect(() => {
-    const polyCenter = polygonCenter || [viewport.longitude, viewport.latitude];
+    const polyCenter =
+      polygonCenter ||
+      (mapRef.current
+        ? [mapRef.current.getCenter().lng, mapRef.current.getCenter().lat]
+        : [initialViewport.longitude, initialViewport.latitude]);
     const season = useMapStore.getState().sunSeason || 'winter_solstice';
     const daylight = VWorldDaylightEngine.calculateDaylightAndShadow(
       polyCenter[1],
@@ -6021,7 +6085,7 @@ export const MapViewer: React.FC = () => {
       selectedBuilding?.height || 24.0
     );
     useMapStore.getState().setContinuousDaylightResult(daylight.daylightResult);
-  }, [sunHour, polygonCenter, viewport.longitude, viewport.latitude, selectedBuilding?.height]);
+  }, [sunHour, polygonCenter, selectedBuilding?.height]);
 
   // 21-2. [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션 동기화]
   useEffect(() => {
@@ -6079,7 +6143,11 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+    const center =
+      polygonCenter ||
+      (map
+        ? [map.getCenter().lng, map.getCenter().lat]
+        : [initialViewport.longitude, initialViewport.latitude]);
 
     if (waterLevelLayerRef.current) {
       waterLevelLayerRef.current.setVisible(waterLevel.enabled);
@@ -6135,8 +6203,6 @@ export const MapViewer: React.FC = () => {
     waterLevel.enabled,
     waterLevel.elevation,
     polygonCenter,
-    viewport.longitude,
-    viewport.latitude,
     isMapLoaded,
   ]);
 
@@ -6339,9 +6405,13 @@ export const MapViewer: React.FC = () => {
 
   useEffect(() => {
     if (!uavSensorLayerRef.current) return;
-    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+    const center =
+      polygonCenter ||
+      (mapRef.current
+        ? [mapRef.current.getCenter().lng, mapRef.current.getCenter().lat]
+        : [initialViewport.longitude, initialViewport.latitude]);
     uavSensorLayerRef.current.updateSitePolygon(completedPolygon, center);
-  }, [completedPolygon, polygonCenter, viewport.longitude, viewport.latitude]);
+  }, [completedPolygon, polygonCenter]);
 
   // 27. [3D 감시 센서 콘 배치 모드] 인터랙션 리스너
   useEffect(() => {
@@ -7120,15 +7190,15 @@ export const MapViewer: React.FC = () => {
 
         {/* 좌측 상단 카메라 연동 동적 방위표 (North Arrow - React 리렌더링 차단 및 DOM 직접 조작) */}
         <Compass
-          bearing={viewport.bearing}
-          pitch={viewport.pitch}
-          zoom={viewport.zoom}
+          bearing={initialViewport.bearing}
+          pitch={initialViewport.pitch}
+          zoom={initialViewport.zoom}
           onResetNorth={handleResetNorth}
           onAdjustPitch={handleAdjustPitch}
         />
 
         {/* 좌측 하단 인쇄 규격 동적 축척 바 (Scale Bar - React 리렌더링 차단 및 DOM 직접 조작) */}
-        <ScaleBar latitude={viewport.latitude} zoom={viewport.zoom} />
+        <ScaleBar latitude={initialViewport.latitude} zoom={initialViewport.zoom} />
 
         {/* [교통·인프라 접근성] 16:9 슬라이드 삽입용 정량 분석 표(Table) 오버레이 */}
         <AccessibilityTableOverlay />
@@ -7989,11 +8059,11 @@ export const MapViewer: React.FC = () => {
           currentBearing={currentBearing}
           currentPitch={currentPitch}
           currentZoom={currentZoom}
-          currentLng={viewport.longitude}
-          currentLat={viewport.latitude}
+          currentLng={cameraTelemetryRef.current.lng}
+          currentLat={cameraTelemetryRef.current.lat}
           currentElevation={
             mapRef.current?.queryTerrainElevation
-              ? (mapRef.current.queryTerrainElevation([viewport.longitude, viewport.latitude]) || 180)
+              ? (mapRef.current.queryTerrainElevation([cameraTelemetryRef.current.lng, cameraTelemetryRef.current.lat]) || 180)
               : 180
           }
           onStopFlight={handleStopFlight}
@@ -8027,11 +8097,11 @@ export const MapViewer: React.FC = () => {
         isOpen={cinematicFlight.isBuilderOpen}
         onClose={() => setCinematicBuilderOpen(false)}
         currentViewport={{
-          longitude: viewport.longitude,
-          latitude: viewport.latitude,
-          zoom: viewport.zoom,
-          pitch: viewport.pitch,
-          bearing: viewport.bearing,
+          longitude: cameraTelemetryRef.current.lng,
+          latitude: cameraTelemetryRef.current.lat,
+          zoom: cameraTelemetryRef.current.zoom,
+          pitch: cameraTelemetryRef.current.pitch,
+          bearing: cameraTelemetryRef.current.bearing,
         }}
         onFlyToWaypoint={handleFlyToWaypoint}
         onStartFlight={handleStartFlight}

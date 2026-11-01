@@ -216,8 +216,8 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
 
       this.camera.projectionMatrix = m.multiply(l);
 
-      // WebGL 상태 복원 및 렌더링
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
+      // WebGL 상태 복원 및 렌더링 (GPU 파이프라인 스톨 방지)
+      const prevFbo = options?.defaultFramebuffer ?? null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();

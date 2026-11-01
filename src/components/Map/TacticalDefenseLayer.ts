@@ -176,7 +176,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
         this.losBlockedRotMesh.rotation.y += deltaSec * 3.0;
       }
 
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
+      const prevFbo = options?.defaultFramebuffer ?? null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();

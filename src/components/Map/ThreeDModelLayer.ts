@@ -113,8 +113,8 @@ export class ThreeDModelLayer implements maplibregl.CustomLayerInterface {
 
       this.camera.projectionMatrix = m.multiply(l);
 
-      // 5. MapLibre의 WebGL 상태를 보존하며 Three.js 씬 렌더링
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
+      // 5. MapLibre의 WebGL 상태를 보존하며 Three.js 씬 렌더링 (GPU 파이프라인 스톨 방지)
+      const prevFbo = options?.defaultFramebuffer ?? null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();

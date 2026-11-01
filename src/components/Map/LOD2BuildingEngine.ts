@@ -2280,9 +2280,7 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
       } catch {}
 
       // [1) GPU 파이프라인 스톨(gl.getParameter) 방지 및 FBO 상태 보존]
-      const prevFbo = options?.defaultFramebuffer !== undefined
-        ? options.defaultFramebuffer
-        : (gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null);
+      const prevFbo = options?.defaultFramebuffer ?? null;
 
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);

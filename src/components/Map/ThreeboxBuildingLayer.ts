@@ -408,8 +408,8 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       this.camera.projectionMatrix = m.multiply(l);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
-      // 6. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출
-      const prevFbo = gl ? gl.getParameter(gl.FRAMEBUFFER_BINDING) : null;
+      // 6. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출 (GPU 파이프라인 스톨 방지)
+      const prevFbo = options?.defaultFramebuffer ?? null;
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
       this.renderer.resetState();
