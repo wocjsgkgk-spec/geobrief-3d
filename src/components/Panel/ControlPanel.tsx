@@ -164,7 +164,6 @@ export const ControlPanel: React.FC = () => {
     addBookmark,
     removeBookmark,
     flyToBookmark,
-    viewport,
     vworldDiagnostic,
     setVworldDiagnostic,
     molitDiagnostic,
@@ -410,8 +409,9 @@ export const ControlPanel: React.FC = () => {
       {/* 2. [3D 일조권 및 시간대별 그림자 침해 시뮬레이터 (mourner/suncalc 연동)] */}
       {activeSidebarTab === 'terrain_infra' &&
         (() => {
-          const centerLat = polygonCenter ? polygonCenter[1] : (viewport?.latitude ?? 37.342);
-          const centerLng = polygonCenter ? polygonCenter[0] : (viewport?.longitude ?? 127.925);
+          const vp = useMapStore.getState().viewport;
+          const centerLat = polygonCenter ? polygonCenter[1] : (vp?.latitude ?? 37.342);
+          const centerLng = polygonCenter ? polygonCenter[0] : (vp?.longitude ?? 127.925);
           const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(6, Math.min(19, sunHour)) : 12;
           const sunInfo = calculateSunLight(safeHour, centerLat, centerLng);
 
@@ -1048,7 +1048,7 @@ export const ControlPanel: React.FC = () => {
         {isAddingBookmark && (
           <form onSubmit={handleCreateBookmark} className="p-2.5 bg-[#18221b] border border-emerald-500/50 rounded-lg space-y-2">
             <label className="text-[11px] text-slate-300 block font-medium">
-              관심 부지 명칭 입력 (현재 시점: 피치 {viewport.pitch.toFixed(0)}°, 베어링 {viewport.bearing.toFixed(0)}°)
+              관심 부지 명칭 입력 (현재 시점: 피치 {useMapStore.getState().viewport.pitch.toFixed(0)}°, 베어링 {useMapStore.getState().viewport.bearing.toFixed(0)}°)
             </label>
             <div className="flex space-x-1.5">
               <input
@@ -2963,7 +2963,8 @@ export const ControlPanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const center = polygonCenter || [viewport.longitude, viewport.latitude];
+                    const vp = useMapStore.getState().viewport;
+                    const center = polygonCenter || [vp.longitude, vp.latitude];
                     const elev = 100;
                     setThreatDome({
                       coords: center,

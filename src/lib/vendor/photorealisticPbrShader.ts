@@ -282,8 +282,12 @@ export function createPhotorealisticPbrMaterial(
   return material;
 }
 
+// Module-level scratch structures for zero GC in hot render loops
+const _scratchV4 = new THREE.Vector4();
+const _scratchV4Alt = new THREE.Vector4();
+
 /**
- * 매 프레임 카메라 회전, 태양광 및 시점 각도 동기화 헬퍼
+ * 매 프레임 카메라 회전, 태양광 및 시점 각도 동기화 헬퍼 (0 GC)
  */
 export function updatePhotorealisticPbrUniforms(
   material: THREE.Material,
@@ -294,16 +298,16 @@ export function updatePhotorealisticPbrUniforms(
   const pbr = (material as any)?.pbrUniforms as PhotorealisticPbrUniforms | undefined;
   if (!pbr) return;
 
-  // 1. 카메라 위치 추출 (projectionMatrixInverse 기반 로컬 시점 계산)
+  // 1. 카메라 위치 추출 (projectionMatrixInverse 기반 로컬 시점 계산 - 0 GC)
   try {
     const inv = camera.projectionMatrixInverse;
-    const v4 = new THREE.Vector4(0, 0, -1, 0).applyMatrix4(inv);
-    if (Math.abs(v4.w) > 1e-9) {
-      pbr.uCameraPosition.value.set(v4.x / v4.w, v4.y / v4.w, v4.z / v4.w);
+    _scratchV4.set(0, 0, -1, 0).applyMatrix4(inv);
+    if (Math.abs(_scratchV4.w) > 1e-9) {
+      pbr.uCameraPosition.value.set(_scratchV4.x / _scratchV4.w, _scratchV4.y / _scratchV4.w, _scratchV4.z / _scratchV4.w);
     } else {
-      const v4Alt = new THREE.Vector4(0, 0, -1, 1).applyMatrix4(inv);
-      if (Math.abs(v4Alt.w) > 1e-9) {
-        pbr.uCameraPosition.value.set(v4Alt.x / v4Alt.w, v4Alt.y / v4Alt.w, v4Alt.z / v4Alt.w);
+      _scratchV4Alt.set(0, 0, -1, 1).applyMatrix4(inv);
+      if (Math.abs(_scratchV4Alt.w) > 1e-9) {
+        pbr.uCameraPosition.value.set(_scratchV4Alt.x / _scratchV4Alt.w, _scratchV4Alt.y / _scratchV4Alt.w, _scratchV4Alt.z / _scratchV4Alt.w);
       } else {
         pbr.uCameraPosition.value.set(0, 500, 500);
       }

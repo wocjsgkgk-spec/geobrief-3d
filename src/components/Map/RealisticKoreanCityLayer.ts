@@ -125,14 +125,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private renderer: THREE.WebGLRenderer | null = null;
 
   // 16종 독립 Material & 단일 씬 메쉬
-  private masterMesh: THREE.Mesh | null = null;
-  private masterGeometry: THREE.BufferGeometry | null = null;
-  private buildingMaterials: THREE.MeshStandardMaterial[] = [];
+  public masterMesh: THREE.Mesh | null = null;
+  public masterGeometry: THREE.BufferGeometry | null = null;
+  public buildingMaterials: THREE.MeshStandardMaterial[] = [];
+  public materialMeshes: THREE.Mesh[] = [];
 
   // 줌 14.5 ~ 15.5 정밀 페이드인을 위한 옥상 난간 및 옥탑 코어 메쉬/재질
-  private rooftopMesh: THREE.Mesh | null = null;
-  private rooftopGeometry: THREE.BufferGeometry | null = null;
-  private rooftopMaterial: THREE.MeshStandardMaterial | null = null;
+  public rooftopMesh: THREE.Mesh | null = null;
+  public rooftopGeometry: THREE.BufferGeometry | null = null;
+  public rooftopMaterial: THREE.MeshStandardMaterial | null = null;
 
   // 조명 시스템
   private sunLight: THREE.DirectionalLight | null = null;
@@ -463,10 +464,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const checkAndComplete = () => {
       this.moveEndTimer = null;
       if (!this.map) return;
+      if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
+        this.moveEndTimer = setTimeout(checkAndComplete, 350);
+        return;
+      }
       this.isMoving = false;
       this.extractAndBuildFromMap();
     };
-    this.moveEndTimer = setTimeout(checkAndComplete, 150);
+    this.moveEndTimer = setTimeout(checkAndComplete, 350);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -478,6 +483,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   public getBuildingCount(): number {
+    return this.builtBuildingKeys.size;
+  }
+
+  public get builtCount(): number {
     return this.builtBuildingKeys.size;
   }
 
@@ -1503,6 +1512,27 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       newMesh.frustumCulled = false;
       newMesh.visible = this.isVisible;
 
+      // [3단계: 16개 Material 단위 분리 메쉬 배열 유지 (Draw Call 16회 보장)]
+      const newMaterialMeshes: THREE.Mesh[] = [];
+      for (let s = 0; s < this.NUM_SLOTS; s++) {
+        const pCount = this.slotPosIdx[s];
+        if (pCount === 0 || !this.buildingMaterials[s]) continue;
+        const slotGeo = new THREE.BufferGeometry();
+        slotGeo.setAttribute('position', new THREE.BufferAttribute(this.slotPosBuf[s].subarray(0, pCount), 3));
+        slotGeo.setAttribute('normal', new THREE.BufferAttribute(this.slotNormBuf[s].subarray(0, pCount), 3));
+        slotGeo.setAttribute('color', new THREE.BufferAttribute(this.slotColorBuf[s].subarray(0, pCount), 3));
+        const uCount = this.slotUvIdx[s];
+        slotGeo.setAttribute('uv', new THREE.BufferAttribute(this.slotUvBuf[s].subarray(0, uCount), 2));
+        const hCount = this.slotHeightIdx[s];
+        slotGeo.setAttribute('aHeight', new THREE.BufferAttribute(this.slotHeightBuf[s].subarray(0, hCount), 1));
+        slotGeo.computeBoundingSphere();
+        const slotMesh = new THREE.Mesh(slotGeo, this.buildingMaterials[s]);
+        slotMesh.frustumCulled = false;
+        slotMesh.visible = this.isVisible;
+        newMaterialMeshes.push(slotMesh);
+      }
+      this.materialMeshes = newMaterialMeshes;
+
       // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
       const oldMesh = this.masterMesh;
       const oldGeo = this.masterGeometry;
@@ -1718,6 +1748,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         mat.dispose();
       }
       this.buildingMaterials = [];
+      this.materialMeshes = [];
     }
     if (this.rooftopMesh) {
       this.scene.remove(this.rooftopMesh);

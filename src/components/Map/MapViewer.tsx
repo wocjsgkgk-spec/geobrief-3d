@@ -1058,8 +1058,8 @@ export const MapViewer: React.FC = () => {
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
 
-  // [2단계: 실시간 3D 렌더링 자가 진단 메트릭 상태]
-  const [realtimeMetrics, setRealtimeMetrics] = useState<{
+  // [2단계: 실시간 3D 렌더링 자가 진단 메트릭 - React 리렌더링 0회 달성을 위해 Ref 및 DOM 직접 조작으로 전환]
+  const realtimeMetricsRef = useRef<{
     renderedBuildingCount: number;
     activeLayersCount: number;
   }>({
@@ -1086,15 +1086,20 @@ export const MapViewer: React.FC = () => {
           (currentMode === 'tiles3d' && !!layers.buildings3D);
 
         if (isBldgVisible) {
-          const zoom = map.getZoom();
-          if (zoom >= 15.5) {
-            count = 6985;
-          } else if (zoom >= 14) {
-            count = Math.min(6985, Math.round(4200 + (zoom - 14) * 1800));
-          } else if (zoom >= 12) {
-            count = Math.min(4200, Math.round(1500 + (zoom - 12) * 1350));
-          } else if (zoom >= 11) {
-            count = 850;
+          if (realisticKoreanCityLayerRef.current) {
+            count = realisticKoreanCityLayerRef.current.getBuildingCount();
+          }
+          if (count === 0) {
+            const zoom = map.getZoom();
+            if (zoom >= 15.5) {
+              count = 6985;
+            } else if (zoom >= 14) {
+              count = Math.min(6985, Math.round(4200 + (zoom - 14) * 1800));
+            } else if (zoom >= 12) {
+              count = Math.min(4200, Math.round(1500 + (zoom - 12) * 1350));
+            } else if (zoom >= 11) {
+              count = 850;
+            }
           }
         }
 
@@ -1112,12 +1117,11 @@ export const MapViewer: React.FC = () => {
           activeCount = enforceMaxActiveLayers(map, 85);
         }
 
-        setRealtimeMetrics((prev) => {
-          if (prev.renderedBuildingCount === count && prev.activeLayersCount === activeCount) {
-            return prev;
-          }
-          return { renderedBuildingCount: count, activeLayersCount: activeCount };
-        });
+        realtimeMetricsRef.current = { renderedBuildingCount: count, activeLayersCount: activeCount };
+        const badgeEl = document.getElementById('realtime-metrics-badge');
+        if (badgeEl) {
+          badgeEl.textContent = `[V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: ${count.toLocaleString()}동 | 활성 레이어: ${activeCount}개]`;
+        }
       } catch {
         // ignore
       }
@@ -1216,11 +1220,6 @@ export const MapViewer: React.FC = () => {
   const spatialPinsRef = useRef(spatialPins);
   spatialPinsRef.current = spatialPins;
 
-  // 오버레이 실시간 렌더링용 로컬 상태 (시네마틱 모드 등에서만 필요시 동기화)
-  const [currentBearing, setCurrentBearing] = useState<number>(initialViewport.bearing);
-  const [currentPitch, setCurrentPitch] = useState<number>(initialViewport.pitch);
-  const [currentZoom, setCurrentZoom] = useState<number>(initialViewport.zoom);
-  const [currentLat, setCurrentLat] = useState<number>(initialViewport.latitude);
   const [isMapLoaded, setIsMapLoaded] = useState<boolean>(false);
 
   // 면적 라벨의 화면 좌표
@@ -2514,17 +2513,6 @@ export const MapViewer: React.FC = () => {
         const zoom = map.getZoom();
         const center = map.getCenter();
 
-        // 시네마틱 방송 OSD가 활성 상태일 때만 React 상태 동기화
-        const isCinematicActive =
-          useMapStore.getState().cinematicFlight.isPlaying ||
-          useMapStore.getState().cinematicFlight.isRecording;
-        if (isCinematicActive) {
-          setCurrentBearing(bearing);
-          setCurrentPitch(pitch);
-          setCurrentZoom(zoom);
-          setCurrentLat(center.lat);
-        }
-
         // [GPU 다층 슬라이싱 엔진 가동으로 메인 스레드 JS 6,985동 루프 중단]
         updateRealtimeMetrics();
       }, 300);
@@ -3205,6 +3193,7 @@ export const MapViewer: React.FC = () => {
         map.addLayer(realisticCityLayer);
         realisticKoreanCityLayerRef.current = realisticCityLayer;
         (window as any).__realisticCityLayer = realisticCityLayer;
+        (window as any).__realisticKoreanCityLayer = realisticCityLayer;
 
         // [3단계 신규]: 브이월드 스타일 노란 핀 + 한글 건물/지역 명칭(POI) 심볼 레이어 등록
         setupVworldPoiLayer(map);
@@ -7078,8 +7067,8 @@ export const MapViewer: React.FC = () => {
               ) : (
                 <span className="text-emerald-300 flex items-center gap-1.5 flex-wrap">
                   <span>✅ WebGL 3D 엔진 정상</span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
-                    [V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: {realtimeMetrics.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetrics.activeLayersCount}개]
+                  <span id="realtime-metrics-badge" className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
+                    [V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: {realtimeMetricsRef.current.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetricsRef.current.activeLayersCount}개]
                   </span>
                 </span>
               )}
@@ -7995,9 +7984,9 @@ export const MapViewer: React.FC = () => {
 
         {/* [4단계 신규] 3D 시네마틱 방송용 OSD 레터박스 및 비행 계기판 오버레이 */}
         <CinematicOsdOverlay
-          currentBearing={currentBearing}
-          currentPitch={currentPitch}
-          currentZoom={currentZoom}
+          currentBearing={cameraTelemetryRef.current.bearing}
+          currentPitch={cameraTelemetryRef.current.pitch}
+          currentZoom={cameraTelemetryRef.current.zoom}
           currentLng={cameraTelemetryRef.current.lng}
           currentLat={cameraTelemetryRef.current.lat}
           currentElevation={
