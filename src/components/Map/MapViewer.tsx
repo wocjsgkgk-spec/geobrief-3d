@@ -138,6 +138,7 @@ import {
   getKoreanLanduseLayerDefinitions,
 } from '@/utils/koreanLanduseRenderer';
 import { elevationCache, clearElevationCache } from '@/utils/elevationCache';
+import { PrecisionAnalysisEngine } from '@/lib/vendor/precisionAnalysisEngine';
 import {
   registerNativeBuildingPatterns,
   NATIVE_BUILDING_PATTERNS,
@@ -2103,16 +2104,16 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'none' },
           },
 
-          // [클릭된 3D 건물 하이라이트 3D 돌출 및 네온 청록색 엣지 레이어]
+          // [클릭된 3D 건물 하이라이트 3D 돌출 및 에메랄드/골드 엣지 레이어]
           {
             id: 'building-highlight-fill',
             type: 'fill-extrusion',
             source: 'building-highlight-source',
             paint: {
-              'fill-extrusion-color': '#06B6D4',
+              'fill-extrusion-color': '#10B981', // 에메랄드 반투명 3D 하이라이트
               'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
               'fill-extrusion-base': buildingBaseExpr,
-              'fill-extrusion-opacity': 0.35,
+              'fill-extrusion-opacity': 0.40,
             },
             layout: { visibility: 'visible' },
           },
@@ -2121,8 +2122,8 @@ export const MapViewer: React.FC = () => {
             type: 'line',
             source: 'building-highlight-source',
             paint: {
-              'line-color': '#22D3EE',
-              'line-width': 3,
+              'line-color': '#F59E0B', // 골드 외곽선
+              'line-width': 3.5,
               'line-opacity': 1.0,
             },
             layout: { visibility: 'visible' },
@@ -3624,6 +3625,7 @@ export const MapViewer: React.FC = () => {
       (window as any).__geobrief_map = map;
       (window as any).__mapInstance = map;
       (window as any).__mapStore = useMapStore;
+      (window as any).__precisionAnalysisEngine = PrecisionAnalysisEngine;
       (window as any).map = map;
     }
 
@@ -5615,38 +5617,36 @@ export const MapViewer: React.FC = () => {
     return () => clearInterval(interval);
   }, [isSunPlaying, setSunHour]);
 
-  // 캔버스 Tainted/CORS 안전 방어 캡처 헬퍼 (CAD Title Block 합성 탑재)
+  // 캔버스 Tainted/CORS 안전 방어 캡처 헬퍼 (CAD Title Block & 메트릭스 합성 탑재)
   const captureCanvasImage = useCallback((mapInstance: maplibregl.Map, label: string): string => {
     try {
-      const canvas = mapInstance.getCanvas();
-      const outCanvas = document.createElement('canvas');
-      outCanvas.width = canvas.width;
-      outCanvas.height = canvas.height;
-      const outCtx = outCanvas.getContext('2d');
-      if (outCtx) {
-        outCtx.drawImage(canvas, 0, 0);
-        if (showTitleBlock) {
-          drawCadTitleBlockOnCanvas(outCtx, outCanvas.width, outCanvas.height, {
-            title: metadata.title || `${label} 공간분석도`,
-            department: metadata.department,
-            author: metadata.author,
-            date: metadata.date,
-            securityLevel: metadata.securityLevel,
-            sheetNo: metadata.sheetNo || 'GB-2026-002',
-            scale: metadata.scale || '1:5,000',
-          });
-        }
-        const compUrl = outCanvas.toDataURL('image/png');
-        if (compUrl && compUrl.length > 100) {
-          return compUrl;
+      if (showTitleBlock) {
+        const activeSite = getGangwon18MilitarySiteById(selectedIdleSiteId || 'wj-1st-logistics');
+        const reportUrl = PrecisionAnalysisEngine.generateBriefingReportCanvas(mapInstance, {
+          title: metadata.title || `${label} 공간분석도`,
+          department: metadata.department,
+          author: metadata.author,
+          date: metadata.date,
+          securityLevel: metadata.securityLevel,
+          sheetNo: metadata.sheetNo || 'GB-2026-003',
+          scale: metadata.scale || '1:5,000',
+          siteName: activeSite?.name,
+          siteAreaPyeong: Math.round((activeSite?.areaSqm || 310000) * 0.3025),
+          targetElevation: cutFill.targetElevation || 142,
+          cutVolume: cutFill.result?.totalCutVolumeM3,
+          fillVolume: cutFill.result?.totalFillVolumeM3,
+        });
+        if (reportUrl && reportUrl.length > 100) {
+          return reportUrl;
         }
       }
+      const canvas = mapInstance.getCanvas();
       return canvas.toDataURL('image/png');
     } catch (err) {
       console.warn('[MapViewer] Canvas capture warning:', err);
       return '';
     }
-  }, [showTitleBlock, metadata]);
+  }, [showTitleBlock, metadata, selectedIdleSiteId, cutFill]);
 
   // [신규] 고해상도 브리핑 보고서 이미지(PNG) & PDF 인쇄 이벤트 리스너
   useEffect(() => {
@@ -5903,11 +5903,19 @@ export const MapViewer: React.FC = () => {
 
       const handleViewshedClick = (e: maplibregl.MapMouseEvent) => {
         const origin: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-        const res = calculateViewshed(map, origin, {
-          observerHeightMeters: 10,
-          targetHeightMeters: 2,
-          radiusMeters: 1500,
-        });
+        const res =
+          PrecisionAnalysisEngine.executePrecisionViewshed(map, origin, {
+            observerHeightMeters: 10,
+            targetHeightMeters: 2,
+            radiusMeters: 1500,
+            azimuthStepDegrees: 2,
+            distanceStepMeters: 30,
+          }) ||
+          calculateViewshed(map, origin, {
+            observerHeightMeters: 10,
+            targetHeightMeters: 2,
+            radiusMeters: 1500,
+          });
         if (res) {
           setViewshedResult(res);
         }
