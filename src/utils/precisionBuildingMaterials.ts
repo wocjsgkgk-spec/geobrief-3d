@@ -888,6 +888,7 @@ export function getPrecisionBuildingMaterials(): THREE.MeshStandardMaterial[] {
     const mat = new THREE.MeshStandardMaterial({
       map: tex,
       color: 0xffffff,
+      vertexColors: true, // [3단계: 건물 하단 0~2.5m 접지 앰비언트 오클루전(AO 0.78->1.0) 그라데이션 정점 색상 반영]
       roughness: isCurtainWall ? 0.25 : isMetal ? 0.35 : 0.65,
       metalness: isCurtainWall ? 0.20 : isMetal ? 0.50 : 0.05,
       side: THREE.DoubleSide,

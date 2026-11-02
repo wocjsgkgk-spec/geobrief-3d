@@ -331,20 +331,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.map = map;
 
     try {
-      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 남서향 48도 주광 + 북동향 하늘빛 환경광)
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.15);
+      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 따뜻한 주광색 sunLight 1.35 + 하늘 반사광 hemisphereLight 0.85)
+      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
       this.sunLight.position.set(-130, 160, 100).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.75);
+      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.45);
       this.fillLight.position.set(100, 120, -110).normalize();
       this.scene.add(this.fillLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       this.scene.add(this.ambientLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xdbeafe, 0.80);
+      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0xd6d3d1, 0.85);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 1단계] 16종 독립 건축 Material & 4종 전용 구조물 Material 배열 직결
@@ -766,23 +766,32 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const uvs = this.slotUvBuf[s];
     const hts = this.slotHeightBuf[s];
 
+    const relH0 = Math.max(0, p0[1] - baseElev);
+    const relH1 = Math.max(0, p1[1] - baseElev);
+    const relH2 = Math.max(0, p2[1] - baseElev);
+
+    // [3단계: 건물 하단 0m ~ 2.5m 접지 앰비언트 오클루전 그라데이션 0.78 -> 1.0 적용]
+    const ao0 = relH0 < 2.5 ? 0.78 + 0.22 * (relH0 / 2.5) : 1.0;
+    const ao1 = relH1 < 2.5 ? 0.78 + 0.22 * (relH1 / 2.5) : 1.0;
+    const ao2 = relH2 < 2.5 ? 0.78 + 0.22 * (relH2 / 2.5) : 1.0;
+
     pos[p] = p0[0]; pos[p + 1] = p0[1]; pos[p + 2] = p0[2];
     nrm[p] = norm[0]; nrm[p + 1] = norm[1]; nrm[p + 2] = norm[2];
-    col[p] = cr; col[p + 1] = cg; col[p + 2] = cb;
+    col[p] = cr * ao0; col[p + 1] = cg * ao0; col[p + 2] = cb * ao0;
     uvs[u] = uv0[0]; uvs[u + 1] = uv0[1];
-    hts[h] = Math.max(0, p0[1] - baseElev);
+    hts[h] = relH0;
 
     pos[p + 3] = p1[0]; pos[p + 4] = p1[1]; pos[p + 5] = p1[2];
     nrm[p + 3] = norm[0]; nrm[p + 4] = norm[1]; nrm[p + 5] = norm[2];
-    col[p + 3] = cr; col[p + 4] = cg; col[p + 5] = cb;
+    col[p + 3] = cr * ao1; col[p + 4] = cg * ao1; col[p + 5] = cb * ao1;
     uvs[u + 2] = uv1[0]; uvs[u + 3] = uv1[1];
-    hts[h + 1] = Math.max(0, p1[1] - baseElev);
+    hts[h + 1] = relH1;
 
     pos[p + 6] = p2[0]; pos[p + 7] = p2[1]; pos[p + 8] = p2[2];
     nrm[p + 6] = norm[0]; nrm[p + 7] = norm[1]; nrm[p + 8] = norm[2];
-    col[p + 6] = cr; col[p + 7] = cg; col[p + 8] = cb;
+    col[p + 6] = cr * ao2; col[p + 7] = cg * ao2; col[p + 8] = cb * ao2;
     uvs[u + 4] = uv2[0]; uvs[u + 5] = uv2[1];
-    hts[h + 2] = Math.max(0, p2[1] - baseElev);
+    hts[h + 2] = relH2;
 
     this.slotPosIdx[s] += 9;
     this.slotUvIdx[s] += 6;

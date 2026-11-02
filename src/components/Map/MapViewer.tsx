@@ -2851,9 +2851,9 @@ export const MapViewer: React.FC = () => {
         }
 
         // 1-B) [3단계: 벡터 토지피복(Landuse/Landcover) 디테일 블렌딩 레이어 일괄 등록]
-        // 위성사진 바닥의 픽셀화 뭉개짐을 보완하고 15~25% 투명도로 자연스럽게 합성
+        // [2단계: 위성사진 원본 선명 노출을 위해 인위적 녹색 필름 오버레이 기본 OFF]
         const landuseLayerDefs = getKoreanLanduseLayerDefinitions('openmaptiles-vector');
-        const initialLanduseVis = baseMap === 'satellite' ? 'visible' : 'none';
+        const initialLanduseVis = 'none';
 
         for (const luLayer of landuseLayerDefs) {
           if (!map.getLayer(luLayer.id)) {
@@ -2879,16 +2879,15 @@ export const MapViewer: React.FC = () => {
 
         for (const rLayer of roadLayerDefs) {
           if (!map.getLayer(rLayer.id)) {
-            const isWater =
-              rLayer.id.startsWith('korean-water') ||
-              rLayer.id.startsWith('korean-riverbank');
+            const isWater = rLayer.id.startsWith('korean-water');
+            const isRiverbank = rLayer.id.startsWith('korean-riverbank');
+            const isBridge = rLayer.id === 'road-bridge-casing' || rLayer.id === 'road-bridge-deck';
             const isComplexHidden = rLayer.id.startsWith('complex-');
             const isGroundBand =
               rLayer.id === 'road-asphalt' ||
               rLayer.id === 'road-curb-casing' ||
-              rLayer.id === 'road-bridge-casing' ||
-              rLayer.id === 'road-bridge-deck' ||
               rLayer.id === 'road-centerline' ||
+              rLayer.id === 'road-lanes' ||
               rLayer.id === 'korean-crosswalk-stripes' ||
               rLayer.id === 'korean-crosswalk-stoplines' ||
               rLayer.id === 'korean-roundabout-island' ||
@@ -2900,7 +2899,9 @@ export const MapViewer: React.FC = () => {
                 ...(rLayer.layout || {}),
                 visibility: isWater
                   ? 'visible'
-                  : isComplexHidden || isGroundBand
+                  : isBridge
+                  ? initialRoadVis
+                  : isRiverbank || isComplexHidden || isGroundBand
                   ? 'none'
                   : initialRoadVis,
               },
@@ -3622,6 +3623,7 @@ export const MapViewer: React.FC = () => {
       (window as any).__mapLibreMap = map;
       (window as any).__geobrief_map = map;
       (window as any).__mapInstance = map;
+      (window as any).__mapStore = useMapStore;
       (window as any).map = map;
     }
 
@@ -4154,21 +4156,25 @@ export const MapViewer: React.FC = () => {
 
     for (const lid of KOREAN_ROAD_LAYER_IDS) {
       if (map.getLayer(lid)) {
+        const isBridge = lid === 'road-bridge-casing' || lid === 'road-bridge-deck';
         const isGroundBand =
           lid === 'road-asphalt' ||
           lid === 'road-curb-casing' ||
-          lid === 'road-bridge-casing' ||
-          lid === 'road-bridge-deck' ||
           lid === 'road-centerline' ||
+          lid === 'road-lanes' ||
           lid === 'korean-crosswalk-stripes' ||
           lid === 'korean-crosswalk-stoplines' ||
           lid === 'korean-roundabout-island' ||
           lid === 'korean-roundabout-lane' ||
           lid === 'korean-roads-surface';
-        if (lid.startsWith('korean-water') || lid.startsWith('korean-riverbank')) {
+        if (lid.startsWith('korean-water')) {
           map.setLayoutProperty(lid, 'visibility', 'visible');
+        } else if (lid.startsWith('korean-riverbank')) {
+          map.setLayoutProperty(lid, 'visibility', 'none'); // 위성사진 둔치 산책로·잔디밭 100% 선명 노출
+        } else if (isBridge) {
+          map.setLayoutProperty(lid, 'visibility', roadVis); // 실제 하천 횡단 교량만 회백색 콘크리트 상판(#cbd5e1) 표시
         } else if (lid.startsWith('complex-') || isGroundBand) {
-          // [1단계] 위성사진 노면을 가리는 인위적인 아스팔트/연석/교량 띠 오버레이 영구 OFF
+          // [2단계] 위성사진 노면을 가리는 인위적인 아스팔트/연석/블록 오버레이 영구 OFF
           map.setLayoutProperty(lid, 'visibility', 'none');
         } else {
           map.setLayoutProperty(lid, 'visibility', roadVis);
@@ -4530,14 +4536,21 @@ export const MapViewer: React.FC = () => {
       'complex-parking-bays',
       'road-curb-casing',
       'road-asphalt',
-      'road-bridge-casing',
-      'road-bridge-deck',
       'korean-roads-surface',
     ];
     for (const lid of groundCoveringLayers) {
       if (map.getLayer(lid)) {
         map.setLayoutProperty(lid, 'visibility', 'none');
       }
+    }
+
+    // [2단계: 실제 하천 횡단 교량만 회백색 콘크리트 상판(#cbd5e1) 및 난간 표출 연결]
+    const bridgeVis = layers?.roads === false ? 'none' : 'visible';
+    if (map.getLayer('road-bridge-deck')) {
+      map.setLayoutProperty('road-bridge-deck', 'visibility', bridgeVis);
+    }
+    if (map.getLayer('road-bridge-casing')) {
+      map.setLayoutProperty('road-bridge-casing', 'visibility', bridgeVis);
     }
   }, [baseMap, isMapLoaded, layers?.roads]);
 

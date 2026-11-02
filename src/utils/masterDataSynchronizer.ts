@@ -428,6 +428,8 @@ export function stampBuildingWithMasterData(
 
   const seed = Math.abs(Math.floor(centroid[0] * 100000 + centroid[1] * 100000)) % 100;
 
+  const isNearApt = isNearApartmentAnchor(centroid[0], centroid[1]);
+
   // ---------------------------------------------------------------------------
   // A. 건축물대장 / WFS 실측 레코드 매칭 확인
   // ---------------------------------------------------------------------------
@@ -446,16 +448,16 @@ export function stampBuildingWithMasterData(
     isRealMeasured = true;
     source = 'registry_hub';
 
-    // 1. 실측 층수 및 높이
+    // 1. 실측 층수 및 높이 (지상층수 grndFlrCnt * 3.1m 기준)
     realLevels = Number(rec.grndFlrCnt || 0);
     if (realLevels <= 0) {
-      realLevels = Math.max(1, Math.round(Number(rec.heit || props.height || 10) / 3.3));
+      realLevels = Math.max(1, Math.round(Number(rec.heit || props.height || 10) / 3.1));
     }
 
     if (rec.heit && Number(rec.heit) >= 3.0) {
       realHeight = Number(rec.heit);
     } else {
-      realHeight = realLevels * 3.3;
+      realHeight = realLevels * 3.1;
     }
 
     // 2. 실측 용도 표준화
@@ -521,7 +523,6 @@ export function stampBuildingWithMasterData(
       props.zoneName || props.zone_nm || props.spfc_nm || props.UQ111_NM || props.uq111 || props.landuse || ''
     ).toLowerCase();
 
-    const isNearApt = isNearApartmentAnchor(centroid[0], centroid[1]);
     const isAptKeyword = APT_KEYWORDS.some((kw) => rawName.includes(kw));
     const isApartmentShape = areaSqm >= 320 && (aspectRatio >= 1.6 || areaSqm >= 420);
 
@@ -574,35 +575,48 @@ export function stampBuildingWithMasterData(
       realHeight = realLevels * 3.3;
       realName = rawName || `${district.name} 영내 지원시설`;
     } else if (
-      zoneStr.includes('상업') || zoneStr.includes('업무') ||
+      zoneStr.includes('공공') || zoneStr.includes('업무') ||
+      rawName.includes('청사') || rawName.includes('시청') || rawName.includes('구청') || rawName.includes('군청') ||
+      rawName.includes('오피스') || rawName.includes('공사') || rawName.includes('공단')
+    ) {
+      // 공공청사 / 대형 오피스 (6~15층)
+      realUse = '업무시설(관공서/오피스)';
+      realStruct = '철근콘크리트조';
+      realRoof = '슬래브지붕';
+      realLevels = 6 + (seed % 10); // 6~15층
+      realHeight = Math.round(realLevels * 3.3 * 10) / 10;
+      realName = rawName || `${district.name} 공공청사오피스`;
+    } else if (
+      zoneStr.includes('상업') ||
       rawName.includes('상가') || rawName.includes('빌딩') || rawName.includes('타워') || rawName.includes('프라자') ||
       areaSqm >= 250
     ) {
+      // 일반 상가 (3~6층)
       realUse = '제1·2종근린생활시설(상가)';
       realStruct = '철근콘크리트조';
       realRoof = '슬래브지붕';
-      realLevels = Math.min(8, Math.max(3, Math.round(areaSqm / 120))); // 3~8층
-      realHeight = realLevels * 3.4;
+      realLevels = 3 + (seed % 4); // 3~6층
+      realHeight = Math.round(realLevels * 3.2 * 10) / 10;
       realName = rawName || `${district.name} 복합상가빌딩`;
     } else {
-      // 일반 단독/다가구주택
+      // 일반 단독/다가구주택 (2~3층)
       realUse = '단독/다가구주택';
       realStruct = areaSqm < 150 ? '벽돌조(조적조)' : '철근콘크리트조';
       realRoof = '기와지붕';
-      realLevels = areaSqm < 130 ? 2 : 3; // 2~3층
-      realHeight = realLevels * 3.2;
+      realLevels = 2 + (seed % 2); // 2~3층
+      realHeight = Math.round(realLevels * 3.1 * 10) / 10;
       realName = rawName || `${district.name} 일반주택`;
     }
   }
 
   // ---------------------------------------------------------------------------
-  // C. [절대 규칙: 세장비 & 소형 건물 12m 엄격 제한]
+  // C. [절대 규칙: 세장비 & 소형 건물 12m 엄격 제한, 0m 평면 건물 원천 금지]
   // ---------------------------------------------------------------------------
   // 소형 주택 area < 220㎡는 어떤 경우에도 절대 12m를 초과하지 못하도록 차단
   if (areaSqm < 220) {
     if (realHeight > 12.0) {
       realHeight = Math.min(12.0, 7.5 + (seed % 5) * 0.9);
-      realLevels = Math.max(2, Math.min(3, Math.round(realHeight / 3.3)));
+      realLevels = Math.max(2, Math.min(3, Math.round(realHeight / 3.1)));
     }
   }
 
@@ -614,7 +628,17 @@ export function stampBuildingWithMasterData(
     }
   }
 
-  realHeight = Math.round(realHeight * 10) / 10;
+  // 세장비 (Aspect Ratio) 제한으로 연필 기둥 방지 및 0m 평면 건물 원천 금지
+  const minDim = Math.max(5.0, Math.sqrt(areaSqm));
+  const maxAllowedHeight = isNearApt || realUse === '공동주택(아파트)' ? 78.0 : Math.max(14.0, minDim * 3.5);
+  if (realHeight > maxAllowedHeight) {
+    realHeight = Math.round(maxAllowedHeight * 10) / 10;
+    realLevels = Math.max(2, Math.round(realHeight / 3.2));
+  }
+
+  // 0m 평면 건물 원천 금지: 최소 7.5m (2층) 보장
+  realHeight = Math.max(7.5, Math.round(realHeight * 10) / 10);
+  realLevels = Math.max(2, realLevels);
 
   // ---------------------------------------------------------------------------
   // D. 위성 항공사진 실시간 지붕 색감 결합

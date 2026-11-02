@@ -125,7 +125,7 @@ export function getKoreanRoadLayerDefinitions(
     // -------------------------------------------------------------------------
     // [3단계] 원주천·섬강·소양강 하천 수면 및 둔치(Water & Floodplain) 레이어
     // -------------------------------------------------------------------------
-    // 0-1. 원주천·섬강 수변 둔치(Floodplain) 잔디/생태공원 폴리곤
+    // 0-1. 원주천·섬강 수변 둔치(Floodplain) 잔디/생태공원 폴리곤 (위성사진 원본 선명 노출을 위해 비활성화)
     {
       id: 'korean-riverbank-floodplain',
       type: 'fill',
@@ -136,11 +136,11 @@ export function getKoreanRoadLayerDefinitions(
       filter: ['match', ['get', 'class'], ['grass', 'wetland', 'park'], true, false],
       paint: {
         'fill-color': '#36533c', // 생기 있는 원주천 둔치 녹지 톤
-        'fill-opacity': 0.38,
-        'fill-antialias': true,
+        'fill-opacity': 0.0,
+        'fill-antialias': false,
       },
       layout: {
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 
@@ -159,9 +159,9 @@ export function getKoreanRoadLayerDefinitions(
           ['zoom'],
           9, '#0f2942',  // 원경(호수/대하천): 깊은 다크 틸 (#0f2942)
           13, '#163832', // 중경(본류 하천): 짙은 다크 에메랄드 (#163832)
-          16, '#1b4332', // 근경(원주천 등): 맑고 깊은 딥 틸 (#1b4332)
+          16, '#112f27', // 근경(원주천 등): 맑고 깊은 딥 틸 (#112f27)
         ],
-        'fill-opacity': 0.75, // 위성사진과 조화를 이루는 자연스러운 투명도
+        'fill-opacity': 0.82, // 위성사진과 조화를 이루는 자연스러운 투명도
         'fill-antialias': true,
       },
       layout: {
@@ -337,8 +337,9 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // [1단계: 위성사진 노면 100% 노출] 인위적인 도로/교량 아스팔트 및 연석 띠 레이어 완전 비활성화
-    // - 위성사진 고해상도 아스팔트와 실제 도로가 가려지지 않도록 visibility: 'none' 및 line-width: 0.0 적용
+    // [1단계: 위성사진 노면 100% 노출 및 실제 하천 횡단 교량만 회백색 상판 연결]
+    // - 위성사진 고해상도 아스팔트와 실제 도로가 가려지지 않도록 일반 도로는 완전 비활성화
+    // - 오직 bridgeFilter(brunnel === 'bridge')에 해당하는 실제 교량만 깔끔한 회백색 콘크리트 상판(#cbd5e1) 및 난간 표출
     // -------------------------------------------------------------------------
     {
       id: 'road-bridge-casing',
@@ -349,14 +350,23 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: bridgeFilter,
       paint: {
-        'line-color': '#64748b',
-        'line-opacity': 0.0,
-        'line-width': 0.0,
+        'line-color': '#94a3b8', // 다크 실버/콘크리트 난간 케이싱
+        'line-opacity': 0.95,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          11, 2.6,
+          13, 5.2,
+          15, 10.4,
+          16.5, 18.5,
+          18, 30.5,
+        ],
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'none',
+        visibility: 'visible',
       },
     },
     {
@@ -368,14 +378,23 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: bridgeFilter,
       paint: {
-        'line-color': '#26292e',
-        'line-opacity': 0.0,
-        'line-width': 0.0,
+        'line-color': '#cbd5e1', // 깔끔한 회백색 콘크리트 상판
+        'line-opacity': 0.95,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          11, 1.8,
+          13, 3.8,
+          15, 8.0,
+          16.5, 15.0,
+          18, 26.0,
+        ],
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'none',
+        visibility: 'visible',
       },
     },
     {
@@ -440,7 +459,7 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // [2단계] 간선도로 백색 차선 점선 (road-lanes)
+    // [2단계] 간선도로 백색 차선 점선 (위성사진 노면 선명 노출을 위해 비활성화)
     // -------------------------------------------------------------------------
     {
       id: 'road-lanes',
@@ -453,13 +472,13 @@ export function getKoreanRoadLayerDefinitions(
       paint: {
         'line-color': '#ffffff',
         'line-dasharray': [3, 4],
-        'line-opacity': 0.60,
-        'line-width': 1.0,
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 
