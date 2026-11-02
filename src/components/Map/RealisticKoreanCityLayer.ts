@@ -220,6 +220,63 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.tunnelGroup.visible = false;
   }
 
+  private currentTheme: 'photorealistic' | 'landuse' | 'height_spectrum' = 'photorealistic';
+
+  public setBuildingTheme(theme: 'photorealistic' | 'landuse' | 'height_spectrum'): void {
+    this.currentTheme = theme;
+    if (!this.buildingMaterials || this.buildingMaterials.length === 0) return;
+
+    // 용도별 색상 맵 (Landuse Palette)
+    const landuseColors = [
+      0xf59e0b, 0xfbbf24, 0xf59e0b, 0xd97706, 0xfbbf24, // 0..4: 고층 아파트 / 주거 (Amber/Warm Orange)
+      0x3b82f6, 0x2563eb, 0x0ea5e9, 0x1d4ed8, 0x0284c7, // 5..9: 근린상가 / 오피스 (Blue/Cyan)
+      0x8b5cf6, 0x7c3aed, 0xa855f7,                      // 10..12: 공공청사 / 학교 / 종합병원 (Purple)
+      0x10b981, 0x059669, 0x34d399,                      // 13..15: 저층 주택 / 빌라 / 군막사 (Emerald)
+      0xf59e0b, 0x0ea5e9, 0x38bdf8, 0xf59e0b             // 16..19: 측벽, 쇼윈도, 간판, 포치
+    ];
+
+    // 층수·높이 스펙트럼 맵 (Height Spectrum: 저층 청록 -> 중층 노랑 -> 고층 주황 -> 초고층 마젠타)
+    const heightSpectrumColors = [
+      0xf97316, 0xf97316, 0xea580c, 0xf97316, 0xc2410c, // 0..4: 고층 (Orange)
+      0xeab308, 0xfacc15, 0xeab308, 0xca8a04, 0xfde047, // 5..9: 중층 (Yellow)
+      0xec4899, 0xdb2777, 0xf43f5e,                      // 10..12: 초고층/특화타워 (Pink/Magenta)
+      0x06b6d4, 0x0891b2, 0x22d3ee,                      // 13..15: 저층 (Cyan/Teal)
+      0xf97316, 0xeab308, 0xfacc15, 0xf97316             // 16..19: 구조체
+    ];
+
+    for (let i = 0; i < this.buildingMaterials.length; i++) {
+      const mat = this.buildingMaterials[i];
+      if (theme === 'photorealistic') {
+        mat.color.setHex(0xffffff);
+        mat.roughness = 0.45;
+      } else if (theme === 'landuse') {
+        const hex = landuseColors[i % landuseColors.length];
+        mat.color.setHex(hex);
+        mat.roughness = 0.55;
+      } else if (theme === 'height_spectrum') {
+        const hex = heightSpectrumColors[i % heightSpectrumColors.length];
+        mat.color.setHex(hex);
+        mat.roughness = 0.55;
+      }
+      mat.needsUpdate = true;
+    }
+
+    if (this.rooftopMaterial) {
+      if (theme === 'photorealistic') {
+        this.rooftopMaterial.color.setHex(0xffffff);
+      } else if (theme === 'landuse') {
+        this.rooftopMaterial.color.setHex(0xe2e8f0);
+      } else if (theme === 'height_spectrum') {
+        this.rooftopMaterial.color.setHex(0x94a3b8);
+      }
+      this.rooftopMaterial.needsUpdate = true;
+    }
+
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
   public getVisible(): boolean {
     return this.isVisible;
   }

@@ -3748,7 +3748,7 @@ export const MapViewer: React.FC = () => {
         map.setLayoutProperty('drawing-polygon-fill', 'visibility', isDrawingMode ? 'visible' : 'none');
       }
       if (map.getLayer('drawing-polygon-line')) {
-        map.setLayoutProperty('drawing-polygon-line', 'visibility', isDrawingMode ? 'visible' : 'none');
+        map.setLayoutProperty('drawing-polygon-line', 'visibility', 'visible');
       }
       if (map.getLayer('drawing-polygon-points')) {
         map.setLayoutProperty('drawing-polygon-points', 'visibility', isDrawingMode ? 'visible' : 'none');
@@ -5875,15 +5875,14 @@ export const MapViewer: React.FC = () => {
     });
   }, [viewshedResult, isMapLoaded]);
 
-  // [V-World 건물 표현 테마 실시간 전환 (모드 A, B, C 전체 실사 3D 건물 일관 렌더링)]
+  // [V-World 건물 표현 테마 실시간 전환 (실사 포토 / 용도별 색상 / 층수·높이 스펙트럼)]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    // 모드 A, 모드 B, 모드 C 어느 것을 선택하더라도 건물들이 파란색이나 붉은색 납작한 판으로 변하지 않고
-    // 항상 실사 3D 건물(밝은 아이보리/베이지 외벽 + 다채로운 지붕)로 렌더링되게 통일
     if (realisticKoreanCityLayerRef.current) {
       realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
+      realisticKoreanCityLayerRef.current.setBuildingTheme(buildingTheme);
     }
     // 단색 도배의 원인이었던 MapLibre GPU 중복 레이어는 항상 비활성화 유지
     setGpuBuildingLayersVisibility(map, false, true);
