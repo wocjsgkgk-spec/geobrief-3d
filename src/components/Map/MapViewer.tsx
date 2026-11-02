@@ -1709,7 +1709,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#06B6D4',
               'fill-opacity': 0.16,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           {
             id: 'buffer-500m-line',
@@ -1720,7 +1720,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2.8,
               'line-dasharray': [3, 2],
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [접경 안보 관제] 1) DMZ 완충구역 반투명 적색 면 채우기
@@ -1846,7 +1846,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#10B981',
               'fill-opacity': 0.18,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // 부지 드로잉 완성 폴리곤 에메랄드 외곽선 (#10B981, width 4.0)
           {
@@ -1857,7 +1857,7 @@ export const MapViewer: React.FC = () => {
               'line-color': '#10B981',
               'line-width': 4,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
           // 부지 드로잉 완성 꼭짓점
           {
@@ -1871,7 +1871,7 @@ export const MapViewer: React.FC = () => {
               'circle-stroke-color': '#10B981',
               'circle-stroke-width': 2,
             },
-            layout: { visibility: 'visible' },
+            layout: { visibility: 'none' },
           },
 
           // [토목·지형 단면 및 3단 경사도 분석 격자 오버레이 레이어]
@@ -2912,31 +2912,10 @@ export const MapViewer: React.FC = () => {
         }
 
         // ---------------------------------------------------------------------
-        // [2단계: 3D 지형 완벽 호환 GPU 다층 슬라이싱(Multi-Tier Slicing) 엔진 등록]
-        // - DEM 표고 변위 셰이더와 100% 네이티브 호환, 지형에 안착되어 솟아오름 보장
-        // - 1층 화강석 기단부 + 중층 실감 외벽 + 실사 창문 패턴 + 옥상 슬래브 파라펫 4단
         // ---------------------------------------------------------------------
-        ensureBuildingPatterns(map);
-        // [상호 배타적 3D 렌더러 가시성 동기화]: renderMode3D가 'facade'일 때는 GPU 다층 레이어를 초기 숨김('none')하여 이중 겹침 원천 차단
-        const initRenderMode = useMapStore.getState().renderMode3D;
-        const initialGpuVis = (initRenderMode === 'native' && !!layers.buildings3D) ? 'visible' : 'none';
-
-        const gpuLayers = createGpuBuildingStackLayers('openmaptiles-vector', 'building');
-        gpuLayers.forEach((layerDef) => {
-          if (!map.getLayer(layerDef.id)) {
-            const configured: any = {
-              ...layerDef,
-              layout: {
-                ...(layerDef.layout || {}),
-                visibility: initialGpuVis,
-              },
-            };
-            map.addLayer(configured);
-          }
-        });
-
-        // ---------------------------------------------------------------------
-        // [3단계 직결] 메인 실측 건물 소스 및 융합 소스 등록: real-buildings-source & fusion-buildings-source
+        // [1단계: 충돌 유발 구형 fill-extrusion 및 단색 건물 레이어 100% 완전 제거]
+        // Three.js VWorldPhotorealEngine이 100% 전담 렌더링하므로 
+        // 화면을 덮거나 Z-Fighting을 일으키는 구형 GPU 다층/3d-buildings 레이어를 등록하지 않음
         // ---------------------------------------------------------------------
         for (const sId of ['real-buildings-source', 'fusion-buildings-source']) {
           if (!map.getSource(sId)) {
@@ -2947,39 +2926,7 @@ export const MapViewer: React.FC = () => {
           }
         }
 
-        // real-buildings-source GPU 다층 레이어 등록
-        const realLayers = createGpuBuildingStackLayers('real-buildings-source', undefined, 'real');
-        realLayers.forEach((layerDef) => {
-          if (!map.getLayer(layerDef.id)) {
-            const configured: any = {
-              ...layerDef,
-              layout: {
-                ...(layerDef.layout || {}),
-                visibility: initialGpuVis,
-              },
-            };
-            map.addLayer(configured);
-          }
-        });
-
-        // GeoJSON 소스 융합용 다층 레이어
-        if (map.getSource('fusion-buildings-source')) {
-          const fusionLayers = createGpuBuildingStackLayers('fusion-buildings-source', undefined, 'fusion');
-          fusionLayers.forEach((layerDef) => {
-            if (!map.getLayer(layerDef.id)) {
-              const configured: any = {
-                ...layerDef,
-                layout: {
-                  ...(layerDef.layout || {}),
-                  visibility: initialGpuVis,
-                },
-              };
-              map.addLayer(configured);
-            }
-          });
-        }
-
-        // [핵심] OpenFreeMap 벡터 타일 스트리밍 활성화용 캐리어 레이어 (6,500+ 건물 100% 수집 보장)
+        // [핵심] OpenFreeMap 벡터 타일 스트리밍 활성화용 100% 투명 캐리어 레이어
         if (!map.getLayer('building-vector-carrier')) {
           map.addLayer({
             id: 'building-vector-carrier',
@@ -2989,29 +2936,10 @@ export const MapViewer: React.FC = () => {
             minzoom: 10.0,
             maxzoom: 24,
             paint: {
-              'fill-opacity': 0.0001,
-              'fill-color': '#000000',
+              'fill-opacity': 0.0001, // 인간 눈에는 완전 투명하지만 MapLibre queryRenderedFeatures 타일 피처 유지
+              'fill-color': '#ffffff',
             },
             layout: { visibility: 'visible' },
-          });
-        }
-
-        // 폴백용 3d-buildings 레이어 (중복 렌더링 방지 layout: none)
-        if (!map.getLayer('3d-buildings')) {
-          map.addLayer({
-            id: '3d-buildings',
-            type: 'fill-extrusion',
-            source: 'openmaptiles-vector',
-            'source-layer': 'building',
-            minzoom: 11.0,
-            maxzoom: 24,
-            paint: {
-              'fill-extrusion-color': '#d6d3d1',
-              'fill-extrusion-height': gpuBuildingTotalHeightExpr,
-              'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.95,
-            },
-            layout: { visibility: 'none' },
           });
         }
 
@@ -3262,25 +3190,8 @@ export const MapViewer: React.FC = () => {
         );
       }
 
-      // [주력 3D 건축물 렌더러: Three.js 기반 실감 절차적 LOD2 빌딩 엔진 등록]
-      try {
-        const initRenderMode = useMapStore.getState().renderMode3D;
-        const lod2Engine = new LOD2BuildingEngine();
-        lod2Engine.setVisible(false); // RealisticKoreanCityLayer가 주력 실사 3D 렌더링을 전담하므로 초기 중복 렌더링/충돌 방지
-        lod2Engine.setOnError((err) => {
-          console.warn('[MapViewer] LOD2 Building Engine fallback to LOD1:', err);
-          setDetail3DMode('lod1');
-          setWebglFallbackWarning('⚠️ 3D 실감 렌더링 지연/부하 감지로 일반(LOD1) 모드로 안전 전환되었습니다.');
-        });
-        map.addLayer(lod2Engine);
-        lod2BuildingEngineRef.current = lod2Engine;
-        (window as any).__lod2Engine = lod2Engine;
-        if (initRenderMode === 'facade') {
-          updateRealtimeMetrics();
-        }
-      } catch (lod2Err) {
-        console.error('[LOD2BuildingEngine] Registration warning:', lod2Err);
-      }
+      // [1단계: 구형 충돌 레이어 완전 제거]
+      // 구형 LOD2BuildingEngine 중복 등록을 영구 배제하여 RealisticKoreanCityLayer가 단독 전담 렌더링하도록 일원화
 
       // [2단계 신규: Three.js 단일 버퍼 기반 한국형 실사 포토 파사드 & 입체 지붕 메쉬 엔진 등록]
       try {
@@ -3845,13 +3756,13 @@ export const MapViewer: React.FC = () => {
       });
 
       if (map.getLayer('drawing-polygon-fill')) {
-        map.setLayoutProperty('drawing-polygon-fill', 'visibility', 'visible');
+        map.setLayoutProperty('drawing-polygon-fill', 'visibility', isDrawingMode ? 'visible' : 'none');
       }
       if (map.getLayer('drawing-polygon-line')) {
-        map.setLayoutProperty('drawing-polygon-line', 'visibility', 'visible');
+        map.setLayoutProperty('drawing-polygon-line', 'visibility', isDrawingMode ? 'visible' : 'none');
       }
       if (map.getLayer('drawing-polygon-points')) {
-        map.setLayoutProperty('drawing-polygon-points', 'visibility', 'visible');
+        map.setLayoutProperty('drawing-polygon-points', 'visibility', isDrawingMode ? 'visible' : 'none');
       }
 
       if (polygonCenter) {

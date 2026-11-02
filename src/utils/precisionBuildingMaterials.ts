@@ -833,70 +833,12 @@ function drawSlot19_AptPorch(ctx: CanvasRenderingContext2D, s: number): void {
 // 20개 Material 배열 팩토리 (싱글톤 캐시)
 // ---------------------------------------------------------------------------
 
-let cachedMaterials: THREE.MeshStandardMaterial[] | null = null;
+import {
+  getVworldPhotorealMaterials,
+  classifyVworldPhotorealBuilding,
+  PHOTOREAL_ROOF_COLORS,
+} from '@/lib/vendor/vworldPhotorealEngine';
 
 export function getPrecisionBuildingMaterials(): THREE.MeshStandardMaterial[] {
-  if (cachedMaterials && cachedMaterials.length === 20) {
-    return cachedMaterials;
-  }
-
-  const s = 512;
-  const drawFns = [
-    drawSlot0_AptCreamWhiteMint,
-    drawSlot1_AptSoftBeigeCharcoal,
-    drawSlot2_AptWarmGrayNavy,
-    drawSlot3_AptIvoryCorridor,
-    drawSlot4_AptHighEndCurtainWall,
-    drawSlot5_CommGraniteColorSign,
-    drawSlot6_CommRedBrickCommercial,
-    drawSlot7_CommDarkMetalOffice,
-    drawSlot8_CommBrownBrick,
-    drawSlot9_CommWhiteBlueMedical,
-    drawSlot10_GovSkyBlueGlassPodium,
-    drawSlot11_GovEmeraldGreenOffice,
-    drawSlot12_GovSchoolTerracotta,
-    drawSlot13_ResiRedBrickVilla,
-    drawSlot14_ResiCreamPilotiStudio,
-    drawSlot15_ResiSandBeigeBarracks,
-    drawSlot16_AptSideWall,
-    drawSlot17_CommPodium,
-    drawSlot18_Signboard,
-    drawSlot19_AptPorch,
-  ];
-
-  const materials: THREE.MeshStandardMaterial[] = [];
-
-  for (let i = 0; i < drawFns.length; i++) {
-    const canvas = createOffscreenCanvas(s, s);
-    const ctx = typeof (canvas as any).getContext === 'function' ? canvas.getContext('2d') : null;
-    if (ctx) {
-      drawFns[i](ctx, s);
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.generateMipmaps = true;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    tex.anisotropy = 16;
-
-    // 유리 커튼월(4, 10, 11)은 낮은 roughness, 벽돌/콘크리트는 높은 roughness
-    const isCurtainWall = i === 4 || i === 10 || i === 11;
-    const isMetal = i === 7;
-
-    const mat = new THREE.MeshStandardMaterial({
-      map: tex,
-      color: 0xffffff,
-      vertexColors: true, // [3단계: 건물 하단 0~2.5m 접지 앰비언트 오클루전(AO 0.78->1.0) 그라데이션 정점 색상 반영]
-      roughness: isCurtainWall ? 0.25 : isMetal ? 0.35 : 0.65,
-      metalness: isCurtainWall ? 0.20 : isMetal ? 0.50 : 0.05,
-      side: THREE.DoubleSide,
-    });
-
-    materials.push(mat);
-  }
-
-  cachedMaterials = materials;
-  return materials;
+  return getVworldPhotorealMaterials();
 }

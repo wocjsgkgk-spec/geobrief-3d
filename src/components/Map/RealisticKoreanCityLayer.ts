@@ -1362,14 +1362,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         const sliceStartTime = performance.now();
         let sliceCount = 0;
+        const targetBudget = this.hasInitialBuilt ? FRAME_BUDGET_MS : 14.0;
 
         while (featureIdx < features.length) {
-          if (sliceCount >= 50) {
+          if (sliceCount > 0 && sliceCount % 40 === 0) {
             const elapsed = performance.now() - sliceStartTime;
-            if (
-              elapsed >= FRAME_BUDGET_MS ||
-              (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() < 1.0)
-            ) {
+            if (elapsed >= targetBudget) {
               break;
             }
           }
@@ -1390,24 +1388,30 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [초기 화면 즉시 표시 및 점진적 커밋]: 첫 10동 생성 시 즉시 표출, 이후 250동 단위로 더블버퍼링 커밋
+          // [초기 화면 즉시 표시 및 점진적 커밋]: 첫 10동 생성 시 즉시 표출, 이후 80동 단위로 점진 표출
           if (
             this.hasAnySlotVertices() &&
-            ((!this.masterMesh && newlyAddedCount >= 10) || newlyAddedCount >= 250)
+            ((!this.hasInitialBuilt && newlyAddedCount >= 10) || newlyAddedCount >= 80)
           ) {
             this.commitAccumulatedGeometry();
             newlyAddedCount = 0;
+            if (!this.hasInitialBuilt && this.builtBuildingKeys.size >= 10) {
+              this.hasInitialBuilt = true;
+            }
           }
-          // 아직 처리할 건물이 남아있으면 다음 idle callback에 스케줄링 (프레임 드랍 0%)
-          if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-            this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 120 });
+          // 다음 슬라이스 스케줄링: 초기 로드 시에는 지체 없이 setTimeout(0)으로 즉시 표출, 이후 idleCallback 유지
+          if (!this.hasInitialBuilt) {
+            this.activeBuildIdleId = setTimeout(executeSlice, 0);
+          } else if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 80 });
           } else {
-            this.activeBuildIdleId = setTimeout(executeSlice, 16);
+            this.activeBuildIdleId = setTimeout(executeSlice, 8);
           }
         } else {
           // 전체 피처 슬라이싱 완료!
           this.activeBuildIdleId = null;
           this.isBuildingGeometry = false;
+          this.hasInitialBuilt = true;
 
           // 전체 슬라이스 완료 시 단 1회만 커밋 (중간 메쉬 파괴 및 재생성 0회 보장)
           if (newlyAddedCount > 0 || !this.masterMesh) {
