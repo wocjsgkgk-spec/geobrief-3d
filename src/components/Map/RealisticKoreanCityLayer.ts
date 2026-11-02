@@ -247,7 +247,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   public findBuildingNear(
     lng: number,
     lat: number,
-    maxDistM: number = 30
+    maxDistM: number = 35
   ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null {
     const list = this.getCachedFeatures();
     if (!list || list.length === 0) return null;
@@ -255,23 +255,73 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     let closest: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null;
     let minDist = maxDistM;
 
-    for (const feat of list) {
+    for (let fIdx = 0; fIdx < list.length; fIdx++) {
+      const feat = list[fIdx];
       if (!feat.geometry) continue;
       const geom = feat.geometry;
-      let samplePt: [number, number] | null = null;
-      if (geom.type === 'Polygon') {
-        samplePt = geom.coordinates[0]?.[0] as [number, number];
-      } else if (geom.type === 'MultiPolygon') {
-        samplePt = geom.coordinates[0]?.[0]?.[0] as [number, number];
-      }
-      if (!samplePt) continue;
 
-      const dx = (lng - samplePt[0]) * 111000 * Math.cos((lat * Math.PI) / 180);
-      const dy = (lat - samplePt[1]) * 111000;
-      const d = Math.hypot(dx, dy);
-      if (d < minDist) {
-        minDist = d;
-        closest = feat;
+      const rings: [number, number][][] = [];
+      if (geom.type === 'Polygon') {
+        if (geom.coordinates && geom.coordinates.length > 0) {
+          rings.push(geom.coordinates[0] as [number, number][]);
+        }
+      } else if (geom.type === 'MultiPolygon') {
+        if (geom.coordinates && geom.coordinates.length > 0) {
+          for (let p = 0; p < geom.coordinates.length; p++) {
+            if (geom.coordinates[p]?.[0]) {
+              rings.push(geom.coordinates[p][0] as [number, number][]);
+            }
+          }
+        }
+      }
+
+      for (let r = 0; r < rings.length; r++) {
+        const ring = rings[r];
+        if (!ring || ring.length < 3) continue;
+
+        // [초고속 BBOX 사전 필터링: 마우스 커서 반경 35m 밖 건물 0ns 즉시 스킵]
+        let bMinX = Infinity, bMaxX = -Infinity, bMinY = Infinity, bMaxY = -Infinity;
+        for (let k = 0; k < ring.length; k++) {
+          const rx = ring[k][0], ry = ring[k][1];
+          if (rx < bMinX) bMinX = rx;
+          if (rx > bMaxX) bMaxX = rx;
+          if (ry < bMinY) bMinY = ry;
+          if (ry > bMaxY) bMaxY = ry;
+        }
+        const dLngDeg = (maxDistM / 111000) / (Math.cos((lat * Math.PI) / 180) || 1);
+        const dLatDeg = maxDistM / 111000;
+        if (lng < bMinX - dLngDeg || lng > bMaxX + dLngDeg || lat < bMinY - dLatDeg || lat > bMaxY + dLatDeg) {
+          continue;
+        }
+
+        // 1) 점-폴리곤 내부 포함 판별 (Point in Polygon Ray-Casting)
+        let inside = false;
+        let sumLng = 0;
+        let sumLat = 0;
+        const count = ring.length;
+        for (let i = 0, j = count - 1; i < count; j = i++) {
+          const xi = ring[i][0], yi = ring[i][1];
+          const xj = ring[j][0], yj = ring[j][1];
+          sumLng += xi;
+          sumLat += yi;
+          const intersect = ((yi > lat) !== (yj > lat)) && (lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi);
+          if (intersect) inside = !inside;
+        }
+
+        if (inside) {
+          return feat; // 건물 폴리곤 내부 클릭 시 즉시 100% 매칭
+        }
+
+        // 2) 중심점 기준 거리 판정
+        const cLng = sumLng / count;
+        const cLat = sumLat / count;
+        const dx = (lng - cLng) * 111000 * Math.cos((lat * Math.PI) / 180);
+        const dy = (lat - cLat) * 111000;
+        const d = Math.hypot(dx, dy);
+        if (d < minDist) {
+          minDist = d;
+          closest = feat;
+        }
       }
     }
     return closest;
