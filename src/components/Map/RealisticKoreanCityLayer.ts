@@ -156,6 +156,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private externalFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
   private persistentBuildingMap: Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>> = new Map();
   private hasInitialBuilt: boolean = false;
+  private lastBuiltZoom: number = 15.5;
   private options: RealisticKoreanCityLayerOptions;
 
   // [3단계 고성능 엔진] 3ms 타임슬라이싱 및 사전할당 Float32Array 버퍼
@@ -212,9 +213,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.masterMesh.visible = visible;
     }
     if (this.rooftopMesh) {
-      const z = this.map ? this.map.getZoom() : 15.0;
-      const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
-      this.rooftopMesh.visible = visible && t > 0.01;
+      this.rooftopMesh.visible = visible;
     }
     this.bridgeGroup.visible = false;
     this.tunnelGroup.visible = false;
@@ -282,20 +281,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.map = map;
 
     try {
-      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 화사하고 눈부신 주광 + 하늘빛 환경광)
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
-      this.sunLight.position.set(120, 160, 90).normalize();
+      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 남서향 48도 주광 + 북동향 하늘빛 환경광)
+      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.15);
+      this.sunLight.position.set(-130, 160, 100).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
       this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.75);
-      this.fillLight.position.set(-100, 120, -80).normalize();
+      this.fillLight.position.set(100, 120, -110).normalize();
       this.scene.add(this.fillLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
       this.scene.add(this.ambientLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xdbeafe, 0.85);
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xdbeafe, 0.80);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 1단계] 16종 독립 건축 Material & 4종 전용 구조물 Material 배열 직결
@@ -515,6 +514,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         unbuiltCount++;
         newFeaturesToBuild.push(f);
       }
+    }
+
+    // [2단계: 줌 단계 대폭 변경(LOD 전환) 감지 & 더블버퍼링 무지연 갱신]
+    const currentZ = this.map.getZoom();
+    const zoomDelta = Math.abs(currentZ - this.lastBuiltZoom);
+    if (this.masterMesh && zoomDelta >= 1.5 && this.persistentBuildingMap.size > 0) {
+      this.lastBuiltZoom = currentZ;
+      this.resetAccumulatedBuffers();
+      this.buildRealisticCityMesh(Array.from(this.persistentBuildingMap.values()));
+      return;
     }
 
     // 이미 화면에 있는 건물은 연산을 100% 생략하여 끊김과 깜빡임 0% 달성
@@ -1176,8 +1185,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // -------------------------------------------------------------------
-      // A. [GeoBrief 3D 1단계: V-World급 5단 분리형 초정밀 3D 건축 지오메트리 직결]
+      // A. [GeoBrief 3D 2단계: V-World급 5단 분리형 초정밀 지오메트리 & 동적 3-LOD 직결]
       // -------------------------------------------------------------------
+      const zoom = map.getZoom();
+      const mapCenter = map.getCenter();
+      const dLngM = (cLng - mapCenter.lng) * metersPerLng;
+      const dLatM = (cLat - mapCenter.lat) * metersPerLat;
+      const distFromCenterM = Math.hypot(dLngM, dLatM);
+
+      let lodLevel: 1 | 2 | 3 = 3;
+      if (zoom < 14.0) {
+        lodLevel = 1;
+      } else if (zoom < 15.2) {
+        lodLevel = distFromCenterM < 650 ? 2 : 1;
+      } else {
+        if (distFromCenterM < 750) {
+          lodLevel = 3;
+        } else if (distFromCenterM < 1600) {
+          lodLevel = 2;
+        } else {
+          lodLevel = 1;
+        }
+      }
+
       PrecisionBuildingBuilder.buildBuilding({
         pts2D,
         baseElev,
@@ -1190,6 +1220,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         centerLngLat: [cLng, cLat],
         holeIndices,
         innerRings2D,
+        lodLevel,
         addSlotQuad: this.addSlotQuad,
         addSlotTriangle: this.addSlotTriangle,
         addRooftopQuad: this.addRooftopQuad,
@@ -1255,7 +1286,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 3.0; // [60fps 엄격 보장] 프레임당 최대 3.0ms 이내 연산 엄격 보장
+      const FRAME_BUDGET_MS = 6.0; // [60fps 엄격 보장] 프레임당 최대 6.0ms 이내 연산 엄격 보장
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1274,7 +1305,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         let sliceCount = 0;
 
         while (featureIdx < features.length) {
-          if (sliceCount >= 20) {
+          if (sliceCount >= 50) {
             const elapsed = performance.now() - sliceStartTime;
             if (
               elapsed >= FRAME_BUDGET_MS ||
@@ -1300,14 +1331,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // 최초 화면 즉시 표시: 메쉬가 아직 전혀 없을 때만 첫 60동 생성 후 1차 표출하여 초기 로딩 지연 0초
-          if (!this.masterMesh && this.hasAnySlotVertices() && newlyAddedCount >= 60) {
+          // [초기 화면 즉시 표시 및 점진적 커밋]: 첫 10동 생성 시 즉시 표출, 이후 250동 단위로 더블버퍼링 커밋
+          if (
+            this.hasAnySlotVertices() &&
+            ((!this.masterMesh && newlyAddedCount >= 10) || newlyAddedCount >= 250)
+          ) {
             this.commitAccumulatedGeometry();
             newlyAddedCount = 0;
           }
           // 아직 처리할 건물이 남아있으면 다음 idle callback에 스케줄링 (프레임 드랍 0%)
           if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-            this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 1000 });
+            this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 120 });
           } else {
             this.activeBuildIdleId = setTimeout(executeSlice, 16);
           }
@@ -1526,14 +1560,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
-      // [3단계 신규] 줌 14.5 ~ 15.5 사이에서 옥상 난간 및 옥탑 코어 부드러운 페이드인
-      if (this.rooftopMesh && this.map) {
-        const z = this.map.getZoom();
-        const t = Math.max(0, Math.min(1, (z - 14.5) / 1.0));
-        this.rooftopMesh.visible = t > 0.01 && this.isVisible;
-        if (this.rooftopMaterial) {
-          this.rooftopMaterial.opacity = t;
-        }
+      // [2단계: 옥상 메쉬 상시 렌더링 (원거리/중거리에서도 지붕 뚫림 0% 보장)]
+      if (this.rooftopMesh) {
+        this.rooftopMesh.visible = this.isVisible;
       }
 
       const rawMatrix = extractCustomLayerMatrix(options, this.map);

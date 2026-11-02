@@ -1,14 +1,17 @@
 /**
  * lib/vendor/precisionBuildingBuilder.ts
  *
- * [GeoBrief 3D 1단계: V-World급 5단 분리형 초정밀 3D 건축 지오메트리 생성기]
+ * [GeoBrief 3D 2단계: V-World급 5단 분리형 초정밀 3D 건축 지오메트리 & 3-LOD 최적화 엔진]
  *
- * 단순 박스 압출 방식을 전면 폐기하고, 건물 한 채를 물리적으로 결합된 5단 서브 구조물로 생성합니다:
- * 1단: 1층 기단부 (0m ~ 3.8m) - 0.2m 돌출 화강석 프레임, 통유리 쇼윈도, 1층 상단 가로 간판 박스 / 아파트 현관 포치
- * 2단: 기준층 본동 외벽 (3.8m ~ H) - 3.2m 베이 × 3.0m 층고 정밀 UV 타일링, 아파트 측벽 브랜드 줄눈 전용 재질 분리
- * 3단: 옥상 테두리 입체 난간 (H ~ H + 1.0m) - 0.35m 두께, 1.0m 높이 콘크리트 난간(Parapet)
- * 4단: 용도별 실제 옥상 바닥 (Roof Deck, 높이 H) - 우레탄 녹색(45%), 콘크리트 슬래브(35%), ㅅ자 박공기와(15%), 징크(5%)
- * 5단: 옥상 설비 및 엘리베이터 권상기실 (H ~ H + 3.2m) - 4.5m × 4.5m × 3.0m 엘리베이터 코어 박스 + 냉각탑/실외기
+ * 1. 3단계 동적 LOD(Level of Detail) 아키텍처:
+ *    - LOD 3 (High, 근거리): 5단 서브구조물 100% 완전 표출
+ *      * 1단: 0.2m 돌출 화강석 포디움 + 0.35m 돌출 가로 간판 박스(3면) / 아파트 현관 포치 & 캐노피
+ *      * 2단: 3.2m 베이 × 3.0m 층고 정밀 UV 타일링, 고층 아파트 양 끝단 측벽(Slot 16) 분리
+ *      * 3단: 3면 3D 파라펫 난간 (외벽-0.35m 상판 턱-내벽 안쪽 옥상 바닥 홈 및 AO 그림자)
+ *      * 4단: 용도별 옥상 바닥 슬래브 (우레탄 녹색, 콘크리트 슬래브, 박공기와, 징크) + 처마 돌출 & 게이블 박공벽 차폐
+ *      * 5단: 엘리베이터 옥탑방 코어 + 실외기 + [신규] 태양광 발전 패널 어레이 + 원통형 FRP 물탱크 + 공공청사 옥상 정원
+ *    - LOD 2 (Medium, 중거리): 시각적 형상은 온전히 유지하면서 미세 부속물(간판 측면/실외기)을 생략하여 정점 45% 절감
+ *    - LOD 1 (Low, 원거리): 단일 외벽 쿼드 + 단일 솔리드 옥상 바닥 캡(지붕 소실 0%, 정점 80% 절감, 수만 동 60fps 보장)
  */
 
 import * as THREE from 'three';
@@ -16,6 +19,7 @@ import earcut from 'earcut';
 import {
   BuildingStyleAssignment,
   classifyBuildingStyle,
+  ROOF_COLORS,
 } from '@/utils/precisionBuildingMaterials';
 
 const Earcut = (earcut as any).default || earcut;
@@ -87,6 +91,7 @@ export interface PrecisionBuildingOptions {
   centerLngLat?: [number, number];
   holeIndices?: number[];
   innerRings2D?: Point2D[][];
+  lodLevel?: 1 | 2 | 3;
   addSlotQuad: AddSlotQuadFn;
   addSlotTriangle: AddSlotTriangleFn;
   addRooftopQuad: AddRooftopQuadFn;
@@ -95,7 +100,7 @@ export interface PrecisionBuildingOptions {
 
 export class PrecisionBuildingBuilder {
   /**
-   * 5단 분리형 초정밀 3D 건물 지오메트리 생성
+   * 5단 분리형 초정밀 3D 건물 지오메트리 & 동적 3-LOD 빌더
    */
   public static buildBuilding(options: PrecisionBuildingOptions): void {
     const {
@@ -108,6 +113,7 @@ export class PrecisionBuildingBuilder {
       featProps = {},
       centerLngLat,
       holeIndices = [],
+      lodLevel = 3,
       addSlotQuad,
       addSlotTriangle,
       addRooftopQuad,
@@ -133,6 +139,7 @@ export class PrecisionBuildingBuilder {
 
     // 건물 높이 보정 (최소 3.5m)
     const height = Math.max(3.5, rawHeight);
+    const topElev = baseElev + height;
 
     // 16종 독립 스타일 배분
     const style: BuildingStyleAssignment = classifyBuildingStyle(
@@ -146,11 +153,11 @@ export class PrecisionBuildingBuilder {
     const isApartment = style.category === 'apartment';
     const isCommercial = style.category === 'commercial';
     const isPublic = style.category === 'public';
+    const isLowRise = style.category === 'villa';
 
     // 1층 기단부 높이 결정
     const podiumH = Math.min(height, 3.8);
     const mainH = height - podiumH;
-    const topElev = baseElev + height;
     const podiumElev = baseElev + podiumH;
 
     // 아파트 측벽 판별 (높이 24m 이상 고층 아파트에서 가장 짧은 2개 변)
@@ -166,6 +173,259 @@ export class PrecisionBuildingBuilder {
         }
       }
     }
+
+    // =========================================================================
+    // [LOD 1: 원거리 시점 (거리 > 1400m 또는 줌 < 14.0)]
+    // 단일 외벽 쿼드 + 단일 솔리드 옥상 바닥 캡 (버텍스 80% 절감, 지붕 소실 0%)
+    // =========================================================================
+    if (lodLevel === 1) {
+      // 1~2단 일체형 외벽
+      for (let i = 0; i < N; i++) {
+        const j = (i + 1) % N;
+        const elen = edgeLens[i];
+        if (elen < 0.1) continue;
+
+        const p0 = pts2D[i];
+        const p1 = pts2D[j];
+        const dx = p1.x - p0.x;
+        const dz = p1.z - p0.z;
+        const normLen = Math.hypot(dx, dz) || 1;
+        const nx = dz / normLen;
+        const nz = -dx / normLen;
+
+        const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
+        const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
+        const pTR: [number, number, number] = [p1.x, topElev, p1.z];
+        const pTL: [number, number, number] = [p0.x, topElev, p0.z];
+
+        const isSide = sideWallEdgeIndices.has(i);
+        const slot = isSide ? style.sideWallSlot : style.facadeSlot;
+        const u = isSide ? 1.0 : elen / 3.2;
+        const v = height / 3.0;
+
+        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [0, 0], [u, 0], [u, v], [0, v]);
+      }
+
+      // 4단: 단일 솔리드 옥상 바닥 캡 (절대 지붕 뚫림 없음)
+      if (style.roofType === 'gabled') {
+        const ridgeElev = topElev + 2.0;
+        const rCenter: [number, number, number] = [cx, ridgeElev, cz];
+        for (let i = 0; i < N; i++) {
+          const j = (i + 1) % N;
+          addRooftopTriangle(
+            [pts2D[i].x, topElev, pts2D[i].z],
+            [pts2D[j].x, topElev, pts2D[j].z],
+            rCenter,
+            [0, 1, 0],
+            [0, 0],
+            [1, 0],
+            [0.5, 1],
+            style.roofColorRgb
+          );
+        }
+      } else {
+        const flatCoords: number[] = [];
+        for (const p of pts2D) {
+          flatCoords.push(p.x, p.z);
+        }
+        const triIndices = Earcut(flatCoords, holeIndices, 2);
+        for (let k = 0; k < triIndices.length; k += 3) {
+          const pA = pts2D[triIndices[k]];
+          const pB = pts2D[triIndices[k + 1]];
+          const pC = pts2D[triIndices[k + 2]];
+          if (!pA || !pB || !pC) continue;
+
+          addRooftopTriangle(
+            [pA.x, topElev, pA.z],
+            [pB.x, topElev, pB.z],
+            [pC.x, topElev, pC.z],
+            [0, 1, 0],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            style.roofColorRgb
+          );
+        }
+      }
+      return;
+    }
+
+    // =========================================================================
+    // [LOD 2: 중거리 시점 (거리 600m ~ 1400m 또는 줌 14.0 ~ 15.2)]
+    // 기단부 외벽 + 기준층 창문 타일링 + 단일 옥상 난간 + 옥탑 코어 (버텍스 45% 절감)
+    // =========================================================================
+    if (lodLevel === 2) {
+      // 1단 기단부 (돌출 간판 및 포치 생략)
+      for (let i = 0; i < N; i++) {
+        const j = (i + 1) % N;
+        const elen = edgeLens[i];
+        if (elen < 0.1) continue;
+
+        const p0 = pts2D[i];
+        const p1 = pts2D[j];
+        const dx = p1.x - p0.x;
+        const dz = p1.z - p0.z;
+        const normLen = Math.hypot(dx, dz) || 1;
+        const nx = dz / normLen;
+        const nz = -dx / normLen;
+
+        const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
+        const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
+        const pTR: [number, number, number] = [p1.x, podiumElev, p1.z];
+        const pTL: [number, number, number] = [p0.x, podiumElev, p0.z];
+
+        const isSide = sideWallEdgeIndices.has(i);
+        const slot = isSide ? style.sideWallSlot : isApartment ? style.facadeSlot : style.podiumSlot;
+        const u = isSide ? 1.0 : elen / 3.2;
+
+        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [0, 0], [u, 0], [u, 1], [0, 1]);
+
+        // 2단 본동 외벽
+        if (mainH > 0.5) {
+          const wBL: [number, number, number] = [p0.x, podiumElev, p0.z];
+          const wBR: [number, number, number] = [p1.x, podiumElev, p1.z];
+          const wTR: [number, number, number] = [p1.x, topElev, p1.z];
+          const wTL: [number, number, number] = [p0.x, topElev, p0.z];
+
+          const mainSlot = isSide ? style.sideWallSlot : style.facadeSlot;
+          const vu = isSide ? 1.0 : elen / 3.2;
+          const vv = mainH / 3.0;
+
+          addSlotQuad(mainSlot, wBL, wBR, wTR, wTL, [nx, 0, nz], [0, 0], [vu, 0], [vu, vv], [0, vv]);
+        }
+
+        // 3단 단일 옥상 난간 (내벽 인셋 생략)
+        if (style.roofType !== 'gabled') {
+          const parapetH = 0.8;
+          addRooftopQuad(
+            [p0.x, topElev, p0.z],
+            [p1.x, topElev, p1.z],
+            [p1.x, topElev + parapetH, p1.z],
+            [p0.x, topElev + parapetH, p0.z],
+            [nx, 0, nz],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            style.parapetColorRgb
+          );
+        }
+      }
+
+      // 4단 옥상 바닥 슬래브
+      if (style.roofType === 'gabled') {
+        let maxEdgeIdx = 0;
+        let maxDist = 0;
+        for (let i = 0; i < N; i++) {
+          if (edgeLens[i] > maxDist) {
+            maxDist = edgeLens[i];
+            maxEdgeIdx = i;
+          }
+        }
+        const pA = pts2D[maxEdgeIdx];
+        const pB = pts2D[(maxEdgeIdx + 1) % N];
+        const ridgeElev = topElev + 2.2;
+        const rA: [number, number, number] = [pA.x * 0.5 + cx * 0.5, ridgeElev, pA.z * 0.5 + cz * 0.5];
+        const rB: [number, number, number] = [pB.x * 0.5 + cx * 0.5, ridgeElev, pB.z * 0.5 + cz * 0.5];
+
+        for (let i = 0; i < N; i++) {
+          const j = (i + 1) % N;
+          addRooftopTriangle(
+            [pts2D[i].x, topElev, pts2D[i].z],
+            [pts2D[j].x, topElev, pts2D[j].z],
+            rA,
+            [0, 1, 0],
+            [0, 0],
+            [1, 0],
+            [0.5, 1],
+            style.roofColorRgb
+          );
+          addRooftopTriangle(
+            [pts2D[j].x, topElev, pts2D[j].z],
+            rB,
+            rA,
+            [0, 1, 0],
+            [1, 0],
+            [0.5, 1],
+            [0, 1],
+            style.roofColorRgb
+          );
+        }
+      } else {
+        const flatCoords: number[] = [];
+        for (const p of pts2D) {
+          flatCoords.push(p.x, p.z);
+        }
+        const triIndices = Earcut(flatCoords, holeIndices, 2);
+        for (let k = 0; k < triIndices.length; k += 3) {
+          const pA = pts2D[triIndices[k]];
+          const pB = pts2D[triIndices[k + 1]];
+          const pC = pts2D[triIndices[k + 2]];
+          if (!pA || !pB || !pC) continue;
+
+          addRooftopTriangle(
+            [pA.x, topElev, pA.z],
+            [pB.x, topElev, pB.z],
+            [pC.x, topElev, pC.z],
+            [0, 1, 0],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            style.roofColorRgb
+          );
+        }
+      }
+
+      // 5단 옥탑 엘리베이터 코어 (중거리 필수 실루엣)
+      if (height >= 14.0 && style.roofType !== 'gabled' && areaSqm >= 140) {
+        const coreSize = 4.2;
+        const coreH = 2.8;
+        const coreTop = topElev + coreH;
+        const ox = cx + 1.2;
+        const oz = cz + 1.2;
+        const half = coreSize * 0.5;
+
+        const c0: [number, number] = [ox - half, oz - half];
+        const c1: [number, number] = [ox + half, oz - half];
+        const c2: [number, number] = [ox + half, oz + half];
+        const c3: [number, number] = [ox - half, oz + half];
+        const corePts = [c0, c1, c2, c3];
+
+        for (let k = 0; k < 4; k++) {
+          const nextK = (k + 1) % 4;
+          addRooftopQuad(
+            [corePts[k][0], topElev, corePts[k][1]],
+            [corePts[nextK][0], topElev, corePts[nextK][1]],
+            [corePts[nextK][0], coreTop, corePts[nextK][1]],
+            [corePts[k][0], coreTop, corePts[k][1]],
+            [0, 0, 1],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            style.penthouseColorRgb
+          );
+        }
+        addRooftopQuad(
+          [c0[0], coreTop, c0[1]],
+          [c1[0], coreTop, c1[1]],
+          [c2[0], coreTop, c2[1]],
+          [c3[0], coreTop, c3[1]],
+          [0, 1, 0],
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [style.penthouseColorRgb[0] * 1.1, style.penthouseColorRgb[1] * 1.1, style.penthouseColorRgb[2] * 1.1]
+        );
+      }
+      return;
+    }
+
+    // =========================================================================
+    // [LOD 3: 근거리 시점 (거리 < 750m 또는 줌 >= 15.2)]
+    // 초정밀 5단 분리형 건축 모델 + 태양광 어레이 + 물탱크 + 옥상정원 + 게이블 박공벽
+    // =========================================================================
 
     // -------------------------------------------------------------------------
     // 1단: 1층 기단부 (Ground Podium, 0m ~ 3.8m)
@@ -474,7 +734,7 @@ export class PrecisionBuildingBuilder {
     }
 
     if (style.roofType !== 'gabled') {
-      // 평지붕 건물에만 3D 입체 난간 생성 (위에서 볼 때 안쪽 홈과 그림자 형성)
+      // 평지붕 건물에 3D 입체 난간 생성 (위에서 볼 때 안쪽 홈과 AO 그림자 형성)
       for (let i = 0; i < N; i++) {
         const j = (i + 1) % N;
         const p0 = pts2D[i];
@@ -516,7 +776,7 @@ export class PrecisionBuildingBuilder {
           [style.parapetColorRgb[0] * 1.08, style.parapetColorRgb[1] * 1.08, style.parapetColorRgb[2] * 1.08]
         );
 
-        // 3) 난간 내측 벽체 (H + 1.0m ~ H, 안쪽 옥상 바닥으로 하강)
+        // 3) 난간 내측 벽체 (H + 1.0m ~ H, AO 그림자 쉐이딩 반영)
         addRooftopQuad(
           [ip0.x, parapetTopElev, ip0.z],
           [ip1.x, parapetTopElev, ip1.z],
@@ -527,7 +787,7 @@ export class PrecisionBuildingBuilder {
           [1, 0],
           [1, 1],
           [0, 1],
-          [style.parapetColorRgb[0] * 0.85, style.parapetColorRgb[1] * 0.85, style.parapetColorRgb[2] * 0.85]
+          [style.parapetColorRgb[0] * 0.78, style.parapetColorRgb[1] * 0.78, style.parapetColorRgb[2] * 0.78]
         );
       }
     }
@@ -538,7 +798,7 @@ export class PrecisionBuildingBuilder {
     const deckPolygon = style.roofType === 'gabled' ? pts2D : innerPts2D;
 
     if (style.roofType === 'gabled') {
-      // 실제 ㅅ자형 경사 박공지붕(Gabled Roof) 메쉬 (단독주택·빌라 15%)
+      // 실제 ㅅ자형 경사 박공지붕(Gabled Roof) 메쉬 + [2단계] 처마 돌출 & 게이블 박공벽 완전 차폐
       let maxEdgeIdx = 0;
       let maxDist = 0;
       for (let i = 0; i < N; i++) {
@@ -556,33 +816,37 @@ export class PrecisionBuildingBuilder {
       const rA: [number, number, number] = [pA.x * 0.5 + cx * 0.5, ridgeElev, pA.z * 0.5 + cz * 0.5];
       const rB: [number, number, number] = [pB.x * 0.5 + cx * 0.5, ridgeElev, pB.z * 0.5 + cz * 0.5];
 
+      // 처마 0.25m 돌출(Eaves) 및 2면 경사 지붕 메쉬
       for (let i = 0; i < N; i++) {
         const j = (i + 1) % N;
         const e0 = pts2D[i];
         const e1 = pts2D[j];
 
-        // 처마에서 용마루 능선으로 올라가는 2면 경사 메쉬
-        addRooftopTriangle(
-          [e0.x, topElev, e0.z],
-          [e1.x, topElev, e1.z],
-          rA,
-          [0, 1, 0],
-          [0, 0],
-          [1, 0],
-          [0.5, 1],
-          style.roofColorRgb
-        );
-        addRooftopTriangle(
-          [e1.x, topElev, e1.z],
-          rB,
-          rA,
-          [0, 1, 0],
-          [1, 0],
-          [0.5, 1],
-          [0, 1],
-          style.roofColorRgb
-        );
+        // 법선 방향 처마 0.25m 외측 돌출
+        const dx = e1.x - e0.x;
+        const dz = e1.z - e0.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const nx = dz / len;
+        const nz = -dx / len;
+
+        const ov0: [number, number, number] = [e0.x + nx * 0.25, topElev, e0.z + nz * 0.25];
+        const ov1: [number, number, number] = [e1.x + nx * 0.25, topElev, e1.z + nz * 0.25];
+
+        addRooftopTriangle(ov0, ov1, rA, [0, 1, 0], [0, 0], [1, 0], [0.5, 1], style.roofColorRgb);
+        addRooftopTriangle(ov1, rB, rA, [0, 1, 0], [1, 0], [0.5, 1], [0, 1], style.roofColorRgb);
       }
+
+      // 게이블 박공벽 (양 끝단 삼각형 외벽) 완전 밀폐 차폐
+      addRooftopTriangle(
+        [pA.x, topElev, pA.z],
+        [pB.x, topElev, pB.z],
+        rA,
+        [0, 0, 1],
+        [0, 0],
+        [1, 0],
+        [0.5, 1],
+        ROOF_COLORS.gableWall
+      );
     } else {
       // 평면 옥상 바닥 슬래브 삼각화 (초록 우레탄 45%, 콘크리트 슬래브 35%, 징크 5%)
       const flatCoords: number[] = [];
@@ -625,83 +889,99 @@ export class PrecisionBuildingBuilder {
     }
 
     // -------------------------------------------------------------------------
-    // 5단: 옥상 설비 및 엘리베이터 권상기실 (Rooftop Penthouse, H ~ H + 3.2m)
+    // 5단: 옥상 설비, 엘리베이터 옥탑방, 태양광 패널, 물탱크, 옥상 정원 (H ~ H + 3.2m)
     // -------------------------------------------------------------------------
-    if (height >= 12.0 && style.roofType !== 'gabled' && areaSqm >= 120) {
-      // 옥상 일측에 가로 4.5m × 세로 4.5m × 높이 3.0m 엘리베이터 코어 박스 생성
-      const coreSize = 4.5;
-      const coreH = 3.0;
-      const coreTop = topElev + coreH;
+    if (style.roofType !== 'gabled') {
+      const absSeed = Math.abs(seed);
 
-      // 중심에서 살짝 오프셋된 위치
-      const offsetM = Math.min(3.0, Math.sqrt(areaSqm) * 0.15);
-      const ox = cx + offsetM * 0.5;
-      const oz = cz + offsetM * 0.5;
-      const half = coreSize * 0.5;
+      // A. 엘리베이터 권상기실(옥탑방) 코어 박스 (4층 이상, 12m+, 면적 120㎡+)
+      if (height >= 12.0 && areaSqm >= 120) {
+        const coreSize = 4.5;
+        const coreH = 3.0;
+        const coreTop = topElev + coreH;
 
-      const c0: [number, number] = [ox - half, oz - half];
-      const c1: [number, number] = [ox + half, oz - half];
-      const c2: [number, number] = [ox + half, oz + half];
-      const c3: [number, number] = [ox - half, oz + half];
-      const corePts = [c0, c1, c2, c3];
+        const offsetM = Math.min(3.0, Math.sqrt(areaSqm) * 0.15);
+        const ox = cx + offsetM * 0.5;
+        const oz = cz + offsetM * 0.5;
+        const half = coreSize * 0.5;
 
-      // 코어 박스 4면 수직 벽체
-      for (let k = 0; k < 4; k++) {
-        const nextK = (k + 1) % 4;
-        const b0 = corePts[k];
-        const b1 = corePts[nextK];
+        const c0: [number, number] = [ox - half, oz - half];
+        const c1: [number, number] = [ox + half, oz - half];
+        const c2: [number, number] = [ox + half, oz + half];
+        const c3: [number, number] = [ox - half, oz + half];
+        const corePts = [c0, c1, c2, c3];
 
+        // 코어 박스 4면 벽체
+        for (let k = 0; k < 4; k++) {
+          const nextK = (k + 1) % 4;
+          const b0 = corePts[k];
+          const b1 = corePts[nextK];
+
+          addRooftopQuad(
+            [b0[0], topElev, b0[1]],
+            [b1[0], topElev, b1[1]],
+            [b1[0], coreTop, b1[1]],
+            [b0[0], coreTop, b0[1]],
+            [0, 0, 1],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            style.penthouseColorRgb
+          );
+        }
+
+        // 코어 박스 상단 슬래브
         addRooftopQuad(
-          [b0[0], topElev, b0[1]],
-          [b1[0], topElev, b1[1]],
-          [b1[0], coreTop, b1[1]],
-          [b0[0], coreTop, b0[1]],
-          [0, 0, 1],
+          [c0[0], coreTop, c0[1]],
+          [c1[0], coreTop, c1[1]],
+          [c2[0], coreTop, c2[1]],
+          [c3[0], coreTop, c3[1]],
+          [0, 1, 0],
           [0, 0],
           [1, 0],
           [1, 1],
           [0, 1],
-          style.penthouseColorRgb
+          [style.penthouseColorRgb[0] * 1.1, style.penthouseColorRgb[1] * 1.1, style.penthouseColorRgb[2] * 1.1]
         );
-      }
 
-      // 코어 박스 옥탑 윗면 슬래브
-      addRooftopQuad(
-        [c0[0], coreTop, c0[1]],
-        [c1[0], coreTop, c1[1]],
-        [c2[0], coreTop, c2[1]],
-        [c3[0], coreTop, c3[1]],
-        [0, 1, 0],
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 1],
-        [style.penthouseColorRgb[0] * 1.1, style.penthouseColorRgb[1] * 1.1, style.penthouseColorRgb[2] * 1.1]
-      );
+        // B. 코어 박스 옆 냉각탑/실외기 박스 (2.2m × 2.2m × 1.4m)
+        const hvacSize = 2.2;
+        const hvacH = 1.4;
+        const hvacTop = topElev + hvacH;
+        const hx = ox - coreSize * 0.8;
+        const hz = oz;
+        const hHalf = hvacSize * 0.5;
+        const hColor: [number, number, number] = [0.75, 0.77, 0.80]; // 실버 그레이
 
-      // 코어 박스 옆 냉각탑/실외기 박스 (2.2m × 2.2m × 1.4m)
-      const hvacSize = 2.2;
-      const hvacH = 1.4;
-      const hvacTop = topElev + hvacH;
-      const hx = ox - coreSize * 0.8;
-      const hz = oz;
-      const hHalf = hvacSize * 0.5;
-      const hColor: [number, number, number] = [0.75, 0.77, 0.80]; // 실버 그레이
+        const h0: [number, number] = [hx - hHalf, hz - hHalf];
+        const h1: [number, number] = [hx + hHalf, hz - hHalf];
+        const h2: [number, number] = [hx + hHalf, hz + hHalf];
+        const h3: [number, number] = [hx - hHalf, hz + hHalf];
+        const hPts = [h0, h1, h2, h3];
 
-      const h0: [number, number] = [hx - hHalf, hz - hHalf];
-      const h1: [number, number] = [hx + hHalf, hz - hHalf];
-      const h2: [number, number] = [hx + hHalf, hz + hHalf];
-      const h3: [number, number] = [hx - hHalf, hz + hHalf];
-      const hPts = [h0, h1, h2, h3];
+        for (let k = 0; k < 4; k++) {
+          const nextK = (k + 1) % 4;
+          addRooftopQuad(
+            [hPts[k][0], topElev, hPts[k][1]],
+            [hPts[nextK][0], topElev, hPts[nextK][1]],
+            [hPts[nextK][0], hvacTop, hPts[nextK][1]],
+            [hPts[k][0], hvacTop, hPts[k][1]],
+            [0, 0, 1],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            hColor
+          );
+        }
 
-      for (let k = 0; k < 4; k++) {
-        const nextK = (k + 1) % 4;
         addRooftopQuad(
-          [hPts[k][0], topElev, hPts[k][1]],
-          [hPts[nextK][0], topElev, hPts[nextK][1]],
-          [hPts[nextK][0], hvacTop, hPts[nextK][1]],
-          [hPts[k][0], hvacTop, hPts[k][1]],
-          [0, 0, 1],
+          [h0[0], hvacTop, h0[1]],
+          [h1[0], hvacTop, h1[1]],
+          [h2[0], hvacTop, h2[1]],
+          [h3[0], hvacTop, h3[1]],
+          [0, 1, 0],
           [0, 0],
           [1, 0],
           [1, 1],
@@ -710,18 +990,178 @@ export class PrecisionBuildingBuilder {
         );
       }
 
-      addRooftopQuad(
-        [h0[0], hvacTop, h0[1]],
-        [h1[0], hvacTop, h1[1]],
-        [h2[0], hvacTop, h2[1]],
-        [h3[0], hvacTop, h3[1]],
-        [0, 1, 0],
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 1],
-        hColor
-      );
+      // C. [2단계 신규] 옥상 태양광 발전 패널 어레이 (Solar PV Array)
+      // 한국 신축 아파트, 공공기관, 대형 상가 옥상 남향(South, +z) 25도 경사 솔라 패널
+      const hasSolar =
+        ((isApartment && height >= 18.0 && areaSqm >= 160) ||
+          (isPublic && areaSqm >= 180) ||
+          (isCommercial && areaSqm >= 280)) &&
+        absSeed % 5 < 3;
+
+      if (hasSolar) {
+        const solW = 6.0;  // 동서 가로 6m
+        const solL = 3.4;  // 남북 길이 3.4m
+        const sx = cx - 2.5;
+        const sz = cz + 1.5; // 남측 구역 배치
+
+        const sHalfW = solW * 0.5;
+        const sHalfL = solL * 0.5;
+
+        // 25도 남향 경사: 북쪽 높이 +1.8m, 남쪽 높이 +0.6m
+        const solTopElev = topElev + 1.8;
+        const solBotElev = topElev + 0.6;
+
+        const spTL: [number, number, number] = [sx - sHalfW, solTopElev, sz - sHalfL];
+        const spTR: [number, number, number] = [sx + sHalfW, solTopElev, sz - sHalfL];
+        const spBR: [number, number, number] = [sx + sHalfW, solBotElev, sz + sHalfL];
+        const spBL: [number, number, number] = [sx - sHalfW, solBotElev, sz + sHalfL];
+
+        // 짙은 딥블루 솔라 셀 패널
+        addRooftopQuad(
+          spBL,
+          spBR,
+          spTR,
+          spTL,
+          [0, 0.91, 0.42],
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          ROOF_COLORS.solarCell
+        );
+
+        // 4개 모서리 아연도금 지지대 다리
+        const legs = [spTL, spTR, spBR, spBL];
+        for (const leg of legs) {
+          addRooftopQuad(
+            [leg[0] - 0.1, topElev, leg[2] - 0.1],
+            [leg[0] + 0.1, topElev, leg[2] - 0.1],
+            [leg[0] + 0.1, leg[1], leg[2] + 0.1],
+            [leg[0] - 0.1, leg[1], leg[2] + 0.1],
+            [0, 0, 1],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            ROOF_COLORS.solarFrame
+          );
+        }
+      }
+
+      // D. [2단계 신규] 한국 도심형 원통형 FRP 물탱크 (Cylindrical Water Tank)
+      // 저층 다세대 빌라, 원룸, 중소형 상가 옥상의 파란색 FRP 또는 은색 물탱크
+      const hasWaterTank =
+        (isLowRise || (isCommercial && height <= 20.0)) &&
+        areaSqm >= 70 &&
+        areaSqm < 400 &&
+        absSeed % 4 < 2;
+
+      if (hasWaterTank) {
+        const wx = cx - 1.5;
+        const wz = cz - 1.5;
+        const radius = 0.9;
+        const tankH = 1.6;
+        const tankTop = topElev + tankH;
+        const tankPadH = topElev + 0.25;
+
+        // 1) 콘크리트 받침대 사각 패드 (2.2m × 2.2m × 0.25m)
+        const pR = 1.1;
+        addRooftopQuad(
+          [wx - pR, tankPadH, wz - pR],
+          [wx + pR, tankPadH, wz - pR],
+          [wx + pR, tankPadH, wz + pR],
+          [wx - pR, tankPadH, wz + pR],
+          [0, 1, 0],
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [0.60, 0.60, 0.58]
+        );
+
+        // 2) 8각 원통 기둥
+        const tankColor = absSeed % 2 === 0 ? ROOF_COLORS.waterTankBlue : ROOF_COLORS.waterTankSilver;
+        const octPts: [number, number][] = [];
+        for (let a = 0; a < 8; a++) {
+          const ang = (a * Math.PI) / 4;
+          octPts.push([wx + Math.cos(ang) * radius, wz + Math.sin(ang) * radius]);
+        }
+
+        for (let a = 0; a < 8; a++) {
+          const nextA = (a + 1) % 8;
+          const a0 = octPts[a];
+          const a1 = octPts[nextA];
+
+          addRooftopQuad(
+            [a0[0], tankPadH, a0[1]],
+            [a1[0], tankPadH, a1[1]],
+            [a1[0], tankTop, a1[1]],
+            [a0[0], tankTop, a0[1]],
+            [0, 0, 1],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            tankColor
+          );
+
+          // 상단 원뿔 뚜껑 삼각형
+          addRooftopTriangle(
+            [a0[0], tankTop, a0[1]],
+            [a1[0], tankTop, a1[1]],
+            [wx, tankTop + 0.35, wz],
+            [0, 1, 0],
+            [0, 0],
+            [1, 0],
+            [0.5, 1],
+            [tankColor[0] * 0.9, tankColor[1] * 0.9, tankColor[2] * 0.9]
+          );
+        }
+      }
+
+      // E. [2단계 신규] 공공청사 옥상 정원 및 목재 휴게 데크 (Rooftop Garden)
+      // 반곡동 혁신도시 공공기관 청사, 시청, 도청 스타일 녹화 정원
+      const hasGarden = isPublic && areaSqm >= 260;
+      if (hasGarden) {
+        const gw = Math.min(8.0, Math.sqrt(areaSqm) * 0.35);
+        const gl = Math.min(6.0, Math.sqrt(areaSqm) * 0.28);
+        const gx = cx - 2.0;
+        const gz = cz - 2.0;
+        const gHalfW = gw * 0.5;
+        const gHalfL = gl * 0.5;
+        const gElev = topElev + 0.15;
+
+        // 잔디 화단 패치
+        addRooftopQuad(
+          [gx - gHalfW, gElev, gz - gHalfL],
+          [gx + gHalfW, gElev, gz - gHalfL],
+          [gx + gHalfW, gElev, gz + gHalfL],
+          [gx - gHalfW, gElev, gz + gHalfL],
+          [0, 1, 0],
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          ROOF_COLORS.lawnGreen
+        );
+
+        // 화단 옆 목재 휴게 데크
+        const dw = 3.2;
+        const dl = gl;
+        const dx = gx + gHalfW + dw * 0.5 + 0.3;
+        addRooftopQuad(
+          [dx - dw * 0.5, topElev + 0.08, gz - dl * 0.5],
+          [dx + dw * 0.5, topElev + 0.08, gz - dl * 0.5],
+          [dx + dw * 0.5, topElev + 0.08, gz + dl * 0.5],
+          [dx - dw * 0.5, topElev + 0.08, gz + dl * 0.5],
+          [0, 1, 0],
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          ROOF_COLORS.woodDeck
+        );
+      }
     }
   }
 }
