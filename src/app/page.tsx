@@ -137,7 +137,7 @@ export default function Home() {
           className={`hidden md:block transition-all duration-300 ease-in-out h-full overflow-hidden border-r border-[#1e2a22] backdrop-blur-xl bg-[#0a0f0c]/90 shadow-2xl relative z-20 ${
             isPresentationMode || isSidebarCollapsed
               ? 'w-0 opacity-0 pointer-events-none'
-              : 'w-[325px] md:w-[335px] opacity-100'
+              : 'w-[340px] shrink-0 opacity-100'
           }`}
         >
           <ControlPanel />
@@ -152,7 +152,7 @@ export default function Home() {
               onClick={() => setIsMobilePanelOpen(false)}
             />
             {/* 모바일 서랍 본문 */}
-            <div className="relative z-50 w-[88vw] max-w-sm h-full bg-[#141a16] shadow-2xl flex flex-col border-r border-[#242f27] animate-slide-in-left">
+            <div className="relative z-50 w-[88vw] max-w-[340px] h-full bg-[#141a16] shadow-2xl flex flex-col border-r border-[#242f27] animate-slide-in-left">
               <div className="flex items-center justify-between p-3 border-b border-[#242f27] bg-[#101712]">
                 <span className="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
                   GeoBrief 3D 분석 제어

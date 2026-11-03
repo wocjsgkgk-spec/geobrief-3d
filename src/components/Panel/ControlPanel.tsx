@@ -328,50 +328,50 @@ export const ControlPanel: React.FC = () => {
       <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
         <button
           onClick={() => handleTabChange('terrain_infra')}
-          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
             localActiveTab === 'terrain_infra'
               ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
           title="3D 지형(DEM), 공간 인프라 레이어, 토목 분석, 일조 시뮬레이션"
         >
-          <div className="flex items-center gap-1 font-bold text-xs">
-            <Mountain className="w-3.5 h-3.5 text-emerald-400" />
-            <span>지형/인프라</span>
+          <div className="flex items-center gap-1 font-bold text-xs whitespace-nowrap shrink-0">
+            <Mountain className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="whitespace-nowrap">지형/인프라</span>
           </div>
-          <span className="text-[9.5px] opacity-75">지형·레이어</span>
+          <span className="text-[9.5px] opacity-75 whitespace-nowrap">지형·레이어</span>
         </button>
 
         <button
           onClick={() => handleTabChange('buildings_complex')}
-          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
             localActiveTab === 'buildings_complex'
               ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
           title="3D 건축 렌더링 모드 선택, 1군지사 스마트 복합단지, 3D 시설물 배치"
         >
-          <div className="flex items-center gap-1 font-bold text-xs">
-            <Building2 className="w-3.5 h-3.5 text-amber-400" />
-            <span>3D 건축/단지</span>
+          <div className="flex items-center gap-1 font-bold text-xs whitespace-nowrap shrink-0">
+            <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="whitespace-nowrap">3D 건축/단지</span>
           </div>
-          <span className="text-[9.5px] opacity-75">3D 모드·단지</span>
+          <span className="text-[9.5px] opacity-75 whitespace-nowrap">3D 모드·단지</span>
         </button>
 
         <button
           onClick={() => handleTabChange('site_access')}
-          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 ${
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
             localActiveTab === 'site_access'
               ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
           title="전국/강원 주소 검색, 전략 유휴지 프리셋, 구역 지정, 국방 규제"
         >
-          <div className="flex items-center gap-1 font-bold text-xs">
-            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-            <span>부지/접근성</span>
+          <div className="flex items-center gap-1 font-bold text-xs whitespace-nowrap shrink-0">
+            <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="whitespace-nowrap">부지/접근성</span>
           </div>
-          <span className="text-[9.5px] opacity-75">주소·구역·규제</span>
+          <span className="text-[9.5px] opacity-75 whitespace-nowrap">주소·구역·규제</span>
         </button>
       </div>
 
@@ -1702,13 +1702,13 @@ export const ControlPanel: React.FC = () => {
         <>
           {/* [핵심 신규] 3D 건축물 렌더링 모드 단일 선택 (Mutual Exclusion) */}
           <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111a14]/80">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                3D 건축 렌더링 엔진 선택
+            <div className="flex items-center justify-between gap-1">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="whitespace-nowrap">3D 건축 렌더링 엔진 선택</span>
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 font-semibold">
-                상호 배타적 실행
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 font-semibold whitespace-nowrap shrink-0">
+                단일 실행
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-tight">
@@ -1741,12 +1741,12 @@ export const ControlPanel: React.FC = () => {
                   className="mt-1 accent-blue-500 pointer-events-none"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-100">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold text-slate-100 whitespace-nowrap">
                       모드 A: 경량 네이티브
                     </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-blue-900/60 text-blue-300 border border-blue-700">
-                      MapLibre fill-extrusion
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700 whitespace-nowrap shrink-0">
+                      MapLibre Extrusion
                     </span>
                   </div>
                   <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
@@ -1780,12 +1780,12 @@ export const ControlPanel: React.FC = () => {
                   className="mt-1 accent-amber-500 pointer-events-none"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-200">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold text-amber-200 whitespace-nowrap">
                       모드 B: 실감 파사드 (LOD2)
                     </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-amber-900/60 text-amber-300 border border-amber-700">
-                      Three.js 절차적 생성
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300 border border-amber-700 whitespace-nowrap shrink-0">
+                      Three.js 절차적
                     </span>
                   </div>
                   <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
@@ -1819,13 +1819,13 @@ export const ControlPanel: React.FC = () => {
                   className="mt-1 accent-emerald-500 pointer-events-none"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-200 flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      모드 C: 실측 디지털 트윈 (LOD2+)
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold text-emerald-200 flex items-center gap-1 whitespace-nowrap">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>모드 C: 실측 디지털 트윈 (LOD2+)</span>
                     </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700">
-                      브이월드 실측 대장 + PBR
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-700 whitespace-nowrap shrink-0">
+                      브이월드 + PBR
                     </span>
                   </div>
                   <p className="text-[10.5px] text-slate-400 mt-1 leading-normal">
@@ -1837,20 +1837,20 @@ export const ControlPanel: React.FC = () => {
           </section>
 
           {/* [고정밀 3D 타일셋(3D Tiles) 스트리밍 & 엔드포인트 설정 카드] */}
-          <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#0a1820]/70 border-l-2 border-l-cyan-500">
+          <section className="p-3.5 border-b border-[#242f27] space-y-2.5 bg-[#0a1820]/70 border-l-2 border-l-cyan-500">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Boxes className="w-4 h-4 text-cyan-400" />
-                <div>
-                  <h3 className="text-xs font-bold text-cyan-200">
-                    고정밀 3D 타일셋(3D Tiles) 스트리밍
+              <div className="flex items-center gap-2 min-w-0">
+                <Boxes className="w-4 h-4 text-cyan-400 shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="text-xs font-bold text-cyan-200 whitespace-nowrap">
+                    고정밀 3D 타일셋 스트리밍
                   </h3>
-                  <span className="text-[10px] text-cyan-400/80 block">
-                    Deck.gl Tile3DLayer · Google / V-World / Cesium / LiDAR
+                  <span className="text-[10px] text-cyan-400/80 whitespace-nowrap block truncate">
+                    OGC 3D Tiles · Google / V-World / Cesium
                   </span>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
                 <input
                   type="checkbox"
                   checked={tile3DStream.enabled}
@@ -1861,185 +1861,40 @@ export const ControlPanel: React.FC = () => {
               </label>
             </div>
 
-            {/* 3D 타일셋 OGC 스트리밍 엔드포인트 설정 모달 열기 버튼 */}
+            {/* 스트리밍 상태 간이 표시 (단일 행) */}
+            <div className="flex items-center justify-between bg-[#081219] px-2.5 py-1.5 rounded-lg border border-[#142837] text-[10px]">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    tile3DStream.isLoading
+                      ? 'bg-amber-400 animate-ping'
+                      : tile3DStream.enabled
+                      ? 'bg-emerald-400'
+                      : 'bg-slate-500'
+                  }`}
+                />
+                <span className="text-slate-300 font-mono whitespace-nowrap truncate">
+                  {tile3DStream.enabled
+                    ? tile3DStream.statusText || '정상 스트리밍 가동 중'
+                    : '비활성 (Three.js 실사 메쉬 가동)'}
+                </span>
+              </div>
+              {tile3DStream.enabled && (
+                <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800/60 whitespace-nowrap shrink-0 ml-1">
+                  {tile3DStream.tilesLoadedCount ? `${tile3DStream.tilesLoadedCount}개 타일` : '실사 폴백'}
+                </span>
+              )}
+            </div>
+
+            {/* 3D 타일셋 OGC 스트리밍 엔드포인트 설정 모달 열기 버튼 (화면 중앙 와이드 팝업 모달) */}
             <button
               type="button"
               onClick={() => setCustom3DTilesModalOpen(true)}
-              className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-950 to-[#0e2738] hover:from-cyan-900 hover:to-[#13354c] border border-cyan-500/50 text-cyan-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md group"
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-950 via-[#0e2738] to-slate-900 hover:from-cyan-900 hover:to-cyan-950 border border-cyan-500/50 hover:border-cyan-400 text-cyan-200 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md group whitespace-nowrap"
             >
-              <Sliders className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-45 transition-transform" />
-              <span>[3D Tiles OGC 스트리밍 엔드포인트 설정]</span>
+              <Sliders className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-45 transition-transform shrink-0" />
+              <span className="whitespace-nowrap">3D Tiles OGC 스트리밍 엔드포인트 설정</span>
             </button>
-
-            {tile3DStream.enabled && (
-              <div className="space-y-2.5 pt-1.5 border-t border-cyan-900/50 text-[11px]">
-                {/* 스트리밍 상태 및 타일 수치 표시 */}
-                <div className="flex items-center justify-between bg-[#081219] p-2 rounded-lg border border-[#142837]">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        tile3DStream.isLoading
-                          ? 'bg-amber-400 animate-ping'
-                          : 'bg-emerald-400'
-                      }`}
-                    />
-                    <span className="text-[10px] text-slate-300 font-mono truncate max-w-[170px]">
-                      {tile3DStream.statusText || '정상 스트리밍 가동 중'}
-                    </span>
-                  </div>
-                  {tile3DStream.tilesLoadedCount ? (
-                    <span className="text-[9.5px] font-mono text-cyan-300 bg-cyan-950 px-1.5 py-0.2 rounded border border-cyan-800/60">
-                      {tile3DStream.tilesLoadedCount}개 타일
-                    </span>
-                  ) : (
-                    <span className="text-[9px] text-emerald-400/90 font-mono">
-                      실사 메쉬 폴백 보호
-                    </span>
-                  )}
-                </div>
-
-                {/* 3D 타일셋 6대 프리셋 빠른 선택 */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-slate-300 font-semibold">
-                      3D 타일셋 스트림 소스
-                    </label>
-                    <span className="text-[9px] text-cyan-400 font-mono">
-                      OGC 3D Tiles 1.0
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { id: 'vworld_3d_buildings', label: '🇰🇷 브이월드 OGC 실사 3D' },
-                      { id: 'google_3d', label: '🌍 Google Photorealistic 3D' },
-                      { id: 'cesium_osm', label: '🌐 Cesium Ion OSM' },
-                      { id: 'sample_pointcloud', label: '📡 LiDAR RGB 점군 (pnts)' },
-                      { id: 'sample_city', label: '🏙️ 도시 모델 (b3dm)' },
-                      { id: 'custom', label: '⚙️ 사용자 지정 URL' },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          if (item.id === 'custom' && !tile3DStream.url) {
-                            setCustom3DTilesModalOpen(true);
-                          } else {
-                            setTile3DStreamPreset(item.id as any);
-                          }
-                        }}
-                        className={`py-1.5 px-2 rounded-lg text-[9.5px] font-bold transition-all border text-left truncate ${
-                          tile3DStream.presetId === item.id
-                            ? 'bg-cyan-600 border-cyan-400 text-white shadow-sm ring-1 ring-cyan-400/40'
-                            : 'bg-[#0a1620] border-cyan-900/50 text-cyan-300 hover:bg-[#112332]'
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 사용자 정의 URL 입력창 */}
-                {tile3DStream.presetId === 'custom' && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-slate-400 block">
-                        3D Tiles 엔드포인트 URL (tileset.json)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setCustom3DTilesModalOpen(true)}
-                        className="text-[9px] text-cyan-400 hover:text-cyan-300 underline font-mono"
-                      >
-                        상세 진단
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="https://.../tileset.json"
-                      value={tile3DStream.url}
-                      onChange={(e) => setTile3DStreamUrl(e.target.value)}
-                      className="w-full bg-[#081219] border border-cyan-800/60 rounded px-2 py-1 text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-400"
-                    />
-                  </div>
-                )}
-
-                {/* LOD 프러스텀 컬링 세밀도 (Screen Space Error: 8/16/24) */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-slate-300 font-semibold">LOD 렌더링 품질 (SSE)</span>
-                    <span className="font-mono text-cyan-300 font-bold">
-                      {tile3DStream.maximumScreenSpaceError === 8
-                        ? '8 (초정밀)'
-                        : tile3DStream.maximumScreenSpaceError === 16
-                        ? '16 (균형/표준)'
-                        : '24 (고성능)'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[
-                      { sse: 8, label: '초정밀 (8)' },
-                      { sse: 16, label: '균형 (16)' },
-                      { sse: 24, label: '고성능 (24)' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.sse}
-                        type="button"
-                        onClick={() => setTile3DStreamSse(opt.sse)}
-                        className={`py-1 px-1 rounded text-[9.5px] font-semibold border ${
-                          tile3DStream.maximumScreenSpaceError === opt.sse
-                            ? 'bg-cyan-600 border-cyan-400 text-white font-bold'
-                            : 'bg-[#08141d] border-cyan-900/40 text-slate-300 hover:bg-[#10222f]'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[9px] text-slate-400 leading-tight">
-                    * 미로드 구역은 Three.js 로컬 실사 건물 메쉬가 무중단 폴백 가드로 항상 100% 유지됩니다.
-                  </p>
-                </div>
-
-                {/* 불투명도 및 점 크기 조절 */}
-                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-cyan-900/40">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[9.5px]">
-                      <span className="text-slate-400">투명도</span>
-                      <span className="font-mono text-cyan-300 font-bold">
-                        {Math.round(tile3DStream.opacity * 100)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0.0}
-                      max={1.0}
-                      step={0.05}
-                      value={tile3DStream.opacity}
-                      onChange={(e) => setTile3DStreamOpacity(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[9.5px]">
-                      <span className="text-slate-400">점군 크기</span>
-                      <span className="font-mono text-cyan-300 font-bold">
-                        {tile3DStream.pointSize}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      step={0.5}
-                      value={tile3DStream.pointSize}
-                      onChange={(e) => setTile3DStreamPointSize(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-cyan-400"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </section>
 
           {/* [2단계 신규] 3D 시설물 인터랙티브 배치 및 변환 기즈모(TransformControls) */}
@@ -4121,10 +3976,10 @@ export const ControlPanel: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowTerrainProfile(true)}
-          className="w-full py-2 px-3 rounded-lg bg-[#1a291f] hover:bg-[#223629] border border-emerald-600/50 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm"
+          className="w-full py-2.5 px-3 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 hover:border-emerald-400 text-emerald-200 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md group whitespace-nowrap"
         >
-          <BarChart3 className="w-3.5 h-3.5" />
-          <span>지형 횡단 고도 프로파일 & 통계 모달 열기</span>
+          <BarChart3 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="whitespace-nowrap">지형 횡단 고도 프로파일 & 통계 팝업</span>
         </button>
       </section>
 
@@ -4138,27 +3993,27 @@ export const ControlPanel: React.FC = () => {
         <div className="space-y-1.5 text-xs">
           {/* [고정밀 3D 타일셋(3D Tiles) 스트리밍] */}
           <div className="flex items-center justify-between p-2 rounded bg-[#10202a] border border-[#1b3b4f]">
-            <div className="flex items-center gap-2">
-              <Boxes className="w-3.5 h-3.5 text-cyan-400" />
-              <div>
-                <span className="text-slate-200 font-medium block text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <Boxes className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-slate-200 font-medium block text-xs whitespace-nowrap">
                   고정밀 3D 타일셋 (OGC 3D Tiles)
                 </span>
-                <span className="text-[9.5px] text-cyan-400 font-mono">
+                <span className="text-[9.5px] text-cyan-400 font-mono whitespace-nowrap block truncate">
                   {tile3DStream.enabled ? '스트리밍 가동 중' : '비활성 (Three.js 실사 가동)'}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0 ml-1">
               <button
                 type="button"
                 onClick={() => setCustom3DTilesModalOpen(true)}
-                className="px-2 py-0.5 text-[9.5px] font-bold rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 transition-all flex items-center gap-1 shadow-sm"
+                className="px-2 py-0.5 text-[9.5px] font-bold rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 transition-all flex items-center gap-1 shadow-sm whitespace-nowrap"
               >
-                <Sliders className="w-3 h-3 text-cyan-400" />
-                <span>설정</span>
+                <Sliders className="w-3 h-3 text-cyan-400 shrink-0" />
+                <span className="whitespace-nowrap">설정</span>
               </button>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
                 <input
                   type="checkbox"
                   checked={tile3DStream.enabled}
@@ -4172,17 +4027,17 @@ export const ControlPanel: React.FC = () => {
 
           {/* [2단계 신규: 브이월드 실사 3D 타일 스트리밍 (XDO)] */}
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <span className="flex items-center gap-2 text-slate-300 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              브이월드 실사 3D 스트리밍 (XDO)
+            <span className="flex items-center gap-2 text-slate-300 font-medium whitespace-nowrap">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="whitespace-nowrap">브이월드 실사 3D 스트리밍 (XDO)</span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 ml-1">
               {vworldTileStats && vworldTileStats.loadedTiles > 0 && (
-                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono">
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono whitespace-nowrap shrink-0">
                   {vworldTileStats.loadedTiles}타일 (L{vworldTileStats.currentLevel})
                 </span>
               )}
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
                 <input
                   type="checkbox"
                   checked={layers.vworld3DReal}
@@ -4196,17 +4051,17 @@ export const ControlPanel: React.FC = () => {
 
           {/* [3단계 신규: 브이월드 전국 실사 3D 교량 (facility_bridge)] */}
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <span className="flex items-center gap-2 text-slate-300 font-medium">
-              <Boxes className="w-3.5 h-3.5 text-blue-400" />
-              브이월드 실사 3D 교량 (Bridge)
+            <span className="flex items-center gap-2 text-slate-300 font-medium whitespace-nowrap">
+              <Boxes className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="whitespace-nowrap">브이월드 실사 3D 교량 (Bridge)</span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 ml-1">
               {vworldTileStats && vworldTileStats.loadedBridges > 0 && (
-                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono">
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60 font-mono whitespace-nowrap shrink-0">
                   {vworldTileStats.loadedBridges}교량
                 </span>
               )}
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
                 <input
                   type="checkbox"
                   checked={layers.vworld3DBridges}
@@ -4220,17 +4075,17 @@ export const ControlPanel: React.FC = () => {
 
           {/* [3단계 신규: 브이월드 3D DEM 지형 표고 격자] */}
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <span className="flex items-center gap-2 text-slate-300 font-medium">
-              <Mountain className="w-3.5 h-3.5 text-emerald-400" />
-              브이월드 3D DEM 지형 격자
+            <span className="flex items-center gap-2 text-slate-300 font-medium whitespace-nowrap">
+              <Mountain className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="whitespace-nowrap">브이월드 3D DEM 지형 격자</span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 ml-1">
               {vworldTileStats && vworldTileStats.loadedDemTiles > 0 && (
-                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono">
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono whitespace-nowrap shrink-0">
                   {vworldTileStats.loadedDemTiles}격자
                 </span>
               )}
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
                 <input
                   type="checkbox"
                   checked={layers.vworldDemTerrain}
@@ -4243,11 +4098,11 @@ export const ControlPanel: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <span className="flex items-center gap-2 text-slate-300 font-medium">
-              <Building className="w-3.5 h-3.5 text-blue-400" />
-              건축물 3D 돌출 (Extrusion)
+            <span className="flex items-center gap-2 text-slate-300 font-medium whitespace-nowrap">
+              <Building className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="whitespace-nowrap">건축물 3D 돌출 (Extrusion)</span>
             </span>
-            <label className="relative inline-flex items-center cursor-pointer">
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input
                 type="checkbox"
                 checked={layers.buildings3D}
@@ -4262,11 +4117,11 @@ export const ControlPanel: React.FC = () => {
           {layers.buildings3D && (
             <div className="p-2.5 rounded-lg bg-[#142018] border border-[#233b2a] space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-amber-400" />
-                  V-World 3D 건물 표현 테마
+                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5 whitespace-nowrap">
+                  <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="whitespace-nowrap">V-World 3D 건물 표현 테마</span>
                 </span>
-                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-800/60 font-mono">
+                <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60 font-mono whitespace-nowrap shrink-0">
                   {buildingTheme === 'photorealistic' ? '실사 포토' : buildingTheme === 'landuse' ? '용도별 색상' : '층수·높이 스펙트럼'}
                 </span>
               </div>
@@ -4451,9 +4306,9 @@ export const ControlPanel: React.FC = () => {
           {/* [V-World API 연결 상태 실시간 진단 카드] */}
           <div className="p-2.5 rounded-lg bg-[#111713] border border-[#243328] space-y-2 text-[11px]">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5 whitespace-nowrap">
                 <span
-                  className="w-2 h-2 rounded-full inline-block animate-pulse"
+                  className="w-2 h-2 rounded-full inline-block animate-pulse shrink-0"
                   style={{
                     backgroundColor:
                       vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
@@ -4463,10 +4318,10 @@ export const ControlPanel: React.FC = () => {
                         : '#F59E0B',
                   }}
                 />
-                3D 건축물 공간정보 소스
+                <span className="whitespace-nowrap">3D 건축물 공간정보 소스</span>
               </span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 ${
                   vworldDiagnostic.featureCount > 0 || vworldDiagnostic.status === 'connected'
                     ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
                     : 'bg-slate-800/80 border-slate-700 text-slate-300'
@@ -4486,17 +4341,17 @@ export const ControlPanel: React.FC = () => {
           {/* [국토교통부 공공데이터포털(건축HUB & 전국 교량·터널) 실시간 연동 진단 카드] */}
           <div className="p-2.5 rounded-lg bg-[#111713] border border-[#243328] space-y-2 text-[11px]">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5 whitespace-nowrap">
                 <span
-                  className="w-2 h-2 rounded-full inline-block animate-pulse"
+                  className="w-2 h-2 rounded-full inline-block animate-pulse shrink-0"
                   style={{
                     backgroundColor: molitDiagnostic.hasApiKey ? '#10B981' : '#F59E0B',
                   }}
                 />
-                국토교통부 공공데이터포털
+                <span className="whitespace-nowrap">국토교통부 공공데이터포털</span>
               </span>
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 ${
                   molitDiagnostic.hasApiKey
                     ? 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
                     : 'bg-amber-950/80 border-amber-600/80 text-amber-300'
@@ -4656,11 +4511,11 @@ export const ControlPanel: React.FC = () => {
 
           {/* [교통 접근성 분석] 16:9 정량 분석표 표시 토글 */}
           <div className="flex items-center justify-between p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <div className="flex items-center space-x-2">
-              <Car className="w-3.5 h-3.5 text-emerald-400" />
-              <div>
-                <span className="text-slate-200 font-medium">교통·인프라 접근성 분석표</span>
-                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono">
+            <div className="flex items-center space-x-2 min-w-0">
+              <Car className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-slate-200 font-medium whitespace-nowrap">교통·인프라 접근성 분석표</span>
+                <span className="text-[10px] text-emerald-400/90 ml-1.5 font-mono whitespace-nowrap">
                   (16:9 슬라이드)
                 </span>
               </div>

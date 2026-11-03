@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Mountain,
   TrendingUp,
@@ -37,7 +38,12 @@ export const TerrainProfileModal: React.FC<TerrainProfileModalProps> = ({
     y: number;
   } | null>(null);
 
-  if (!isOpen || !slopeResult || !profileResult) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted || !slopeResult || !profileResult) {
     return null;
   }
 
@@ -77,44 +83,52 @@ export const TerrainProfileModal: React.FC<TerrainProfileModalProps> = ({
     if (c.p.elevation < minPoint.p.elevation) minPoint = c;
   });
 
-  return (
+  return createPortal(
     <div
-      className={`fixed bottom-12 left-4 z-30 transition-all duration-300 font-sans select-none ${
-        isMinimized ? 'w-auto' : 'w-[500px]'
-      }`}
+      className={
+        isMinimized
+          ? 'fixed bottom-12 right-6 z-40 transition-all duration-300 font-sans select-none w-auto'
+          : 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 font-sans select-none'
+      }
     >
-      <div className="bg-[#0e1611]/95 backdrop-blur-md border border-[#223828] rounded-xl shadow-2xl overflow-hidden text-slate-200">
+      <div
+        className={
+          isMinimized
+            ? 'bg-[#0e1611]/95 backdrop-blur-md border border-[#223828] rounded-xl shadow-2xl overflow-hidden text-slate-200'
+            : 'w-full max-w-[560px] bg-[#0e1611]/95 backdrop-blur-md border border-emerald-500/30 rounded-2xl shadow-2xl overflow-hidden text-slate-200 ring-1 ring-emerald-500/20'
+        }
+      >
         {/* 헤더 */}
-        <div className="px-3.5 py-2.5 bg-[#14231b] border-b border-[#223828] flex items-center justify-between">
+        <div className="px-4 py-3 bg-[#14231b] border-b border-[#223828] flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <span className="p-1 rounded bg-emerald-950/80 border border-emerald-600/50 text-emerald-400">
               <Mountain className="w-4 h-4" />
             </span>
             <div>
-              <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                <span>토목·도시계획 지형 분석</span>
-                <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-medium">
+              <div className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                <span className="whitespace-nowrap">토목·도시계획 지형 분석</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-medium whitespace-nowrap">
                   DEM 프로파일
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400">경사도 3단 분석 및 해발고도 횡단면도</p>
+              <p className="text-[10.5px] text-slate-400 whitespace-nowrap">경사도 3단 분석 및 해발고도 횡단면도</p>
             </div>
           </div>
 
           <div className="flex items-center space-x-1.5">
             <button
               onClick={() => setIsMinimized(!isMinimized)}
-              className="p-1 rounded hover:bg-[#1f3627] text-slate-400 hover:text-slate-200 transition-colors"
+              className="p-1.5 rounded hover:bg-[#1f3627] text-slate-400 hover:text-slate-200 transition-colors"
               title={isMinimized ? '창 확대' : '창 축소'}
             >
-              {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+              {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
             </button>
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 transition-colors"
+              className="p-1.5 rounded hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 transition-colors"
               title="닫기"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -435,6 +449,7 @@ export const TerrainProfileModal: React.FC<TerrainProfileModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
