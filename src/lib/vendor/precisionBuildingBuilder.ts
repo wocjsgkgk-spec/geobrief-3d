@@ -310,7 +310,7 @@ export class PrecisionBuildingBuilder {
 
         // 3단 단일 옥상 난간 (내벽 인셋 생략)
         if (style.roofType !== 'gabled') {
-          const parapetH = 0.8;
+          const parapetH = 0.9; // [3단계: 0.9m 돌출 난간]
           addRooftopQuad(
             [p0.x, topElev, p0.z],
             [p1.x, topElev, p1.z],
@@ -707,10 +707,10 @@ export class PrecisionBuildingBuilder {
     }
 
     // -------------------------------------------------------------------------
-    // 3단: 옥상 테두리 입체 난간 (3D Parapet Wall, H ~ H + 1.0m)
+    // 3단: 옥상 테두리 입체 난간 (3D Parapet Wall, H ~ H + 0.9m)
     // -------------------------------------------------------------------------
-    const parapetThick = 0.35; // 난간 두께 0.35m
-    const parapetH = 1.0;      // 난간 높이 1.0m
+    const parapetThick = 0.40; // [3단계: 난간 두께 0.40m]
+    const parapetH = 0.90;     // [3단계: 난간 높이 0.90m]
     const parapetTopElev = topElev + parapetH;
 
     // 인셋 폴리곤 계산 (옥상 안쪽 0.35m)

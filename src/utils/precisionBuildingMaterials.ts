@@ -25,19 +25,23 @@ export interface BuildingStyleAssignment {
   penthouseColorRgb: [number, number, number];
 }
 
+import { HIGH_DETAIL_ROOF_COLORS } from '@/lib/vendor/vworldHighDetailAtlas';
+
 // 옥상 4대 실측 컬러 및 2단계 옥상 디테일 컬러 정의
 export const ROOF_COLORS = {
-  urethaneGreen: [0.23, 0.43, 0.32] as [number, number, number], // #3b6e52 (45%)
-  concreteSlab: [0.55, 0.53, 0.50] as [number, number, number],  // #8c8881 (35%)
-  terracottaTile: [0.49, 0.21, 0.15] as [number, number, number],// #7c3626 (15%)
-  blueSlate: [0.15, 0.31, 0.48] as [number, number, number],      // #254e7a (박공 보조)
-  zincBlue: [0.28, 0.33, 0.41] as [number, number, number],       // #475569 실버/블루 징크 (5%)
+  urethaneGreen: HIGH_DETAIL_ROOF_COLORS.urethaneGreen, // #2e6f4e (45% 상가·원룸)
+  concreteSlab: HIGH_DETAIL_ROOF_COLORS.concreteSlab,   // #8c8881 (35% 아파트·빌딩)
+  terracottaTile: HIGH_DETAIL_ROOF_COLORS.terracottaTile,// #7c3626 (15% 기와)
+  blueSlate: HIGH_DETAIL_ROOF_COLORS.blueSlate,         // #1e40af (5% 청색 강판)
+  zincBlue: HIGH_DETAIL_ROOF_COLORS.zincBlue,           // #475569 실버/블루 징크 (5%)
+  parapetGray: HIGH_DETAIL_ROOF_COLORS.parapetGray,     // #c7c2ba 밝은 회백색 난간
+  penthouseCore: HIGH_DETAIL_ROOF_COLORS.penthouseCore, // #9e9a94 옥탑 코어
   // [2단계 신규] 옥상 디테일(태양광 패널, 물탱크, 옥상 정원, 박공벽) 컬러
   solarCell: [0.09, 0.14, 0.24] as [number, number, number],     // 딥블루 솔라 셀
   solarFrame: [0.42, 0.45, 0.48] as [number, number, number],    // 아연도금 지지대 프레임
   waterTankBlue: [0.18, 0.42, 0.68] as [number, number, number], // FRP 파랑 물탱크
   waterTankSilver: [0.72, 0.74, 0.77] as [number, number, number],// 스테인리스 물탱크
-  lawnGreen: [0.27, 0.52, 0.21] as [number, number, number],     // 옥상 잔디 정원
+  lawnGreen: HIGH_DETAIL_ROOF_COLORS.roofGardenGreen,            // #3b7a57 옥상 조경 녹지
   woodDeck: [0.55, 0.40, 0.26] as [number, number, number],      // 옥상 목재 데크
   gableWall: [0.82, 0.80, 0.76] as [number, number, number],     // 박공벽 외벽 콘크리트
 };

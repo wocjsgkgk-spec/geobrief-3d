@@ -42,16 +42,19 @@ export interface VworldBuildingStyle {
   penthouseColorRgb: [number, number, number];
 }
 
+import { getVworldHighDetailMaterials, HIGH_DETAIL_ROOF_COLORS } from '@/lib/vendor/vworldHighDetailAtlas';
+
 // 옥상 4대 실측 컬러 정의
 export const PHOTOREAL_ROOF_COLORS = {
-  urethaneGreen: [0.231, 0.431, 0.322] as [number, number, number], // #3b6e52 (45%)
+  urethaneGreen: HIGH_DETAIL_ROOF_COLORS.urethaneGreen, // #2e6f4e (45% 상가·원룸)
   urethaneDeep: [0.180, 0.361, 0.267] as [number, number, number],  // #2e5c44 (보조)
-  concreteSlab: [0.549, 0.533, 0.506] as [number, number, number],  // #8c8881 (35%)
-  terracottaTile: [0.486, 0.212, 0.149] as [number, number, number],// #7c3626 (15%)
-  blueSlate: [0.145, 0.306, 0.478] as [number, number, number],      // #254e7a (박공 청색)
-  zincBlue: [0.278, 0.333, 0.412] as [number, number, number],       // #475569 실버/블루 징크 (5%)
-  parapetGray: [0.760, 0.745, 0.720] as [number, number, number],    // #c2beb8 난간 콘크리트
-  penthouseCore: [0.620, 0.605, 0.580] as [number, number, number],  // #9e9a94 옥탑 코어
+  concreteSlab: HIGH_DETAIL_ROOF_COLORS.concreteSlab,   // #8c8881 (35% 아파트·빌딩)
+  terracottaTile: HIGH_DETAIL_ROOF_COLORS.terracottaTile,// #7c3626 (15% 기와)
+  blueSlate: HIGH_DETAIL_ROOF_COLORS.blueSlate,         // #1e40af (5% 청색 강판)
+  zincBlue: HIGH_DETAIL_ROOF_COLORS.zincBlue,           // #475569 실버/블루 징크
+  parapetGray: HIGH_DETAIL_ROOF_COLORS.parapetGray,     // #c7c2ba 밝은 회백색 난간
+  penthouseCore: HIGH_DETAIL_ROOF_COLORS.penthouseCore, // #9e9a94 옥탑 코어
+  roofGardenGreen: HIGH_DETAIL_ROOF_COLORS.roofGardenGreen, // #3b7a57 옥상 조경 녹지
 };
 
 // =============================================================================
@@ -786,69 +789,7 @@ function drawSlot19_AptPorch(ctx: CanvasRenderingContext2D, s: number): void {
 let cachedPhotorealMaterials: THREE.MeshStandardMaterial[] | null = null;
 
 export function getVworldPhotorealMaterials(): THREE.MeshStandardMaterial[] {
-  if (cachedPhotorealMaterials && cachedPhotorealMaterials.length === 20) {
-    return cachedPhotorealMaterials;
-  }
-
-  const s = 1024;
-  const drawFns = [
-    drawSlot0_AptCreamWhiteBrown,
-    drawSlot1_AptSandBeigeTerracotta,
-    drawSlot2_AptWarmGrayCharcoal,
-    drawSlot3_AptCoolGrayNavy,
-    drawSlot4_AptCurtainWallTower,
-    drawSlot5_CommBeigeGraniteSign,
-    drawSlot6_CommRedBrickCommercial,
-    drawSlot7_CommDarkMetalOffice,
-    drawSlot8_CommBrownBrick,
-    drawSlot9_CommWhiteBlueMedical,
-    drawSlot10_GovSkyBlueGlassPodium,
-    drawSlot11_GovSchoolTerracotta,
-    drawSlot12_GovHospitalHelipad,
-    drawSlot13_ResiRedBrickVilla,
-    drawSlot14_ResiPilotiStuccoStudio,
-    drawSlot15_ResiSandBeigeBarracks,
-    drawSlot16_AptSideWall,
-    drawSlot17_CommPodium,
-    drawSlot18_Signboard,
-    drawSlot19_AptPorch,
-  ];
-
-  const materials: THREE.MeshStandardMaterial[] = [];
-
-  for (let i = 0; i < drawFns.length; i++) {
-    const canvas = createOffscreen1024Canvas();
-    const ctx = typeof (canvas as any).getContext === 'function' ? canvas.getContext('2d') : null;
-    if (ctx) {
-      drawFns[i](ctx, s);
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.generateMipmaps = true;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    tex.anisotropy = 16;
-
-    // 유리 커튼월(4, 10)은 낮은 roughness, 메탈(7)은 높은 metalness
-    const isCurtainWall = i === 4 || i === 10;
-    const isMetal = i === 7;
-
-    const mat = new THREE.MeshStandardMaterial({
-      map: tex,
-      color: 0xffffff,
-      vertexColors: true,
-      roughness: isCurtainWall ? 0.22 : isMetal ? 0.35 : 0.65,
-      metalness: isCurtainWall ? 0.25 : isMetal ? 0.55 : 0.05,
-      side: THREE.DoubleSide,
-    });
-
-    materials.push(mat);
-  }
-
-  cachedPhotorealMaterials = materials;
-  return materials;
+  return getVworldHighDetailMaterials();
 }
 
 // =============================================================================
