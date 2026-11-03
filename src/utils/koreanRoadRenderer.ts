@@ -337,9 +337,8 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // [1단계: 위성사진 노면 100% 노출 및 실제 하천 횡단 교량만 회백색 상판 연결]
-    // - 위성사진 고해상도 아스팔트와 실제 도로가 가려지지 않도록 일반 도로는 완전 비활성화
-    // - 오직 bridgeFilter(brunnel === 'bridge')에 해당하는 실제 교량만 깔끔한 회백색 콘크리트 상판(#cbd5e1) 및 난간 표출
+    // [2단계: 도로 위 흰색 박스·오버레이 영구 삭제 & 위성사진 원본 100% 무결점 노출]
+    // - 도로 위를 가로막던 두꺼운 흰색/은색 교량 데크 라인 영구 제거 (visibility: 'none')
     // -------------------------------------------------------------------------
     {
       id: 'road-bridge-casing',
@@ -350,23 +349,14 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: bridgeFilter,
       paint: {
-        'line-color': '#94a3b8', // 다크 실버/콘크리트 난간 케이싱
-        'line-opacity': 0.95,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          11, 2.6,
-          13, 5.2,
-          15, 10.4,
-          16.5, 18.5,
-          18, 30.5,
-        ],
+        'line-color': '#94a3b8',
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {
@@ -378,23 +368,14 @@ export function getKoreanRoadLayerDefinitions(
       maxzoom: 24,
       filter: bridgeFilter,
       paint: {
-        'line-color': '#cbd5e1', // 깔끔한 회백색 콘크리트 상판
-        'line-opacity': 0.95,
-        'line-width': [
-          'interpolate',
-          ['exponential', 1.5],
-          ['zoom'],
-          11, 1.8,
-          13, 3.8,
-          15, 8.0,
-          16.5, 15.0,
-          18, 26.0,
-        ],
+        'line-color': '#cbd5e1',
+        'line-opacity': 0.0,
+        'line-width': 0.0,
       },
       layout: {
         'line-cap': 'butt',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
     {

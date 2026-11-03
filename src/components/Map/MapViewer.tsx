@@ -699,7 +699,8 @@ export const MapViewer: React.FC = () => {
           areaSum += x1 * y2 - x2 * y1;
         }
         const areaSqm = Math.abs(areaSum) * 0.5;
-        if (areaSqm > 4000 || areaSqm < 10) {
+        const maxLimit = isExplicitBuilding ? 8500 : 4500;
+        if (areaSqm > maxLimit || areaSqm < 10) {
           return;
         }
 
@@ -2889,7 +2890,7 @@ export const MapViewer: React.FC = () => {
                 visibility: isWater
                   ? 'visible'
                   : isBridge
-                  ? initialRoadVis
+                  ? 'none'
                   : isRiverbank || isComplexHidden || isGroundBand
                   ? 'none'
                   : initialRoadVis,
@@ -4074,7 +4075,7 @@ export const MapViewer: React.FC = () => {
         } else if (lid.startsWith('korean-riverbank')) {
           map.setLayoutProperty(lid, 'visibility', 'none'); // 위성사진 둔치 산책로·잔디밭 100% 선명 노출
         } else if (isBridge) {
-          map.setLayoutProperty(lid, 'visibility', roadVis); // 실제 하천 횡단 교량만 회백색 콘크리트 상판(#cbd5e1) 표시
+          map.setLayoutProperty(lid, 'visibility', 'none'); // 도로 위 흰색 박스 영구 삭제
         } else if (lid.startsWith('complex-') || isGroundBand) {
           // [2단계] 위성사진 노면을 가리는 인위적인 아스팔트/연석/블록 오버레이 영구 OFF
           map.setLayoutProperty(lid, 'visibility', 'none');
@@ -4446,13 +4447,12 @@ export const MapViewer: React.FC = () => {
       }
     }
 
-    // [2단계: 실제 하천 횡단 교량만 회백색 콘크리트 상판(#cbd5e1) 및 난간 표출 연결]
-    const bridgeVis = layers?.roads === false ? 'none' : 'visible';
+    // [2단계: 도로 위 흰색 박스 영구 삭제]
     if (map.getLayer('road-bridge-deck')) {
-      map.setLayoutProperty('road-bridge-deck', 'visibility', bridgeVis);
+      map.setLayoutProperty('road-bridge-deck', 'visibility', 'none');
     }
     if (map.getLayer('road-bridge-casing')) {
-      map.setLayoutProperty('road-bridge-casing', 'visibility', bridgeVis);
+      map.setLayoutProperty('road-bridge-casing', 'visibility', 'none');
     }
   }, [baseMap, isMapLoaded, layers?.roads]);
 

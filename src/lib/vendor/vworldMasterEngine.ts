@@ -148,11 +148,11 @@ export class VworldMasterEngine {
       usage.includes('apartments');
 
     // -------------------------------------------------------------------------
-    // [규격 1: 아파트 단지 (apartments 또는 면적 320㎡ 이상 단지형/장방형)]
-    // 스펙: 45m ~ 75m (15층 ~ 25층 고층 스카이라인 100% 강제 보장, 전 지역 공통)
+    // [규격 1: 아파트 단지 (면적 250㎡ 이상, 폭 8m 이상 고층 동)]
+    // - 바닥 면적 250㎡ 미만 또는 폭 8m 미만 부속 시설(경비실/변전실)은 고층 제외 (뾰족 기둥 원천 차단)
     // -------------------------------------------------------------------------
-    const isApartmentShape = areaSqm >= 320 && (minWidth >= 8.5 || areaSqm >= 420);
-    if (isApartmentTag || (isApartmentShape && !hasPublicTag)) {
+    const isApartmentShape = areaSqm >= 300 && (minWidth >= 8.0 || areaSqm >= 400);
+    if ((isApartmentTag && areaSqm >= 250 && minWidth >= 8.0) || (isApartmentShape && !hasPublicTag)) {
       const aptH = 45.0 + (seed % 31) * 1.0; // 45.0m ~ 75.0m
       return aptH;
     }
@@ -185,11 +185,15 @@ export class VworldMasterEngine {
     }
 
     // 기본 보증 높이 (모든 건물 입체화 보증: 최소 7.5m ~ 12m)
-    return Math.max(7.5, 7.5 + (seed % 5) * 1.0);
+    const baseH = Math.max(7.5, 7.5 + (seed % 5) * 1.0);
+    if (areaSqm < 250 || minWidth < 8.0) {
+      return Math.min(baseH, 12.0);
+    }
+    return baseH;
   }
 
   /**
-   * 세장비 및 소형 필지 안전 캡 (절대 0~1m 반환 금지, 최소 7.5m 보장)
+   * 세장비 및 소형 필지 안전 캡 (250㎡ 미만 또는 폭 8m 미만 뾰족 기둥 방지 클램핑: 최대 12m)
    */
   private static clampSafetyHeight(
     rawH: number,
@@ -197,9 +201,9 @@ export class VworldMasterEngine {
     minWidth: number,
     seed: number
   ): number {
-    if (areaSqm < 200) {
-      // 200㎡ 미만 소형 건물도 최소 7.5m ~ 11.5m 보장
-      return Math.max(7.5, Math.min(rawH, 7.5 + (seed % 5) * 1.0));
+    if (areaSqm < 250 || minWidth < 8.0) {
+      // 250㎡ 미만 소형 건물이나 폭 8m 미만 건물은 절대 높이 12m(3층) 초과 불가
+      return Math.min(Math.max(3.5, rawH > 0 ? rawH : 7.5 + (seed % 3) * 1.0), 12.0);
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = Math.max(14.0, safeW * 4.0);

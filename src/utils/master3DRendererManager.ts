@@ -173,31 +173,46 @@ export function isPermittedBuildingPolygon(
   maxEdgeLen: number,
   minWidth?: number
 ): boolean {
-  // 1. 면적 4,000㎡ 초과 비건물 (산림, 호수, 행정구역 경계선, 대형 필지 단지) 및 15㎡ 미만 파편 영구 차단
-  if (areaSqm > 4000 || areaSqm < 15.0) {
+  // 1. 면적 상한 필터: 실측 건축물은 최대 8,500㎡(대단지 판상형 아파트 슬래브), 비건물은 4,500㎡, 12㎡ 미만 파편 차단
+  const isExplicit = Boolean(
+    featProps.building ||
+    featProps.buld_nm ||
+    featProps.bldNm ||
+    featProps.buildingName ||
+    featProps.mgmBldrgstPk ||
+    featProps.bd_mgt_sn ||
+    featProps.realUse ||
+    featProps.grnd_flr ||
+    featProps.gro_flo_co ||
+    featProps.height ||
+    featProps.hei ||
+    featProps.heit
+  );
+  const maxAreaLimit = isExplicit ? 8500.0 : 4500.0;
+  if (areaSqm > maxAreaLimit || areaSqm < 12.0) {
     return false;
   }
 
-  // 2. 가로/세로 span 260m 초과 또는 단일 변 220m 초과 (삼각형 찢어짐 방지)
-  if (spanX > 260 || spanZ > 260 || maxEdgeLen > 220) {
+  // 2. 가로/세로 span 280m 초과 또는 단일 변 240m 초과 (삼각형 찢어짐 방지)
+  if (spanX > 280 || spanZ > 280 || maxEdgeLen > 240) {
     return false;
   }
 
   // 3. [1단계 핵심: 도로/보행로/옹벽/방음벽/철도 설비 수직 장벽 아티팩트 100% 원천 차단]
-  // - 폭이 6m 미만이거나 세장비(aspectRatio)가 8.0을 초과하는 선형 폴리곤은 건물이 아니므로 무조건 차단!
+  // - 폭이 4m 미만이거나 세장비(aspectRatio)가 9.0을 초과하는 선형 폴리곤은 건물이 아니므로 무조건 차단!
   const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
   const maxSpan = Math.max(spanX, spanZ);
 
-  if (calculatedMinWidth < 6.0) {
-    return false; // 최소 폭 6.0m 미만은 건물이 아닌 도로, 보행로, 옹벽, 방음벽, 경계석 파편
+  if (calculatedMinWidth < 4.0) {
+    return false; // 최소 폭 4.0m 미만은 건물이 아닌 도로, 보행로, 옹벽, 방음벽, 경계석 파편
   }
 
   const aspectRatio = maxSpan / calculatedMinWidth;
-  if (aspectRatio > 8.0) {
-    return false; // 세장비 8.0 초과는 수직 장벽이 되는 선형 인프라
+  if (aspectRatio > 9.0) {
+    return false; // 세장비 9.0 초과는 수직 장벽이 되는 선형 인프라
   }
 
-  if (maxEdgeLen > 0 && (areaSqm / (maxEdgeLen * maxEdgeLen)) < 0.06) {
+  if (maxEdgeLen > 0 && (areaSqm / (maxEdgeLen * maxEdgeLen)) < 0.05) {
     return false; // 긴 변 대비 면적이 극도로 좁은 띠형 폴리곤 차단
   }
 
@@ -255,7 +270,7 @@ export function isPermittedBuildingPolygon(
 }
 
 /**
- * [전역 높이 필터] 브이월드 REA 역공학 4단계 스펙 연동
+ * [전역 높이 필터] 브이월드 REA 역공학 4단계 스펙 연동 & 뾰족 기둥(바늘 타워) 방지 클램핑
  */
 export function sanitizeBuildingHeight(
   rawHeight: number,
@@ -266,20 +281,28 @@ export function sanitizeBuildingHeight(
   featProps: Record<string, any> = {},
   centerLngLat?: [number, number]
 ): number {
+  let calculatedH: number;
   if (rawHeight > 0) {
-    if (areaSqm < 200) {
-      return Math.max(7.5, Math.min(rawHeight, 7.5 + (seed % 5) * 1.0)); // 7.5m ~ 11.5m (최소 7.5m 3D 보장)
+    if (areaSqm < 250 || minWidth < 8.0) {
+      return Math.min(Math.max(3.5, rawHeight), 12.0); // 250㎡ 미만 또는 폭 8m 미만은 3층(12m) 이하 강제 클램핑
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
-    return Math.max(7.5, Math.min(rawHeight, maxAllowed));
+    calculatedH = Math.max(7.5, Math.min(rawHeight, maxAllowed));
+  } else {
+    calculatedH = VworldMasterEngine.calculateBuildingHeight(
+      featProps,
+      areaSqm,
+      minWidth,
+      seed,
+      centerLngLat
+    );
   }
 
-  return VworldMasterEngine.calculateBuildingHeight(
-    featProps,
-    areaSqm,
-    minWidth,
-    seed,
-    centerLngLat
-  );
+  // [2단계 핵심] 바닥 면적 250㎡ 미만이거나 폭 8m 미만인 건물은 절대 12m(3층)를 초과할 수 없음
+  if (areaSqm < 250 || minWidth < 8.0) {
+    return Math.min(calculatedH, 12.0);
+  }
+
+  return calculatedH;
 }

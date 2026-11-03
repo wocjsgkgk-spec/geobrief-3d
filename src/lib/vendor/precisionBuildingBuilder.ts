@@ -137,8 +137,22 @@ export class PrecisionBuildingBuilder {
     const cx = sumX / N;
     const cz = sumZ / N;
 
-    // 건물 높이 보정 (최소 3.5m)
-    const height = Math.max(3.5, rawHeight);
+    // [2단계 핵심] Bounding Box 최소 폭 산출 및 뾰족 기둥(바늘 타워) 강제 클램핑 (250㎡ 미만 또는 폭 8m 미만: 최대 12m)
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < N; i++) {
+      const p = pts2D[i];
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    }
+    const minWidth = Math.min(Math.max(1, maxX - minX), Math.max(1, maxZ - minZ));
+
+    let clampedHeight = Math.max(3.5, rawHeight);
+    if (areaSqm < 250 || minWidth < 8.0) {
+      clampedHeight = Math.min(clampedHeight, 12.0);
+    }
+    const height = clampedHeight;
     const topElev = baseElev + height;
 
     // 16종 독립 스타일 배분

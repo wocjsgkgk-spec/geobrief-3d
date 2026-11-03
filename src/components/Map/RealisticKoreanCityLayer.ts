@@ -581,7 +581,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
    * MapLibre 맵 소스 및 캐시로부터 화면 내 건물을 추출하여 3D 빌드 실행 (100% 입체화)
    */
   public extractAndBuildFromMap(): void {
-    if (!this.map || this.isBuildingGeometry || this.isMoving) return;
+    if (!this.map || this.isMoving) return;
     if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
       return;
     }
@@ -653,11 +653,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.cachedFeatures.forEach((f) => stampBuildingWithMasterData(f));
     }
 
+    if (this.isBuildingGeometry) {
+      this.pendingFeatures = newFeaturesToBuild.length > 0 ? newFeaturesToBuild : this.cachedFeatures;
+      return;
+    }
+
     if (newFeaturesToBuild.length > 0 || !this.masterMesh) {
-      if (this.persistentBuildingMap.size > 50) {
-        this.hasInitialBuilt = true;
-      }
-      // 신규 건물만 백그라운드 idle slice에서 조용히 추가 (기존 메쉬 파괴 0회, 60fps 유지)
+      // 신규 건물만 백그라운드 slice에서 조용히 추가 (기존 메쉬 파괴 0회, 60fps 유지)
       this.buildRealisticCityMesh(this.masterMesh ? newFeaturesToBuild : this.cachedFeatures);
     }
   }
@@ -1229,6 +1231,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
+      // [2단계 핵심] 뾰족 기둥(바늘 타워) 강제 클램핑: 250㎡ 미만 또는 폭 8m 미만은 절대 12m(3층) 초과 불가
+      if (areaSqm < 250 || minWidth < 8.0) {
+        height = Math.min(height, 12.0);
+      }
+
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
       const sideWallEdgeIndices = new Set<number>();
       if (isTrueHighRiseApt && ptCount >= 4) {
@@ -1406,12 +1413,38 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
       const metersPerLat = (Math.PI / 180) * 6378137;
 
+      // [2단계: 뷰포트 및 주변 광역 블록(반경 8km+) 전 구역 수천 동 100% 최우선 빌드]
+      const bounds = map.getBounds();
+      const minLng = bounds.getWest() - 0.085;
+      const maxLng = bounds.getEast() + 0.085;
+      const minLat = bounds.getSouth() - 0.080;
+      const maxLat = bounds.getNorth() + 0.080;
+
+      const viewportFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+      const outerFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+
+      for (let i = 0; i < rawFeatures.length; i++) {
+        const feat = rawFeatures[i];
+        if (!feat || !feat.geometry) continue;
+        const coords = feat.geometry.type === 'Polygon'
+          ? feat.geometry.coordinates[0]?.[0]
+          : feat.geometry.coordinates[0]?.[0]?.[0];
+        if (!coords) continue;
+        const [lng, lat] = coords;
+        if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
+          viewportFeatures.push(feat);
+        } else {
+          outerFeatures.push(feat);
+        }
+      }
+
       const maxLimit = this.options.maxBuildings || 35000;
-      const features = rawFeatures.length > maxLimit ? rawFeatures.slice(0, maxLimit) : rawFeatures;
+      const combinedList = [...viewportFeatures, ...outerFeatures];
+      const features = combinedList.length > maxLimit ? combinedList.slice(0, maxLimit) : combinedList;
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 6.0; // [60fps 엄격 보장] 프레임당 최대 6.0ms 이내 연산 엄격 보장
+      const FRAME_BUDGET_MS = 22.0; // 프레임당 약 22ms 타임버짓으로 화면 내 건물 초고속 일괄 렌더링
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1428,12 +1461,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         const sliceStartTime = performance.now();
         let sliceCount = 0;
-        const targetBudget = this.hasInitialBuilt ? FRAME_BUDGET_MS : 14.0;
 
         while (featureIdx < features.length) {
-          if (sliceCount > 0 && sliceCount % 40 === 0) {
+          if (sliceCount > 0 && sliceCount % 350 === 0) {
             const elapsed = performance.now() - sliceStartTime;
-            if (elapsed >= targetBudget) {
+            if (elapsed >= FRAME_BUDGET_MS) {
               break;
             }
           }
@@ -1454,24 +1486,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [초기 화면 즉시 표시 및 점진적 커밋]: 첫 10동 생성 시 즉시 표출, 이후 80동 단위로 점진 표출
+          // [화면 즉시 표시 및 주기적 커밋]: 최초 30동 생성 시 즉시 표출, 이후 350동 단위로 증분 커밋
           if (
             this.hasAnySlotVertices() &&
-            ((!this.hasInitialBuilt && newlyAddedCount >= 10) || newlyAddedCount >= 80)
+            (newlyAddedCount >= 350 || (!this.hasInitialBuilt && newlyAddedCount >= 30))
           ) {
             this.commitAccumulatedGeometry();
+            this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
             newlyAddedCount = 0;
-            if (!this.hasInitialBuilt && this.builtBuildingKeys.size >= 10) {
-              this.hasInitialBuilt = true;
-            }
+            this.hasInitialBuilt = true;
           }
-          // 다음 슬라이스 스케줄링: 초기 로드 시에는 지체 없이 setTimeout(0)으로 즉시 표출, 이후 idleCallback 유지
-          if (!this.hasInitialBuilt) {
+          // 뷰포트 내 건물 완료 시까지는 setTimeout(0)으로 무지연 고속 빌드
+          if (featureIdx < viewportFeatures.length || this.builtBuildingKeys.size < 6000) {
             this.activeBuildIdleId = setTimeout(executeSlice, 0);
-          } else if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-            this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 80 });
           } else {
-            this.activeBuildIdleId = setTimeout(executeSlice, 8);
+            this.activeBuildIdleId = setTimeout(executeSlice, 14);
           }
         } else {
           // 전체 피처 슬라이싱 완료!
@@ -1479,9 +1508,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.isBuildingGeometry = false;
           this.hasInitialBuilt = true;
 
-          // 전체 슬라이스 완료 시 단 1회만 커밋 (중간 메쉬 파괴 및 재생성 0회 보장)
+          // 전체 슬라이스 완료 시 커밋 및 메트릭 갱신
           if (newlyAddedCount > 0 || !this.masterMesh) {
             this.commitAccumulatedGeometry();
+            this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
           }
 
           if (this.pendingFeatures) {
@@ -1492,12 +1522,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       };
 
-      // 타임슬라이싱 즉시 1회차 시작 (requestIdleCallback 활용)
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        this.activeBuildIdleId = (window as any).requestIdleCallback(executeSlice, { timeout: 1000 });
-      } else {
-        this.activeBuildIdleId = setTimeout(executeSlice, 16);
-      }
+      // 타임슬라이싱 즉시 1회차 시작 (No-Delay setTimeout 0)
+      this.activeBuildIdleId = setTimeout(executeSlice, 0);
     } catch (buildErr) {
       console.warn('[RealisticKoreanCityLayer] buildRealisticCityMesh exception:', buildErr);
       this.isBuildingGeometry = false;
