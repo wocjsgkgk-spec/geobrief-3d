@@ -168,16 +168,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private activeBuildIdleId: any = null;
   private activeBuildTaskId: number = 0;
 
-  // [1단계: Multi-Material 16종 독립 바인딩을 위한 시퀀셜 정점 버퍼 및 건물 단위 그룹 목록]
-  private accBuildingPosBuf: Float32Array = new Float32Array(3000000);
-  private accBuildingNormBuf: Float32Array = new Float32Array(3000000);
-  private accBuildingColorBuf: Float32Array = new Float32Array(3000000);
-  private accBuildingUvBuf: Float32Array = new Float32Array(2000000);
-  private accBuildingHeightBuf: Float32Array = new Float32Array(1000000);
-  private accBuildingPosIdx: number = 0;
-  private accBuildingUvIdx: number = 0;
-  private accBuildingHeightIdx: number = 0;
-  private buildingGroups: { start: number; count: number; materialIndex: number }[] = [];
+  // [3단계: Multi-Material 16종 독립 슬롯 버퍼 (Draw Call <= 16 및 60fps 무지연)]
+  private static readonly NUM_SLOTS = 16;
+  private slotPosBuf: Float32Array[] = [];
+  private slotNormBuf: Float32Array[] = [];
+  private slotColorBuf: Float32Array[] = [];
+  private slotUvBuf: Float32Array[] = [];
+  private slotHeightBuf: Float32Array[] = [];
+  private slotPosIdx: number[] = new Array(16).fill(0);
+  private slotUvIdx: number[] = new Array(16).fill(0);
+  private slotHeightIdx: number[] = new Array(16).fill(0);
+  private currentBuildingSlot: number = 0;
+
+  // 1:1 위성사진 완벽 정합용 Mercator 원점 캐시
+  private originMercator = { x: 0, y: 0 };
+  private originMeterScale: number = 1.0;
 
   // 옥상 난간 및 옥탑 코어 사전 할당 버퍼
   private accRooftopPosBuf: Float32Array = new Float32Array(900000);
@@ -209,6 +214,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   constructor(options: RealisticKoreanCityLayerOptions = {}) {
     this.options = options;
+    for (let s = 0; s < 16; s++) {
+      this.slotPosBuf.push(new Float32Array(300000));
+      this.slotNormBuf.push(new Float32Array(300000));
+      this.slotColorBuf.push(new Float32Array(300000));
+      this.slotUvBuf.push(new Float32Array(200000));
+      this.slotHeightBuf.push(new Float32Array(100000));
+    }
+    this.setOrigin(this.originLngLat);
+  }
+
+  private setOrigin(lngLat: [number, number]): void {
+    this.originLngLat = [lngLat[0], lngLat[1]];
+    const oCoord = maplibregl.MercatorCoordinate.fromLngLat(this.originLngLat, 0);
+    this.originMercator.x = oCoord.x;
+    this.originMercator.y = oCoord.y;
+    this.originMeterScale = oCoord.meterInMercatorCoordinateUnits();
   }
 
   public setVisible(visible: boolean): void {
@@ -476,7 +497,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
       const center = map.getCenter();
-      this.originLngLat = [center.lng, center.lat];
+      this.setOrigin([center.lng, center.lat]);
       this.extractAndBuildFromMap();
     } catch (err) {
       console.warn('[RealisticKoreanCityLayer] onAdd error:', err);
@@ -713,7 +734,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const dLng = Math.abs(newOriginLngLat[0] - this.originLngLat[0]);
       const dLat = Math.abs(newOriginLngLat[1] - this.originLngLat[1]);
       if (dLng > 0.35 || dLat > 0.35 || !this.fixedOriginInitialized) {
-        this.originLngLat = [newOriginLngLat[0], newOriginLngLat[1]];
+        this.setOrigin([newOriginLngLat[0], newOriginLngLat[1]]);
         this.fixedOriginInitialized = true;
         // 다른 시·군으로 원거리 이동 시(40km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
         if (dLng > 0.40 || dLat > 0.40) {
@@ -768,10 +789,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private resetAccumulatedBuffers(): void {
     this.builtBuildingKeys.clear();
-    this.accBuildingPosIdx = 0;
-    this.accBuildingUvIdx = 0;
-    this.accBuildingHeightIdx = 0;
-    this.buildingGroups = [];
+    for (let s = 0; s < 16; s++) {
+      this.slotPosIdx[s] = 0;
+      this.slotUvIdx[s] = 0;
+      this.slotHeightIdx[s] = 0;
+    }
 
     this.accRooftopPosIdx = 0;
     this.accRooftopUvIdx = 0;
@@ -779,35 +801,38 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   private hasAnySlotVertices(): boolean {
-    return this.accBuildingPosIdx > 0;
+    for (let s = 0; s < 16; s++) {
+      if (this.slotPosIdx[s] > 0) return true;
+    }
+    return false;
   }
 
-  private ensureBuildingCapacity(additionalVertices: number): void {
-    const neededFloats = this.accBuildingPosIdx + additionalVertices * 3;
-    if (neededFloats > this.accBuildingPosBuf.length) {
-      const newSize = Math.max(this.accBuildingPosBuf.length * 2, neededFloats + 200000);
+  private ensureSlotCapacity(s: number, additionalVertices: number): void {
+    const neededFloats = this.slotPosIdx[s] + additionalVertices * 3;
+    if (neededFloats > this.slotPosBuf[s].length) {
+      const newSize = Math.max(this.slotPosBuf[s].length * 2, neededFloats + 100000);
       const newPos = new Float32Array(newSize);
       const newNorm = new Float32Array(newSize);
       const newColor = new Float32Array(newSize);
       const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
       const newHeight = new Float32Array(Math.floor(newSize / 3));
 
-      newPos.set(this.accBuildingPosBuf.subarray(0, this.accBuildingPosIdx));
-      newNorm.set(this.accBuildingNormBuf.subarray(0, this.accBuildingPosIdx));
-      newColor.set(this.accBuildingColorBuf.subarray(0, this.accBuildingPosIdx));
-      newUv.set(this.accBuildingUvBuf.subarray(0, this.accBuildingUvIdx));
-      newHeight.set(this.accBuildingHeightBuf.subarray(0, this.accBuildingHeightIdx));
+      newPos.set(this.slotPosBuf[s].subarray(0, this.slotPosIdx[s]));
+      newNorm.set(this.slotNormBuf[s].subarray(0, this.slotPosIdx[s]));
+      newColor.set(this.slotColorBuf[s].subarray(0, this.slotPosIdx[s]));
+      newUv.set(this.slotUvBuf[s].subarray(0, this.slotUvIdx[s]));
+      newHeight.set(this.slotHeightBuf[s].subarray(0, this.slotHeightIdx[s]));
 
-      this.accBuildingPosBuf = newPos;
-      this.accBuildingNormBuf = newNorm;
-      this.accBuildingColorBuf = newColor;
-      this.accBuildingUvBuf = newUv;
-      this.accBuildingHeightBuf = newHeight;
+      this.slotPosBuf[s] = newPos;
+      this.slotNormBuf[s] = newNorm;
+      this.slotColorBuf[s] = newColor;
+      this.slotUvBuf[s] = newUv;
+      this.slotHeightBuf[s] = newHeight;
     }
   }
 
   private addSlotTriangle = (
-    _slot: number,
+    slot: number,
     p0: [number, number, number],
     p1: [number, number, number],
     p2: [number, number, number],
@@ -817,20 +842,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uv2: [number, number],
     color?: [number, number, number]
   ): void => {
-    this.ensureBuildingCapacity(3);
-    const p = this.accBuildingPosIdx;
-    const u = this.accBuildingUvIdx;
-    const h = this.accBuildingHeightIdx;
+    const s =
+      typeof slot === 'number' && slot >= 0 && slot < 16
+        ? slot
+        : this.currentBuildingSlot >= 0 && this.currentBuildingSlot < 16
+        ? this.currentBuildingSlot
+        : 0;
+    this.ensureSlotCapacity(s, 3);
+    const p = this.slotPosIdx[s];
+    const u = this.slotUvIdx[s];
+    const h = this.slotHeightIdx[s];
     const baseElev = this.currentBuildingBaseElev;
     const cr = color ? color[0] : 1.0;
     const cg = color ? color[1] : 1.0;
     const cb = color ? color[2] : 1.0;
 
-    const pos = this.accBuildingPosBuf;
-    const nrm = this.accBuildingNormBuf;
-    const col = this.accBuildingColorBuf;
-    const uvs = this.accBuildingUvBuf;
-    const hts = this.accBuildingHeightBuf;
+    const pos = this.slotPosBuf[s];
+    const nrm = this.slotNormBuf[s];
+    const col = this.slotColorBuf[s];
+    const uvs = this.slotUvBuf[s];
+    const hts = this.slotHeightBuf[s];
 
     const relH0 = Math.max(0, p0[1] - baseElev);
     const relH1 = Math.max(0, p1[1] - baseElev);
@@ -859,9 +890,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uvs[u + 4] = uv2[0]; uvs[u + 5] = uv2[1];
     hts[h + 2] = relH2;
 
-    this.accBuildingPosIdx += 9;
-    this.accBuildingUvIdx += 6;
-    this.accBuildingHeightIdx += 3;
+    this.slotPosIdx[s] += 9;
+    this.slotUvIdx[s] += 6;
+    this.slotHeightIdx[s] += 3;
   };
 
   private addSlotQuad = (
@@ -891,7 +922,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uv2: [number, number],
     color?: [number, number, number]
   ): void => {
-    this.addSlotTriangle(0, p0, p1, p2, norm, uv0, uv1, uv2, color);
+    this.addSlotTriangle(this.currentBuildingSlot, p0, p1, p2, norm, uv0, uv1, uv2, color);
   };
 
   private addQuad = (
@@ -904,7 +935,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     color?: [number, number, number]
   ): void => {
     this.addSlotQuad(
-      0,
+      this.currentBuildingSlot,
       pBL,
       pBR,
       pTR,
@@ -1097,8 +1128,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         sumLng += lng;
         sumLat += lat;
 
-        const mx = (lng - this.originLngLat[0]) * metersPerLng;
-        const mz = -(lat - this.originLngLat[1]) * metersPerLat;
+        const cCoord = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
+        const mx = (cCoord.x - this.originMercator.x) / this.originMeterScale;
+        const mz = (cCoord.y - this.originMercator.y) / this.originMeterScale;
         pts2D.push({ x: mx, z: mz });
       }
 
@@ -1181,8 +1213,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
               const d1 = Math.abs(holeCoords[i][1] - holeCoords[0][1]);
               if (d0 < 1e-7 && d1 < 1e-7) break;
             }
-            const hMx = (holeCoords[i][0] - this.originLngLat[0]) * metersPerLng;
-            const hMz = -(holeCoords[i][1] - this.originLngLat[1]) * metersPerLat;
+            const hCoord = maplibregl.MercatorCoordinate.fromLngLat([holeCoords[i][0], holeCoords[i][1]], 0);
+            const hMx = (hCoord.x - this.originMercator.x) / this.originMeterScale;
+            const hMz = (hCoord.y - this.originMercator.y) / this.originMeterScale;
             holePts.push({ x: hMx, z: hMz });
           }
           if (holePts.length >= 3) {
@@ -1229,9 +1262,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [2단계 핵심] 뾰족 기둥(바늘 타워) 강제 클램핑: 250㎡ 미만 또는 폭 8m 미만은 절대 12m(3층) 초과 불가
+      // [3단계 핵심] 뾰족 기둥(바늘 타워) 강제 클램핑: 250㎡ 미만 또는 폭 8m 미만은 절대 11m(3층) 이하 강제 클램핑
       if (areaSqm < 250 || minWidth < 8.0) {
-        height = Math.min(height, 12.0);
+        height = Math.min(height, 11.0);
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
@@ -1297,11 +1330,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.currentBuildingBaseElev = baseElev;
       const topElev = baseElev + height;
 
-      // [GeoBrief 3D 1단계: Multi-Material 16종 독립 바인딩을 위한 시작 정점 오프셋 및 Material 인덱스 산출]
-      const startVertex = this.accBuildingPosIdx / 3;
+      // [GeoBrief 3D 3단계: Multi-Material 16종 독립 슬롯 분기]
       const bldgSeed = Math.abs(Math.floor(cLng * 100000 + cLat * 100000));
       const bldgStyle = classifyBuildingStyle(featProps, bldgSeed, areaSqm, height, [cLng, cLat]);
-      const materialIndex = (bldgStyle.facadeSlot ?? 0) % 16;
+      this.currentBuildingSlot = (bldgStyle.facadeSlot ?? 0) % 16;
 
       // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
       const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat, areaSqm);
@@ -1317,14 +1349,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           addTriangle: this.addTriangle,
         });
 
-        const vertexCount = this.accBuildingPosIdx / 3 - startVertex;
-        if (vertexCount > 0) {
-          this.buildingGroups.push({
-            start: startVertex,
-            count: vertexCount,
-            materialIndex,
-          });
-        }
         anyBuilt = true;
         continue;
       }
@@ -1372,15 +1396,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         addRooftopTriangle: this.addRooftopTriangle,
       });
 
-      const vertexCount = this.accBuildingPosIdx / 3 - startVertex;
-      if (vertexCount > 0) {
-        this.buildingGroups.push({
-          start: startVertex,
-          count: vertexCount,
-          materialIndex,
-        });
-      }
-
       anyBuilt = true;
     }
 
@@ -1418,13 +1433,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // 고정 원점 유지: 시·군 내 이동 시 고정(지터링 방지 및 캐시 유지), 시·군간 원거리 이동(8km+) 시 원점 재동기화
       if (!this.fixedOriginInitialized) {
-        this.originLngLat = [center.lng, center.lat];
+        this.setOrigin([center.lng, center.lat]);
         this.fixedOriginInitialized = true;
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
         if (dLng > 0.35 || dLat > 0.35) {
-          this.originLngLat = [center.lng, center.lat];
+          this.setOrigin([center.lng, center.lat]);
           this.resetAccumulatedBuffers();
         }
       }
@@ -1553,31 +1568,58 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * [1단계: Multi-Material 16종 독립 바인딩 & 건물 단위 그룹 일괄 커밋]
+   * [3단계: Multi-Material 16종 슬롯별 TypedArray 일괄 병합 & GPU Draw Call <= 16 무결점 60fps]
    */
   private commitAccumulatedGeometry(): void {
     if (!this.map || !this.scene) return;
 
-    if (this.accBuildingPosIdx > 0 && this.buildingMaterials.length > 0) {
-      const finalPositions = this.accBuildingPosBuf.subarray(0, this.accBuildingPosIdx);
-      const finalNormals = this.accBuildingNormBuf.subarray(0, this.accBuildingPosIdx);
-      const finalColors = this.accBuildingColorBuf.subarray(0, this.accBuildingPosIdx);
-      const finalUvs = this.accBuildingUvBuf.subarray(0, this.accBuildingUvIdx);
-      const finalHeights = this.accBuildingHeightBuf.subarray(0, this.accBuildingHeightIdx);
+    let totalVertices = 0;
+    for (let s = 0; s < 16; s++) {
+      totalVertices += this.slotPosIdx[s] / 3;
+    }
+
+    if (totalVertices > 0 && this.buildingMaterials.length > 0) {
+      const mergedPos = new Float32Array(totalVertices * 3);
+      const mergedNorm = new Float32Array(totalVertices * 3);
+      const mergedColor = new Float32Array(totalVertices * 3);
+      const mergedUv = new Float32Array(totalVertices * 2);
+      const mergedHeight = new Float32Array(totalVertices);
 
       const newGeometry = new THREE.BufferGeometry();
       newGeometry.clearGroups();
 
-      for (let i = 0; i < this.buildingGroups.length; i++) {
-        const g = this.buildingGroups[i];
-        newGeometry.addGroup(g.start, g.count, g.materialIndex);
+      let vertexOffset = 0;
+      let posOffset = 0;
+      let uvOffset = 0;
+      let heightOffset = 0;
+
+      for (let s = 0; s < 16; s++) {
+        const pCount = this.slotPosIdx[s];
+        const uCount = this.slotUvIdx[s];
+        const hCount = this.slotHeightIdx[s];
+        const vCount = pCount / 3;
+
+        if (vCount > 0) {
+          mergedPos.set(this.slotPosBuf[s].subarray(0, pCount), posOffset);
+          mergedNorm.set(this.slotNormBuf[s].subarray(0, pCount), posOffset);
+          mergedColor.set(this.slotColorBuf[s].subarray(0, pCount), posOffset);
+          mergedUv.set(this.slotUvBuf[s].subarray(0, uCount), uvOffset);
+          mergedHeight.set(this.slotHeightBuf[s].subarray(0, hCount), heightOffset);
+
+          newGeometry.addGroup(vertexOffset, vCount, s);
+
+          vertexOffset += vCount;
+          posOffset += pCount;
+          uvOffset += uCount;
+          heightOffset += hCount;
+        }
       }
 
-      newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPositions, 3));
-      newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormals, 3));
-      newGeometry.setAttribute('color', new THREE.BufferAttribute(finalColors, 3));
-      newGeometry.setAttribute('uv', new THREE.BufferAttribute(finalUvs, 2));
-      newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalHeights, 1));
+      newGeometry.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+      newGeometry.setAttribute('normal', new THREE.BufferAttribute(mergedNorm, 3));
+      newGeometry.setAttribute('color', new THREE.BufferAttribute(mergedColor, 3));
+      newGeometry.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
+      newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(mergedHeight, 1));
       newGeometry.computeBoundingSphere();
 
       const newMesh = new THREE.Mesh(newGeometry, this.buildingMaterials);
@@ -1585,7 +1627,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       newMesh.visible = this.isVisible;
 
       console.log(
-        `[GeoBrief 3D Multi-Material] 등록된 건물 그룹 수: ${newGeometry.groups.length}개 / 바인딩된 재질 수: ${this.buildingMaterials.length}종`
+        `[GeoBrief 3D 60fps Merged] 활성 건물 수: ${this.builtBuildingKeys.size}동 / GPU Draw Call 그룹: ${newGeometry.groups.length}개 / 바인딩 재질: ${this.buildingMaterials.length}종`
       );
 
       // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
@@ -1716,20 +1758,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
-      const mercator = maplibregl.MercatorCoordinate.fromLngLat(
-        this.originLngLat,
-        0 // 항상 해수면(0m) 기준계로 고정하여 표고 변위 지터링 완전 차단
-      );
-
-      const meterScale = maplibregl.MercatorCoordinate.fromLngLat(
-        this.originLngLat,
-        0
-      ).meterInMercatorCoordinateUnits();
-
       this.renderMatrix.fromArray(rawMatrix as any);
-      this.scaleVector.set(meterScale, -meterScale, meterScale);
+      this.scaleVector.set(this.originMeterScale, -this.originMeterScale, this.originMeterScale);
       this.localMatrix
-        .makeTranslation(mercator.x, mercator.y, mercator.z)
+        .makeTranslation(this.originMercator.x, this.originMercator.y, 0)
         .scale(this.scaleVector)
         .multiply(this.rotationX);
 

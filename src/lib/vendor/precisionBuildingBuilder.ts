@@ -150,7 +150,7 @@ export class PrecisionBuildingBuilder {
 
     let clampedHeight = Math.max(3.5, rawHeight);
     if (areaSqm < 250 || minWidth < 8.0) {
-      clampedHeight = Math.min(clampedHeight, 12.0);
+      clampedHeight = Math.min(clampedHeight, 11.0);
     }
     const height = clampedHeight;
     const topElev = baseElev + height;

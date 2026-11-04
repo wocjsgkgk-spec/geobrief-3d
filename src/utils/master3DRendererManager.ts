@@ -284,7 +284,7 @@ export function sanitizeBuildingHeight(
   let calculatedH: number;
   if (rawHeight > 0) {
     if (areaSqm < 250 || minWidth < 8.0) {
-      return Math.min(Math.max(3.5, rawHeight), 12.0); // 250㎡ 미만 또는 폭 8m 미만은 3층(12m) 이하 강제 클램핑
+      return Math.min(Math.max(3.5, rawHeight), 11.0); // 250㎡ 미만 또는 폭 8m 미만 소형 건물은 최대 11m(3층) 이하 강제 클램핑
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
@@ -299,9 +299,9 @@ export function sanitizeBuildingHeight(
     );
   }
 
-  // [2단계 핵심] 바닥 면적 250㎡ 미만이거나 폭 8m 미만인 건물은 절대 12m(3층)를 초과할 수 없음
+  // [3단계 핵심] 바닥 면적 250㎡ 미만이거나 폭 8m 미만인 건물은 절대 11m(3층)를 초과할 수 없음
   if (areaSqm < 250 || minWidth < 8.0) {
-    return Math.min(calculatedH, 12.0);
+    return Math.min(calculatedH, 11.0);
   }
 
   return calculatedH;
