@@ -26,22 +26,26 @@ export interface BuildingStyleAssignment {
 }
 
 import { HIGH_DETAIL_ROOF_COLORS } from '@/lib/vendor/vworldHighDetailAtlas';
+import {
+  AUTHENTIC_ROOF_COLORS,
+  getVworldAuthenticMaterials,
+} from '@/lib/vendor/vworldAuthenticAtlasGenerator';
 
 // 옥상 4대 실측 컬러 및 2단계 옥상 디테일 컬러 정의
 export const ROOF_COLORS = {
-  urethaneGreen: HIGH_DETAIL_ROOF_COLORS.urethaneGreen, // #2e6f4e (45% 상가·원룸)
-  concreteSlab: HIGH_DETAIL_ROOF_COLORS.concreteSlab,   // #8c8881 (35% 아파트·빌딩)
-  terracottaTile: HIGH_DETAIL_ROOF_COLORS.terracottaTile,// #7c3626 (15% 기와)
-  blueSlate: HIGH_DETAIL_ROOF_COLORS.blueSlate,         // #1e40af (5% 청색 강판)
-  zincBlue: HIGH_DETAIL_ROOF_COLORS.zincBlue,           // #475569 실버/블루 징크 (5%)
-  parapetGray: HIGH_DETAIL_ROOF_COLORS.parapetGray,     // #c7c2ba 밝은 회백색 난간
-  penthouseCore: HIGH_DETAIL_ROOF_COLORS.penthouseCore, // #9e9a94 옥탑 코어
+  urethaneGreen: AUTHENTIC_ROOF_COLORS.urethaneGreen, // #2e6f4e (45% 상가·원룸)
+  concreteSlab: AUTHENTIC_ROOF_COLORS.concreteSlab,   // #8c8881 (35% 아파트·빌딩)
+  terracottaTile: AUTHENTIC_ROOF_COLORS.terracottaTile,// #7c3626 (15% 기와)
+  blueSlate: AUTHENTIC_ROOF_COLORS.blueSlate,         // #1e40af (5% 청색 강판)
+  zincBlue: AUTHENTIC_ROOF_COLORS.zincBlue,           // #475569 실버/블루 징크 (5%)
+  parapetGray: AUTHENTIC_ROOF_COLORS.parapetGray,     // #c7c2ba 밝은 회백색 난간
+  penthouseCore: AUTHENTIC_ROOF_COLORS.penthouseCore, // #9e9a94 옥탑 코어
   // [2단계 신규] 옥상 디테일(태양광 패널, 물탱크, 옥상 정원, 박공벽) 컬러
   solarCell: [0.09, 0.14, 0.24] as [number, number, number],     // 딥블루 솔라 셀
   solarFrame: [0.42, 0.45, 0.48] as [number, number, number],    // 아연도금 지지대 프레임
   waterTankBlue: [0.18, 0.42, 0.68] as [number, number, number], // FRP 파랑 물탱크
   waterTankSilver: [0.72, 0.74, 0.77] as [number, number, number],// 스테인리스 물탱크
-  lawnGreen: HIGH_DETAIL_ROOF_COLORS.roofGardenGreen,            // #3b7a57 옥상 조경 녹지
+  lawnGreen: AUTHENTIC_ROOF_COLORS.roofGardenGreen,            // #3b7a57 옥상 조경 녹지
   woodDeck: [0.55, 0.40, 0.26] as [number, number, number],      // 옥상 목재 데크
   gableWall: [0.82, 0.80, 0.76] as [number, number, number],     // 박공벽 외벽 콘크리트
 };
@@ -132,8 +136,13 @@ export function classifyBuildingStyle(
   } else if (isGovPublic) {
     category = 'public';
     facadeSlot = 10 + (absSeed % 3); // Group 10~12
-    roofType = 'concrete';
-    roofColorRgb = ROOF_COLORS.concreteSlab;
+    if (facadeSlot === 11 && absSeed % 2 === 0) {
+      roofType = 'gabled';
+      roofColorRgb = ROOF_COLORS.terracottaTile;
+    } else {
+      roofType = 'concrete';
+      roofColorRgb = ROOF_COLORS.concreteSlab;
+    }
   } else if (isIndustrial) {
     category = 'commercial';
     facadeSlot = 7; // 다크 모던 메탈
@@ -142,22 +151,21 @@ export function classifyBuildingStyle(
   } else if (isLowRiseResidential) {
     category = 'villa';
     facadeSlot = 13 + (absSeed % 3); // Group 13~15
-    // 단독주택·빌라는 15% 박공기와, 나머지 우레탄 녹색
-    if (absSeed % 10 < 4) {
+    // 단독주택·빌라 (전체 20% 박공지붕): 적갈색 기와(#7c3626) 또는 청색 강판(#1e40af), 일부 우레탄 녹색
+    if (absSeed % 10 < 5) {
       roofType = 'gabled';
-      roofColorRgb = absSeed % 2 === 0 ? ROOF_COLORS.terracottaTile : ROOF_COLORS.blueSlate;
+      roofColorRgb = absSeed % 3 === 0 ? ROOF_COLORS.blueSlate : ROOF_COLORS.terracottaTile;
     } else {
       roofType = 'urethane';
-      roofColorRgb = ROOF_COLORS.urethaneGreen;
+      roofColorRgb = absSeed % 2 === 0 ? ROOF_COLORS.urethaneGreen : AUTHENTIC_ROOF_COLORS.roofGardenGreen;
     }
   } else {
-    // 일반 근린상가 및 오피스
+    // 일반 근린상가 및 오피스 (전체 45% 우레탄 녹색)
     category = 'commercial';
     facadeSlot = 5 + (absSeed % 5); // Group 5~9
-    // 상가는 우레탄 녹색(45%) 또는 콘크리트 슬래브(35%)
-    if (absSeed % 10 < 6) {
+    if (absSeed % 10 < 7) {
       roofType = 'urethane';
-      roofColorRgb = ROOF_COLORS.urethaneGreen;
+      roofColorRgb = absSeed % 2 === 0 ? ROOF_COLORS.urethaneGreen : AUTHENTIC_ROOF_COLORS.roofGardenGreen;
     } else {
       roofType = 'concrete';
       roofColorRgb = ROOF_COLORS.concreteSlab;
@@ -844,5 +852,5 @@ import {
 } from '@/lib/vendor/vworldPhotorealEngine';
 
 export function getPrecisionBuildingMaterials(): THREE.MeshStandardMaterial[] {
-  return getVworldPhotorealMaterials();
+  return getVworldAuthenticMaterials();
 }

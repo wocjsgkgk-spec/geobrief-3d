@@ -238,6 +238,32 @@ export class PrecisionBuildingBuilder {
           );
         }
       } else {
+        // [2단계: 원거리 LOD 1에서도 0.9m 외곽 돌출 난간(Parapet) 생성]
+        const parapetH = 0.90;
+        const parapetTopElev = topElev + parapetH;
+        for (let i = 0; i < N; i++) {
+          const j = (i + 1) % N;
+          const p0 = pts2D[i];
+          const p1 = pts2D[j];
+          const dx = p1.x - p0.x;
+          const dz = p1.z - p0.z;
+          const normLen = Math.hypot(dx, dz) || 1;
+          const nx = dz / normLen;
+          const nz = -dx / normLen;
+          addRooftopQuad(
+            [p0.x, topElev, p0.z],
+            [p1.x, topElev, p1.z],
+            [p1.x, parapetTopElev, p1.z],
+            [p0.x, parapetTopElev, p0.z],
+            [nx, 0, nz],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            style.parapetColorRgb
+          );
+        }
+
         const flatCoords: number[] = [];
         for (const p of pts2D) {
           flatCoords.push(p.x, p.z);
@@ -366,6 +392,32 @@ export class PrecisionBuildingBuilder {
           );
         }
       } else {
+        // [2단계: 원거리 LOD 1에서도 0.9m 외곽 돌출 난간(Parapet) 생성]
+        const parapetH = 0.90;
+        const parapetTopElev = topElev + parapetH;
+        for (let i = 0; i < N; i++) {
+          const j = (i + 1) % N;
+          const p0 = pts2D[i];
+          const p1 = pts2D[j];
+          const dx = p1.x - p0.x;
+          const dz = p1.z - p0.z;
+          const normLen = Math.hypot(dx, dz) || 1;
+          const nx = dz / normLen;
+          const nz = -dx / normLen;
+          addRooftopQuad(
+            [p0.x, topElev, p0.z],
+            [p1.x, topElev, p1.z],
+            [p1.x, parapetTopElev, p1.z],
+            [p0.x, parapetTopElev, p0.z],
+            [nx, 0, nz],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            style.parapetColorRgb
+          );
+        }
+
         const flatCoords: number[] = [];
         for (const p of pts2D) {
           flatCoords.push(p.x, p.z);
@@ -393,7 +445,7 @@ export class PrecisionBuildingBuilder {
       // 5단 옥탑 엘리베이터 코어 (중거리 필수 실루엣)
       if (height >= 14.0 && style.roofType !== 'gabled' && areaSqm >= 140) {
         const coreSize = 4.2;
-        const coreH = 2.8;
+        const coreH = 3.0;
         const coreTop = topElev + coreH;
         const ox = cx + 1.2;
         const oz = cz + 1.2;

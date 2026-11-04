@@ -42,19 +42,22 @@ export interface VworldBuildingStyle {
   penthouseColorRgb: [number, number, number];
 }
 
-import { getVworldHighDetailMaterials, HIGH_DETAIL_ROOF_COLORS } from '@/lib/vendor/vworldHighDetailAtlas';
+import {
+  getVworldAuthenticMaterials,
+  AUTHENTIC_ROOF_COLORS,
+} from '@/lib/vendor/vworldAuthenticAtlasGenerator';
 
 // 옥상 4대 실측 컬러 정의
 export const PHOTOREAL_ROOF_COLORS = {
-  urethaneGreen: HIGH_DETAIL_ROOF_COLORS.urethaneGreen, // #2e6f4e (45% 상가·원룸)
+  urethaneGreen: AUTHENTIC_ROOF_COLORS.urethaneGreen, // #2e6f4e (45% 상가·원룸)
   urethaneDeep: [0.180, 0.361, 0.267] as [number, number, number],  // #2e5c44 (보조)
-  concreteSlab: HIGH_DETAIL_ROOF_COLORS.concreteSlab,   // #8c8881 (35% 아파트·빌딩)
-  terracottaTile: HIGH_DETAIL_ROOF_COLORS.terracottaTile,// #7c3626 (15% 기와)
-  blueSlate: HIGH_DETAIL_ROOF_COLORS.blueSlate,         // #1e40af (5% 청색 강판)
-  zincBlue: HIGH_DETAIL_ROOF_COLORS.zincBlue,           // #475569 실버/블루 징크
-  parapetGray: HIGH_DETAIL_ROOF_COLORS.parapetGray,     // #c7c2ba 밝은 회백색 난간
-  penthouseCore: HIGH_DETAIL_ROOF_COLORS.penthouseCore, // #9e9a94 옥탑 코어
-  roofGardenGreen: HIGH_DETAIL_ROOF_COLORS.roofGardenGreen, // #3b7a57 옥상 조경 녹지
+  concreteSlab: AUTHENTIC_ROOF_COLORS.concreteSlab,   // #8c8881 (35% 아파트·빌딩)
+  terracottaTile: AUTHENTIC_ROOF_COLORS.terracottaTile,// #7c3626 (15% 기와)
+  blueSlate: AUTHENTIC_ROOF_COLORS.blueSlate,         // #1e40af (5% 청색 강판)
+  zincBlue: AUTHENTIC_ROOF_COLORS.zincBlue,           // #475569 실버/블루 징크
+  parapetGray: AUTHENTIC_ROOF_COLORS.parapetGray,     // #c7c2ba 밝은 회백색 난간
+  penthouseCore: AUTHENTIC_ROOF_COLORS.penthouseCore, // #9e9a94 옥탑 코어
+  roofGardenGreen: AUTHENTIC_ROOF_COLORS.roofGardenGreen, // #3b7a57 옥상 조경 녹지
 };
 
 // =============================================================================
@@ -789,7 +792,7 @@ function drawSlot19_AptPorch(ctx: CanvasRenderingContext2D, s: number): void {
 let cachedPhotorealMaterials: THREE.MeshStandardMaterial[] | null = null;
 
 export function getVworldPhotorealMaterials(): THREE.MeshStandardMaterial[] {
-  return getVworldHighDetailMaterials();
+  return getVworldAuthenticMaterials();
 }
 
 // =============================================================================
