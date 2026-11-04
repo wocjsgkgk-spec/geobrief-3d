@@ -3165,10 +3165,11 @@ export const MapViewer: React.FC = () => {
         );
         map.addLayer(tbLayer);
         threeboxLayerRef.current = tbLayer;
-        if (initRenderMode === 'facade') {
-          // [2단계 신규] 강원권 주요 거점 건축물 LOD2 입체 지붕 및 옥상 구조물 즉각 동기화
-          tbLayer.syncRoofs(SAMPLE_BUILDINGS.features);
-        }
+        // [1단계: 단일 재질 덮어쓰기 버그 원천 제거]
+        // ThreeboxBuildingLayer의 구형 단일 재질(mats.upperResidential) facades 생성을 영구 배제하여
+        // RealisticKoreanCityLayer가 16종 독립 Multi-Material로 전 건물을 전담 렌더링하도록 보장
+        tbLayer.clearFacadesGroup();
+        tbLayer.clearRoofsGroup();
       } catch (tbErr) {
         console.error(
           `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 ThreeboxBuildingLayer 등록 실패!\n` +

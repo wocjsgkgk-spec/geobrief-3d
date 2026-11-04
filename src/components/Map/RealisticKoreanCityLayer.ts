@@ -57,7 +57,10 @@ import { Vworld3DRenderEngine } from '@/lib/vendor/vworld3DRenderEngine';
 import { HybridVworldRenderer } from '@/lib/vendor/hybridVworldRenderer';
 import { VworldRealRenderer } from '@/lib/vendor/vworldRealRenderer';
 import { PrecisionBuildingBuilder } from '@/lib/vendor/precisionBuildingBuilder';
-import { getPrecisionBuildingMaterials } from '@/utils/precisionBuildingMaterials';
+import {
+  getPrecisionBuildingMaterials,
+  classifyBuildingStyle,
+} from '@/utils/precisionBuildingMaterials';
 import {
   classifyBuildingWithVendor,
   ClassifiedBuildingInfo,
@@ -165,16 +168,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private activeBuildIdleId: any = null;
   private activeBuildTaskId: number = 0;
 
-  // 16종 독립 Material + 4종 전용 구조물(측벽, 기단부, 간판, 포치) 슬롯 버퍼
-  private readonly NUM_SLOTS = 20;
-  private slotPosBuf: Float32Array[] = Array.from({ length: 20 }, () => new Float32Array(300000));
-  private slotNormBuf: Float32Array[] = Array.from({ length: 20 }, () => new Float32Array(300000));
-  private slotColorBuf: Float32Array[] = Array.from({ length: 20 }, () => new Float32Array(300000));
-  private slotUvBuf: Float32Array[] = Array.from({ length: 20 }, () => new Float32Array(200000));
-  private slotHeightBuf: Float32Array[] = Array.from({ length: 20 }, () => new Float32Array(100000));
-  private slotPosIdx: Int32Array = new Int32Array(20);
-  private slotUvIdx: Int32Array = new Int32Array(20);
-  private slotHeightIdx: Int32Array = new Int32Array(20);
+  // [1단계: Multi-Material 16종 독립 바인딩을 위한 시퀀셜 정점 버퍼 및 건물 단위 그룹 목록]
+  private accBuildingPosBuf: Float32Array = new Float32Array(3000000);
+  private accBuildingNormBuf: Float32Array = new Float32Array(3000000);
+  private accBuildingColorBuf: Float32Array = new Float32Array(3000000);
+  private accBuildingUvBuf: Float32Array = new Float32Array(2000000);
+  private accBuildingHeightBuf: Float32Array = new Float32Array(1000000);
+  private accBuildingPosIdx: number = 0;
+  private accBuildingUvIdx: number = 0;
+  private accBuildingHeightIdx: number = 0;
+  private buildingGroups: { start: number; count: number; materialIndex: number }[] = [];
 
   // 옥상 난간 및 옥탑 코어 사전 할당 버퍼
   private accRooftopPosBuf: Float32Array = new Float32Array(900000);
@@ -405,8 +408,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0xd6d3d1, 0.85);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 1단계] 16종 독립 건축 Material & 4종 전용 구조물 Material 배열 직결
-      this.buildingMaterials = getPrecisionBuildingMaterials();
+      // 2. [GeoBrief 3D 1단계] 16종 독립 건축 Material 배열 직결
+      this.buildingMaterials = getPrecisionBuildingMaterials().slice(0, 16);
 
       // [지붕 옥상 윗면 4대 실측 톤 완전 분리: vertexColors 100% 표출]
       this.rooftopMaterial = new THREE.MeshStandardMaterial({
@@ -765,50 +768,46 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private resetAccumulatedBuffers(): void {
     this.builtBuildingKeys.clear();
-    for (let s = 0; s < this.NUM_SLOTS; s++) {
-      this.slotPosIdx[s] = 0;
-      this.slotUvIdx[s] = 0;
-      this.slotHeightIdx[s] = 0;
-    }
+    this.accBuildingPosIdx = 0;
+    this.accBuildingUvIdx = 0;
+    this.accBuildingHeightIdx = 0;
+    this.buildingGroups = [];
+
     this.accRooftopPosIdx = 0;
     this.accRooftopUvIdx = 0;
     this.accRooftopHeightIdx = 0;
   }
 
   private hasAnySlotVertices(): boolean {
-    for (let s = 0; s < this.NUM_SLOTS; s++) {
-      if (this.slotPosIdx[s] > 0) return true;
-    }
-    return false;
+    return this.accBuildingPosIdx > 0;
   }
 
-  private ensureSlotCapacity(slot: number, additionalVertices: number): void {
-    const s = slot >= 0 && slot < this.NUM_SLOTS ? slot : 0;
-    const neededFloats = this.slotPosIdx[s] + additionalVertices * 3;
-    if (neededFloats > this.slotPosBuf[s].length) {
-      const newSize = Math.max(this.slotPosBuf[s].length * 2, neededFloats + 100000);
+  private ensureBuildingCapacity(additionalVertices: number): void {
+    const neededFloats = this.accBuildingPosIdx + additionalVertices * 3;
+    if (neededFloats > this.accBuildingPosBuf.length) {
+      const newSize = Math.max(this.accBuildingPosBuf.length * 2, neededFloats + 200000);
       const newPos = new Float32Array(newSize);
       const newNorm = new Float32Array(newSize);
       const newColor = new Float32Array(newSize);
       const newUv = new Float32Array(Math.floor((newSize / 3) * 2));
       const newHeight = new Float32Array(Math.floor(newSize / 3));
 
-      newPos.set(this.slotPosBuf[s].subarray(0, this.slotPosIdx[s]));
-      newNorm.set(this.slotNormBuf[s].subarray(0, this.slotPosIdx[s]));
-      newColor.set(this.slotColorBuf[s].subarray(0, this.slotPosIdx[s]));
-      newUv.set(this.slotUvBuf[s].subarray(0, this.slotUvIdx[s]));
-      newHeight.set(this.slotHeightBuf[s].subarray(0, this.slotHeightIdx[s]));
+      newPos.set(this.accBuildingPosBuf.subarray(0, this.accBuildingPosIdx));
+      newNorm.set(this.accBuildingNormBuf.subarray(0, this.accBuildingPosIdx));
+      newColor.set(this.accBuildingColorBuf.subarray(0, this.accBuildingPosIdx));
+      newUv.set(this.accBuildingUvBuf.subarray(0, this.accBuildingUvIdx));
+      newHeight.set(this.accBuildingHeightBuf.subarray(0, this.accBuildingHeightIdx));
 
-      this.slotPosBuf[s] = newPos;
-      this.slotNormBuf[s] = newNorm;
-      this.slotColorBuf[s] = newColor;
-      this.slotUvBuf[s] = newUv;
-      this.slotHeightBuf[s] = newHeight;
+      this.accBuildingPosBuf = newPos;
+      this.accBuildingNormBuf = newNorm;
+      this.accBuildingColorBuf = newColor;
+      this.accBuildingUvBuf = newUv;
+      this.accBuildingHeightBuf = newHeight;
     }
   }
 
   private addSlotTriangle = (
-    slot: number,
+    _slot: number,
     p0: [number, number, number],
     p1: [number, number, number],
     p2: [number, number, number],
@@ -818,21 +817,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uv2: [number, number],
     color?: [number, number, number]
   ): void => {
-    const s = slot >= 0 && slot < this.NUM_SLOTS ? slot : 0;
-    this.ensureSlotCapacity(s, 3);
-    const p = this.slotPosIdx[s];
-    const u = this.slotUvIdx[s];
-    const h = this.slotHeightIdx[s];
+    this.ensureBuildingCapacity(3);
+    const p = this.accBuildingPosIdx;
+    const u = this.accBuildingUvIdx;
+    const h = this.accBuildingHeightIdx;
     const baseElev = this.currentBuildingBaseElev;
     const cr = color ? color[0] : 1.0;
     const cg = color ? color[1] : 1.0;
     const cb = color ? color[2] : 1.0;
 
-    const pos = this.slotPosBuf[s];
-    const nrm = this.slotNormBuf[s];
-    const col = this.slotColorBuf[s];
-    const uvs = this.slotUvBuf[s];
-    const hts = this.slotHeightBuf[s];
+    const pos = this.accBuildingPosBuf;
+    const nrm = this.accBuildingNormBuf;
+    const col = this.accBuildingColorBuf;
+    const uvs = this.accBuildingUvBuf;
+    const hts = this.accBuildingHeightBuf;
 
     const relH0 = Math.max(0, p0[1] - baseElev);
     const relH1 = Math.max(0, p1[1] - baseElev);
@@ -861,9 +859,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uvs[u + 4] = uv2[0]; uvs[u + 5] = uv2[1];
     hts[h + 2] = relH2;
 
-    this.slotPosIdx[s] += 9;
-    this.slotUvIdx[s] += 6;
-    this.slotHeightIdx[s] += 3;
+    this.accBuildingPosIdx += 9;
+    this.accBuildingUvIdx += 6;
+    this.accBuildingHeightIdx += 3;
   };
 
   private addSlotQuad = (
@@ -893,7 +891,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uv2: [number, number],
     color?: [number, number, number]
   ): void => {
-    this.addSlotTriangle(10, p0, p1, p2, norm, uv0, uv1, uv2, color);
+    this.addSlotTriangle(0, p0, p1, p2, norm, uv0, uv1, uv2, color);
   };
 
   private addQuad = (
@@ -906,7 +904,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     color?: [number, number, number]
   ): void => {
     this.addSlotQuad(
-      10,
+      0,
       pBL,
       pBR,
       pTR,
@@ -1299,6 +1297,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.currentBuildingBaseElev = baseElev;
       const topElev = baseElev + height;
 
+      // [GeoBrief 3D 1단계: Multi-Material 16종 독립 바인딩을 위한 시작 정점 오프셋 및 Material 인덱스 산출]
+      const startVertex = this.accBuildingPosIdx / 3;
+      const bldgSeed = Math.abs(Math.floor(cLng * 100000 + cLat * 100000));
+      const bldgStyle = classifyBuildingStyle(featProps, bldgSeed, areaSqm, height, [cLng, cLat]);
+      const materialIndex = (bldgStyle.facadeSlot ?? 0) % 16;
+
       // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
       const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat, areaSqm);
       if (landmarkInfo) {
@@ -1312,6 +1316,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           addQuad: this.addQuad,
           addTriangle: this.addTriangle,
         });
+
+        const vertexCount = this.accBuildingPosIdx / 3 - startVertex;
+        if (vertexCount > 0) {
+          this.buildingGroups.push({
+            start: startVertex,
+            count: vertexCount,
+            materialIndex,
+          });
+        }
         anyBuilt = true;
         continue;
       }
@@ -1358,6 +1371,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         addRooftopQuad: this.addRooftopQuad,
         addRooftopTriangle: this.addRooftopTriangle,
       });
+
+      const vertexCount = this.accBuildingPosIdx / 3 - startVertex;
+      if (vertexCount > 0) {
+        this.buildingGroups.push({
+          start: startVertex,
+          count: vertexCount,
+          materialIndex,
+        });
+      }
 
       anyBuilt = true;
     }
@@ -1531,90 +1553,40 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * [2단계: 더블 버퍼링 원자적 메쉬 교체 & GPU 단일 Draw Call 달성]
+   * [1단계: Multi-Material 16종 독립 바인딩 & 건물 단위 그룹 일괄 커밋]
    */
   private commitAccumulatedGeometry(): void {
     if (!this.map || !this.scene) return;
 
-    let totalPosFloats = 0;
-    let totalUvFloats = 0;
-    let totalHeightFloats = 0;
-
-    for (let s = 0; s < this.NUM_SLOTS; s++) {
-      totalPosFloats += this.slotPosIdx[s];
-      totalUvFloats += this.slotUvIdx[s];
-      totalHeightFloats += this.slotHeightIdx[s];
-    }
-
-    if (totalPosFloats > 0 && this.buildingMaterials.length > 0) {
-      const mergedPos = new Float32Array(totalPosFloats);
-      const mergedNorm = new Float32Array(totalPosFloats);
-      const mergedCol = new Float32Array(totalPosFloats);
-      const mergedUv = new Float32Array(totalUvFloats);
-      const mergedHeight = new Float32Array(totalHeightFloats);
+    if (this.accBuildingPosIdx > 0 && this.buildingMaterials.length > 0) {
+      const finalPositions = this.accBuildingPosBuf.subarray(0, this.accBuildingPosIdx);
+      const finalNormals = this.accBuildingNormBuf.subarray(0, this.accBuildingPosIdx);
+      const finalColors = this.accBuildingColorBuf.subarray(0, this.accBuildingPosIdx);
+      const finalUvs = this.accBuildingUvBuf.subarray(0, this.accBuildingUvIdx);
+      const finalHeights = this.accBuildingHeightBuf.subarray(0, this.accBuildingHeightIdx);
 
       const newGeometry = new THREE.BufferGeometry();
       newGeometry.clearGroups();
 
-      let posOffset = 0;
-      let uvOffset = 0;
-      let heightOffset = 0;
-      let vertexOffset = 0;
-
-      for (let s = 0; s < this.NUM_SLOTS; s++) {
-        const pCount = this.slotPosIdx[s];
-        if (pCount === 0) continue;
-
-        mergedPos.set(this.slotPosBuf[s].subarray(0, pCount), posOffset);
-        mergedNorm.set(this.slotNormBuf[s].subarray(0, pCount), posOffset);
-        mergedCol.set(this.slotColorBuf[s].subarray(0, pCount), posOffset);
-
-        const uCount = this.slotUvIdx[s];
-        mergedUv.set(this.slotUvBuf[s].subarray(0, uCount), uvOffset);
-
-        const hCount = this.slotHeightIdx[s];
-        mergedHeight.set(this.slotHeightBuf[s].subarray(0, hCount), heightOffset);
-
-        const vertexCount = pCount / 3;
-        newGeometry.addGroup(vertexOffset, vertexCount, s);
-
-        posOffset += pCount;
-        uvOffset += uCount;
-        heightOffset += hCount;
-        vertexOffset += vertexCount;
+      for (let i = 0; i < this.buildingGroups.length; i++) {
+        const g = this.buildingGroups[i];
+        newGeometry.addGroup(g.start, g.count, g.materialIndex);
       }
 
-      newGeometry.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
-      newGeometry.setAttribute('normal', new THREE.BufferAttribute(mergedNorm, 3));
-      newGeometry.setAttribute('color', new THREE.BufferAttribute(mergedCol, 3));
-      newGeometry.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
-      newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(mergedHeight, 1));
+      newGeometry.setAttribute('position', new THREE.BufferAttribute(finalPositions, 3));
+      newGeometry.setAttribute('normal', new THREE.BufferAttribute(finalNormals, 3));
+      newGeometry.setAttribute('color', new THREE.BufferAttribute(finalColors, 3));
+      newGeometry.setAttribute('uv', new THREE.BufferAttribute(finalUvs, 2));
+      newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalHeights, 1));
       newGeometry.computeBoundingSphere();
 
       const newMesh = new THREE.Mesh(newGeometry, this.buildingMaterials);
       newMesh.frustumCulled = false;
       newMesh.visible = this.isVisible;
 
-      // [3단계: 16개 Material 단위 분리 메쉬 배열 유지 (Draw Call 16회 보장)]
-      const newMaterialMeshes: THREE.Mesh[] = [];
-      for (let s = 0; s < this.NUM_SLOTS; s++) {
-        const pCount = this.slotPosIdx[s];
-        if (pCount === 0 || !this.buildingMaterials[s]) continue;
-        const slotGeo = new THREE.BufferGeometry();
-        slotGeo.setAttribute('position', new THREE.BufferAttribute(this.slotPosBuf[s].subarray(0, pCount), 3));
-        slotGeo.setAttribute('normal', new THREE.BufferAttribute(this.slotNormBuf[s].subarray(0, pCount), 3));
-        slotGeo.setAttribute('color', new THREE.BufferAttribute(this.slotColorBuf[s].subarray(0, pCount), 3));
-        const uCount = this.slotUvIdx[s];
-        slotGeo.setAttribute('uv', new THREE.BufferAttribute(this.slotUvBuf[s].subarray(0, uCount), 2));
-        const hCount = this.slotHeightIdx[s];
-        slotGeo.setAttribute('aHeight', new THREE.BufferAttribute(this.slotHeightBuf[s].subarray(0, hCount), 1));
-        slotGeo.computeBoundingSphere();
-        const slotMesh = new THREE.Mesh(slotGeo, this.buildingMaterials[s]);
-        slotMesh.frustumCulled = false;
-        slotMesh.visible = this.isVisible;
-        newMaterialMeshes.push(slotMesh);
-      }
-      this.materialMeshes = newMaterialMeshes;
+      console.log(
+        `[GeoBrief 3D Multi-Material] 등록된 건물 그룹 수: ${newGeometry.groups.length}개 / 바인딩된 재질 수: ${this.buildingMaterials.length}종`
+      );
 
       // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
       const oldMesh = this.masterMesh;

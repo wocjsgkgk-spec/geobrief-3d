@@ -543,31 +543,11 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
     this.clearRoofsGroup();
     this.clearFacadesGroup();
 
-    if (this.lodMode === 'lod2' && features && features.length > 0 && this.originLngLat) {
-      const elevFn = (coord: [number, number]) => {
-        if (this.map) {
-          const elev = elevationCache.getFromMap(this.map, coord);
-          return elev - this.clampedAltitude;
-        }
-        return 0;
-      };
-
-      // 1. [3단계 신규] 실측 층고(3.0m) 및 창문(2.5m) UV 매핑 절차적 건축 외벽 메쉬 생성
-      const facades = generateBuildingFacadesGroup(
-        features,
-        this.originLngLat,
-        elevFn
-      );
-      this.facadesGroup.add(facades);
-
-      // 2. [3단계 신규] 속성 기반 LOD2 입체 지붕(박공/모임/평지붕) 및 PBR 셰이딩 생성
-      const roofs = generateLOD2RoofsGroup(
-        features,
-        this.originLngLat,
-        elevFn
-      );
-      this.roofsGroup.add(roofs);
-    }
+    // [1단계: 단일 재질 덮어쓰기 원천 차단]
+    // 구형 Threebox batch facades(단일 mats.upperResidential 메쉬) 및 batch roofs 생성을 영구 비활성화하여
+    // RealisticKoreanCityLayer가 16종 독립 Multi-Material로 전 건물을 전담 렌더링하도록 보장합니다.
+    this.roofsGroup.visible = false;
+    this.facadesGroup.visible = false;
 
     const currentZoom = this.map ? this.map.getZoom() : 16;
     const isHighDetailZoom = currentZoom >= 13.5 && this.lodMode === 'lod2';
