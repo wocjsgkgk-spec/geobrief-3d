@@ -541,41 +541,40 @@ export function classifyBuildingWithVendor(
     }
 
     // -------------------------------------------------------------------------
-    // 유형 4 [소형 필지 단독주택·다세대 빌라]
+    // 유형 4 [소형 필지 단독주택·다세대 빌라] (area < 220㎡)
+    // - 주변 아파트 POI 여부와 무관하게 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
+    // - 실제 층수: 6.5m ~ 10.0m (2층 ~ 3층)
     // -------------------------------------------------------------------------
     case 'residential': {
       floors = 2 + (seed % 2); // 2층 ~ 3층
-      height = 8.0 + (seed % 6) * 1.0; // 8.0m ~ 13.0m
+      height = Math.min(10.5, 6.5 + (seed % 36) * 0.1); // 6.5m ~ 10.0m
 
-      const resPick = seed % 4;
+      const resPick = seed % 3;
       if (resPick === 0) {
-        wallColor = '#8c3b2b'; // 프리셋 I: 붉은 치장벽돌 (#8c3b2b) + 백색 창틀
+        wallColor = '#8c3828'; // 적벽돌 (#8c3828)
         atlasWallSlot = 'villa_preset_i';
       } else if (resPick === 1) {
-        wallColor = '#6e473b'; // 프리셋 J: 갈색 파벽돌 (#6e473b)
-        atlasWallSlot = 'villa_preset_j';
-      } else if (resPick === 2) {
-        wallColor = '#f5f0e6'; // 프리셋 K: 밝은 아이보리 스타코 + 박공
+        wallColor = '#fef3c7'; // 크림 스타코 (#fef3c7)
         atlasWallSlot = 'villa_preset_k';
       } else {
-        wallColor = '#dfd8cc'; // 프리셋 L: 투톤 화강석 필로티 원룸
-        atlasWallSlot = 'villa_preset_l';
+        wallColor = '#d49b6a'; // 황토 파벽돌 (#d49b6a)
+        atlasWallSlot = 'villa_preset_j';
       }
 
-      // 지붕: 적갈색 기와 박공(50%), 청색 강판 박공(30%), 슬레이트 그레이(20%)
+      // 지붕: 적갈색 기와 박공(40%), 청색 강판 박공(35%), 초록 우레탄(25%)
       const resRoofSeed = seed % 100;
-      if (resRoofSeed < 50) {
-        roofColor = '#7c3626'; // 적갈색 기와 지붕 (50%)
+      if (resRoofSeed < 40) {
+        roofColor = '#7c3626'; // 적갈색 기와 지붕 (#7c3626)
         atlasRoofSlot = 'roof_terracotta_tile';
         isGabledRoof = true;
-      } else if (resRoofSeed < 80) {
-        roofColor = '#1e40af'; // 청색 강판 지붕 (30%)
+      } else if (resRoofSeed < 75) {
+        roofColor = '#254e7a'; // 청색 강판 지붕 (#254e7a)
         atlasRoofSlot = 'roof_zinc_blue';
         isGabledRoof = true;
       } else {
-        roofColor = '#475569'; // 슬레이트 그레이 (20%)
-        atlasRoofSlot = 'comm_charcoal_panel';
-        isGabledRoof = true;
+        roofColor = '#3b6e52'; // 초록 우레탄 방수 (#3b6e52)
+        atlasRoofSlot = 'roof_urethane_sage';
+        isGabledRoof = false;
       }
       hasParapet = !isGabledRoof;
       hasPenthouseCore = false;
@@ -735,33 +734,37 @@ export function classifyBuildingWithVendor(
     }
   }
 
-  // [3단계: 소형 건물(50㎡ ~ 250㎡) 무실동 등 입체 복원 의무 규격: 최소 8.0m ~ 15.0m (2.5층 ~ 4층)]
-  if (areaSqm >= 50 && areaSqm <= 250 && !isAuxiliaryInApt) {
-    const minSmallH = 8.0 + (seed % 8) * 1.0; // 8.0m ~ 15.0m
-    if (height < minSmallH) {
-      height = minSmallH;
-      floors = Math.max(2, Math.round(height / 3.3));
+  // [2단계: 소형 단독주택·다세대·원룸 area < 220㎡ 10.5m 절대 상한 엄격 적용]
+  if (areaSqm < 220 || minWidth < 7.5) {
+    height = Math.min(10.5, Math.max(6.5, 6.5 + (seed % 36) * 0.1));
+    floors = Math.min(3, Math.max(2, Math.round(height / 3.2)));
+    bType = 'residential';
+  } else {
+    // ---------------------------------------------------------------------------
+    // [브이월드 실사 마스터 엔진 연동: 100% 실사 높이 보장 (0m 평면화 원천 방지)]
+    // ---------------------------------------------------------------------------
+    const masterEngineH = VworldMasterEngine.calculateBuildingHeight(
+      properties,
+      areaSqm,
+      minWidth,
+      seed,
+      [centerLng, centerLat]
+    );
+    if (masterEngineH > height) {
+      height = masterEngineH;
+      floors = Math.max(floors, Math.max(2, Math.round(height / 3.3)));
     }
+
+    // 일반 건물 최소 볼륨 보장 (0% Flat 납작화 방지: 최소 7.5m 이상 입체 복원)
+    height = Math.max(7.5, height);
+    floors = Math.max(2, floors);
   }
 
-  // ---------------------------------------------------------------------------
-  // [브이월드 실사 마스터 엔진 연동: 100% 실사 높이 보장 (0m 평면화 원천 방지)]
-  // ---------------------------------------------------------------------------
-  const masterEngineH = VworldMasterEngine.calculateBuildingHeight(
-    properties,
-    areaSqm,
-    minWidth,
-    seed,
-    [centerLng, centerLat]
-  );
-  if (masterEngineH > height) {
-    height = masterEngineH;
-    floors = Math.max(floors, Math.max(2, Math.round(height / 3.3)));
+  // 최종 안전 확인: 소형 주택은 절대 10.5m 초과 불가
+  if (areaSqm < 220 || minWidth < 7.5) {
+    height = Math.min(height, 10.5);
+    floors = Math.min(floors, 3);
   }
-
-  // 일반 건물 최소 볼륨 보장 (0% Flat 납작화 방지: 최소 7.5m 이상 입체 복원)
-  height = Math.max(7.5, height);
-  floors = Math.max(2, floors);
 
   // ---------------------------------------------------------------------------
   // [최종 높이 및 유형에 따른 외벽/지붕 텍스처 엄격 동기화]

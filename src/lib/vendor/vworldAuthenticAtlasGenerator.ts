@@ -35,12 +35,12 @@ import * as THREE from 'three';
 
 // 옥상 4대 실측 컬러 정의
 export const AUTHENTIC_ROOF_COLORS = {
-  urethaneGreen: [0.180, 0.435, 0.306] as [number, number, number], // #2e6f4e (45% 상가·원룸)
-  concreteSlab: [0.549, 0.533, 0.506] as [number, number, number],  // #8c8881 (35% 아파트·빌딩)
-  terracottaTile: [0.486, 0.212, 0.149] as [number, number, number],// #7c3626 (15% 기와)
-  blueSlate: [0.118, 0.251, 0.686] as [number, number, number],      // #1e40af (5% 청색 강판)
+  urethaneGreen: [0.231, 0.431, 0.322] as [number, number, number], // #3b6e52 (시내 상가 및 주택 초록 우레탄 방수)
+  concreteSlab: [0.549, 0.533, 0.506] as [number, number, number],  // #8c8881 (35% 아파트·빌딩 콘크리트 슬래브)
+  terracottaTile: [0.486, 0.212, 0.149] as [number, number, number],// #7c3626 (15% 적갈색 기와)
+  blueSlate: [0.145, 0.306, 0.478] as [number, number, number],      // #254e7a (청색 강판)
   zincBlue: [0.278, 0.333, 0.412] as [number, number, number],       // #475569 실버/블루 징크
-  parapetGray: [0.780, 0.760, 0.730] as [number, number, number],    // #c7c2ba 밝은 회백색 난간
+  parapetGray: [0.780, 0.760, 0.730] as [number, number, number],    // #c7c2ba 밝은 회백색 난간 (0.9m 콘크리트 난간)
   penthouseCore: [0.620, 0.605, 0.580] as [number, number, number],  // #9e9a94 옥탑 코어
   roofGardenGreen: [0.231, 0.478, 0.341] as [number, number, number],// #3b7a57 옥상 조경 녹지
 };
@@ -559,9 +559,9 @@ export function drawGroup12_GovHospital(ctx: CanvasRenderingContext2D, s: number
 // [Group 13 ~ 15: 저층 주택·빌라·군 통합막사]
 // =============================================================================
 
-// Group 13: 적벽돌 다세대 빌라 (#9e3b28 + 정교한 흰색 줄눈 + 2구 하이샤시 창문)
+// Group 13: 적벽돌 다세대 빌라 (#8c3828 + 정교한 흰색 줄눈 + 2구 하이샤시 창문)
 export function drawGroup13_ResiRedBrickVilla(ctx: CanvasRenderingContext2D, s: number): void {
-  ctx.fillStyle = '#9e3b28';
+  ctx.fillStyle = '#8c3828';
   ctx.fillRect(0, 0, s, s);
 
   // 백색 줄눈
@@ -636,10 +636,29 @@ export function drawGroup14_ResiPilotiStucco(ctx: CanvasRenderingContext2D, s: n
   }
 }
 
-// Group 15: 샌드 베이지 군 표준 통합막사 (#e5e0d8 + 적갈색 기단부)
+// Group 15: 황토 파벽돌 & 샌드 베이지 주택 (#d49b6a / #e5e0d8 + 적갈색 기단부)
 export function drawGroup15_ResiSandBarracks(ctx: CanvasRenderingContext2D, s: number): void {
-  ctx.fillStyle = '#e5e0d8';
+  ctx.fillStyle = '#d49b6a';
   ctx.fillRect(0, 0, s, s);
+
+  // 황토 파벽돌 가로 줄눈
+  ctx.strokeStyle = '#fef3c7';
+  ctx.lineWidth = 2.0;
+  const rowH = s * 0.06;
+  const colW = s * 0.12;
+  for (let y = 0; y < s * 0.80; y += rowH) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(s, y);
+    ctx.stroke();
+    const offset = (Math.round(y / rowH) % 2) * (colW * 0.5);
+    for (let x = offset; x < s; x += colW) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + rowH);
+      ctx.stroke();
+    }
+  }
 
   // 하단 적벽돌 기단부
   ctx.fillStyle = '#7c2d12';

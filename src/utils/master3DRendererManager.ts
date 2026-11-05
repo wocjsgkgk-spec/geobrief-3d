@@ -296,11 +296,54 @@ export function sanitizeBuildingHeight(
   featProps: Record<string, any> = {},
   centerLngLat?: [number, number]
 ): number {
+  // ---------------------------------------------------------------------------
+  // [규격 1] 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minWidth < 7.5m)
+  // - 주변에 아파트 POI가 있더라도 절대 11m(3.5층) 초과 금지: Math.min(height, 10.5)
+  // - 실제 층수: 6.5m ~ 10m (2층 ~ 3층)
+  // ---------------------------------------------------------------------------
+  if (areaSqm < 220 || minWidth < 7.5) {
+    if (rawHeight > 0) {
+      return Math.min(10.5, Math.max(6.5, rawHeight));
+    }
+    return Math.min(10.5, 6.5 + (seed % 36) * 0.1);
+  }
+
+  // ---------------------------------------------------------------------------
+  // [규격 2] 학교·공공청사 (school, public 또는 운동장을 낀 중대형 건물)
+  // - 운동장은 0m 바닥 유지, 교사동 건물만 12m ~ 15m (3층 ~ 4층)
+  // ---------------------------------------------------------------------------
+  const rawName = String(featProps.buld_nm || featProps.name || '').toLowerCase();
+  const rawUse = String(featProps.realUse || featProps.use || featProps.mainPurpsCdNm || '').toLowerCase();
+  const isSchool = rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등') || rawUse.includes('학교') || rawUse.includes('교육');
+  if (isSchool && areaSqm < 1500) {
+    return 12.0 + (seed % 4) * 1.0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // [규격 3] 시내 상가 및 근린생활시설 (220㎡ <= area < 500㎡)
+  // - 상업지역이나 주택가 대로변 상가: 높이 12m ~ 20m (3층 ~ 6층)
+  // ---------------------------------------------------------------------------
+  if (areaSqm >= 220 && areaSqm < 500 && !isHighRiseApt) {
+    const commH = 12.0 + (seed % 9) * 1.0;
+    if (rawHeight > 0) {
+      return Math.min(20.0, Math.max(12.0, rawHeight));
+    }
+    return commH;
+  }
+
+  // ---------------------------------------------------------------------------
+  // [규격 4] 진짜 아파트 단지 (apartments 또는 area >= 400㎡인 장방형/타워형 주거 건물)
+  // - 높이 45m ~ 75m (15층 ~ 25층)
+  // ---------------------------------------------------------------------------
+  if (isHighRiseApt && areaSqm >= 320 && minWidth >= 8.0) {
+    if (rawHeight > 0) {
+      return Math.min(75.0, Math.max(45.0, rawHeight));
+    }
+    return 45.0 + (seed % 31) * 1.0;
+  }
+
   let calculatedH: number;
   if (rawHeight > 0) {
-    if (areaSqm < 250 || minWidth < 8.0) {
-      return Math.min(Math.max(3.5, rawHeight), 11.0); // 250㎡ 미만 또는 폭 8m 미만 소형 건물은 최대 11m(3층) 이하 강제 클램핑
-    }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
     calculatedH = Math.max(7.5, Math.min(rawHeight, maxAllowed));
@@ -314,9 +357,8 @@ export function sanitizeBuildingHeight(
     );
   }
 
-  // [3단계 핵심] 바닥 면적 250㎡ 미만이거나 폭 8m 미만인 건물은 절대 11m(3층)를 초과할 수 없음
-  if (areaSqm < 250 || minWidth < 8.0) {
-    return Math.min(calculatedH, 11.0);
+  if (areaSqm < 220 || minWidth < 7.5) {
+    return Math.min(calculatedH, 10.5);
   }
 
   return calculatedH;

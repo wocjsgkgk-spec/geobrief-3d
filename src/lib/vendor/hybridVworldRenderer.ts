@@ -280,7 +280,7 @@ export class HybridVworldRenderer {
       useLower.includes('아파트') ||
       useLower.includes('공동주택') ||
       nameLower.includes('아파트') ||
-      nameLower.includes('동') ||
+      (/\d+동\b/.test(nameLower) && nameLower.includes('아파트')) ||
       featProps.building === 'apartments';
 
     const isHighRiseApt =

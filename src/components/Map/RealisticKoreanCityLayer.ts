@@ -1262,9 +1262,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [3단계 핵심] 뾰족 기둥(바늘 타워) 강제 클램핑: 250㎡ 미만 또는 폭 8m 미만은 절대 11m(3층) 이하 강제 클램핑
-      if (areaSqm < 250 || minWidth < 8.0) {
-        height = Math.min(height, 11.0);
+      // [2단계 핵심] 소형 단독주택·다세대·원룸: 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
+      if (areaSqm < 220 || minWidth < 7.5) {
+        height = Math.min(height, 10.5);
+        if (height < 6.5) {
+          height = 6.5 + (diverseSeed % 36) * 0.1;
+        }
+      } else if (areaSqm >= 220 && areaSqm < 500 && !isTrueHighRiseApt) {
+        height = Math.min(20.0, Math.max(12.0, height));
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!

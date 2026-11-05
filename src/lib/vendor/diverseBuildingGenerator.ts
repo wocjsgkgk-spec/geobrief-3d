@@ -589,7 +589,7 @@ export class DiverseBuildingGenerator {
       (areaSqm >= 800 && height >= 20.0);
 
     const isApartment =
-      name.includes('아파트') ||
+      (name.includes('아파트') ||
       name.includes('자이') ||
       name.includes('푸르지오') ||
       name.includes('힐스테이트') ||
@@ -597,10 +597,11 @@ export class DiverseBuildingGenerator {
       name.includes('e편한세상') ||
       name.includes('아이파크') ||
       name.includes('부영') ||
-      name.includes('동') ||
+      (/\d+동\b/.test(name) && (name.includes('아파트') || usage.includes('apartments'))) ||
       usage.includes('아파트') ||
       usage.includes('apartments') ||
-      usage.includes('공동주택');
+      usage.includes('공동주택')) &&
+      areaSqm >= 250;
 
     let targetIdx = 0;
 

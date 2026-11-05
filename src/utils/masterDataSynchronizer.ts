@@ -459,6 +459,17 @@ export function stampBuildingWithMasterData(
   let isRealMeasured = false;
   let source: StampedRealAttributes['source'] = 'metric_inferred';
 
+  const rawName = String(
+    props.name || props.name_ko || props.buld_nm || props.buildingName || props.bldNm || ''
+  ).toLowerCase();
+  const isAptKeyword = APT_KEYWORDS.some((kw) => rawName.includes(kw));
+  const isExplicitAptTag = Boolean(
+    props.building === 'apartments' ||
+    props.usageType === 'apartment' ||
+    props.bld_category === 'apartment' ||
+    isAptKeyword
+  );
+
   if (rec) {
     isRealMeasured = true;
     source = 'registry_hub';
@@ -531,23 +542,12 @@ export function stampBuildingWithMasterData(
     // -------------------------------------------------------------------------
     source = 'zoning_inferred';
 
-    const rawName = String(
-      props.name || props.name_ko || props.buld_nm || props.buildingName || props.bldNm || ''
-    ).toLowerCase();
     const zoneStr = String(
       props.zoneName || props.zone_nm || props.spfc_nm || props.UQ111_NM || props.uq111 || props.landuse || ''
     ).toLowerCase();
 
-    const isAptKeyword = APT_KEYWORDS.some((kw) => rawName.includes(kw));
-    const isExplicitAptTag = Boolean(
-      props.building === 'apartments' ||
-      props.usageType === 'apartment' ||
-      props.bld_category === 'apartment' ||
-      isAptKeyword
-    );
-
     // 1. 용도 추론 (진짜 아파트 식별 태그/명칭이 확인된 경우에만 고층 아파트 스카이라인 적용)
-    if (isExplicitAptTag && areaSqm >= 250) {
+    if (isExplicitAptTag && areaSqm >= 350) {
       realUse = '공동주택(아파트)';
       realStruct = '철근콘크리트조';
       realRoof = '슬래브지붕';
@@ -625,35 +625,64 @@ export function stampBuildingWithMasterData(
   }
 
   // ---------------------------------------------------------------------------
-  // C. [절대 규칙: 세장비 & 소형 건물 12m 엄격 제한, 0m 평면 건물 원천 금지]
+  // C. [절대 규칙: 용도·면적별 층고 분리 및 소형 건물 10.5m 엄격 강제 클램핑]
   // ---------------------------------------------------------------------------
-  // 소형 주택 area < 220㎡는 어떤 경우에도 절대 12m를 초과하지 못하도록 차단
-  if (areaSqm < 220) {
-    if (realHeight > 12.0) {
-      realHeight = Math.min(12.0, 7.5 + (seed % 5) * 0.9);
-      realLevels = Math.max(2, Math.min(3, Math.round(realHeight / 3.1)));
-    }
-  }
+  const minDim = Math.max(5.0, Math.sqrt(areaSqm));
 
-  // 대단지 아파트는 45m ~ 78m 실제 층수 보장
-  if (realUse === '공동주택(아파트)' && areaSqm >= 350) {
-    if (realHeight < 45.0) {
-      realHeight = 48.0 + (seed % 28) * 1.0;
+  // 1) 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minDim < 7.5m)
+  // 주변 아파트 POI 여부와 무관하게 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
+  // 실제 층수: 6.5m ~ 10m (2층 ~ 3층)
+  if (areaSqm < 220 || minDim < 7.5) {
+    realHeight = Math.min(10.5, Math.max(6.5, 6.5 + (seed % 36) * 0.1));
+    realLevels = Math.min(3, Math.max(2, Math.round(realHeight / 3.2)));
+    realUse = '단독/다가구주택';
+    if (!rec || !rec.roofCdNm) {
+      realRoof = seed % 2 === 0 ? '기와지붕' : '슬래브지붕';
+    }
+  } else if (
+    rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등') ||
+    realUse.includes('학교') || realUse.includes('교육')
+  ) {
+    // 3) 학교·공공청사: 교사동 건물만 12m ~ 15m (3층 ~ 4층)
+    realLevels = 3 + (seed % 2); // 3~4층
+    realHeight = 12.0 + (seed % 4) * 1.0; // 12m ~ 15m
+    realUse = '교육연구시설(학교)';
+    realRoof = '슬래브지붕';
+  } else if (
+    // 2) 시내 상가 및 근린생활시설 (220 <= area < 500)
+    areaSqm >= 220 && areaSqm < 500 &&
+    realUse !== '공동주택(아파트)' && !isExplicitAptTag
+  ) {
+    realLevels = 3 + (seed % 4); // 3~6층
+    realHeight = 12.0 + (seed % 9) * 1.0; // 12m ~ 20m
+    realUse = '제1·2종근린생활시설(상가)';
+    realRoof = '슬래브지붕';
+  } else if (
+    // 4) 진짜 아파트 단지 (area >= 350)
+    (realUse === '공동주택(아파트)' || isExplicitAptTag) && areaSqm >= 350
+  ) {
+    if (realHeight < 45.0 || realHeight > 75.0) {
+      realHeight = 45.0 + (seed % 31) * 1.0; // 45m ~ 75m
       realLevels = Math.round(realHeight / 3.1);
     }
+    realRoof = '슬래브지붕';
+  } else {
+    // 세장비 (Aspect Ratio) 제한으로 연필 기둥 방지 및 0m 평면 건물 원천 금지
+    const maxAllowedHeight = Math.max(14.0, minDim * 3.5);
+    if (realHeight > maxAllowedHeight) {
+      realHeight = Math.round(maxAllowedHeight * 10) / 10;
+      realLevels = Math.max(2, Math.round(realHeight / 3.2));
+    }
+    // 0m 평면 건물 원천 금지: 최소 7.5m (2층) 보장
+    realHeight = Math.max(7.5, Math.round(realHeight * 10) / 10);
+    realLevels = Math.max(2, realLevels);
   }
 
-  // 세장비 (Aspect Ratio) 제한으로 연필 기둥 방지 및 0m 평면 건물 원천 금지
-  const minDim = Math.max(5.0, Math.sqrt(areaSqm));
-  const maxAllowedHeight = isNearApt || realUse === '공동주택(아파트)' ? 78.0 : Math.max(14.0, minDim * 3.5);
-  if (realHeight > maxAllowedHeight) {
-    realHeight = Math.round(maxAllowedHeight * 10) / 10;
-    realLevels = Math.max(2, Math.round(realHeight / 3.2));
+  // 최종 안전 확인: 소형 주택은 절대 10.5m를 넘을 수 없음
+  if (areaSqm < 220 || minDim < 7.5) {
+    realHeight = Math.min(realHeight, 10.5);
+    realLevels = Math.min(realLevels, 3);
   }
-
-  // 0m 평면 건물 원천 금지: 최소 7.5m (2층) 보장
-  realHeight = Math.max(7.5, Math.round(realHeight * 10) / 10);
-  realLevels = Math.max(2, realLevels);
 
   // ---------------------------------------------------------------------------
   // D. 위성 항공사진 실시간 지붕 색감 결합

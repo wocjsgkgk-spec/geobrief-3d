@@ -149,8 +149,10 @@ export class PrecisionBuildingBuilder {
     const minWidth = Math.min(Math.max(1, maxX - minX), Math.max(1, maxZ - minZ));
 
     let clampedHeight = Math.max(3.5, rawHeight);
-    if (areaSqm < 250 || minWidth < 8.0) {
-      clampedHeight = Math.min(clampedHeight, 11.0);
+    if (areaSqm < 220 || minWidth < 7.5) {
+      clampedHeight = Math.min(10.5, Math.max(6.5, clampedHeight));
+    } else if (areaSqm >= 220 && areaSqm < 500 && rawHeight < 25.0) {
+      clampedHeight = Math.min(20.0, Math.max(12.0, clampedHeight));
     }
     const height = clampedHeight;
     const topElev = baseElev + height;

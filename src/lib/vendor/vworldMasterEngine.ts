@@ -142,22 +142,42 @@ export class VworldMasterEngine {
       name.includes('아이파크') ||
       name.includes('부영') ||
       name.includes('휴먼시아') ||
-      name.includes('동') ||
+      (/\d+동\b/.test(name) && (name.includes('아파트') || name.includes('단지') || usage.includes('apartments'))) ||
       usage.includes('아파트') ||
       usage.includes('공동주택') ||
       usage.includes('apartments');
 
     // -------------------------------------------------------------------------
-    // [규격 1: 아파트 단지 (진짜 아파트 식별 태그/명칭이 확인된 고층 동)]
-    // - 바닥 면적 250㎡ 미만 또는 폭 8m 미만 부속 시설(경비실/변전실)은 고층 제외 (뾰족 기둥 원천 차단)
+    // [규격 1: 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minWidth < 7.5m)]
+    // - 주변 아파트 POI 여부와 무관하게 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
+    // - 실제 층수: 6.5m ~ 10.0m (2층 ~ 3층)
     // -------------------------------------------------------------------------
-    if (isApartmentTag && areaSqm >= 250 && minWidth >= 8.0) {
+    if (areaSqm < 220 || minWidth < 7.5) {
+      const resH = 6.5 + (seed % 36) * 0.1; // 6.5m ~ 10.0m
+      return Math.min(10.5, resH);
+    }
+
+    // -------------------------------------------------------------------------
+    // [규격 2: 학교·공공청사 (school, public 또는 관공서 태그)]
+    // - 운동장은 0m 바닥 유지, 교사동 건물만 12m ~ 15m (3층 ~ 4층)
+    // -------------------------------------------------------------------------
+    const isSchool = name.includes('학교') || name.includes('초등') || name.includes('중학') || name.includes('고등') || usage.includes('school') || usage.includes('education');
+    if (isSchool && areaSqm < 1500) {
+      return 12.0 + (seed % 4) * 1.0; // 12.0m ~ 15.0m (3~4층)
+    }
+
+    // -------------------------------------------------------------------------
+    // [규격 3: 진짜 아파트 단지 (apartments 또는 area >= 400㎡인 장방형/타워형 주거 건물)]
+    // - 스펙: 45m ~ 75m (15층 ~ 25층)
+    // -------------------------------------------------------------------------
+    const isGenuineApt = (isApartmentTag || (areaSqm >= 400 && minWidth >= 8.5)) && areaSqm >= 250 && minWidth >= 8.0;
+    if (isGenuineApt) {
       const aptH = 45.0 + (seed % 31) * 1.0; // 45.0m ~ 75.0m
       return aptH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 2: 공공기관·관공서·대형 빌딩 (area >= 700㎡ 또는 관공서 태그)]
+    // [규격 4: 공공기관·관공서·대형 빌딩 (area >= 700㎡ 또는 관공서 태그)]
     // 스펙: 24m ~ 48m (7층 ~ 15층 랜드마크 조형)
     // -------------------------------------------------------------------------
     if (areaSqm >= 700 || hasPublicTag || (isBangokArea && areaSqm >= 400 && hasPublicTag)) {
@@ -166,33 +186,21 @@ export class VworldMasterEngine {
     }
 
     // -------------------------------------------------------------------------
-    // [규격 3: 시내 일반 상가·원룸·근린생활 블록 (200㎡ <= area < 700㎡)]
-    // 스펙: 12m ~ 22m (4층 ~ 7층)
+    // [규격 5: 시내 일반 상가 및 근린생활시설 (220㎡ <= area < 500㎡)]
+    // 스펙: 12m ~ 20m (3층 ~ 6층)
     // -------------------------------------------------------------------------
-    if (areaSqm >= 200 && areaSqm < 700) {
-      const commH = 12.0 + (seed % 11) * 1.0; // 12.0m ~ 22.0m
+    if (areaSqm >= 220 && areaSqm < 500) {
+      const commH = 12.0 + (seed % 9) * 1.0; // 12.0m ~ 20.0m
       return commH;
     }
 
-    // -------------------------------------------------------------------------
-    // [규격 4: 단독주택·다세대 빌라 (50㎡ <= area < 200㎡)]
-    // 스펙: 7.5m ~ 11.5m (2.5층 ~ 3.5층 - 절대 납작한 0~1m 평면 금지)
-    // -------------------------------------------------------------------------
-    if (areaSqm >= 50 && areaSqm < 200) {
-      const resH = 7.5 + (seed % 5) * 1.0; // 7.5m ~ 11.5m
-      return resH;
-    }
-
-    // 기본 보증 높이 (모든 건물 입체화 보증: 최소 7.5m ~ 12m)
-    const baseH = Math.max(7.5, 7.5 + (seed % 5) * 1.0);
-    if (areaSqm < 250 || minWidth < 8.0) {
-      return Math.min(baseH, 12.0);
-    }
+    // 기본 보증 높이 (기타 500㎡ 이상 상업/업무 건물: 12.0m ~ 22.0m)
+    const baseH = Math.max(12.0, 12.0 + (seed % 11) * 1.0);
     return baseH;
   }
 
   /**
-   * 세장비 및 소형 필지 안전 캡 (250㎡ 미만 또는 폭 8m 미만 뾰족 기둥 방지 클램핑: 최대 12m)
+   * 세장비 및 소형 필지 안전 캡 (220㎡ 미만 또는 폭 7.5m 미만: 최대 10.5m)
    */
   private static clampSafetyHeight(
     rawH: number,
@@ -200,9 +208,9 @@ export class VworldMasterEngine {
     minWidth: number,
     seed: number
   ): number {
-    if (areaSqm < 250 || minWidth < 8.0) {
-      // 250㎡ 미만 소형 건물이나 폭 8m 미만 건물은 절대 높이 12m(3층) 초과 불가
-      return Math.min(Math.max(3.5, rawH > 0 ? rawH : 7.5 + (seed % 3) * 1.0), 12.0);
+    if (areaSqm < 220 || minWidth < 7.5) {
+      // 220㎡ 미만 소형 건물이나 폭 7.5m 미만 건물은 절대 높이 10.5m(3층) 초과 불가
+      return Math.min(10.5, Math.max(6.5, rawH > 0 ? rawH : 6.5 + (seed % 36) * 0.1));
     }
     const safeW = Math.max(6.0, minWidth);
     const maxAllowed = Math.max(14.0, safeW * 4.0);
@@ -226,15 +234,28 @@ export class VworldMasterEngine {
     const cLat = centerLngLat ? centerLngLat[1] : 37.34;
     const isBangokOffice = this.isBangokInnovationZone(cLng, cLat) && (areaSqm >= 400 || height >= 20.0);
 
+    const isLowRiseResi = areaSqm < 220 || minWidth < 7.5;
+    const rawName = String(properties.buld_nm || properties.name || '').toLowerCase();
+    const rawUsage = String(properties.mainPurpsCdNm || properties.use || properties.usage || '').toLowerCase();
+    const isSchool = rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등') || rawUsage.includes('school') || rawUsage.includes('education');
+
     let buildingType: VworldMasterBuildingSpec['buildingType'] = 'residential';
-    let typeName = '일반 주거 빌라';
+    let typeName = '소형 단독주택·다세대·원룸';
     let wallSlot = 'villa_red_brick';
-    let roofSlot = 'roof_concrete_warmgray';
+    let roofSlot = 'roof_terracotta_tile';
     let hasParapet = true;
     let hasPenthouse = false;
     let roofStyle: VworldMasterBuildingSpec['roofStyle'] = 'flat_parapet';
 
-    if (isHighRiseApt) {
+    if (isLowRiseResi) {
+      buildingType = 'residential';
+      typeName = '소형 단독주택·다세대·원룸';
+      wallSlot = seed % 3 === 0 ? 'villa_red_brick' : seed % 3 === 1 ? 'villa_piloti_stucco' : 'villa_sand_brick';
+      roofSlot = seed % 3 === 0 ? 'roof_terracotta_tile' : seed % 3 === 1 ? 'roof_blue_slate' : 'roof_urethane_green';
+      roofStyle = seed % 2 === 0 ? 'gabled' : 'flat_parapet';
+      hasParapet = roofStyle === 'flat_parapet';
+      hasPenthouse = false;
+    } else if (isHighRiseApt) {
       buildingType = 'apartment';
       typeName = '한국형 대단지 아파트';
       wallSlot = seed % 3 === 0 ? 'apt_preset_a' : seed % 3 === 1 ? 'apt_preset_b' : 'apt_preset_c';
@@ -242,30 +263,30 @@ export class VworldMasterEngine {
       hasParapet = true;
       hasPenthouse = true; // 2.8m 엘리베이터 권상기실
       roofStyle = 'flat_parapet';
+    } else if (isSchool) {
+      buildingType = 'public_office';
+      typeName = '초·중·고교 교사동';
+      wallSlot = 'gov_school';
+      roofSlot = seed % 2 === 0 ? 'roof_terracotta_tile' : 'roof_concrete_warmgray';
+      roofStyle = seed % 2 === 0 ? 'gabled' : 'flat_parapet';
+      hasParapet = roofStyle === 'flat_parapet';
+      hasPenthouse = false;
     } else if (isBangokOffice) {
       buildingType = 'public_office';
       typeName = '혁신도시 공공기관·업무타워';
       wallSlot = seed % 2 === 0 ? 'comm_sky_curtain' : 'comm_granite_tile';
-      roofSlot = 'roof_urethane_sage';
+      roofSlot = 'roof_urethane_green';
       hasParapet = true;
       hasPenthouse = true;
       roofStyle = 'flat_parapet';
-    } else if (height >= 12.0) {
+    } else {
       buildingType = 'commercial';
-      typeName = '시내 상가·오피스 빌딩';
-      wallSlot = seed % 3 === 0 ? 'comm_granite_tile' : seed % 3 === 1 ? 'comm_charcoal_panel' : 'comm_sky_curtain';
-      roofSlot = 'roof_urethane_sage';
+      typeName = '시내 상가 및 근린생활시설';
+      wallSlot = seed % 3 === 0 ? 'comm_granite_tile' : seed % 3 === 1 ? 'comm_charcoal_panel' : 'comm_red_brick';
+      roofSlot = 'roof_urethane_green';
       hasParapet = true;
       hasPenthouse = seed % 2 === 0;
       roofStyle = 'flat_parapet';
-    } else {
-      buildingType = 'residential';
-      typeName = '단독주택·빌라·군막사';
-      wallSlot = seed % 3 === 0 ? 'villa_red_brick' : seed % 3 === 1 ? 'villa_brown_brick' : 'villa_granite_stone';
-      roofSlot = seed % 3 === 0 ? 'roof_urethane_sage' : seed % 3 === 1 ? 'roof_concrete_warmgray' : 'roof_terracotta_tile';
-      hasParapet = true;
-      hasPenthouse = false;
-      roofStyle = 'flat_parapet'; // 완전 수평 평면 슬래브 + 0.8m 난간
     }
 
     return {

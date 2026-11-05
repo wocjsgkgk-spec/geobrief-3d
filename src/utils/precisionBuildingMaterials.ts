@@ -64,27 +64,57 @@ export function classifyBuildingStyle(
   const realUse = String(featProps.realUse || featProps.use || featProps.type || '');
   const absSeed = Math.abs(seed);
 
-  const isApt =
-    realUse.includes('아파트') ||
-    realUse.includes('공동주택') ||
-    buldNm.includes('아파트') ||
-    buldNm.includes('아이파크') ||
-    buldNm.includes('푸르지오') ||
-    buldNm.includes('힐스테이트') ||
-    buldNm.includes('자이') ||
-    buldNm.includes('롯데캐슬') ||
-    buldNm.includes('에버빌') ||
-    buldNm.includes('더샵') ||
-    buldNm.includes('청솔') ||
-    (height >= 24 && areaSqm >= 280);
+  // ---------------------------------------------------------------------------
+  // 1. [소형 단독주택·다세대·원룸] area < 220㎡ 최우선 강제 분기
+  // - 주변에 아파트 POI가 있더라도 절대 11m(3.5층) 초과 금지
+  // - 외관: 밝은 크림 스타코, 적벽돌(#8c3828), 황토 파벽돌 외벽 (Slot 13, 14, 15)
+  // - 지붕: ㅅ자형 3D 경사 박공지붕 또는 평슬래브 + 적갈색 기와(#7c3626) / 청색 강판(#254e7a) / 초록 우레탄 옥상
+  // ---------------------------------------------------------------------------
+  if (areaSqm < 220) {
+    const facadeSlot = 13 + (absSeed % 3); // 13: 적벽돌(#8c3828), 14: 크림 스타코, 15: 황토 파벽돌
+    const isGabled = absSeed % 2 === 0;
+    const roofType: 'gabled' | 'concrete' = isGabled ? 'gabled' : 'concrete';
+    const roofPick = absSeed % 3;
+    const roofColorRgb =
+      roofPick === 0
+        ? ROOF_COLORS.terracottaTile // #7c3626 적갈색 기와
+        : roofPick === 1
+        ? ROOF_COLORS.blueSlate      // #254e7a 청색 강판
+        : ROOF_COLORS.urethaneGreen; // #3b6e52 초록 우레탄
+
+    return {
+      category: 'villa',
+      facadeSlot,
+      sideWallSlot: facadeSlot,
+      podiumSlot: facadeSlot,
+      signboardSlot: facadeSlot,
+      porchSlot: facadeSlot,
+      roofType,
+      roofColorRgb,
+      parapetColorRgb: ROOF_COLORS.parapetGray,
+      penthouseColorRgb: ROOF_COLORS.penthouseCore,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. [학교·공공청사] (school, public 또는 관공서 태그)
+  // - 교사동 건물 12m ~ 15m (3층 ~ 4층)
+  // - 외관: 오렌지 테라코타(#d97742) & 적벽돌 투톤 학교 외벽 및 규칙적 교실 창문 격자 (Slot 11)
+  // ---------------------------------------------------------------------------
+  const isSchool =
+    buldNm.includes('학교') ||
+    buldNm.includes('초등') ||
+    buldNm.includes('중학') ||
+    buldNm.includes('고등') ||
+    realUse.includes('학교') ||
+    realUse.includes('교육');
 
   const isGovPublic =
+    isSchool ||
     realUse.includes('공공') ||
     realUse.includes('관공서') ||
     realUse.includes('업무') ||
     realUse.includes('청사') ||
-    realUse.includes('학교') ||
-    realUse.includes('교육') ||
     realUse.includes('병원') ||
     buldNm.includes('청사') ||
     buldNm.includes('시청') ||
@@ -92,12 +122,7 @@ export function classifyBuildingStyle(
     buldNm.includes('공단') ||
     buldNm.includes('공사') ||
     buldNm.includes('센터') ||
-    buldNm.includes('학교') ||
-    buldNm.includes('초등학교') ||
-    buldNm.includes('중학교') ||
-    buldNm.includes('고등학교') ||
     buldNm.includes('병원') ||
-    // 반곡동 혁신도시 공공기관 클러스터 좌표
     (centerLngLat &&
       centerLngLat[0] >= 127.965 &&
       centerLngLat[0] <= 128.005 &&
@@ -105,84 +130,90 @@ export function classifyBuildingStyle(
       centerLngLat[1] <= 37.345 &&
       height >= 14);
 
-  const isIndustrial =
-    realUse.includes('공장') ||
-    realUse.includes('창고') ||
-    realUse.includes('물류') ||
-    realUse.includes('체육') ||
-    buldNm.includes('창고') ||
-    buldNm.includes('물류') ||
-    (areaSqm >= 1200 && height <= 15);
-
-  const isLowRiseResidential =
-    height <= 12 &&
-    (realUse.includes('단독') ||
-      realUse.includes('다세대') ||
-      realUse.includes('연립') ||
-      realUse.includes('빌라') ||
-      realUse.includes('주택') ||
-      areaSqm < 220);
-
-  let category: 'apartment' | 'commercial' | 'public' | 'villa';
-  let facadeSlot = 0;
-  let roofType: 'urethane' | 'concrete' | 'gabled' | 'zinc' = 'concrete';
-  let roofColorRgb = ROOF_COLORS.concreteSlab;
-
-  if (isApt) {
-    category = 'apartment';
-    facadeSlot = absSeed % 5; // Group 0~4
-    roofType = 'concrete';
-    roofColorRgb = ROOF_COLORS.concreteSlab;
-  } else if (isGovPublic) {
-    category = 'public';
-    facadeSlot = 10 + (absSeed % 3); // Group 10~12
-    if (facadeSlot === 11 && absSeed % 2 === 0) {
-      roofType = 'gabled';
-      roofColorRgb = ROOF_COLORS.terracottaTile;
-    } else {
-      roofType = 'concrete';
-      roofColorRgb = ROOF_COLORS.concreteSlab;
+  if (isGovPublic) {
+    if (isSchool) {
+      const isGabled = absSeed % 2 === 0;
+      return {
+        category: 'public',
+        facadeSlot: 11, // Group 11: 초·중·고교 교사동 #d97742 오렌지 테라코타 & 투톤
+        sideWallSlot: 11,
+        podiumSlot: 5,
+        signboardSlot: 6,
+        porchSlot: 5,
+        roofType: isGabled ? 'gabled' : 'concrete',
+        roofColorRgb: isGabled ? ROOF_COLORS.terracottaTile : ROOF_COLORS.concreteSlab,
+        parapetColorRgb: ROOF_COLORS.parapetGray,
+        penthouseColorRgb: ROOF_COLORS.penthouseCore,
+      };
     }
-  } else if (isIndustrial) {
-    category = 'commercial';
-    facadeSlot = 7; // 다크 모던 메탈
-    roofType = 'zinc';
-    roofColorRgb = ROOF_COLORS.zincBlue;
-  } else if (isLowRiseResidential) {
-    category = 'villa';
-    facadeSlot = 13 + (absSeed % 3); // Group 13~15
-    // 단독주택·빌라 (전체 20% 박공지붕): 적갈색 기와(#7c3626) 또는 청색 강판(#1e40af), 일부 우레탄 녹색
-    if (absSeed % 10 < 5) {
-      roofType = 'gabled';
-      roofColorRgb = absSeed % 3 === 0 ? ROOF_COLORS.blueSlate : ROOF_COLORS.terracottaTile;
-    } else {
-      roofType = 'urethane';
-      roofColorRgb = absSeed % 2 === 0 ? ROOF_COLORS.urethaneGreen : AUTHENTIC_ROOF_COLORS.roofGardenGreen;
-    }
-  } else {
-    // 일반 근린상가 및 오피스 (전체 45% 우레탄 녹색)
-    category = 'commercial';
-    facadeSlot = 5 + (absSeed % 5); // Group 5~9
-    if (absSeed % 10 < 7) {
-      roofType = 'urethane';
-      roofColorRgb = absSeed % 2 === 0 ? ROOF_COLORS.urethaneGreen : AUTHENTIC_ROOF_COLORS.roofGardenGreen;
-    } else {
-      roofType = 'concrete';
-      roofColorRgb = ROOF_COLORS.concreteSlab;
-    }
+    const facadeSlot = 10 + (absSeed % 3); // Group 10~12
+    return {
+      category: 'public',
+      facadeSlot,
+      sideWallSlot: facadeSlot,
+      podiumSlot: 5,
+      signboardSlot: 7,
+      porchSlot: 5,
+      roofType: 'concrete',
+      roofColorRgb: ROOF_COLORS.concreteSlab,
+      parapetColorRgb: ROOF_COLORS.parapetGray,
+      penthouseColorRgb: ROOF_COLORS.penthouseCore,
+    };
   }
 
+  // ---------------------------------------------------------------------------
+  // 3. [진짜 아파트 단지] (apartments 또는 area >= 400㎡인 장방형/타워형 주거 건물)
+  // - 높이 45m ~ 75m (15층 ~ 25층)
+  // - 외관: 밝은 크림 화이트/소프트 베이지 콘크리트 외벽 + 발코니 통창 + 층간 슬래브 줄눈 + 옥상 엘리베이터 권상기실 (Slot 0..4)
+  // ---------------------------------------------------------------------------
+  const isApt =
+    (realUse.includes('아파트') ||
+      buldNm.includes('아파트') ||
+      buldNm.includes('아이파크') ||
+      buldNm.includes('푸르지오') ||
+      buldNm.includes('힐스테이트') ||
+      buldNm.includes('자이') ||
+      buldNm.includes('롯데캐슬') ||
+      buldNm.includes('에버빌') ||
+      buldNm.includes('더샵') ||
+      buldNm.includes('청솔') ||
+      (height >= 25 && areaSqm >= 350)) &&
+    areaSqm >= 250;
+
+  if (isApt) {
+    const facadeSlot = absSeed % 5; // Group 0~4
+    return {
+      category: 'apartment',
+      facadeSlot,
+      sideWallSlot: 2, // Group 2 Warm Gray
+      podiumSlot: 1,   // Group 1 Sand Terracotta
+      signboardSlot: 2,
+      porchSlot: 1,
+      roofType: 'concrete',
+      roofColorRgb: ROOF_COLORS.concreteSlab,
+      parapetColorRgb: ROOF_COLORS.parapetGray,
+      penthouseColorRgb: ROOF_COLORS.penthouseCore,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. [시내 상가 및 근린생활시설] (220㎡ <= area < 500㎡)
+  // - 높이 12m ~ 20m (3층 ~ 6층)
+  // - 외관: 1층 어두운 화강석 쇼윈도 + 컬러 가로 간판 패치 + 화강석/타일 외벽 (Slot 5..9)
+  // - 지붕: 초록색 우레탄 방수 옥상(#3b6e52) 및 0.9m 콘크리트 난간(Parapet)
+  // ---------------------------------------------------------------------------
+  const facadeSlot = 5 + (absSeed % 5); // Group 5~9: 5 화강석, 6 적벽돌, 7 다크메탈, 8 황토벽돌, 9 메디컬
   return {
-    category,
+    category: 'commercial',
     facadeSlot,
-    sideWallSlot: 16,
-    podiumSlot: 17,
-    signboardSlot: 18,
-    porchSlot: 19,
-    roofType,
-    roofColorRgb,
-    parapetColorRgb: [0.72, 0.70, 0.67],
-    penthouseColorRgb: [0.65, 0.63, 0.60],
+    sideWallSlot: 7, // 다크 메탈
+    podiumSlot: 5,   // 화강석 포디움
+    signboardSlot: 6,
+    porchSlot: 5,
+    roofType: 'urethane',
+    roofColorRgb: ROOF_COLORS.urethaneGreen, // #3b6e52
+    parapetColorRgb: ROOF_COLORS.parapetGray,
+    penthouseColorRgb: ROOF_COLORS.penthouseCore,
   };
 }
 
