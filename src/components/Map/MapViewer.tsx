@@ -3211,7 +3211,8 @@ export const MapViewer: React.FC = () => {
       try {
         const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'wj-1st-logistics');
         smartCityLayer.setMode(layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military');
-        smartCityLayer.setVisible(Boolean(layers.firstLogisticsSmartCity));
+        const isMilVisible = layers.militarySites !== false;
+        smartCityLayer.setVisible(isMilVisible);
         map.addLayer(smartCityLayer);
         smartCityComplexLayerRef.current = smartCityLayer;
       } catch (scErr) {
@@ -4257,7 +4258,8 @@ export const MapViewer: React.FC = () => {
       smartCityComplexLayerRef.current.setMode(
         layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military'
       );
-      smartCityComplexLayerRef.current.setVisible(Boolean(layers.firstLogisticsSmartCity));
+      const isMilVisible = layers.militarySites !== false;
+      smartCityComplexLayerRef.current.setVisible(isMilVisible);
     }
   }, [layers.firstLogisticsSmartCity, layers.militarySites, selectedIdleSiteId]);
 

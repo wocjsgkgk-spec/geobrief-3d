@@ -22,6 +22,11 @@ import {
   getGangwonMilitarySiteById,
   GangwonMilitarySite,
 } from '@/constants/gangwonMilitarySites';
+import {
+  GANGWON_18_MILITARY_SITES,
+  getGangwon18MilitarySiteById,
+  Gangwon18MilitarySite,
+} from '@/constants/gangwon18MilitarySites';
 import { elevationCache } from '@/utils/elevationCache';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
@@ -1233,15 +1238,16 @@ export function buildComplexForSite(
   mode: 'current_military' | 'future_masterplan' = 'future_masterplan'
 ): THREE.Group {
   if (mode === 'current_military') {
-    // 위성사진과의 괴리 방지: 현재 군부대 상태에서는 임의의 가상 절차적 박스(더미 막사) 생성을 전면 중단하고, 위성 실사 및 실제 GIS 1:1 건물만 표출
-    return new THREE.Group();
+    // [2단계: 군 유휴부지 영내 군 막사·연병장·정비고 3D 실사 절차적 모델링 반환]
+    return buildMilitaryBarracksSite(mats);
   }
 
   const root = new THREE.Group();
   root.name = `complex_root_${siteId}`;
 
-  // 사이트 식별
-  const targetSite = getGangwonMilitarySiteById(siteId);
+  // 사이트 식별 (18개 시군 통합 식별)
+  const site18 = getGangwon18MilitarySiteById(siteId);
+  const targetSite = site18 || getGangwonMilitarySiteById(siteId);
   const canonicalId = targetSite ? targetSite.id : siteId;
 
   switch (canonicalId) {
@@ -1612,10 +1618,10 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
 
   constructor(initialSiteId = 'first-logistics-wonju') {
     this.currentSiteId = initialSiteId;
-    const site = getGangwonMilitarySiteById(initialSiteId);
+    const site = getGangwon18MilitarySiteById(initialSiteId) || getGangwonMilitarySiteById(initialSiteId);
     if (site) {
       this.centerLngLat = site.center;
-      this.rotationDeg = site.rotationDeg;
+      this.rotationDeg = site.rotationDeg ?? -12;
     }
   }
 
@@ -1678,7 +1684,11 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   public setSite(siteId: string): void {
     if (!siteId) return;
 
-    const site = getGangwonMilitarySiteById(siteId) || GANGWON_MILITARY_SITES[0];
+    const site =
+      getGangwon18MilitarySiteById(siteId) ||
+      getGangwonMilitarySiteById(siteId) ||
+      GANGWON_18_MILITARY_SITES[0] ||
+      GANGWON_MILITARY_SITES[0];
     const targetId = site.id;
 
     if (this.currentSiteId === targetId && this.complexMesh) {
@@ -1688,7 +1698,7 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
 
     this.currentSiteId = targetId;
     this.centerLngLat = site.center;
-    this.rotationDeg = site.rotationDeg;
+    this.rotationDeg = site.rotationDeg ?? -12;
 
     this.rebuildMesh();
   }
