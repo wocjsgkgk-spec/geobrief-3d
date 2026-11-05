@@ -540,6 +540,7 @@ export function safeSetTerrain(
 }
 
 export const MapViewer: React.FC = () => {
+  console.log('ACTIVE_RENDERER_MOUNTED:', 'src/components/Map/MapViewer.tsx');
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
@@ -4322,9 +4323,18 @@ export const MapViewer: React.FC = () => {
 
     if (!layers.buildings3D) return;
 
+    fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
+      .then((res) => {
+        if (res.features.length > 0 && mapRef.current) {
+          const { enrichedFeatures } = injectRealDataIntoFeatures(res.features);
+          applyInjectedDataToMap(mapRef.current, enrichedFeatures, realisticKoreanCityLayerRef.current);
+        }
+      })
+      .catch(() => {});
+
     // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
     syncExternalSpatialBuildings(map);
-  }, [isMapLoaded, layers.buildings3D, syncExternalSpatialBuildings]);
+  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncExternalSpatialBuildings]);
 
   // 9. 베이스맵 전환 (4종 원클릭: 국토부 V-World 항공실사, Google 위성, V-World 클린, Google 로드맵)
   useEffect(() => {

@@ -24,6 +24,7 @@ const MapViewer = dynamic(
 );
 
 export default function Home() {
+  console.log('ACTIVE_RENDERER_MOUNTED:', 'src/app/page.tsx');
   const {
     isPresentationMode,
     togglePresentationMode,
