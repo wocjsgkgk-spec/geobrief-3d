@@ -1344,13 +1344,29 @@ export const MapViewer: React.FC = () => {
       }
     };
 
-    (window as any).__inspectBuilding = (info: SelectedBuildingInfo) => {
-      setSelectedBuilding(info);
-      fetchCadastralAnalysis(info.center[1], info.center[0], selectedRegionId, {
-        bldNm: info.name,
-        grndFlr: info.levels,
-        hei: info.height,
-        usage: info.category,
+    (window as any).__inspectBuilding = (info: any) => {
+      if (!info) return;
+      const safeCenter: [number, number] = Array.isArray(info.center) && info.center.length >= 2
+        ? [info.center[0], info.center[1]]
+        : [127.9358, 37.3592];
+      const safeScreenPos = info.screenPos || (mapRef.current ? mapRef.current.project(safeCenter) : { x: 400, y: 300 });
+
+      const safeInfo: SelectedBuildingInfo = {
+        name: info.name || '강원특별자치도 공간정보 객체',
+        category: info.category || '공간정보 분석대상',
+        levels: info.levels || 15,
+        height: info.height || 48,
+        center: safeCenter,
+        screenPos: { x: safeScreenPos.x, y: safeScreenPos.y },
+        rawProperties: info.rawProperties || {},
+      };
+
+      setSelectedBuilding(safeInfo);
+      fetchCadastralAnalysis(safeCenter[1], safeCenter[0], selectedRegionId, {
+        bldNm: safeInfo.name,
+        grndFlr: safeInfo.levels,
+        hei: safeInfo.height,
+        usage: safeInfo.category,
       });
     };
 
@@ -4834,8 +4850,8 @@ export const MapViewer: React.FC = () => {
             },
           }));
 
-          const src = map.getSource('molit-bridge-tunnel-source') as maplibregl.GeoJSONSource;
-          if (src) {
+          const src = map?.getSource ? (map.getSource('molit-bridge-tunnel-source') as maplibregl.GeoJSONSource) : null;
+          if (src && typeof src.setData === 'function') {
             src.setData({
               type: 'FeatureCollection',
               features,
@@ -5319,8 +5335,8 @@ export const MapViewer: React.FC = () => {
   ]);
 
   // 지도 이동 시 건물 팝업 화면 좌표 동기화 (DOM 직접 조작 방식으로 리렌더링 차단)
-  const selectedBuildingCenterLng = selectedBuilding?.center[0];
-  const selectedBuildingCenterLat = selectedBuilding?.center[1];
+  const selectedBuildingCenterLng = selectedBuilding?.center?.[0];
+  const selectedBuildingCenterLat = selectedBuilding?.center?.[1];
 
   useEffect(() => {
     if (
