@@ -646,6 +646,7 @@ export async function fetchAndInjectViewportRealData(
       const feats = fusionJson?.features?.features || [];
       for (const f of feats) {
         const p = f.properties || {};
+        const centroid = computePolygonCentroid(f.geometry) || (p.xpos && p.ypos ? [parseFloat(p.xpos), parseFloat(p.ypos)] : undefined);
         fetchedRecords.push({
           id: f.id,
           bldNm: p.buildingName || p.buld_nm || p.name,
@@ -657,6 +658,7 @@ export async function fetchAndInjectViewportRealData(
           grndFlrCnt: Number(p.grnd_flr || p.gro_flo_co || p.levels || 1),
           heit: Number(p.height || p.hei || 0),
           pnu: p.pnu,
+          coordinates: centroid as [number, number] | undefined,
           geometry: f.geometry,
           source: 'vworld_wfs_fusion',
         });

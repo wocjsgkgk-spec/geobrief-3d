@@ -456,20 +456,18 @@ export async function GET(request: NextRequest) {
 
   const domain = process.env.VWORLD_DOMAIN || 'localhost';
 
-  // 3. 다중 소스 병렬 비동기 수신 (V-World WFS + OSM 태그 + 국토교통부 공공데이터)
-  const geomFilter = `BOX(${minLng},${minLat},${maxLng},${maxLat})`;
+  // 3. 국토교통부 브이월드 OGC WFS 1.1.0 실측 건물 수신
+  const wfsBbox = `${minLat},${minLng},${maxLat},${maxLng},EPSG:4326`;
   const vworldUrl = assertSafeUpstreamUrl(
-    `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
+    `https://api.vworld.kr/req/wfs?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=lt_c_spbd&SRSNAME=EPSG:4326&BBOX=${wfsBbox}&OUTPUT=application/json&KEY=${encodeURIComponent(
       cleanVworldKey
-    )}&domain=${encodeURIComponent(domain)}&geomFilter=${encodeURIComponent(
-      geomFilter
-    )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`
+    )}&DOMAIN=${encodeURIComponent(domain)}&MAXFEATURES=1000`
   );
 
   const vworldController = new AbortController();
   const vworldTimeout = setTimeout(() => vworldController.abort(), 7000);
 
-  let vworldData: any = null;
+  let vworldFeatures: any[] = [];
   let hasVworld = false;
 
   try {
@@ -480,13 +478,22 @@ export async function GET(request: NextRequest) {
         cache: 'no-store',
       });
       clearTimeout(vworldTimeout);
-      if (vworldRes.ok) {
-        vworldData = await vworldRes.json();
-        hasVworld = vworldData?.response?.status === 'OK';
+
+      const text = await vworldRes.text();
+      if (text.startsWith('<') || text.includes('ServiceException')) {
+        console.error('[V-World WFS Auth/Quota Error]', text.slice(0, 300));
+        hasVworld = false;
+      } else {
+        const vworldData = JSON.parse(text);
+        if (Array.isArray(vworldData.features) && vworldData.features.length > 0) {
+          vworldFeatures = vworldData.features;
+          hasVworld = true;
+        }
       }
     }
-  } catch {
+  } catch (err: any) {
     clearTimeout(vworldTimeout);
+    console.warn('[V-World WFS Fusion Notice]', err?.message || err);
     hasVworld = false;
   }
 
@@ -499,11 +506,8 @@ export async function GET(request: NextRequest) {
   const hasDataGoKr = publicDataMap.size > 0;
   let hasOsm = osmTagsMap.size > 0 || osmFeatures.length > 0;
 
-  // 4. 피처 컬렉션 추출: V-World 우선, V-World 부재 또는 인증키 에러 시 OSM Overpass 건물 폴리곤으로 자동 대체
-  let rawFeatures =
-    hasVworld && vworldData?.response?.result?.featureCollection?.features
-      ? vworldData.response.result.featureCollection.features
-      : [];
+  // 4. 피처 컬렉션 추출: V-World WFS 우선, V-World 부재 또는 인증키 에러 시 OSM Overpass 건물 폴리곤으로 자동 대체 (가짜 더미 0건 보장)
+  let rawFeatures = hasVworld && vworldFeatures.length > 0 ? vworldFeatures : [];
 
   let isOsmFallback = false;
   if (rawFeatures.length === 0 && osmFeatures.length > 0) {
@@ -600,6 +604,12 @@ export async function GET(request: NextRequest) {
         if (height < 45.0) {
           height = Math.round(levels * 3.2 * 10) / 10;
         }
+      }
+
+      // [저층 단독·다세대 주택가 층고 왜곡 방지]: 절대 10.5m 초과 금지 (6.5m ~ 10m 엄격 준수)
+      if (usageType === 'residential') {
+        levels = Math.min(levels, 3);
+        height = Math.min(height, 10.5);
       }
 
       // 건물용도명 추출
