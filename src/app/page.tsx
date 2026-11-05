@@ -2,10 +2,21 @@
 
 import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Header } from '@/components/Header/Header';
-import { ControlPanel } from '@/components/Panel/ControlPanel';
 import { useMapStore } from '@/store/useMapStore';
 import { Minimize2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+
+const Header = dynamic(() => import('@/components/Header/Header').then((m) => m.Header), {
+  ssr: false,
+  loading: () => <header className="h-14 w-full bg-[#0a0f0d] border-b border-[#1e2a22]" />,
+});
+
+const ControlPanel = dynamic(
+  () => import('@/components/Panel/ControlPanel').then((m) => m.ControlPanel),
+  {
+    ssr: false,
+    loading: () => <div className="w-full h-full bg-[#0a0f0c]" />,
+  }
+);
 
 // WebGL MapLibre GL은 클라이언트 전용으로 dynamic import
 const MapViewer = dynamic(
