@@ -25,6 +25,7 @@ import {
 import fs from 'fs';
 import path from 'path';
 import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
+import { executeSemanticSpatialQuery } from '@/lib/vendor/semanticSpatialQuery';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,11 @@ export interface UnifiedSearchResult {
   regionName?: string;
   pnu?: string;
   jibun?: string;
-  source: 'preset' | 'vworld_place' | 'vworld_address' | 'cadastral_local' | 'osm';
+  siteId?: string;
+  score?: number;
+  rationale?: string;
+  verdict?: 'GREEN' | 'YELLOW' | 'RED';
+  source: 'preset' | 'vworld_place' | 'vworld_address' | 'cadastral_local' | 'osm' | 'semantic_ontology';
 }
 
 export async function GET(req: NextRequest) {
@@ -59,6 +64,34 @@ export async function GET(req: NextRequest) {
 
   const results: UnifiedSearchResult[] = [];
   const qLower = q.toLowerCase();
+
+  // ---------------------------------------------------------------------------
+  // [0단계: NVIDIA Auto-Ontology 공간 시맨틱 쿼리 엔진 실시간 추론]
+  // 자연어 질의(지역·면적·경사도·규제·목적) 매칭 후보지 우선 추출
+  // ---------------------------------------------------------------------------
+  try {
+    const semanticMatches = executeSemanticSpatialQuery(q);
+    for (const match of semanticMatches.slice(0, 3)) {
+      results.push({
+        id: `semantic-${match.site.id}`,
+        title: `${match.site.name} [적지 점수 ${match.score}점]`,
+        category: 'military_site',
+        categoryLabel: '🧠 AI 온톨로지 매칭',
+        badge: match.matchingBadges.slice(0, 3).join(' · '),
+        address: `${match.site.district} · ${match.matchingRationale}`,
+        coords: match.site.center,
+        regionId: match.site.regionId,
+        regionName: match.site.regionName,
+        siteId: match.site.id,
+        score: match.score,
+        rationale: match.matchingRationale,
+        verdict: match.ontologyReport.verdict,
+        source: 'semantic_ontology',
+      });
+    }
+  } catch (err) {
+    console.warn('[GangwonSearchAPI] Semantic spatial query error:', err);
+  }
 
   // ---------------------------------------------------------------------------
   // [1단계: 강원 18개 시·군 프리셋 0ms 즉시 검색]
