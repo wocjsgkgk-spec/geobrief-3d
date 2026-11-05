@@ -84,11 +84,7 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
   const { selectedIdleSiteId, layers, toggleLayer } = useMapStore();
   const militarySite = selectedIdleSiteId ? getGangwon18MilitarySiteById(selectedIdleSiteId) : null;
 
-  if (!isOpen || (!selectedBuilding && !cadastralReport)) {
-    return null;
-  }
-
-  // 데이터 추출 및 폴백
+  // 데이터 추출 및 폴백 (안전한 옵셔널 체이닝)
   const raw = selectedBuilding?.rawProperties || {};
   const isBridgeOrTunnel = raw.type === 'bridge' || raw.type === 'tunnel' || raw['시설구분'];
 
@@ -158,7 +154,11 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
   const nearestTunnel = cadastralReport?.accessibilityReport?.nearestTunnel;
 
   // NVIDIA Auto-Ontology 복합 인허가 & 규제 지식 그래프 리포트
+  // [React Error #310 완전 방지: 훅 호출을 컴포넌트 최상단에서 무조건 실행]
   const ontologyReport = useMemo(() => {
+    if (!isOpen || (!selectedBuilding && !cadastralReport)) {
+      return null;
+    }
     return SpatialOntologyEngine.assessLegalFeasibility({
       siteId: militarySite?.id || selectedIdleSiteId || undefined,
       pnu: pnu !== '-' ? pnu : undefined,
@@ -168,7 +168,22 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
       currentZoning: zoneName,
       groundElevationM: elevM,
     });
-  }, [militarySite, selectedIdleSiteId, pnu, address, titleName, parcelAreaSqm, totalAreaSqm, slopeDeg, zoneName, elevM]);
+  }, [
+    isOpen,
+    Boolean(selectedBuilding),
+    Boolean(cadastralReport),
+    militarySite?.id,
+    selectedIdleSiteId,
+    pnu,
+    address,
+    titleName,
+    militarySite?.areaSqm,
+    parcelAreaSqm,
+    totalAreaSqm,
+    slopeDeg,
+    zoneName,
+    elevM,
+  ]);
 
   const handleCopy = () => {
     const text = `[GeoBrief 3D 실측 공간정보 인스펙터 리포트]
@@ -179,12 +194,12 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
 - 구분: ${categoryLabel}
 
 ■ [⚖️ 복합 인허가 & 규제 온톨로지 판정]
-- 신호등 판정: ${ontologyReport.verdictLabel}
-- 판정 상세: ${ontologyReport.verdictDetail}
-- 군사규제: ${ontologyReport.militaryRestrictionLevel} (협의기관: ${ontologyReport.competentMilitaryAgency})
-- 종상향 스펙: ${ontologyReport.developmentSpec.targetZoning} (용적률 최대 ${ontologyReport.developmentSpec.targetFarPct}%, 최고고도 ${ontologyReport.developmentSpec.maxAllowableHeightM}m)
-- 지형 산지전용: ${ontologyReport.developmentSpec.slopeDescription}
-- 추정 종전부지 가액: 약 ${ontologyReport.developmentSpec.estimatedLandValueEok.toLocaleString()}억원 (연면적 ${Math.round(ontologyReport.developmentSpec.developmentCapacitySqm / 3.30578).toLocaleString()}평)
+- 신호등 판정: ${ontologyReport?.verdictLabel || '-'}
+- 판정 상세: ${ontologyReport?.verdictDetail || '-'}
+- 군사규제: ${ontologyReport?.militaryRestrictionLevel || '-'} (협의기관: ${ontologyReport?.competentMilitaryAgency || '-'})
+- 종상향 스펙: ${ontologyReport?.developmentSpec.targetZoning || '-'} (용적률 최대 ${ontologyReport?.developmentSpec.targetFarPct || 0}%, 최고고도 ${ontologyReport?.developmentSpec.maxAllowableHeightM || 0}m)
+- 지형 산지전용: ${ontologyReport?.developmentSpec.slopeDescription || '-'}
+- 추정 종전부지 가액: 약 ${ontologyReport?.developmentSpec.estimatedLandValueEok.toLocaleString() || 0}억원 (연면적 ${Math.round((ontologyReport?.developmentSpec.developmentCapacitySqm || 0) / 3.30578).toLocaleString()}평)
 
 ■ [1] 건축물대장 표제부
 - 주용도: ${mainPurpose}
@@ -210,6 +225,11 @@ ${bufferActive && bufferStats ? `\n■ [4] 반경 500m 인프라 집계\n- 총 �
     setCopied(true);
     setTimeout(() => setCopied(false), 2200);
   };
+
+  // [렌더링 가드] 모든 훅(useState, useMemo) 호출 완료 후 안전한 null 반환
+  if (!isOpen || (!selectedBuilding && !cadastralReport) || !ontologyReport) {
+    return null;
+  }
 
   return (
     <div

@@ -25,16 +25,14 @@ const MapViewer = dynamic(
 
 export default function Home() {
   console.log('ACTIVE_RENDERER_MOUNTED:', 'src/app/page.tsx');
-  const {
-    isPresentationMode,
-    togglePresentationMode,
-    setIsPresentationMode,
-    isSidebarCollapsed,
-    toggleSidebarCollapse,
-    isMobilePanelOpen,
-    toggleMobilePanel,
-    setIsMobilePanelOpen,
-  } = useMapStore();
+  const isPresentationMode = useMapStore((s) => s.isPresentationMode);
+  const togglePresentationMode = useMapStore((s) => s.togglePresentationMode);
+  const setIsPresentationMode = useMapStore((s) => s.setIsPresentationMode);
+  const isSidebarCollapsed = useMapStore((s) => s.isSidebarCollapsed);
+  const toggleSidebarCollapse = useMapStore((s) => s.toggleSidebarCollapse);
+  const isMobilePanelOpen = useMapStore((s) => s.isMobilePanelOpen);
+  const toggleMobilePanel = useMapStore((s) => s.toggleMobilePanel);
+  const setIsMobilePanelOpen = useMapStore((s) => s.setIsMobilePanelOpen);
 
   // 브라우저 전체화면(Fullscreen) API 동기화 및 ESC 감지
   useEffect(() => {

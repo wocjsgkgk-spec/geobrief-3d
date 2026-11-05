@@ -21,6 +21,10 @@ import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 
 export const WONJU_1ST_LOGISTICS_CENTER: [number, number] = [127.9358, 37.3592];
 
+function safeNonIndexed(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  return geo.index ? geo.toNonIndexed() : geo;
+}
+
 // =============================================================================
 // 1. 단일/듀얼 Draw Call 경량 로우폴리 수목 지오메트리 빌더
 // =============================================================================
@@ -32,7 +36,7 @@ export const WONJU_1ST_LOGISTICS_CENTER: [number, number] = [127.9358, 37.3592];
  */
 export function createGangwonConiferGeometry(): THREE.BufferGeometry {
   // 1) 수피 줄기
-  const trunk = new THREE.CylinderGeometry(0.20, 0.38, 2.8, 5).toNonIndexed();
+  const trunk = safeNonIndexed(new THREE.CylinderGeometry(0.20, 0.38, 2.8, 5));
   trunk.deleteAttribute('uv');
   trunk.translate(0, 1.4, 0);
 
@@ -45,19 +49,19 @@ export function createGangwonConiferGeometry(): THREE.BufferGeometry {
   trunk.setAttribute('color', new THREE.BufferAttribute(trunkColors, 3));
 
   // 2) 4단 피라미드형 원추 수관 (강원 소나무/잣나무 특유의 층층이 뻗은 바늘잎)
-  const tier1 = new THREE.ConeGeometry(2.4, 2.5, 6).toNonIndexed();
+  const tier1 = safeNonIndexed(new THREE.ConeGeometry(2.4, 2.5, 6));
   tier1.deleteAttribute('uv');
   tier1.translate(0, 3.2, 0);
 
-  const tier2 = new THREE.ConeGeometry(1.9, 2.3, 6).toNonIndexed();
+  const tier2 = safeNonIndexed(new THREE.ConeGeometry(1.9, 2.3, 6));
   tier2.deleteAttribute('uv');
   tier2.translate(0, 4.8, 0);
 
-  const tier3 = new THREE.ConeGeometry(1.3, 2.0, 5).toNonIndexed();
+  const tier3 = safeNonIndexed(new THREE.ConeGeometry(1.3, 2.0, 5));
   tier3.deleteAttribute('uv');
   tier3.translate(0, 6.2, 0);
 
-  const tierTop = new THREE.ConeGeometry(0.75, 1.6, 5).toNonIndexed();
+  const tierTop = safeNonIndexed(new THREE.ConeGeometry(0.75, 1.6, 5));
   tierTop.deleteAttribute('uv');
   tierTop.translate(0, 7.4, 0);
 
@@ -89,7 +93,7 @@ export function createGangwonConiferGeometry(): THREE.BufferGeometry {
  * - 줄기: 자작나무 은백색/참나무 회갈색 줄기
  */
 export function createGangwonDeciduousGeometry(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.22, 0.40, 2.5, 5).toNonIndexed();
+  const trunk = safeNonIndexed(new THREE.CylinderGeometry(0.22, 0.40, 2.5, 5));
   trunk.deleteAttribute('uv');
   trunk.translate(0, 1.25, 0);
 
@@ -103,17 +107,17 @@ export function createGangwonDeciduousGeometry(): THREE.BufferGeometry {
   trunk.setAttribute('color', new THREE.BufferAttribute(trunkColors, 3));
 
   // 하단 대형 돔
-  const crown1 = new THREE.DodecahedronGeometry(2.3, 1).toNonIndexed();
+  const crown1 = safeNonIndexed(new THREE.DodecahedronGeometry(2.3, 1));
   crown1.deleteAttribute('uv');
   crown1.translate(0, 3.5, 0);
 
   // 중단 비대칭 돔
-  const crown2 = new THREE.DodecahedronGeometry(1.8, 1).toNonIndexed();
+  const crown2 = safeNonIndexed(new THREE.DodecahedronGeometry(1.8, 1));
   crown2.deleteAttribute('uv');
   crown2.translate(0.3, 4.9, -0.2);
 
   // 상단 소형 돔
-  const crown3 = new THREE.DodecahedronGeometry(1.3, 1).toNonIndexed();
+  const crown3 = safeNonIndexed(new THREE.DodecahedronGeometry(1.3, 1));
   crown3.deleteAttribute('uv');
   crown3.translate(-0.2, 6.0, 0.2);
 
@@ -150,24 +154,24 @@ export function createUnifiedTreeGeometry(): THREE.BufferGeometry {
  * - 7.5m 강철 기둥 (#64748b) + 도로 방향 2.2m 캔틸레버 암 + LED 조명 헤드(#cbd5e1) 및 발광 렌즈(#fef08a)
  */
 export function createStreetLightPoleGeometry(): THREE.BufferGeometry {
-  const base = new THREE.CylinderGeometry(0.28, 0.32, 0.25, 6).toNonIndexed();
+  const base = safeNonIndexed(new THREE.CylinderGeometry(0.28, 0.32, 0.25, 6));
   base.deleteAttribute('uv');
   base.translate(0, 0.125, 0);
 
-  const pole = new THREE.CylinderGeometry(0.12, 0.18, 7.2, 6).toNonIndexed();
+  const pole = safeNonIndexed(new THREE.CylinderGeometry(0.12, 0.18, 7.2, 6));
   pole.deleteAttribute('uv');
   pole.translate(0, 3.725, 0);
 
-  const arm = new THREE.CylinderGeometry(0.08, 0.10, 2.2, 5).toNonIndexed();
+  const arm = safeNonIndexed(new THREE.CylinderGeometry(0.08, 0.10, 2.2, 5));
   arm.deleteAttribute('uv');
   arm.rotateZ(Math.PI / 3.2);
   arm.translate(0.9, 7.3, 0);
 
-  const head = new THREE.BoxGeometry(0.35, 0.12, 0.65).toNonIndexed();
+  const head = safeNonIndexed(new THREE.BoxGeometry(0.35, 0.12, 0.65));
   head.deleteAttribute('uv');
   head.translate(1.9, 7.6, 0);
 
-  const lens = new THREE.BoxGeometry(0.26, 0.03, 0.52).toNonIndexed();
+  const lens = safeNonIndexed(new THREE.BoxGeometry(0.26, 0.03, 0.52));
   lens.deleteAttribute('uv');
   lens.translate(1.9, 7.53, 0);
 
@@ -197,34 +201,34 @@ export function createStreetLightPoleGeometry(): THREE.BufferGeometry {
  * - 6.5m 수직 지주 + 4.5m 수평 캔틸레버 지주 + 삼색등(적/황/녹) 하우징
  */
 export function createTrafficSignalMastGeometry(): THREE.BufferGeometry {
-  const base = new THREE.CylinderGeometry(0.32, 0.36, 0.30, 6).toNonIndexed();
+  const base = safeNonIndexed(new THREE.CylinderGeometry(0.32, 0.36, 0.30, 6));
   base.deleteAttribute('uv');
   base.translate(0, 0.15, 0);
 
-  const mast = new THREE.CylinderGeometry(0.18, 0.22, 6.5, 6).toNonIndexed();
+  const mast = safeNonIndexed(new THREE.CylinderGeometry(0.18, 0.22, 6.5, 6));
   mast.deleteAttribute('uv');
   mast.translate(0, 3.4, 0);
 
-  const horizArm = new THREE.CylinderGeometry(0.10, 0.12, 4.5, 5).toNonIndexed();
+  const horizArm = safeNonIndexed(new THREE.CylinderGeometry(0.10, 0.12, 4.5, 5));
   horizArm.deleteAttribute('uv');
   horizArm.rotateZ(Math.PI / 2);
   horizArm.translate(2.25, 6.2, 0);
 
-  const housing = new THREE.BoxGeometry(1.2, 0.42, 0.28).toNonIndexed();
+  const housing = safeNonIndexed(new THREE.BoxGeometry(1.2, 0.42, 0.28));
   housing.deleteAttribute('uv');
   housing.translate(3.2, 6.2, 0);
 
-  const redLens = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8).toNonIndexed();
+  const redLens = safeNonIndexed(new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8));
   redLens.deleteAttribute('uv');
   redLens.rotateX(Math.PI / 2);
   redLens.translate(2.8, 6.2, 0.14);
 
-  const yellowLens = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8).toNonIndexed();
+  const yellowLens = safeNonIndexed(new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8));
   yellowLens.deleteAttribute('uv');
   yellowLens.rotateX(Math.PI / 2);
   yellowLens.translate(3.2, 6.2, 0.14);
 
-  const greenLens = new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8).toNonIndexed();
+  const greenLens = safeNonIndexed(new THREE.CylinderGeometry(0.14, 0.14, 0.05, 8));
   greenLens.deleteAttribute('uv');
   greenLens.rotateX(Math.PI / 2);
   greenLens.translate(3.6, 6.2, 0.14);

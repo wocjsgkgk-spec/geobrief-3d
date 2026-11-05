@@ -5422,6 +5422,7 @@ export const MapViewer: React.FC = () => {
       ].filter((l) => Boolean(map.getLayer(l)));
 
       const rendered = map.queryRenderedFeatures({ layers: bldgLayerIds });
+      const [cMinX, cMinY, cMaxX, cMaxY] = turf.bbox(circle);
       let resCount = 0;
       let comCount = 0;
       let pubCount = 0;
@@ -5440,7 +5441,7 @@ export const MapViewer: React.FC = () => {
             // ignore
           }
         }
-        if (pt && turf.booleanPointInPolygon(turf.point(pt), circle)) {
+        if (pt && pt[0] >= cMinX && pt[0] <= cMaxX && pt[1] >= cMinY && pt[1] <= cMaxY && turf.booleanPointInPolygon(turf.point(pt), circle)) {
           total++;
           const p = (feat.properties || {}) as Record<string, any>;
           const uType = String(p.usageType || p.bld_category || p.main_purps_cd_nm || '');
@@ -5619,11 +5620,15 @@ export const MapViewer: React.FC = () => {
       ].filter((l) => Boolean(map.getLayer(l)));
       if (bldgLayerIds.length === 0) return 0;
       const rendered = map.queryRenderedFeatures({ layers: bldgLayerIds });
+      if (rendered.length === 0) return 0;
+      const [minX, minY, maxX, maxY] = turf.bbox(completedPolygon);
       let cnt = 0;
       for (const feat of rendered) {
         if (!feat.geometry) continue;
         try {
           const c = turf.centroid(feat as any);
+          const [cx, cy] = c.geometry.coordinates;
+          if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
           if (turf.booleanPointInPolygon(c, completedPolygon)) cnt++;
         } catch {
           // ignore
