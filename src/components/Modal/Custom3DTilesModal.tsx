@@ -194,8 +194,8 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-[720px] rounded-2xl border border-emerald-500/30 bg-slate-950/95 p-6 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="w-full max-w-[720px] rounded-2xl border border-emerald-500/30 bg-slate-950 p-6 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* 헤더 */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -239,7 +239,7 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
                   },
                   {
                     id: 'vworld_3d_buildings',
-                    name: '브이월드 OGC 실사 3D',
+                    name: '브이월드 OGC 실사 3D (국토부)',
                     desc: '국토부 공식 3D 건물·교량 b3dm 메쉬',
                     tag: '공식 타일셋',
                   },
@@ -287,7 +287,7 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
                       {slot.tag}
                     </span>
                   </div>
-                  <p className="text-[10.5px] text-slate-400 whitespace-nowrap truncate leading-tight">
+                  <p className="text-[10px] text-slate-400 whitespace-nowrap leading-tight">
                     {slot.desc}
                   </p>
                 </button>
@@ -411,9 +411,9 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
 
             <div className="grid grid-cols-3 gap-3">
               {[
-                { sse: 8, label: '8 초정밀', desc: '근거리 고해상도 메쉬' },
-                { sse: 16, label: '16 균형', desc: '표준 스트리밍 권장' },
-                { sse: 24, label: '24 고성능', desc: '화면 밖 즉각 GC 해제' },
+                { sse: 8, label: 'SSE 8 (초정밀)', desc: '근거리 고해상도 메쉬' },
+                { sse: 16, label: 'SSE 16 (균형)', desc: '표준 스트리밍 권장' },
+                { sse: 24, label: 'SSE 24 (고성능)', desc: '화면 밖 즉각 GC 해제' },
               ].map((opt) => (
                 <button
                   key={opt.sse}
