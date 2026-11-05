@@ -2911,10 +2911,6 @@ export const MapViewer: React.FC = () => {
 
         // ---------------------------------------------------------------------
         // ---------------------------------------------------------------------
-        // [1단계: 충돌 유발 구형 fill-extrusion 및 단색 건물 레이어 100% 완전 제거]
-        // Three.js VWorldPhotorealEngine이 100% 전담 렌더링하므로 
-        // 화면을 덮거나 Z-Fighting을 일으키는 구형 GPU 다층/3d-buildings 레이어를 등록하지 않음
-        // ---------------------------------------------------------------------
         for (const sId of ['real-buildings-source', 'fusion-buildings-source']) {
           if (!map.getSource(sId)) {
             map.addSource(sId, {
@@ -2940,6 +2936,21 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'visible' },
           });
         }
+
+        // [강제 집행 2] 베이스맵 원본 건물 폴리곤(25,719동) 100% 정위치 3D 솟아오름 등록
+        // openmaptiles-vector 'building' 소스 기반 GPU 4단 슬라이스 실사 건축 레이어 등록
+        ensureBuildingPatterns(map);
+        const gpuBuildingLayers = createGpuBuildingStackLayers('openmaptiles-vector', 'building');
+        gpuBuildingLayers.forEach((gl) => {
+          if (!map.getLayer(gl.id)) {
+            try {
+              map.addLayer(gl);
+            } catch (layerErr) {
+              console.warn('[MapViewer] gpu building layer add notice:', gl.id, layerErr);
+            }
+          }
+        });
+        setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
 
         // [전술·분석 GeoJSON 소스 및 오버레이 레이어 동적 안전 주입]
         if (fullMapStyle.sources) {
@@ -3216,12 +3227,12 @@ export const MapViewer: React.FC = () => {
       }
 
       // [강원 군 유휴부지 3D 시각화: 병영 막사 vs 미래 마스터플랜 레이어 등록]
+      // [강제 집행 1] 산속 유령 군 막사·연병장·더미 박멸: 기본 등록 및 노출 완전 차단
       try {
         const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'wj-1st-logistics');
-        smartCityLayer.setMode(layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military');
-        const isMilVisible = layers.militarySites !== false;
-        smartCityLayer.setVisible(isMilVisible);
-        map.addLayer(smartCityLayer);
+        smartCityLayer.setMode('future_masterplan');
+        smartCityLayer.setVisible(false);
+        // map.addLayer(smartCityLayer) 호출 배제하여 산속 절차적 막사 영구 차단
         smartCityComplexLayerRef.current = smartCityLayer;
       } catch (scErr) {
         console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
@@ -3253,11 +3264,11 @@ export const MapViewer: React.FC = () => {
         console.warn('[MilitarySiteVisualizer] registration notice:', visErr);
       }
 
-      // [2단계 신규: 브이월드 실사 3D 타일 스트리밍 레이어(VWorld3DTileLayer) 등록]
+      // [강제 집행 1] 동부교 위쪽 거대 회색 상자 무리 영구 차단: VWorld3DTileLayer 맵 등록 영구 차단
       try {
         const vworldTileLayer = new VWorld3DTileLayer();
-        vworldTileLayer.setVisible(!!layers.vworld3DReal && !!layers.buildings3D);
-        map.addLayer(vworldTileLayer);
+        vworldTileLayer.setVisible(false);
+        // map.addLayer(vworldTileLayer) 호출 배제하여 오프셋 XDO 회색 상자 영구 차단
         vworld3DTileLayerRef.current = vworldTileLayer;
         (window as any).__vworld3DTileLayer = vworldTileLayer;
       } catch (vwTileErr) {
@@ -4263,13 +4274,11 @@ export const MapViewer: React.FC = () => {
       if (selectedIdleSiteId) {
         smartCityComplexLayerRef.current.setSite(selectedIdleSiteId);
       }
-      smartCityComplexLayerRef.current.setMode(
-        layers.firstLogisticsSmartCity ? 'future_masterplan' : 'current_military'
-      );
-      const isMilVisible = layers.militarySites !== false;
-      smartCityComplexLayerRef.current.setVisible(isMilVisible);
+      smartCityComplexLayerRef.current.setMode('future_masterplan');
+      // [강제 집행 1] 군 막사 모드 및 산속 더미 영구 차단: 오직 사용자가 스마트시티 미래 레이어를 켰을 때만 표시
+      smartCityComplexLayerRef.current.setVisible(Boolean(layers.firstLogisticsSmartCity));
     }
-  }, [layers.firstLogisticsSmartCity, layers.militarySites, selectedIdleSiteId]);
+  }, [layers.firstLogisticsSmartCity, selectedIdleSiteId]);
 
   // 8-0-3-1. [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진 동기화]
   useEffect(() => {
@@ -4738,9 +4747,10 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     if (!isMapLoaded || !vworld3DTileLayerRef.current) return;
     const hasRealisticBuildings = Boolean(realisticKoreanCityLayerRef.current?.getVisible?.() ?? true);
-    // 실사 Three.js 건물 메쉬 가동 시에는 XDO 합성 더미 건물이 중복 렌더링되지 않도록 상호 배타 가드 적용
-    vworld3DTileLayerRef.current.setBuildingsVisible(!!layers.vworld3DReal && !!layers.buildings3D && !hasRealisticBuildings);
-    vworld3DTileLayerRef.current.setBridgesVisible(!!layers.vworld3DBridges && !!layers.buildings3D);
+    // [강제 집행 1] 오프셋 회색 상자 더미 영구 차단
+    vworld3DTileLayerRef.current.setBuildingsVisible(false);
+    vworld3DTileLayerRef.current.setBridgesVisible(false);
+    vworld3DTileLayerRef.current.setVisible(false);
     vworld3DTileLayerRef.current.setDemVisible(!!layers.vworldDemTerrain);
   }, [layers.vworld3DReal, layers.vworld3DBridges, layers.vworldDemTerrain, layers.buildings3D, isMapLoaded]);
 
@@ -5912,8 +5922,8 @@ export const MapViewer: React.FC = () => {
       realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
       realisticKoreanCityLayerRef.current.setBuildingTheme(buildingTheme);
     }
-    // 단색 도배의 원인이었던 MapLibre GPU 중복 레이어는 항상 비활성화 유지
-    setGpuBuildingLayersVisibility(map, false, true);
+    // [강제 집행 2] 베이스맵 원본 건물 25,719동 100% 3D 솟아오름 유지
+    setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
   }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
   // 21. [3D 다목적 실측 줄자 (3D Ruler & Area) 인터랙션 & GeoJSON 동기화]
@@ -6422,6 +6432,7 @@ export const MapViewer: React.FC = () => {
     if (realisticKoreanCityLayerRef.current) {
       realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
     }
+    setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
     map.triggerRepaint();
   }, [layers.buildings3D, isMapLoaded]);
 
@@ -6894,10 +6905,11 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('cadastral-parcels-line')) {
           map.setLayoutProperty('cadastral-parcels-line', 'visibility', 'none');
         }
-        // 3D 건축물 및 비행안전 천장 표시 (활성 모드에 따라 단일 렌더러만 표시)
+        // 3D 건축물 및 비행안전 천장 표시 (베이스맵 원본 건물 100% 가시성 보장)
         if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', renderMode3D === 'native' ? 'visible' : 'none');
+          map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
         }
+        setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
@@ -7012,12 +7024,13 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty('building-mass-edges', 'visibility', massVis);
         }
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
-        setGpuBuildingLayersVisibility(map, renderMode3D === 'native' && layers.buildings3D);
+        // [강제 집행 2] 모드 무관하게 베이스맵 원본 건물 25,719동 100% 3D 렌더링 유지
+        setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }
         if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+          map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
         }
         if (realisticKoreanCityLayerRef.current) {
           realisticKoreanCityLayerRef.current.setVisible(!!layers.buildings3D);

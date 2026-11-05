@@ -20,6 +20,7 @@ import type { RealisticKoreanCityLayer } from '@/components/Map/RealisticKoreanC
 import type { LOD2BuildingEngine } from '@/components/Map/LOD2BuildingEngine';
 import type { RenderMode3D, Tile3DStreamState } from '@/types/map';
 import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
+import { setGpuBuildingLayersVisibility } from '@/utils/gpuRealisticBuildingStack';
 
 export const ALL_FILL_EXTRUSION_LAYER_IDS = [
   'bldg-tier1-podium',
@@ -157,8 +158,13 @@ export function syncMaster3DRenderer(
     threeboxLayer.setVisible(placedFacilitiesCount > 0);
   }
 
-  // 4. 이중 겹침 및 Z-Fighting 영구 차단을 위해 fill-extrusion은 상호 배타 숨김 유지
-  hideAllFillExtrusionLayers(map);
+  // 4. [강제 집행 2] 베이스맵 원본 건물 폴리곤(25,719동) 100% 정위치 3D 솟아오름 유지
+  // 모드 A, 모드 B, 모드 C 무관하게 베이스맵 실제 건물이 숨겨지지 않고 위성사진 자리 위에서 100% 솟아오르도록 보장
+  if (isBuildingsVisible) {
+    setGpuBuildingLayersVisibility(map, true);
+  } else {
+    hideAllFillExtrusionLayers(map);
+  }
 }
 
 /**

@@ -1100,132 +1100,11 @@ export function buildSmartRoadAndGreenPlaza(mats: SmartCityMaterials): THREE.Gro
 
 // =============================================================================
 // 8-1. 영내 기존 군 막사 & 연병장 3D 컴포넌트 (Current Military Barracks Complex)
+// [강제 집행 1] 산속 유령 군 막사·연병장·더미 박멸: 빈 Group 반환으로 영구 차단
 // =============================================================================
 export function buildMilitaryBarracksSite(mats: SmartCityMaterials): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'military_barracks_complex';
-
-  // 1. 연병장 바닥 (토사 바닥 + 헬리패드)
-  const paradeGeo = new THREE.PlaneGeometry(160, 110);
-  paradeGeo.rotateX(-Math.PI / 2);
-  const paradeMat = new THREE.MeshStandardMaterial({
-    color: 0x937c68, // 토사 흙색
-    roughness: 0.95,
-    metalness: 0.05,
-  });
-  const paradeMesh = new THREE.Mesh(paradeGeo, paradeMat);
-  paradeMesh.position.set(0, 0.2, 0);
-  group.add(paradeMesh);
-
-  // 연병장 백색 트랙 라인
-  const trackGeo = new THREE.RingGeometry(35, 36, 32);
-  trackGeo.rotateX(-Math.PI / 2);
-  const trackMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-  const trackMesh = new THREE.Mesh(trackGeo, trackMat);
-  trackMesh.position.set(0, 0.25, 0);
-  group.add(trackMesh);
-
-  // 중앙 헬리패드 'H' 마크
-  const helipadMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const hBar1 = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 14), helipadMat);
-  hBar1.position.set(-4, 0.28, 0);
-  const hBar2 = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 14), helipadMat);
-  hBar2.position.set(4, 0.28, 0);
-  const hCross = new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 2), helipadMat);
-  hCross.position.set(0, 0.28, 0);
-  group.add(hBar1, hBar2, hCross);
-
-  // 2. 통합 병영 막사 빌더 (3층 샌드베이지 + 적갈색 기와 박공)
-  const createBarracks = (x: number, z: number, rotY: number, name: string) => {
-    const bGroup = new THREE.Group();
-    bGroup.name = name;
-
-    const wallGeo = new THREE.BoxGeometry(36, 9.5, 15);
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: 0xe2dacb, // 샌드 베이지
-      roughness: 0.75,
-      metalness: 0.1,
-    });
-    const wallMesh = new THREE.Mesh(wallGeo, wallMat);
-    wallMesh.position.y = 4.75;
-    bGroup.add(wallMesh);
-
-    // 적갈색 기와 박공 지붕
-    const roofShape = new THREE.Shape();
-    roofShape.moveTo(-8, 0);
-    roofShape.lineTo(0, 3.5);
-    roofShape.lineTo(8, 0);
-    roofShape.closePath();
-
-    const roofGeo = new THREE.ExtrudeGeometry(roofShape, {
-      steps: 1,
-      depth: 38,
-      bevelEnabled: false,
-    });
-    roofGeo.center();
-    const roofMat = new THREE.MeshStandardMaterial({
-      color: 0x7c3626, // 적갈색 기와 박공
-      roughness: 0.6,
-      metalness: 0.15,
-    });
-    const roofMesh = new THREE.Mesh(roofGeo, roofMat);
-    roofMesh.rotation.y = Math.PI / 2;
-    roofMesh.position.y = 9.5 + 1.75;
-    bGroup.add(roofMesh);
-
-    // 현관 캐노피
-    const canopyGeo = new THREE.BoxGeometry(6, 0.4, 3);
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
-    const canopyMesh = new THREE.Mesh(canopyGeo, canopyMat);
-    canopyMesh.position.set(0, 3.5, 8.5);
-    bGroup.add(canopyMesh);
-
-    bGroup.position.set(x, 0, z);
-    bGroup.rotation.y = rotY;
-    return bGroup;
-  };
-
-  group.add(createBarracks(-55, -45, (-10 * Math.PI) / 180, 'barracks_1'));
-  group.add(createBarracks(0, -55, 0, 'barracks_2'));
-  group.add(createBarracks(55, -45, (10 * Math.PI) / 180, 'barracks_3'));
-
-  // 3. 군수물자 종합 보급창고 2동
-  const createWarehouse = (x: number, z: number, rotY: number, colorHex: number) => {
-    const wGroup = new THREE.Group();
-    const bodyGeo = new THREE.BoxGeometry(42, 7, 18);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd4cfc5, roughness: 0.6 });
-    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-    bodyMesh.position.y = 3.5;
-    wGroup.add(bodyMesh);
-
-    const rGeo = new THREE.CylinderGeometry(10, 10, 44, 16, 1, false, 0, Math.PI);
-    rGeo.rotateZ(Math.PI / 2);
-    const rMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.4, metalness: 0.3 });
-    const rMesh = new THREE.Mesh(rGeo, rMat);
-    rMesh.position.y = 7;
-    wGroup.add(rMesh);
-
-    wGroup.position.set(x, 0, z);
-    wGroup.rotation.y = rotY;
-    return wGroup;
-  };
-
-  group.add(createWarehouse(-65, 45, (8 * Math.PI) / 180, 0x1e3a5f)); // 네이비 보급창고
-  group.add(createWarehouse(65, 45, (-8 * Math.PI) / 180, 0x2e4835)); // 국방색 군수 정비고
-
-  // 4. 위병소 및 국기 게양대
-  const guardGeo = new THREE.BoxGeometry(5, 3.5, 5);
-  const guardMat = new THREE.MeshStandardMaterial({ color: 0xe2dacb, roughness: 0.8 });
-  const guardMesh = new THREE.Mesh(guardGeo, guardMat);
-  guardMesh.position.set(-8, 1.75, 75);
-  group.add(guardMesh);
-
-  const poleGeo = new THREE.CylinderGeometry(0.12, 0.15, 14, 8);
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.8, roughness: 0.2 });
-  const poleMesh = new THREE.Mesh(poleGeo, poleMat);
-  poleMesh.position.set(8, 7, 75);
-  group.add(poleMesh);
-
+  group.name = 'military_barracks_complex_disabled';
   return group;
 }
 
@@ -1238,8 +1117,8 @@ export function buildComplexForSite(
   mode: 'current_military' | 'future_masterplan' = 'future_masterplan'
 ): THREE.Group {
   if (mode === 'current_military') {
-    // [2단계: 군 유휴부지 영내 군 막사·연병장·정비고 3D 실사 절차적 모델링 반환]
-    return buildMilitaryBarracksSite(mats);
+    // [강제 집행 1] 산속 유령 군 막사·연병장·더미 박멸: 빈 Group 반환
+    return new THREE.Group();
   }
 
   const root = new THREE.Group();

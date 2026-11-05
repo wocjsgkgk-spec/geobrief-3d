@@ -573,32 +573,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   /**
    * 벡터 타일 건물 피처(6,400여동)와 외부 실측 대장(WFS/Overpass) 피처 결합
+   * [강제 집행 2] 외부 오프셋 GeoJSON 영구 배제: 오직 지도 베이스맵 원본 건물 벡터 타일(openmaptiles-vector)만 100% 사용
    */
   private mergeBuildingFeatures(
     vecFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
     extFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] {
-    if (!extFeats || extFeats.length === 0) return vecFeats;
-    if (!vecFeats || vecFeats.length === 0) return extFeats;
-
-    const result: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [...vecFeats];
-    const seen = new Set<string>();
-
-    for (let i = 0; i < vecFeats.length; i++) {
-      const f = vecFeats[i];
-      if (f.id) seen.add(String(f.id));
-    }
-
-    for (let j = 0; j < extFeats.length; j++) {
-      const ext = extFeats[j];
-      const extId = ext.id ? String(ext.id) : `ext-${j}`;
-      if (!seen.has(extId)) {
-        seen.add(extId);
-        result.push(ext);
-      }
-    }
-
-    return result;
+    // 좌표 오차가 있는 외부 GeoJSON 대신 100% 정위치 베이스맵 벡터 타일 건물 피처만 반환
+    if (vecFeats && vecFeats.length > 0) return vecFeats;
+    return [];
   }
 
   /**
@@ -744,46 +727,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    let unbuiltCount = 0;
-    let modifiedCount = 0;
-    const newFeaturesToBuild: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
-    for (let i = 0; i < features.length; i++) {
-      const f = features[i];
-      const key = getBuildingFeatureKey(f);
-      const ex = this.persistentBuildingMap.get(key);
-      if (!ex) {
-        this.persistentBuildingMap.set(key, f);
-        unbuiltCount++;
-        newFeaturesToBuild.push(f);
-      } else {
-        const exH = Number(ex.properties?.height || ex.properties?.hei || 0);
-        const newH = Number(f.properties?.height || f.properties?.hei || 0);
-        if (newH > exH + 0.5) {
-          this.persistentBuildingMap.set(key, f);
-          modifiedCount++;
-          newFeaturesToBuild.push(f);
-        }
-      }
-      if (!this.builtBuildingKeys.has(key)) {
-        unbuiltCount++;
-      }
-    }
-
-    if (modifiedCount > 500) {
-      this.resetAccumulatedBuffers();
-    } else if (this.masterMesh && unbuiltCount === 0) {
+    // [강제 집행 2] 외부 오프셋 GeoJSON 직접 메쉬화 차단:
+    // 베이스맵 원본 벡터 타일(openmaptiles-vector) 피처만 100% 사용하여 3D 빌드 실행
+    if (this.map) {
+      this.extractAndBuildFromMap();
       return;
-    }
-
-    this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
-
-    if (this.isBuildingGeometry) {
-      this.pendingFeatures = newFeaturesToBuild.length > 0 ? newFeaturesToBuild : this.cachedFeatures;
-      return;
-    }
-
-    if (!this.isMoving) {
-      this.buildRealisticCityMesh(this.masterMesh ? newFeaturesToBuild : this.cachedFeatures);
     }
   }
 
@@ -1262,14 +1210,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [2단계 핵심] 소형 단독주택·다세대·원룸: 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
-      if (areaSqm < 220 || minWidth < 7.5) {
+      // [강제 집행 3] 4대 층고 분리 (소형 단독 6.5~10.5m / 일반 상가 12~21m / 공공·대형 16~42m / 아파트 45~75m)
+      if (isTrueHighRiseApt) {
+        // 4) 아파트 단지: 45m ~ 75m
+        height = Math.min(75.0, Math.max(45.0, height));
+      } else if (areaSqm < 220 || minWidth < 7.5) {
+        // 1) 소형 단독·빌라: 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
         height = Math.min(height, 10.5);
         if (height < 6.5) {
           height = 6.5 + (diverseSeed % 36) * 0.1;
         }
-      } else if (areaSqm >= 220 && areaSqm < 500 && !isTrueHighRiseApt) {
-        height = Math.min(20.0, Math.max(12.0, height));
+      } else if (areaSqm >= 220 && areaSqm < 600) {
+        // 2) 일반 상가·원룸: 12m ~ 21m
+        height = Math.min(21.0, Math.max(12.0, height));
+      } else {
+        // 3) 공공기관·대형 빌딩 (area >= 600): 16m ~ 42m
+        height = Math.min(42.0, Math.max(16.0, height));
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
