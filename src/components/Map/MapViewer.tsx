@@ -42,7 +42,7 @@ import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
-import { syncMaster3DRenderer } from '@/utils/master3DRendererManager';
+import { syncMaster3DRenderer, isPermittedBuildingPolygon } from '@/utils/master3DRendererManager';
 import {
   createGpuBuildingStackLayers,
   ensureBuildingPatterns,
@@ -632,9 +632,9 @@ export const MapViewer: React.FC = () => {
         };
       }
 
-      const MAX_PERSISTENT_FEATURES = 20000;
+      const MAX_PERSISTENT_FEATURES = 45000;
       if (persistentBuildingCacheRef.current.size > MAX_PERSISTENT_FEATURES) {
-        const excess = persistentBuildingCacheRef.current.size - 14000;
+        const excess = persistentBuildingCacheRef.current.size - 35000;
         let removed = 0;
         for (const k of persistentBuildingCacheRef.current.keys()) {
           if (removed >= excess) break;
@@ -647,37 +647,7 @@ export const MapViewer: React.FC = () => {
       newFeatures.forEach((feat, idx) => {
         if (!feat || !feat.geometry) return;
 
-        // [요구사항 2] 건물이 아닌 곳(연속지적도 필지, 용도지역 구역, 공원/단지 landuse) 3D 건물 캐시 유입 100% 원천 차단
         const p = (feat.properties || {}) as Record<string, any>;
-        if (p.is_non_building || p.is_site_boundary) return;
-
-        const isExplicitBuilding = Boolean(
-          p.building ||
-          p.buld_nm ||
-          p.bldNm ||
-          p.buildingName ||
-          p.bd_mgt_sn ||
-          p.mgmBldrgstPk ||
-          p.realUse ||
-          p.grnd_flr ||
-          p.gro_flo_co ||
-          p.grndFlrCnt ||
-          p.hei ||
-          p.heit ||
-          p.height
-        );
-
-        if (!isExplicitBuilding) {
-          if (p.UQ111 || p.UQ111_NM || p.uq111 || p.zoneName || p.zone_nm || p.spfc_nm || p.spfc_cd) return;
-          if (p.landuse || p.leisure || p.boundary || p.admin_level || p.natural) return;
-        }
-
-        const isParcelWithoutBld =
-          Boolean(p.pnu || p.jimok || p.jibun) &&
-          !isExplicitBuilding;
-        if (isParcelWithoutBld) return;
-
-        // [요구사항 2] 바닥 면적 4,000㎡ 초과 거대 구역 폴리곤(학교 부지, 아파트 단지 외곽, 군부대 경계 등) 및 10㎡ 미만 파편 3D 압출 제외
         const coords =
           feat.geometry.type === 'Polygon'
             ? feat.geometry.coordinates[0]
@@ -685,6 +655,7 @@ export const MapViewer: React.FC = () => {
         if (!coords || coords.length < 3) return;
 
         let areaSum = 0;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         const n = coords.length;
         const cLng = coords[0][0];
         const cLat = coords[0][1];
@@ -692,6 +663,11 @@ export const MapViewer: React.FC = () => {
         const mPerLng = 111320 * cosLat;
         const mPerLat = 110574;
         for (let i = 0; i < n; i++) {
+          const pt = coords[i];
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
           const j = (i + 1) % n;
           const x1 = (coords[i][0] - cLng) * mPerLng;
           const y1 = (coords[i][1] - cLat) * mPerLat;
@@ -700,8 +676,13 @@ export const MapViewer: React.FC = () => {
           areaSum += x1 * y2 - x2 * y1;
         }
         const areaSqm = Math.abs(areaSum) * 0.5;
-        const maxLimit = isExplicitBuilding ? 8500 : 4500;
-        if (areaSqm > maxLimit || areaSqm < 10) {
+        const spanXM = Math.max(1, (maxX - minX) * mPerLng);
+        const spanYM = Math.max(1, (maxY - minY) * mPerLat);
+        const minWM = Math.min(spanXM, spanYM);
+        const maxSM = Math.max(spanXM, spanYM);
+
+        // [관문 100% 필터] 비건물(지적도 필지, 용도지역, 공원, 운동장) 및 거대 폴리곤 영구 차단
+        if (!isPermittedBuildingPolygon(p, areaSqm, spanXM, spanYM, maxSM, minWM)) {
           return;
         }
 
@@ -914,17 +895,18 @@ export const MapViewer: React.FC = () => {
   const syncAbortControllerRef = useRef<AbortController | null>(null);
   const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // [1단계 직결] 로컬 실측 데이터베이스(30,466동) 시작 즉시 프리로드 및 실측 저장소 RBush 자동 적재
+  // [1단계 직결] 로컬 실측 데이터베이스(30,037동) 시작 즉시 프리로드 및 실측 저장소 RBush 자동 적재
   useEffect(() => {
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
       .then((res) => {
         if (res.features.length > 0 && mapRef.current) {
-          const { enrichedFeatures } = injectRealDataIntoFeatures(res.features);
+          const { merged } = mergeIntoPersistentBuildingCache(res.features);
+          const { enrichedFeatures } = injectRealDataIntoFeatures(merged);
           applyInjectedDataToMap(mapRef.current, enrichedFeatures, realisticKoreanCityLayerRef.current);
         }
       })
       .catch(() => {});
-  }, [selectedRegionId]);
+  }, [selectedRegionId, mergeIntoPersistentBuildingCache]);
 
   const syncExternalSpatialBuildings = useCallback(
     (mapInstance: maplibregl.Map) => {
@@ -2645,6 +2627,16 @@ export const MapViewer: React.FC = () => {
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
       updateRealtimeMetrics();
+      fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
+        .then((res) => {
+          if (res.features.length > 0 && map) {
+            const { merged } = mergeIntoPersistentBuildingCache(res.features);
+            const { enrichedFeatures } = injectRealDataIntoFeatures(merged);
+            applyInjectedDataToMap(map, enrichedFeatures, realisticKoreanCityLayerRef.current);
+            updateRealtimeMetrics();
+          }
+        })
+        .catch(() => {});
       setTimeout(() => {
         syncExternalSpatialBuildings(map);
       }, 600);
@@ -4344,15 +4336,17 @@ export const MapViewer: React.FC = () => {
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
       .then((res) => {
         if (res.features.length > 0 && mapRef.current) {
-          const { enrichedFeatures } = injectRealDataIntoFeatures(res.features);
+          const { merged } = mergeIntoPersistentBuildingCache(res.features);
+          const { enrichedFeatures } = injectRealDataIntoFeatures(merged);
           applyInjectedDataToMap(mapRef.current, enrichedFeatures, realisticKoreanCityLayerRef.current);
+          updateRealtimeMetrics();
         }
       })
       .catch(() => {});
 
     // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
     syncExternalSpatialBuildings(map);
-  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncExternalSpatialBuildings]);
+  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncExternalSpatialBuildings, mergeIntoPersistentBuildingCache, updateRealtimeMetrics]);
 
   // 9. 베이스맵 전환 (4종 원클릭: 국토부 V-World 항공실사, Google 위성, V-World 클린, Google 로드맵)
   useEffect(() => {

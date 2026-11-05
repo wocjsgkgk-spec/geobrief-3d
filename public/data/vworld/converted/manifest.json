@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-10-21T15:00:00.450Z",
+  "regions": {
+    "wonju": {
+      "admCode": "51130",
+      "name": "원주시",
+      "file": "wonju.geojson",
+      "coreFile": "wonju_core.geojson",
+      "totalCount": 91422,
+      "coreCount": 30037,
+      "fileSizeMb": 65.12,
+      "updatedAt": "2026-11-05T03:10:27.590Z",
+      "bbox": [
+        127.8,
+        37.15,
+        128.15,
+        37.55
+      ]
+    }
+  }
+}

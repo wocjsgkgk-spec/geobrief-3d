@@ -173,56 +173,35 @@ export function isPermittedBuildingPolygon(
   maxEdgeLen: number,
   minWidth?: number
 ): boolean {
-  // 1. 면적 상한 필터: 실측 건축물은 최대 8,500㎡(대단지 판상형 아파트 슬래브), 비건물은 4,500㎡, 12㎡ 미만 파편 차단
-  const isExplicit = Boolean(
-    featProps.building ||
-    featProps.buld_nm ||
-    featProps.bldNm ||
-    featProps.buildingName ||
-    featProps.mgmBldrgstPk ||
-    featProps.bd_mgt_sn ||
-    featProps.realUse ||
-    featProps.grnd_flr ||
-    featProps.gro_flo_co ||
-    featProps.height ||
-    featProps.hei ||
-    featProps.heit
-  );
-  const maxAreaLimit = isExplicit ? 8500.0 : 4500.0;
-  if (areaSqm > maxAreaLimit || areaSqm < 12.0) {
-    return false;
-  }
-
-  // 2. 가로/세로 span 280m 초과 또는 단일 변 240m 초과 (삼각형 찢어짐 방지)
-  if (spanX > 280 || spanZ > 280 || maxEdgeLen > 240) {
-    return false;
-  }
-
-  // 3. [1단계 핵심: 도로/보행로/옹벽/방음벽/철도 설비 수직 장벽 아티팩트 100% 원천 차단]
-  // - 폭이 4m 미만이거나 세장비(aspectRatio)가 9.0을 초과하는 선형 폴리곤은 건물이 아니므로 무조건 차단!
-  const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
-  const maxSpan = Math.max(spanX, spanZ);
-
-  if (calculatedMinWidth < 4.0) {
-    return false; // 최소 폭 4.0m 미만은 건물이 아닌 도로, 보행로, 옹벽, 방음벽, 경계석 파편
-  }
-
-  const aspectRatio = maxSpan / calculatedMinWidth;
-  if (aspectRatio > 9.0) {
-    return false; // 세장비 9.0 초과는 수직 장벽이 되는 선형 인프라
-  }
-
-  if (maxEdgeLen > 0 && (areaSqm / (maxEdgeLen * maxEdgeLen)) < 0.05) {
-    return false; // 긴 변 대비 면적이 극도로 좁은 띠형 폴리곤 차단
-  }
-
-  // 4. 도로, 철도, 방호벽, 옹벽 속성 명시적 차단
+  // [1단계: 비건물·지적도 필지·도시계획구역·운동장·공터·도로 100% 원천 차단]
   if (
+    featProps.is_site_boundary === true ||
+    featProps.is_non_building === true ||
+    featProps.layer_type === 'cadastral' ||
+    featProps.layer_type === 'zoning' ||
+    featProps.layer_type === 'landuse' ||
+    featProps.boundary ||
+    featProps.admin_level ||
+    featProps.natural ||
+    featProps.landuse ||
+    featProps.leisure ||
+    featProps.UQ111 ||
+    featProps.UQ111_NM ||
+    featProps.uq111 ||
+    featProps.zoneName ||
+    featProps.zone_nm ||
+    featProps.spfc_nm ||
+    featProps.spfc_cd ||
+    featProps.jimok ||
+    featProps.amenity === 'parking' ||
+    featProps.amenity === 'bicycle_parking' ||
+    featProps.building === 'no' ||
     featProps.railway ||
     featProps.highway ||
     featProps.barrier ||
     featProps.wall ||
     featProps.fence ||
+    featProps.waterway ||
     featProps.man_made === 'bridge' ||
     featProps.man_made === 'pier' ||
     featProps.man_made === 'breakwater'
@@ -230,44 +209,80 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // 5. 건물이 아닌 순수 레이어/비건물 속성 차단
-  const isExplicitBuilding = Boolean(
-    featProps.building ||
-    featProps.buld_nm ||
-    featProps.bldNm ||
-    featProps.buildingName ||
-    featProps.mgmBldrgstPk ||
+  // 운동장, 공원, 트랙, 골프장, 잔디밭 등 비건물 레저 구역 차단
+  const leisureVal = String(featProps.leisure || '').toLowerCase();
+  if (
+    leisureVal === 'pitch' ||
+    leisureVal === 'park' ||
+    leisureVal === 'playground' ||
+    leisureVal === 'track' ||
+    leisureVal === 'stadium' ||
+    leisureVal === 'sports_centre' ||
+    leisureVal === 'golf_course'
+  ) {
+    return false;
+  }
+
+  // [2단계: 오직 실제 개별 건축물 외곽선(Individual Building Footprints)만 허용]
+  const isAuthenticBuilding = Boolean(
+    (typeof featProps.building === 'string' && featProps.building !== 'no') ||
+    featProps.source === 'vworld_local' ||
+    featProps.source === 'vworld_wfs' ||
+    featProps.source === 'LT_C_SPBD' ||
     featProps.bd_mgt_sn ||
-    featProps.realUse ||
-    featProps.grnd_flr ||
-    featProps.gro_flo_co ||
-    featProps.render_height ||
-    featProps.height ||
-    featProps.hei ||
-    featProps.heit
+    featProps.mgmBldrgstPk ||
+    featProps.buld_nm ||
+    featProps.bld_nm ||
+    featProps.bldNm ||
+    featProps.buildingName
   );
 
-  if (!isExplicitBuilding) {
-    if (
-      featProps.is_site_boundary === true ||
-      featProps.is_non_building === true ||
-      featProps.layer_type === 'cadastral' ||
-      featProps.layer_type === 'zoning' ||
-      featProps.boundary ||
-      featProps.admin_level ||
-      featProps.natural ||
-      featProps.landuse ||
-      featProps.leisure ||
-      featProps.UQ111 ||
-      featProps.UQ111_NM ||
-      featProps.uq111
-    ) {
-      return false;
-    }
+  if (!isAuthenticBuilding) {
+    return false;
+  }
+
+  // [3단계: 거대 필지 area > 5,000㎡ 단독 폴리곤 차단 (대단지 아파트동 제외)]
+  const isVerifiedApartment = Boolean(
+    featProps.building === 'apartments' ||
+    featProps.usageType === 'apartment' ||
+    featProps.realUse === '공동주택(아파트)' ||
+    String(featProps.buld_nm || featProps.name || featProps.buildingName || '').includes('아파트')
+  );
+
+  const maxAreaLimit = isVerifiedApartment ? 8000.0 : 5000.0;
+  if (areaSqm > maxAreaLimit || areaSqm < 15.0) {
+    return false;
+  }
+
+  // [4단계: 삼각형 찢어짐 및 비정상 스팬 차단]
+  if (spanX > 250 || spanZ > 250 || maxEdgeLen > 220) {
+    return false;
+  }
+
+  // [5단계: 골목길, 도로, 연석, 수직 장벽(폭 < 4.5m, 세장비 > 7.0) 차단]
+  const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
+  const maxSpan = Math.max(spanX, spanZ);
+
+  if (calculatedMinWidth < 4.5) {
+    return false;
+  }
+
+  const aspectRatio = maxSpan / calculatedMinWidth;
+  if (aspectRatio > 7.0) {
+    return false;
+  }
+
+  if (maxEdgeLen > 0 && (areaSqm / (maxEdgeLen * maxEdgeLen)) < 0.05) {
+    return false;
   }
 
   return true;
 }
+
+/**
+ * [관문 엄격 필터] 진짜 개별 건축물 Footprint 전수 검증용 별칭 (100% 동일 사양)
+ */
+export const isAuthenticBuildingFootprint = isPermittedBuildingPolygon;
 
 /**
  * [전역 높이 필터] 브이월드 REA 역공학 4단계 스펙 연동 & 뾰족 기둥(바늘 타워) 방지 클램핑

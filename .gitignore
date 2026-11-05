@@ -28,5 +28,11 @@ env.local
 Thumbs.db
 .env*
 /scratch/
-public/data/
+public/data/*
+!public/data/vworld/
+public/data/vworld/*
+!public/data/vworld/converted/
+public/data/vworld/converted/*
+!public/data/vworld/converted/manifest.json
+!public/data/vworld/converted/wonju_core.geojson
 *.zip

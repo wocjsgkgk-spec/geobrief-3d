@@ -23,6 +23,7 @@
 import rbush from 'rbush';
 import { GANGWON_18_REGIONS, GangwonRegionPreset, getGangwonRegionByIdOrName } from '@/constants/gangwon18Regions';
 import { isNearApartmentAnchor, APT_KEYWORDS } from '@/lib/vendor/buildingClassifier';
+import { isPermittedBuildingPolygon } from '@/utils/master3DRendererManager';
 
 const RBush = (rbush as any).default || rbush;
 
@@ -423,7 +424,21 @@ export function stampBuildingWithMasterData(
   const metrics = computePolygonMetrics(feature.geometry);
   if (!metrics) return feature;
 
-  const { centroid, areaSqm, aspectRatio } = metrics;
+  const { centroid, areaSqm, aspectRatio, minWidthM, maxLengthM } = metrics;
+
+  // [1단계 관문: 진짜 개별 건축물 Footprint 전수 검증] 비건물/필지/공원/운동장 등 배제
+  if (!isPermittedBuildingPolygon(props, areaSqm, minWidthM, maxLengthM, maxLengthM, minWidthM)) {
+    feature.properties = {
+      ...props,
+      is_non_building: true,
+      height: 0,
+      render_height: 0,
+      realHeight: 0,
+      realLevels: 0,
+    };
+    return feature;
+  }
+
   const district = districtHint || resolveGangwonDistrictByCoords(centroid[0], centroid[1]);
 
   const seed = Math.abs(Math.floor(centroid[0] * 100000 + centroid[1] * 100000)) % 100;
@@ -524,15 +539,15 @@ export function stampBuildingWithMasterData(
     ).toLowerCase();
 
     const isAptKeyword = APT_KEYWORDS.some((kw) => rawName.includes(kw));
-    const isApartmentShape = areaSqm >= 320 && (aspectRatio >= 1.6 || areaSqm >= 420);
+    const isExplicitAptTag = Boolean(
+      props.building === 'apartments' ||
+      props.usageType === 'apartment' ||
+      props.bld_category === 'apartment' ||
+      isAptKeyword
+    );
 
-    // 1. 용도 추론 (전역 18개 시·군 무제한 아파트 자동 분류)
-    if (
-      isAptKeyword ||
-      isApartmentShape ||
-      (isNearApt && areaSqm >= 300) ||
-      (zoneStr.includes('주거') && areaSqm >= 320)
-    ) {
+    // 1. 용도 추론 (진짜 아파트 식별 태그/명칭이 확인된 경우에만 고층 아파트 스카이라인 적용)
+    if (isExplicitAptTag && areaSqm >= 250) {
       realUse = '공동주택(아파트)';
       realStruct = '철근콘크리트조';
       realRoof = '슬래브지붕';

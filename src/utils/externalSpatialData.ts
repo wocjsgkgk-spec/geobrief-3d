@@ -686,7 +686,7 @@ export async function fetchExternalSpatialData(
   }
 
   // 1단계: 브이월드 로컬 다운로드 정밀 데이터(GIS건물통합정보) 1순위 최우선 선조회
-  fetchLocalVworldBuildings({ bbox, regionId: options?.regionId, useCoreOnly: true })
+  fetchLocalVworldBuildings({ bbox, regionId: options?.regionId || 'wonju', useCoreOnly: true })
     .then((localRes) => {
       if (localRes.hasLocalData && localRes.features.length > 0 && options?.onImmediate) {
         options.onImmediate({

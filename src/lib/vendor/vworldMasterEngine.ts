@@ -148,11 +148,10 @@ export class VworldMasterEngine {
       usage.includes('apartments');
 
     // -------------------------------------------------------------------------
-    // [규격 1: 아파트 단지 (면적 250㎡ 이상, 폭 8m 이상 고층 동)]
+    // [규격 1: 아파트 단지 (진짜 아파트 식별 태그/명칭이 확인된 고층 동)]
     // - 바닥 면적 250㎡ 미만 또는 폭 8m 미만 부속 시설(경비실/변전실)은 고층 제외 (뾰족 기둥 원천 차단)
     // -------------------------------------------------------------------------
-    const isApartmentShape = areaSqm >= 300 && (minWidth >= 8.0 || areaSqm >= 400);
-    if ((isApartmentTag && areaSqm >= 250 && minWidth >= 8.0) || (isApartmentShape && !hasPublicTag)) {
+    if (isApartmentTag && areaSqm >= 250 && minWidth >= 8.0) {
       const aptH = 45.0 + (seed % 31) * 1.0; // 45.0m ~ 75.0m
       return aptH;
     }

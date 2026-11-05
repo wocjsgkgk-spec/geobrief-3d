@@ -212,51 +212,37 @@ export function classifyBuildingWithVendor(
   const seed = DiverseBuildingGenerator.calculateSeed(firstLng, firstLat);
 
   // [수정: 건물 태그 및 형상 적합성 정밀 판정]
-  const hasExplicitBuildingMarker =
-    Boolean(
-      properties.building ||
-      properties.bld_category ||
-      properties.bd_mgt_sn ||
-      properties.buld_nm ||
-      properties.bldNm ||
-      properties.bld_nm ||
-      properties.buildingName ||
-      properties.grnd_flr ||
-      properties.gro_flo_co ||
-      properties.grndFlrCnt ||
-      properties.hei ||
-      properties.heit ||
-      properties.height ||
-      properties.realHeight ||
-      properties.render_height ||
-      properties.render_min_height ||
-      properties.type === 'building' ||
-      properties.class === 'building' ||
-      properties.layer === 'building'
-    );
+  const isAuthenticBuildingTag = Boolean(
+    (typeof properties.building === 'string' && properties.building !== 'no') ||
+    properties.source === 'vworld_local' ||
+    properties.source === 'vworld_wfs' ||
+    properties.source === 'LT_C_SPBD' ||
+    properties.bd_mgt_sn ||
+    properties.mgmBldrgstPk ||
+    properties.buld_nm ||
+    properties.bld_nm ||
+    properties.bldNm ||
+    properties.buildingName
+  );
 
-  const isExplicitNonBuilding =
+  const isNonBuildingTag =
     properties.is_non_building === true ||
     properties.is_site_boundary === true ||
+    properties.layer_type === 'cadastral' ||
+    properties.layer_type === 'zoning' ||
     properties.admin_level !== undefined ||
-    properties.boundary === 'administrative';
+    properties.boundary === 'administrative' ||
+    properties.building === 'no' ||
+    Boolean(properties.UQ111 || properties.UQ111_NM || properties.uq111 || properties.zoneName || properties.zone_nm || properties.spfc_nm || properties.spfc_cd) ||
+    Boolean(properties.landuse || properties.leisure || properties.natural || properties.highway || properties.railway || properties.barrier) ||
+    (Boolean(properties.pnu || properties.jimok || properties.jibun) && !isAuthenticBuildingTag);
 
-  const isParcelWithoutBuilding =
-    !hasExplicitBuildingMarker &&
-    Boolean(
-      properties.UQ111 ||
-      properties.UQ111_NM ||
-      properties.uq111 ||
-      properties.zoneName ||
-      properties.zone_nm ||
-      properties.spfc_nm ||
-      properties.spfc_cd ||
-      properties.landuse ||
-      properties.leisure ||
-      properties.natural ||
-      properties.pnu ||
-      properties.jimok
-    );
+  const isVerifiedApt = Boolean(
+    properties.building === 'apartments' ||
+    properties.usageType === 'apartment' ||
+    properties.realUse === '공동주택(아파트)' ||
+    String(properties.buld_nm || properties.name || properties.buildingName || '').includes('아파트')
+  );
 
   const isValidGeometry = VworldMasterEngine.isValidBuildingGeometry(
     properties,
@@ -265,7 +251,7 @@ export function classifyBuildingWithVendor(
     metrics.maxLength || 0
   );
 
-  if (isExplicitNonBuilding || isParcelWithoutBuilding || !isValidGeometry) {
+  if (isNonBuildingTag || !isAuthenticBuildingTag || (areaSqm > (isVerifiedApt ? 8000 : 5000)) || !isValidGeometry) {
     return {
       type: 'residential',
       typeIndex: 0,
