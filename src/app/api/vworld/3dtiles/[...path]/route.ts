@@ -22,18 +22,14 @@ export async function GET(
     return getTileset(request);
   }
 
-  // 2. 바이너리 타일 소스 확인 (Cesium 검증 오픈 b3dm 타일셋 풀 매핑)
+  // 2. 바이너리 타일 소스 확인 (미등록 또는 더미 타일 차단)
   const allowedTiles: Record<string, string> = {
-    'parent.b3dm': 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/parent.b3dm',
-    'll.b3dm': 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/ll.b3dm',
-    'lr.b3dm': 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/lr.b3dm',
-    'ul.b3dm': 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/ul.b3dm',
-    'ur.b3dm': 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/ur.b3dm',
+    // 실제 등록된 바이너리 타일셋이 있을 경우 매핑
   };
 
   const remoteTileUrl = allowedTiles[fileName];
   if (!remoteTileUrl) {
-    return new NextResponse('Forbidden or Tile not found in allowed registry', { status: 404 });
+    return new NextResponse('Tile not found', { status: 404 });
   }
 
   try {

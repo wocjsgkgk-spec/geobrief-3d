@@ -3200,7 +3200,7 @@ export const MapViewer: React.FC = () => {
             updateRealtimeMetrics();
           },
         });
-        realisticCityLayer.setVisible(initRenderMode === 'facade' && !!layers.buildings3D);
+        realisticCityLayer.setVisible(!!layers.buildings3D);
         map.addLayer(realisticCityLayer);
         realisticKoreanCityLayerRef.current = realisticCityLayer;
         (window as any).__realisticCityLayer = realisticCityLayer;
@@ -7020,7 +7020,7 @@ export const MapViewer: React.FC = () => {
           map.setLayoutProperty('3d-buildings', 'visibility', 'none');
         }
         if (realisticKoreanCityLayerRef.current) {
-          realisticKoreanCityLayerRef.current.setVisible(renderMode3D === 'facade' && layers.buildings3D);
+          realisticKoreanCityLayerRef.current.setVisible(!!layers.buildings3D);
         }
         if (bldgVis === 'visible') {
           promoteBuildingLayersToTop(map);

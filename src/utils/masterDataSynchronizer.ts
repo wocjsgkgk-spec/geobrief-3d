@@ -631,10 +631,10 @@ export function stampBuildingWithMasterData(
 
   // 1) 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minDim < 7.5m)
   // 주변 아파트 POI 여부와 무관하게 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
-  // 실제 층수: 6.5m ~ 10m (2층 ~ 3층)
+  // 실제 층수: 6.0m ~ 10.5m (1.5층 ~ 3층)
   if (areaSqm < 220 || minDim < 7.5) {
-    realHeight = Math.min(10.5, Math.max(6.5, 6.5 + (seed % 36) * 0.1));
-    realLevels = Math.min(3, Math.max(2, Math.round(realHeight / 3.2)));
+    realHeight = Math.min(10.5, Math.max(6.0, 6.0 + (seed % 45) * 0.1));
+    realLevels = Math.min(3, Math.max(1, Math.round(realHeight / 3.2)));
     realUse = '단독/다가구주택';
     if (!rec || !rec.roofCdNm) {
       realRoof = seed % 2 === 0 ? '기와지붕' : '슬래브지붕';
@@ -643,26 +643,35 @@ export function stampBuildingWithMasterData(
     rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등') ||
     realUse.includes('학교') || realUse.includes('교육')
   ) {
-    // 3) 학교·공공청사: 교사동 건물만 12m ~ 15m (3층 ~ 4층)
+    // 학교 교사동 건물: 12m ~ 15m (3층 ~ 4층)
     realLevels = 3 + (seed % 2); // 3~4층
     realHeight = 12.0 + (seed % 4) * 1.0; // 12m ~ 15m
     realUse = '교육연구시설(학교)';
     realRoof = '슬래브지붕';
   } else if (
-    // 2) 시내 상가 및 근린생활시설 (220 <= area < 500)
-    areaSqm >= 220 && areaSqm < 500 &&
+    // 2) 중심 상권 상가/원룸/근린생활시설 (220 <= area < 600)
+    areaSqm >= 220 && areaSqm < 600 &&
     realUse !== '공동주택(아파트)' && !isExplicitAptTag
   ) {
-    realLevels = 3 + (seed % 4); // 3~6층
-    realHeight = 12.0 + (seed % 9) * 1.0; // 12m ~ 20m
+    realLevels = 4 + (seed % 3); // 4~6층
+    realHeight = 12.0 + (seed % 10) * 1.0; // 12m ~ 21m
     realUse = '제1·2종근린생활시설(상가)';
     realRoof = '슬래브지붕';
   } else if (
-    // 4) 진짜 아파트 단지 (area >= 350)
+    // 3) 도청(춘천)·시청·군청·공공기관·병원·리조트 (area >= 600 비주거/복합)
+    areaSqm >= 600 &&
+    realUse !== '공동주택(아파트)' && !isExplicitAptTag
+  ) {
+    realLevels = 7 + (seed % 9); // 7~15층
+    realHeight = 24.0 + (seed % 25) * 1.0; // 24m ~ 48m
+    realUse = '업무시설(관공서/오피스)';
+    realRoof = '슬래브지붕';
+  } else if (
+    // 4) 전 권역 아파트 단지 (area >= 350)
     (realUse === '공동주택(아파트)' || isExplicitAptTag) && areaSqm >= 350
   ) {
-    if (realHeight < 45.0 || realHeight > 75.0) {
-      realHeight = 45.0 + (seed % 31) * 1.0; // 45m ~ 75m
+    if (realHeight < 45.0 || realHeight > 78.0) {
+      realHeight = 45.0 + (seed % 34) * 1.0; // 45m ~ 78m
       realLevels = Math.round(realHeight / 3.1);
     }
     realRoof = '슬래브지붕';

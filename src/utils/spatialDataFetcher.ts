@@ -165,17 +165,14 @@ export function extractRenderedVectorBuildings(
       // [2단계: 지역별·용도별 실제 건물 층수(Height) 정밀 복원]
       // -----------------------------------------------------------------------
 
-      // (a) 군부대 주둔지 판정 (1군지사 우산동, 캠프 롱 태장동, 접경 군부대)
-      const isWonjuMilitarySite =
-        (cLat >= 37.355 && cLat <= 37.375 && cLng >= 127.930 && cLng <= 127.948) || // 1군지사(우산동)
-        (cLat >= 37.370 && cLat <= 37.390 && cLng >= 127.945 && cLng <= 127.965);   // 캠프 롱(태장동)
-      const isBorderMilitaryZone = cLat >= 38.0; // 철원·화천·양구·인제 등 접경 군부대
+      // (a) 군부대 주둔지 판정 (강원 18개 시·군 전역 및 접경 군부대)
+      const isBorderMilitaryZone = cLat >= 38.0; // 철원·화천·양구·인제·고성 등 접경 군부대
       const isMilitaryName =
         name.includes('부대') || name.includes('군') || name.includes('막사') ||
         name.includes('병영') || name.includes('창고') || name.includes('보급') ||
         name.includes('사령부') || usageType.includes('military') || usageType.includes('barracks');
 
-      const isMilitary = isMilitaryName || (isWonjuMilitarySite && dimMin <= 22 && dimMax >= 18) || (isBorderMilitaryZone && isMilitaryName);
+      const isMilitary = isMilitaryName || (isBorderMilitaryZone && isMilitaryName) || props.isMilitaryOrPublic === true;
 
       // (b) 아파트 명칭 매칭
       const isAptByName =
@@ -220,33 +217,38 @@ export function extractRenderedVectorBuildings(
       const isRealMeasured = props.is_real_measured === true || Boolean(props.mgmBldrgstPk);
       let renderHeight = (isRealMeasured && rawHei >= 3.0) || rawHei >= 10.0 ? rawHei : (rawFlr >= 3 ? rawFlr * 3.3 : 0);
 
-      // [소형 주택·상가 세장비 및 면적 기준 정밀 높이 배분]
+      // [소형 주택·상가 세장비 및 면적 기준 정밀 높이 배분 (강원 18개 시·군 4대 규격)]
       if (approxArea < 220) {
-        // 소형 필지 (단독주택·다가구·소형상가): 무조건 6.5m ~ 11.5m (2층 ~ 3.5층)
+        // 소형 단독주택·다세대·원룸 (30㎡ <= area < 220㎡): 무조건 6.0m ~ 10.5m (1.5~3층) 엄격 클램핑
         const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-        renderHeight = 6.5 + seed * 5.0; // 6.5m ~ 11.5m
-      } else if (approxArea < 280) {
-        // 280㎡ 미만 소형 건물: 절대로 15m 이상 불가
-        const seed = Math.abs(Math.sin(cLng * 73.1 + cLat * 163.7 + approxArea)) % 1;
-        renderHeight = Math.min(15.0, 8.0 + seed * 6.0); // 8m ~ 14m
+        renderHeight = Math.min(10.5, Math.max(6.0, 6.0 + seed * 4.5));
       } else if (!renderHeight || renderHeight < 8.0) {
         if (isMilitary) {
           // 군 표준 병영막사: 1층~3층 (4.5m~9.5m)
           const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
           renderHeight = 4.5 + seed * 4.5;
         } else if (isApartment && approxArea >= 320) {
-          // 진짜 아파트 단지 동: 14층~24층 (42m~72m)
+          // 전 권역 아파트 단지: 15층~25층 (45m~78m)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
-          renderHeight = 42.0 + seed * 30.0; // 42m ~ 72m
-        } else if (isCommercial || (approxArea >= 220 && approxArea < 550)) {
-          // 중형 시가지 상가·원룸: 3층~5층 (11m~18m)
+          renderHeight = 45.0 + seed * 33.0; // 45m ~ 78m
+        } else if (approxArea >= 600) {
+          // 도청·시청·군청·공공기관·병원·리조트: 7층~15층 (24m~48m)
+          const seed = Math.abs(Math.sin(cLng * 113.7 + cLat * 271.3 + approxArea * 0.19)) % 1;
+          renderHeight = 24.0 + seed * 24.0; // 24m ~ 48m
+        } else if (isCommercial || (approxArea >= 220 && approxArea < 600)) {
+          // 중심 상권 상가/원룸/근린생활시설: 4층~6층 (12m~21m)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
-          renderHeight = 11.0 + seed * 7.0; // 11m ~ 18m
+          renderHeight = 12.0 + seed * 9.0; // 12m ~ 21m
         } else {
-          // 일반 주택가: 6.5m ~ 11.5m
+          // 일반 주택가: 6.0m ~ 10.5m
           const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-          renderHeight = 6.5 + seed * 5.0;
+          renderHeight = Math.min(10.5, Math.max(6.0, 6.0 + seed * 4.5));
         }
+      }
+
+      // 최종 클램핑: 소형 주택은 어떤 경우에도 10.5m를 넘지 못함
+      if (approxArea < 220) {
+        renderHeight = Math.min(renderHeight, 10.5);
       }
 
       // 세장비 절대 규칙: 단축 대비 3.5배 초과 차단

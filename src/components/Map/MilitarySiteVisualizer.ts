@@ -112,21 +112,23 @@ export class MilitarySiteVisualizer {
   /**
    * 특정 군 유휴부지 선택 및 포커싱
    */
-  public selectSite(siteId: string): void {
+  public selectSite(siteId: string, shouldFly: boolean = false): void {
     const site = getGangwon18MilitarySiteById(siteId);
     if (!site) return;
     this.selectedSiteId = site.id;
 
     if (this.map) {
-      // 카메라 추천 위치로 부드러운 3D 플라이투
-      this.map.flyTo({
-        center: site.center,
-        zoom: site.recommendedCamera.zoom,
-        pitch: site.recommendedCamera.pitch,
-        bearing: site.recommendedCamera.bearing,
-        essential: true,
-        duration: 1500,
-      });
+      if (shouldFly) {
+        // 사용자 직접 맵 클릭 시에만 카메라 추천 위치로 플라이투 (flyToSignal과 충돌 방지)
+        this.map.flyTo({
+          center: site.center,
+          zoom: site.recommendedCamera.zoom,
+          pitch: site.recommendedCamera.pitch,
+          bearing: site.recommendedCamera.bearing,
+          essential: true,
+          duration: 1500,
+        });
+      }
 
       this.updateLayersFilter();
       this.updateHologramBadges();
@@ -280,7 +282,7 @@ export class MilitarySiteVisualizer {
       if (e.features && e.features[0]) {
         const sid = e.features[0].properties?.id;
         if (sid) {
-          this.selectSite(sid);
+          this.selectSite(sid, true);
           this.options.onSelectSite?.(sid);
         }
       }
@@ -426,7 +428,7 @@ export class MilitarySiteVisualizer {
           return;
         }
 
-        this.selectSite(site.id);
+        this.selectSite(site.id, true);
         this.options.onSelectSite?.(site.id);
       });
 

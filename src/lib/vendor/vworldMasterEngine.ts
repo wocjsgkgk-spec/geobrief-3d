@@ -148,12 +148,12 @@ export class VworldMasterEngine {
       usage.includes('apartments');
 
     // -------------------------------------------------------------------------
-    // [규격 1: 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minWidth < 7.5m)]
+    // [규격 1: 소형 단독주택·다세대·원룸 (30㎡ <= area < 220㎡ 또는 minWidth < 7.5m)]
     // - 주변 아파트 POI 여부와 무관하게 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
-    // - 실제 층수: 6.5m ~ 10.0m (2층 ~ 3층)
+    // - 실제 층수: 6.0m ~ 10.5m (1.5층 ~ 3층)
     // -------------------------------------------------------------------------
     if (areaSqm < 220 || minWidth < 7.5) {
-      const resH = 6.5 + (seed % 36) * 0.1; // 6.5m ~ 10.0m
+      const resH = 6.0 + (seed % 45) * 0.1; // 6.0m ~ 10.5m
       return Math.min(10.5, resH);
     }
 
@@ -167,35 +167,35 @@ export class VworldMasterEngine {
     }
 
     // -------------------------------------------------------------------------
-    // [규격 3: 진짜 아파트 단지 (apartments 또는 area >= 400㎡인 장방형/타워형 주거 건물)]
-    // - 스펙: 45m ~ 75m (15층 ~ 25층)
+    // [규격 3: 전 권역 아파트 단지 (apartments 또는 단지형 350㎡ ~ 2,500㎡ 주거동)]
+    // - 스펙: 45m ~ 78m (15층 ~ 25층)
     // -------------------------------------------------------------------------
-    const isGenuineApt = (isApartmentTag || (areaSqm >= 400 && minWidth >= 8.5)) && areaSqm >= 250 && minWidth >= 8.0;
+    const isGenuineApt = (isApartmentTag || (areaSqm >= 350 && minWidth >= 8.5)) && areaSqm >= 250 && minWidth >= 8.0;
     if (isGenuineApt) {
-      const aptH = 45.0 + (seed % 31) * 1.0; // 45.0m ~ 75.0m
+      const aptH = 45.0 + (seed % 34) * 1.0; // 45.0m ~ 78.0m
       return aptH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 4: 공공기관·관공서·대형 빌딩 (area >= 700㎡ 또는 관공서 태그)]
+    // [규격 4: 도청(춘천)·시청·군청·공공기관·병원·리조트 (area >= 600㎡ 또는 공공 태그)]
     // 스펙: 24m ~ 48m (7층 ~ 15층 랜드마크 조형)
     // -------------------------------------------------------------------------
-    if (areaSqm >= 700 || hasPublicTag || (isBangokArea && areaSqm >= 400 && hasPublicTag)) {
+    if (areaSqm >= 600 || hasPublicTag) {
       const officeH = 24.0 + (seed % 25) * 1.0; // 24.0m ~ 48.0m
       return officeH;
     }
 
     // -------------------------------------------------------------------------
-    // [규격 5: 시내 일반 상가 및 근린생활시설 (220㎡ <= area < 500㎡)]
-    // 스펙: 12m ~ 20m (3층 ~ 6층)
+    // [규격 5: 중심 상권 상가/원룸/근린생활시설 (220㎡ <= area < 600㎡)]
+    // 스펙: 12m ~ 21m (4층 ~ 6층)
     // -------------------------------------------------------------------------
-    if (areaSqm >= 220 && areaSqm < 500) {
-      const commH = 12.0 + (seed % 9) * 1.0; // 12.0m ~ 20.0m
+    if (areaSqm >= 220 && areaSqm < 600) {
+      const commH = 12.0 + (seed % 10) * 1.0; // 12.0m ~ 21.0m
       return commH;
     }
 
-    // 기본 보증 높이 (기타 500㎡ 이상 상업/업무 건물: 12.0m ~ 22.0m)
-    const baseH = Math.max(12.0, 12.0 + (seed % 11) * 1.0);
+    // 기본 보증 높이 (12.0m ~ 21.0m)
+    const baseH = Math.max(12.0, 12.0 + (seed % 10) * 1.0);
     return baseH;
   }
 
@@ -232,11 +232,11 @@ export class VworldMasterEngine {
     const isHighRiseApt = height >= 42.0;
     const cLng = centerLngLat ? centerLngLat[0] : 127.94;
     const cLat = centerLngLat ? centerLngLat[1] : 37.34;
-    const isBangokOffice = this.isBangokInnovationZone(cLng, cLat) && (areaSqm >= 400 || height >= 20.0);
-
-    const isLowRiseResi = areaSqm < 220 || minWidth < 7.5;
     const rawName = String(properties.buld_nm || properties.name || '').toLowerCase();
     const rawUsage = String(properties.mainPurpsCdNm || properties.use || properties.usage || '').toLowerCase();
+    const isPublicOffice = (areaSqm >= 600 || height >= 24.0 || rawName.includes('청사') || rawName.includes('시청') || rawName.includes('도청') || rawName.includes('군청'));
+
+    const isLowRiseResi = areaSqm < 220 || minWidth < 7.5;
     const isSchool = rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등') || rawUsage.includes('school') || rawUsage.includes('education');
 
     let buildingType: VworldMasterBuildingSpec['buildingType'] = 'residential';
@@ -271,9 +271,9 @@ export class VworldMasterEngine {
       roofStyle = seed % 2 === 0 ? 'gabled' : 'flat_parapet';
       hasParapet = roofStyle === 'flat_parapet';
       hasPenthouse = false;
-    } else if (isBangokOffice) {
+    } else if (isPublicOffice) {
       buildingType = 'public_office';
-      typeName = '혁신도시 공공기관·업무타워';
+      typeName = '도청·시청·군청·공공기관·업무타워';
       wallSlot = seed % 2 === 0 ? 'comm_sky_curtain' : 'comm_granite_tile';
       roofSlot = 'roof_urethane_green';
       hasParapet = true;
@@ -298,7 +298,7 @@ export class VworldMasterEngine {
       wallSlot,
       roofSlot,
       isHighRiseApt,
-      isBangokOffice,
+      isBangokOffice: isPublicOffice,
       hasParapet,
       hasPenthouse,
       roofStyle,

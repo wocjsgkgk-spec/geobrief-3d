@@ -541,17 +541,14 @@ export function buildOsmBuildingGeometry(options: OSMGeometryOptions): OSMGeomet
     const metricsInput = { cLng, cLat, dimMin, dimMax, approxArea: trueArea, aspectRatio };
     const regStyle = classifyRegionalBuildingStyle(props, metricsInput);
 
-    // (a) 군부대 주둔지 판정 (1군지사 우산동, 캠프 롱 태장동, 접경 군부대)
-    const isWonjuMilitarySite =
-      (cLat >= 37.355 && cLat <= 37.375 && cLng >= 127.930 && cLng <= 127.948) || // 1군지사(우산동)
-      (cLat >= 37.370 && cLat <= 37.390 && cLng >= 127.945 && cLng <= 127.965);   // 캠프 롱(태장동)
-    const isBorderMilitaryZone = cLat >= 38.0; // 철원·화천·양구·인제 등 접경 군부대
+    // (a) 군부대 주둔지 판정 (강원 18개 시·군 전역 및 접경 군부대)
+    const isBorderMilitaryZone = cLat >= 38.0; // 철원·화천·양구·인제·고성 등 접경 군부대
     const isMilitaryName =
       name.includes('부대') || name.includes('군') || name.includes('막사') ||
       name.includes('병영') || name.includes('창고') || name.includes('보급') ||
       name.includes('사령부') || usageType.includes('military') || usageType.includes('barracks');
 
-    const isMilitary = isMilitaryName || (isWonjuMilitarySite && dimMin <= 22 && dimMax >= 18) || (isBorderMilitaryZone && isMilitaryName) || props.isMilitaryOrPublic === true;
+    const isMilitary = isMilitaryName || (isBorderMilitaryZone && isMilitaryName) || props.isMilitaryOrPublic === true || props.is_military === true;
 
     // (b) 대형 경기장/체육시설/종합운동장 판정 (커튼월 유리 반사감 및 트러스 지붕 메쉬)
     const isStadiumOrArena =

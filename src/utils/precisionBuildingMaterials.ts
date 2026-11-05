@@ -119,16 +119,18 @@ export function classifyBuildingStyle(
     buldNm.includes('청사') ||
     buldNm.includes('시청') ||
     buldNm.includes('도청') ||
+    buldNm.includes('군청') ||
+    buldNm.includes('구청') ||
     buldNm.includes('공단') ||
     buldNm.includes('공사') ||
     buldNm.includes('센터') ||
     buldNm.includes('병원') ||
-    (centerLngLat &&
-      centerLngLat[0] >= 127.965 &&
-      centerLngLat[0] <= 128.005 &&
-      centerLngLat[1] >= 37.315 &&
-      centerLngLat[1] <= 37.345 &&
-      height >= 14);
+    buldNm.includes('의료원') ||
+    buldNm.includes('보건') ||
+    buldNm.includes('소방') ||
+    buldNm.includes('경찰') ||
+    buldNm.includes('법원') ||
+    (areaSqm >= 600 && height >= 20 && !buldNm.includes('아파트'));
 
   if (isGovPublic) {
     if (isSchool) {

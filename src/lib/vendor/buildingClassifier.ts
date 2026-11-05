@@ -289,10 +289,9 @@ export function classifyBuildingWithVendor(
     properties.mainPurpsCdNm || properties.main_purps_nm || properties.mainPurps || properties.bdtyp_cd || ''
   ).toLowerCase();
 
-  // 원주 군부대(1군지사 우산동, 캠프롱 태장동) 좌표 바운드
-  const isWonju1GunJisa = centerLat >= 37.355 && centerLat <= 37.375 && centerLng >= 127.930 && centerLng <= 127.948;
-  const isWonjuCampLong = centerLat >= 37.370 && centerLat <= 37.390 && centerLng >= 127.945 && centerLng <= 127.965;
-  const isMilitaryBoundary = isWonju1GunJisa || isWonjuCampLong || properties.isMilitaryOrPublic === true;
+  // 강원 18개 시·군 접경 및 군사시설 판정
+  const isBorderMilitaryZone = centerLat >= 38.0;
+  const isMilitaryBoundary = isBorderMilitaryZone || properties.isMilitaryOrPublic === true || properties.is_military === true;
 
   const isMilitaryName =
     name.includes('부대') || name.includes('군') || name.includes('막사') ||

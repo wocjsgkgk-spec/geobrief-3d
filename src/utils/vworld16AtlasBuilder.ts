@@ -167,20 +167,25 @@ export function getVworld16BuildingStyle(
     };
   }
 
-  // 3. 원주 반곡동 혁신도시 공공기관 & 대형 오피스 -> 슬롯 8, 9, 10
-  const isBangokInnovation =
-    (centroidLat >= 37.315 && centroidLat <= 37.348 && centroidLng >= 127.962 && centroidLng <= 128.005) ||
-    areaSqm >= 1400 ||
+  // 3. 강원특별자치도 도청·시청·군청·공공기관 & 대형 오피스 -> 슬롯 8, 9, 10
+  const isMajorPublicOffice =
+    areaSqm >= 600 ||
+    name.includes('도청') ||
+    name.includes('시청') ||
+    name.includes('군청') ||
+    name.includes('구청') ||
     name.includes('공단') ||
     name.includes('공사') ||
     name.includes('청사') ||
     name.includes('본부') ||
     name.includes('심평원') ||
     name.includes('건보') ||
+    name.includes('병원') ||
+    name.includes('의료원') ||
     usage.includes('업무시설') ||
     usage.includes('공공기관');
 
-  if (isBangokInnovation && height >= 14.0 && !name.includes('아파트')) {
+  if (isMajorPublicOffice && height >= 14.0 && !name.includes('아파트')) {
     const subIdx = 8 + (seed % 3); // 8, 9, 10 분배
     const uvRect = getVworld16SlotUV(subIdx);
     const isGardenRoof = (seed % 10) < 35;
@@ -190,9 +195,9 @@ export function getVworld16BuildingStyle(
       category: 'office',
       categoryLabel:
         subIdx === 8
-          ? '혁신도시 스카이블루 유리 커튼월 공공청사'
+          ? '공공청사 스카이블루 유리 커튼월'
           : subIdx === 9
-          ? '혁신도시 에메랄드그린 로이유리 타워'
+          ? '공공기관 에메랄드그린 로이유리 타워'
           : '화강석 포디움 공공기관 오피스',
       uvRect,
       roofColorHex: roof.hex,

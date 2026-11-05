@@ -241,16 +241,9 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [3단계: 거대 필지 area > 5,000㎡ 단독 폴리곤 차단 (대단지 아파트동 제외)]
-  const isVerifiedApartment = Boolean(
-    featProps.building === 'apartments' ||
-    featProps.usageType === 'apartment' ||
-    featProps.realUse === '공동주택(아파트)' ||
-    String(featProps.buld_nm || featProps.name || featProps.buildingName || '').includes('아파트')
-  );
-
-  const maxAreaLimit = isVerifiedApartment ? 8000.0 : 5000.0;
-  if (areaSqm > maxAreaLimit || areaSqm < 15.0) {
+  // [3단계: 거대 비건물 필지 area > 4,500㎡ 단독 폴리곤 100% 영구 차단]
+  const maxAreaLimit = 4500.0;
+  if (areaSqm > maxAreaLimit || areaSqm < 20.0) {
     return false;
   }
 
@@ -299,13 +292,13 @@ export function sanitizeBuildingHeight(
   // ---------------------------------------------------------------------------
   // [규격 1] 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minWidth < 7.5m)
   // - 주변에 아파트 POI가 있더라도 절대 11m(3.5층) 초과 금지: Math.min(height, 10.5)
-  // - 실제 층수: 6.5m ~ 10m (2층 ~ 3층)
+  // - 실제 층수: 6.0m ~ 10.5m (1.5층 ~ 3층)
   // ---------------------------------------------------------------------------
   if (areaSqm < 220 || minWidth < 7.5) {
     if (rawHeight > 0) {
-      return Math.min(10.5, Math.max(6.5, rawHeight));
+      return Math.min(10.5, Math.max(6.0, rawHeight));
     }
-    return Math.min(10.5, 6.5 + (seed % 36) * 0.1);
+    return Math.min(10.5, 6.0 + (seed % 45) * 0.1);
   }
 
   // ---------------------------------------------------------------------------
@@ -320,32 +313,44 @@ export function sanitizeBuildingHeight(
   }
 
   // ---------------------------------------------------------------------------
-  // [규격 3] 시내 상가 및 근린생활시설 (220㎡ <= area < 500㎡)
-  // - 상업지역이나 주택가 대로변 상가: 높이 12m ~ 20m (3층 ~ 6층)
+  // [규격 3] 중심 상권 상가/원룸/근린생활시설 (220㎡ <= area < 600㎡)
+  // - 상업지역이나 주택가 대로변 상가: 높이 12m ~ 21m (4층 ~ 6층)
   // ---------------------------------------------------------------------------
-  if (areaSqm >= 220 && areaSqm < 500 && !isHighRiseApt) {
-    const commH = 12.0 + (seed % 9) * 1.0;
+  if (areaSqm >= 220 && areaSqm < 600 && !isHighRiseApt) {
+    const commH = 12.0 + (seed % 10) * 1.0;
     if (rawHeight > 0) {
-      return Math.min(20.0, Math.max(12.0, rawHeight));
+      return Math.min(21.0, Math.max(12.0, rawHeight));
     }
     return commH;
   }
 
   // ---------------------------------------------------------------------------
-  // [규격 4] 진짜 아파트 단지 (apartments 또는 area >= 400㎡인 장방형/타워형 주거 건물)
-  // - 높이 45m ~ 75m (15층 ~ 25층)
+  // [규격 4] 도청(춘천)·시청·군청·공공기관·병원·리조트 (area >= 600㎡ 비주거/복합)
+  // - 높이 24m ~ 48m (7층 ~ 15층)
+  // ---------------------------------------------------------------------------
+  if (areaSqm >= 600 && !isHighRiseApt) {
+    const publicH = 24.0 + (seed % 25) * 1.0;
+    if (rawHeight > 0) {
+      return Math.min(48.0, Math.max(24.0, rawHeight));
+    }
+    return publicH;
+  }
+
+  // ---------------------------------------------------------------------------
+  // [규격 5] 전 권역 아파트 단지 (apartments 또는 단지형 350㎡ ~ 2,500㎡ 주거동)
+  // - 높이 45m ~ 78m (15층 ~ 25층)
   // ---------------------------------------------------------------------------
   if (isHighRiseApt && areaSqm >= 320 && minWidth >= 8.0) {
     if (rawHeight > 0) {
-      return Math.min(75.0, Math.max(45.0, rawHeight));
+      return Math.min(78.0, Math.max(45.0, rawHeight));
     }
-    return 45.0 + (seed % 31) * 1.0;
+    return 45.0 + (seed % 34) * 1.0;
   }
 
   let calculatedH: number;
   if (rawHeight > 0) {
     const safeW = Math.max(6.0, minWidth);
-    const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
+    const maxAllowed = isHighRiseApt ? 78.0 : Math.max(14.0, safeW * 4.0);
     calculatedH = Math.max(7.5, Math.min(rawHeight, maxAllowed));
   } else {
     calculatedH = VworldMasterEngine.calculateBuildingHeight(

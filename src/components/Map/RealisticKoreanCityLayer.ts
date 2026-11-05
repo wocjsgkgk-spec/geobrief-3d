@@ -733,11 +733,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (newOriginLngLat && Array.isArray(newOriginLngLat) && newOriginLngLat.length === 2) {
       const dLng = Math.abs(newOriginLngLat[0] - this.originLngLat[0]);
       const dLat = Math.abs(newOriginLngLat[1] - this.originLngLat[1]);
-      if (dLng > 0.35 || dLat > 0.35 || !this.fixedOriginInitialized) {
+      if (dLng > 0.05 || dLat > 0.05 || !this.fixedOriginInitialized) {
         this.setOrigin([newOriginLngLat[0], newOriginLngLat[1]]);
         this.fixedOriginInitialized = true;
-        // 다른 시·군으로 원거리 이동 시(40km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
-        if (dLng > 0.40 || dLat > 0.40) {
+        // 다른 시·군으로 원거리 이동 시(5.5km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
+        if (dLng > 0.06 || dLat > 0.06) {
           this.persistentBuildingMap.clear();
         }
         this.resetAccumulatedBuffers();
@@ -1312,19 +1312,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
         } catch {}
 
-        // 지형 타일 로드 대기 중 안전 표고: 지역별 실측 지형 고도 동적 추정
+        // 지형 타일 로드 대기 중 또는 평탄지: 지면에 칼같이 밀착
         if (rawElev <= 0) {
-          if (cLat >= 37.31 && cLat <= 37.35 && cLng >= 127.96 && cLng <= 128.01) {
-            rawElev = 162.0; // 원주 반곡동 혁신도시 지형 표고
-          } else if (cLat >= 37.30 && cLat <= 37.38 && cLng >= 127.90 && cLng <= 127.98) {
-            rawElev = 142.0; // 원주 도심권
-          } else if (cLat >= 37.84 && cLat <= 37.92 && cLng >= 127.68 && cLng <= 127.76) {
-            rawElev = 76.0;  // 춘천 도심권
-          } else if (cLat >= 37.72 && cLat <= 37.80 && cLng >= 128.85 && cLng <= 128.93) {
-            rawElev = 22.0;  // 강릉 도심권
-          } else {
-            rawElev = 135.0; // 강원 평균
-          }
+          rawElev = 0;
         }
       } else {
         // 지형 비활성화 시 해수면 0m 평면에 칼같이 밀착
@@ -1443,8 +1433,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
-        if (dLng > 0.35 || dLat > 0.35) {
+        if (dLng > 0.05 || dLat > 0.05) {
           this.setOrigin([center.lng, center.lat]);
+          if (dLng > 0.06 || dLat > 0.06) {
+            this.persistentBuildingMap.clear();
+          }
           this.resetAccumulatedBuffers();
         }
       }

@@ -108,82 +108,30 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. 브이월드 실사 3D Tiles OGC 1.0 표준 타일셋 메타데이터 반환 (원주권 거점 중심)
-  // 원주시 경위도: lon 127.9358, lat 37.3592
+  // 2. 브이월드 실사 3D Tiles OGC 1.0 표준 타일셋 메타데이터 반환 (강원특별자치도 전역 포괄)
   // Region [west, south, east, north, minHeight, maxHeight] (단위: 라디안 및 미터)
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-  const westRad = toRad(127.915);
-  const southRad = toRad(37.335);
-  const eastRad = toRad(127.965);
-  const northRad = toRad(37.385);
+  // 강원특별자치도 18개 시·군 전역 바운딩 볼륨 (경도 127.0~129.5, 위도 37.0~38.6, 고도 0~1800m)
+  const westRad = toRad(127.0);
+  const southRad = toRad(37.0);
+  const eastRad = toRad(129.5);
+  const northRad = toRad(38.6);
 
   const tileset = {
     asset: {
       version: '1.0',
       tilesetVersion: 'vworld-gangwon-3dtiles-1.0',
-      generator: 'GeoBrief 3D V-World 3D Mesh Streaming Engine',
+      generator: 'GeoBrief 3D V-World 3D Streaming Engine',
     },
     geometricError: 256.0,
     root: {
       boundingVolume: {
-        region: [westRad, southRad, eastRad, northRad, 0, 450],
+        region: [westRad, southRad, eastRad, northRad, 0, 1800],
       },
       geometricError: 64.0,
       refine: 'ADD',
-      children: [
-        // Sector 1: 원주 1군지사 및 도심 재생지구 (LOD2 실사 건축 메쉬)
-        {
-          boundingVolume: {
-            region: [toRad(127.93), toRad(37.352), toRad(127.942), toRad(37.365), 0, 320],
-          },
-          geometricError: 16.0,
-          content: {
-            uri: '/api/vworld/3dtiles/tiles/parent.b3dm',
-          },
-          children: [
-            {
-              boundingVolume: {
-                region: [toRad(127.932), toRad(37.355), toRad(127.939), toRad(37.362), 0, 320],
-              },
-              geometricError: 4.0,
-              content: {
-                uri: '/api/vworld/3dtiles/tiles/ll.b3dm',
-              },
-            },
-            {
-              boundingVolume: {
-                region: [toRad(127.935), toRad(37.356), toRad(127.941), toRad(37.364), 0, 320],
-              },
-              geometricError: 4.0,
-              content: {
-                uri: '/api/vworld/3dtiles/tiles/lr.b3dm',
-              },
-            },
-          ],
-        },
-        // Sector 2: 원주 북부 캠프 롱 및 태장동 거점
-        {
-          boundingVolume: {
-            region: [toRad(127.945), toRad(37.37), toRad(127.96), toRad(37.382), 0, 350],
-          },
-          geometricError: 20.0,
-          content: {
-            uri: '/api/vworld/3dtiles/tiles/ul.b3dm',
-          },
-          children: [
-            {
-              boundingVolume: {
-                region: [toRad(127.95), toRad(37.374), toRad(127.958), toRad(37.38), 0, 350],
-              },
-              geometricError: 4.0,
-              content: {
-                uri: '/api/vworld/3dtiles/tiles/ur.b3dm',
-              },
-            },
-          ],
-        },
-      ],
+      children: [],
     },
   };
 
