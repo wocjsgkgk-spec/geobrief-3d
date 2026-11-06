@@ -489,6 +489,37 @@ export const Header: React.FC = () => {
                 </span>
               </button>
 
+              {/* [3단계 신규] 🏙️ V-World 서울식 스카이라인 뷰 (Pitch 65° 저각 조감) */}
+              <button
+                onClick={() => {
+                  const map = (window as any).__mapInstance;
+                  if (map) {
+                    const center = map.getCenter();
+                    map.flyTo({
+                      center: [center.lng, center.lat],
+                      pitch: 65,
+                      bearing: -35,
+                      zoom: Math.max(16.0, map.getZoom()),
+                      duration: 1500,
+                      essential: true,
+                    });
+                  } else {
+                    handleFlyToPreset([127.935, 37.359], 16.5, 65, -35);
+                  }
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2.5 text-xs rounded-lg bg-gradient-to-r from-sky-900/70 to-emerald-900/70 hover:from-sky-800/90 hover:to-emerald-800/90 border border-sky-400/60 text-white font-bold flex items-center justify-between transition-all shadow-md group"
+                title="V-World 서울 실사 사진처럼 낮은 각도(Pitch 65°)에서 도심 빌딩숲과 뒤쪽 강원도 산악 능선, 파란 하늘을 한 화면에 웅장하게 조감"
+              >
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-3.5 h-3.5 text-sky-300 group-hover:scale-110 transition-transform" />
+                  <span className="text-sky-100 font-semibold tracking-tight">🏙️ V-World 서울식 스카이라인 뷰</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-950 text-sky-200 border border-sky-600/60">
+                  Pitch 65°
+                </span>
+              </button>
+
               {/* 시점 프리셋 */}
               <div className="pt-1 border-t border-[#24372a] space-y-1 px-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">

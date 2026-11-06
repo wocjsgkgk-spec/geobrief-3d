@@ -418,8 +418,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
-      // 1. 조명 설정 (자연스러운 한국 도심 주간광: 따뜻한 주광색 sunLight 1.35 + 하늘 반사광 hemisphereLight 0.85)
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+      // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션]
+      // - DirectionalLight: 강도 1.2로 자연스러운 입체감 부여
+      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.20);
       this.sunLight.position.set(-130, 160, 100).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
@@ -428,10 +429,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.fillLight.position.set(100, 120, -110).normalize();
       this.scene.add(this.fillLight);
 
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      // - AmbientLight(환경광): 강도 1.15로 대폭 강화하여 그림자 진 반대편 벽면의 어두움 완전 해소
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.15);
       this.scene.add(this.ambientLight);
 
-      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0xd6d3d1, 0.85);
+      // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 0.95로 서울 사진처럼 밝고 선명한 반사광 제공
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 0.95);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 1단계] 16종 독립 건축 Material 배열 직결
@@ -505,7 +508,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleSourceData = (e: any): void => {
     if (
-      (!this.masterMesh || this.builtBuildingKeys.size < 50) &&
       (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'fusion-buildings-source') &&
       e.isSourceLoaded
     ) {
@@ -514,7 +516,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   };
 
   private handleMapIdle = (): void => {
-    if ((!this.masterMesh || this.builtBuildingKeys.size < 50) && this.map) {
+    if (this.map && !this.isMoving) {
       this.extractAndBuildFromMap();
     }
   };
@@ -637,21 +639,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     } catch {}
 
-    if (this.vectorTileFeatures.length === 0) {
-      const vectorSources = ['openmaptiles-vector', 'openfreemap', 'openmaptiles'].filter((s) =>
-        this.map?.getSource(s)
-      );
+    const vectorSources = ['openmaptiles-vector', 'openfreemap', 'openmaptiles'].filter((s) =>
+      this.map?.getSource(s)
+    );
 
-      for (const srcId of vectorSources) {
-        try {
-          const srcFeats = this.map.querySourceFeatures(srcId, { sourceLayer: 'building' });
-          if (srcFeats && srcFeats.length > 0) {
-            this.vectorTileFeatures = srcFeats as any[];
+    for (const srcId of vectorSources) {
+      try {
+        const srcFeats = this.map.querySourceFeatures(srcId, { sourceLayer: 'building' });
+        if (srcFeats && srcFeats.length > 0) {
+          const valid = srcFeats.filter((f: any) => f && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+          if (valid.length > 0) {
+            this.vectorTileFeatures = valid as any[];
             break;
           }
-        } catch {
-          // ignore
         }
+      } catch {
+        // ignore
       }
     }
 
@@ -690,9 +693,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
-    if (this.cachedFeatures.length === 0) {
-      this.cachedFeatures = (SAMPLE_BUILDINGS?.features as any[]) || [];
-      this.cachedFeatures.forEach((f) => stampBuildingWithMasterData(f));
+    if (this.cachedFeatures.length === 0 && this.map) {
+      const center = this.map.getCenter();
+      const distWonju = Math.hypot(center.lng - 127.935, center.lat - 37.359);
+      if (distWonju < 0.1) {
+        this.cachedFeatures = (SAMPLE_BUILDINGS?.features as any[]) || [];
+        this.cachedFeatures.forEach((f) => stampBuildingWithMasterData(f));
+      }
     }
 
     if (this.isBuildingGeometry) {
@@ -709,7 +716,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   public updateSunLight(
     dirOrAlt: [number, number, number] | THREE.Vector3 | number,
     colorOrAz?: string | number,
-    intensity: number = 1.45,
+    intensity: number = 1.20,
     fogColor?: string,
     fogDensity?: number
   ): void {
@@ -730,6 +737,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.color.set(colorOrAz);
     }
     this.sunLight.intensity = Math.max(0.2, intensity);
+    if (this.ambientLight) this.ambientLight.intensity = 1.15;
+    if (this.hemisphereLight) {
+      this.hemisphereLight.intensity = 0.95;
+      this.hemisphereLight.color.set(0xffffff);
+      this.hemisphereLight.groundColor.set(0xe2e8f0);
+    }
 
     // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
     if (this.scene) {
@@ -1348,9 +1361,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const dLatM = (cLat - mapCenter.lat) * metersPerLat;
       const distFromCenterM = Math.hypot(dLngM, dLatM);
 
-      // [1단계: 1번째 사진 우측 상단 '초록색/갈색 산속 더미 박스 군집' 100% 영구 삭제]
-      // 산악 능선(표고 > 195m) 및 카메라 반경 2,300m 초과 원거리 산자락 허위 건물 즉시 차단
-      if (rawElev > 195 || distFromCenterM > 2300) {
+      // [산악 허위 더미 방지]: 지형 고도가 카메라 중심 지면 표고보다 250m 이상 급격히 높은 산꼭대기 절벽 상자 차단
+      const centerElev = map.queryTerrainElevation ? (map.queryTerrainElevation([mapCenter.lng, mapCenter.lat]) || 0) : 0;
+      if ((rawElev - centerElev > 250) || distFromCenterM > 2400) {
         continue;
       }
 
