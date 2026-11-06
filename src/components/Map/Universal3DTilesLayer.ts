@@ -11,7 +11,6 @@ import earcut from 'earcut';
 import { Tile3DStreamState } from '@/types/map';
 import { buildingSpatialCache } from '@/utils/buildingSpatialCache';
 import { elevationCache } from '@/utils/elevationCache';
-import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { TilesetController } from '@/lib/vendor/tilesetController';
 import {
   resolve3DTilesUrlAndOptions,
@@ -179,11 +178,11 @@ export class Universal3DTilesManager {
    * GeoJSON Feature 목록을 3D 타일 건축 아이템 구조로 전처리 및 RBush 색인
    */
   private reparseBuildings(): void {
-    const rawList =
-      this.features.length > 0
-        ? this.features
-        : (buildingSpatialCache.getFeaturesInBbox([127.8, 37.2, 128.1, 37.5]) as any) ||
-          (SAMPLE_BUILDINGS.features as any);
+    if (!this.features || this.features.length === 0) {
+      this.parsedBuildings = [];
+      return;
+    }
+    const rawList = this.features;
 
     const items: BuildingItem[] = [];
 

@@ -31,7 +31,6 @@ import * as THREE from 'three';
 import earcut from 'earcut';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
 import { elevationCache } from '@/utils/elevationCache';
-import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import {
   getDiverseKoreanFacadeAtlasTexture,
   getDiverseFacadeSlotUV,
@@ -508,7 +507,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleSourceData = (e: any): void => {
     if (
-      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'fusion-buildings-source') &&
+      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'fusion-buildings-source' || e.sourceId === 'real-buildings-source') &&
       e.isSourceLoaded
     ) {
       this.extractAndBuildFromMap();
@@ -573,52 +572,118 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * 벡터 타일 건물 피처와 외부 실측(V-World 실측/WFS 30,037동) 피처 스마트 무손실 결합
-   * [3단계 복원] 브이월드 공식 화면과 동일하게 누락된 택지지구 단독주택·상가·공공청사 100% 통합
+   * 베이스맵 원본 벡터 타일 건물 피처(100% 실측 정위치)에 외부 실측(V-World / 건축HUB) 속성만 1:1 공간 매칭 주입
+   * - 외곽선 지오메트리는 100% 베이스맵 벡터 타일 원본 좌표만 사용하여 산속 유령 건물 원천 차단 (0%)
+   * - 외부 데이터(extFeats)는 좌표를 임의로 그리지 않고, Point-in-Polygon / Centroid 거리 매칭(<= 25m)으로 실제 층수 및 명칭만 보강
    */
   private mergeBuildingFeatures(
     vecFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
     extFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] {
-    const combined: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
-    const seenCentroids = new Set<string>();
+    if (!vecFeats || vecFeats.length === 0) return [];
 
-    const addFeature = (feat: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>) => {
-      if (!feat || !feat.geometry) return;
-      const coords = feat.geometry.type === 'Polygon'
-        ? feat.geometry.coordinates[0]
-        : feat.geometry.coordinates[0]?.[0];
-      if (!coords || coords.length < 3) return;
+    if (!extFeats || extFeats.length === 0) {
+      return vecFeats;
+    }
+
+    // 1) 외부 실측 피처 공간 인덱스(Grid Map) 구축 (~20m 격자 해시)
+    const extGrid = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]>();
+    for (let i = 0; i < extFeats.length; i++) {
+      const ef = extFeats[i];
+      if (!ef || !ef.geometry) continue;
+      const coords = ef.geometry.type === 'Polygon'
+        ? ef.geometry.coordinates[0]
+        : ef.geometry.coordinates[0]?.[0];
+      if (!coords || coords.length < 3) continue;
 
       let sumX = 0, sumY = 0;
-      for (let i = 0; i < coords.length; i++) {
-        sumX += coords[i][0];
-        sumY += coords[i][1];
+      for (let j = 0; j < coords.length; j++) {
+        sumX += coords[j][0];
+        sumY += coords[j][1];
       }
-      const cX = (sumX / coords.length).toFixed(4);
-      const cY = (sumY / coords.length).toFixed(4);
-      const key = `${cX}_${cY}`;
+      const cX = sumX / coords.length;
+      const cY = sumY / coords.length;
 
-      if (seenCentroids.has(key)) return;
-      seenCentroids.add(key);
-      combined.push(feat);
-    };
+      const gX = Math.round(cX * 5000);
+      const gY = Math.round(cY * 5000);
+      const gKey = `${gX}_${gY}`;
+      let list = extGrid.get(gKey);
+      if (!list) {
+        list = [];
+        extGrid.set(gKey, list);
+      }
+      list.push(ef);
+    }
 
-    // 1) 베이스맵 벡터 타일 건물 피처 추가
-    if (vecFeats && vecFeats.length > 0) {
-      for (let i = 0; i < vecFeats.length; i++) {
-        addFeature(vecFeats[i]);
+    // 2) 베이스맵 벡터 건물 피처마다 가장 가까운 외부 실측 피처를 찾아 속성만 주입 (지오메트리는 100% 벡터 타일 유지!)
+    for (let i = 0; i < vecFeats.length; i++) {
+      const vf = vecFeats[i];
+      if (!vf || !vf.geometry) continue;
+      const coords = vf.geometry.type === 'Polygon'
+        ? vf.geometry.coordinates[0]
+        : vf.geometry.coordinates[0]?.[0];
+      if (!coords || coords.length < 3) continue;
+
+      let sumX = 0, sumY = 0;
+      for (let j = 0; j < coords.length; j++) {
+        sumX += coords[j][0];
+        sumY += coords[j][1];
+      }
+      const cX = sumX / coords.length;
+      const cY = sumY / coords.length;
+
+      const gX = Math.round(cX * 5000);
+      const gY = Math.round(cY * 5000);
+
+      let bestMatch: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null;
+      let bestDist = 0.00025; // 최대 약 25m 이내
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const neighborList = extGrid.get(`${gX + dx}_${gY + dy}`);
+          if (!neighborList) continue;
+          for (let k = 0; k < neighborList.length; k++) {
+            const candidate = neighborList[k];
+            const cCoords = candidate.geometry.type === 'Polygon'
+              ? candidate.geometry.coordinates[0]
+              : candidate.geometry.coordinates[0]?.[0];
+            if (!cCoords || cCoords.length < 3) continue;
+            let cSumX = 0, cSumY = 0;
+            for (let m = 0; m < cCoords.length; m++) {
+              cSumX += cCoords[m][0];
+              cSumY += cCoords[m][1];
+            }
+            const candCX = cSumX / cCoords.length;
+            const candCY = cSumY / cCoords.length;
+            const dist = Math.hypot(candCX - cX, candCY - cY);
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestMatch = candidate;
+            }
+          }
+        }
+      }
+
+      if (bestMatch && bestMatch.properties) {
+        const bp = bestMatch.properties;
+        const vp = vf.properties || {};
+        vf.properties = {
+          ...vp,
+          realHeight: bp.realHeight || bp.height || bp.heit || vp.realHeight,
+          realLevels: bp.realLevels || bp.levels || bp.grnd_flr || bp.gro_flo_co || vp.realLevels,
+          height: bp.height || bp.realHeight || bp.heit || vp.height,
+          grnd_flr: bp.grnd_flr || bp.gro_flo_co || bp.levels || vp.grnd_flr,
+          levels: bp.levels || bp.grnd_flr || bp.gro_flo_co || vp.levels,
+          realUse: bp.realUse || bp.mainPurpsCdNm || bp.usageType || vp.realUse,
+          realName: bp.realName || bp.buld_nm || bp.bldNm || bp.name || vp.realName,
+          buld_nm: bp.buld_nm || bp.bldNm || bp.name || vp.buld_nm,
+          roofCdNm: bp.roofCdNm || bp.roofColour || vp.roofCdNm,
+          is_real_measured: true,
+        };
       }
     }
 
-    // 2) 브이월드 실측 대장 피처 추가 (누락된 단독주택용지 및 관공서 빈틈없이 100% 보충)
-    if (extFeats && extFeats.length > 0) {
-      for (let i = 0; i < extFeats.length; i++) {
-        addFeature(extFeats[i]);
-      }
-    }
-
-    return combined.length > 0 ? combined : (vecFeats || []);
+    return vecFeats;
   }
 
   /**
@@ -632,10 +697,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.isMoving = false;
 
     // 1) 뷰포트 내 MapLibre 벡터 타일 피처 전체 수집 (6,400+ 저층/중층 건물 100% 추출)
+    let candidateFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
     try {
       const extracted = extractRenderedVectorBuildings(this.map);
       if (extracted && extracted.length > 0) {
-        this.vectorTileFeatures = extracted;
+        candidateFeatures = extracted;
       }
     } catch {}
 
@@ -648,14 +714,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const srcFeats = this.map.querySourceFeatures(srcId, { sourceLayer: 'building' });
         if (srcFeats && srcFeats.length > 0) {
           const valid = srcFeats.filter((f: any) => f && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
-          if (valid.length > 0) {
-            this.vectorTileFeatures = valid as any[];
-            break;
+          if (valid.length > candidateFeatures.length) {
+            candidateFeatures = valid as any[];
           }
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
+    }
+
+    if (candidateFeatures.length > 0) {
+      this.vectorTileFeatures = candidateFeatures;
     }
 
     // 2) 외부 실측 피처와 벡터 피처 스마트 결합 (건물 탈락 0%)
@@ -693,14 +760,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
-    if (this.cachedFeatures.length === 0 && this.map) {
-      const center = this.map.getCenter();
-      const distWonju = Math.hypot(center.lng - 127.935, center.lat - 37.359);
-      if (distWonju < 0.1) {
-        this.cachedFeatures = (SAMPLE_BUILDINGS?.features as any[]) || [];
-        this.cachedFeatures.forEach((f) => stampBuildingWithMasterData(f));
-      }
-    }
 
     if (this.isBuildingGeometry) {
       this.pendingFeatures = newFeaturesToBuild.length > 0 ? newFeaturesToBuild : this.cachedFeatures;
@@ -1175,7 +1234,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const spanZ = Math.max(1, maxZ - minZ);
       const minWidth = Math.min(spanX, spanZ);
 
-      // [1단계: 마스터 전역 기하 필터] 면적 50,000㎡ 초과 비건물 및 찢어짐 폴리곤 차단 (대형 관공서 및 소형 주택 100% 통과)
+      // [1단계: 마스터 전역 기하 필터]
+      // 1) 비건물 거대 폴리곤 및 좁은 옹벽 제외:
+      // 바닥 면적 4,500㎡ 초과 단일 폴리곤(학교 운동장, 공원)이나 짧은 변 폭 5m 미만의 좁고 긴 도형(도로, 옹벽, 담장) 100% 제외
+      if (areaSqm > 4500.0 || areaSqm < 30.0) {
+        continue;
+      }
+      if (minWidth < 5.0) {
+        continue;
+      }
+      if (Math.max(spanX, spanZ) / minWidth > 8.0) {
+        continue;
+      }
+
       const featProps = (feat.properties || {}) as Record<string, any>;
       if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth)) {
         continue;
@@ -1183,14 +1254,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // [1단계: 화면 삼각형 찢어짐(Polygon Tearing) 원천 차단]
       if (maxEdgeLen > 350 || spanX > 450 || spanZ > 450) {
-        continue;
-      }
-
-      // [3단계 복원: 폭 2.8m 미만 또는 세장비 9.5 초과 비건물 수직 장벽만 차단 (소형 단독주택 100% 복원)]
-      if (minWidth < 2.8) {
-        continue;
-      }
-      if (Math.max(spanX, spanZ) / minWidth > 9.5) {
         continue;
       }
 
@@ -1258,22 +1321,20 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [강제 집행 3] 4대 층고 분리 (소형 단독 6.5~10.5m / 일반 상가 12~21m / 공공·대형 16~42m / 아파트 45~75m)
+      // [강제 집행 3] 5대 층고 분리 (소형 단독 6.0~10.5m / 일반 상가 12~21m / 도청·시청·공공 22~45m / 아파트 45~75m)
       if (isTrueHighRiseApt) {
-        // 4) 아파트 단지: 45m ~ 75m
+        // 5) 전 권역 아파트 단지: 45m ~ 75m (최대 높이 75m 상한선 고정)
         height = Math.min(75.0, Math.max(45.0, height));
       } else if (areaSqm < 220 || minWidth < 7.5) {
-        // 1) 소형 단독·빌라: 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
-        height = Math.min(height, 10.5);
-        if (height < 6.5) {
-          height = 6.5 + (diverseSeed % 36) * 0.1;
-        }
+        // 2) 농어촌 주택·구도심 단독·다가구·빌라 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층)
+        // 절대 11m를 넘지 못하게 강제 클램핑 (Math.min(height, 10.5))
+        height = Math.min(10.5, Math.max(6.0, height));
       } else if (areaSqm >= 220 && areaSqm < 600) {
-        // 2) 일반 상가·원룸: 12m ~ 21m
+        // 3) 18개 시·군 시내 중심 상가·원룸·근린생활시설 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
         height = Math.min(21.0, Math.max(12.0, height));
       } else {
-        // 3) 공공기관·대형 빌딩 (area >= 600): 16m ~ 42m
-        height = Math.min(42.0, Math.max(16.0, height));
+        // 4) 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·동해안 리조트 (area >= 600㎡ 비주거): 22m ~ 45m (7층 ~ 14층)
+        height = Math.min(45.0, Math.max(22.0, height));
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
@@ -1363,7 +1424,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // [산악 허위 더미 방지]: 지형 고도가 카메라 중심 지면 표고보다 250m 이상 급격히 높은 산꼭대기 절벽 상자 차단
       const centerElev = map.queryTerrainElevation ? (map.queryTerrainElevation([mapCenter.lng, mapCenter.lat]) || 0) : 0;
-      if ((rawElev - centerElev > 250) || distFromCenterM > 2400) {
+      if (rawElev - centerElev > 250) {
         continue;
       }
 
@@ -1458,13 +1519,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
       const metersPerLat = (Math.PI / 180) * 6378137;
 
-      // [1단계: 뷰포트 실제 도심 시가지(반경 2.2km) 건물 100% 최우선 빌드]
-      // 산악 능선으로 이어지는 8km 원거리 버퍼를 제거하여 산속 유령 건물 유입 원천 차단
+      // [1단계: 동적 뷰포트(Dynamic BBOX) 실제 시가지 건물 100% 최우선 빌드]
       const bounds = map.getBounds();
-      const minLng = bounds.getWest() - 0.018;
-      const maxLng = bounds.getEast() + 0.018;
-      const minLat = bounds.getSouth() - 0.018;
-      const maxLat = bounds.getNorth() + 0.018;
+      const minLng = bounds.getWest() - 0.035;
+      const maxLng = bounds.getEast() + 0.035;
+      const minLat = bounds.getSouth() - 0.035;
+      const maxLat = bounds.getNorth() + 0.035;
 
       const viewportFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
 
@@ -1481,8 +1541,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
-      const maxLimit = this.options.maxBuildings || 35000;
-      const features = viewportFeatures.length > maxLimit ? viewportFeatures.slice(0, maxLimit) : viewportFeatures;
+      // [강제 집행] 특정 개수로 건물을 자르는 코드(slice/limit) 완전 제거: 뷰포트 내 실제 건물 100% 렌더링
+      const features = viewportFeatures;
 
       let featureIdx = 0;
       let newlyAddedCount = 0;

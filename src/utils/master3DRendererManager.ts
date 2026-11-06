@@ -229,6 +229,10 @@ export function isPermittedBuildingPolygon(
   // [2단계: 오직 실제 개별 건축물 외곽선(Individual Building Footprints)만 허용]
   const isAuthenticBuilding = Boolean(
     (typeof featProps.building === 'string' && featProps.building !== 'no') ||
+    featProps.render_height !== undefined ||
+    featProps.render_min_height !== undefined ||
+    featProps.levels !== undefined ||
+    featProps.sourceLayer === 'building' ||
     featProps.source === 'vworld_local' ||
     featProps.source === 'vworld_wfs' ||
     featProps.source === 'LT_C_SPBD' ||
@@ -247,9 +251,9 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [3단계: 거대 비건물 필지 area > 50,000㎡ 단독 폴리곤 100% 영구 차단 (대형 공공청사·병원·학교 허용)]
-  const maxAreaLimit = 50000.0;
-  if (areaSqm > maxAreaLimit || areaSqm < 5.0) {
+  // [3단계: 거대 비건물 필지 area > 4,500㎡ 단독 폴리곤 100% 영구 차단 (학교 운동장 전체, 단지 외곽 필지선, 공원)]
+  const maxAreaLimit = 4500.0;
+  if (areaSqm > maxAreaLimit || areaSqm < 30.0) {
     return false;
   }
 
@@ -258,16 +262,16 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [5단계: 골목길, 도로, 연석, 수직 장벽(폭 < 2.8m, 세장비 > 9.5) 차단 - 소형 단독주택 100% 통과]
+  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 5.0m, 세장비 > 8.0) 100% 차단]
   const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
   const maxSpan = Math.max(spanX, spanZ);
 
-  if (calculatedMinWidth < 2.8) {
+  if (calculatedMinWidth < 5.0) {
     return false;
   }
 
   const aspectRatio = maxSpan / calculatedMinWidth;
-  if (aspectRatio > 9.5) {
+  if (aspectRatio > 8.0) {
     return false;
   }
 
@@ -331,32 +335,32 @@ export function sanitizeBuildingHeight(
   }
 
   // ---------------------------------------------------------------------------
-  // [규격 4] 도청(춘천)·시청·군청·공공기관·병원·리조트 (area >= 600㎡ 비주거/복합)
-  // - 높이 24m ~ 48m (7층 ~ 15층)
+  // [규격 4] 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·동해안 리조트 (area >= 600㎡ 비주거/복합)
+  // - 높이 22m ~ 45m (7층 ~ 14층)
   // ---------------------------------------------------------------------------
   if (areaSqm >= 600 && !isHighRiseApt) {
-    const publicH = 24.0 + (seed % 25) * 1.0;
+    const publicH = 22.0 + (seed % 24) * 1.0;
     if (rawHeight > 0) {
-      return Math.min(48.0, Math.max(24.0, rawHeight));
+      return Math.min(45.0, Math.max(22.0, rawHeight));
     }
     return publicH;
   }
 
   // ---------------------------------------------------------------------------
   // [규격 5] 전 권역 아파트 단지 (apartments 또는 단지형 350㎡ ~ 2,500㎡ 주거동)
-  // - 높이 45m ~ 78m (15층 ~ 25층)
+  // - 높이 45m ~ 75m (15층 ~ 25층, 최대 75m 상한선 고정)
   // ---------------------------------------------------------------------------
   if (isHighRiseApt && areaSqm >= 320 && minWidth >= 8.0) {
     if (rawHeight > 0) {
-      return Math.min(78.0, Math.max(45.0, rawHeight));
+      return Math.min(75.0, Math.max(45.0, rawHeight));
     }
-    return 45.0 + (seed % 34) * 1.0;
+    return 45.0 + (seed % 31) * 1.0;
   }
 
   let calculatedH: number;
   if (rawHeight > 0) {
     const safeW = Math.max(6.0, minWidth);
-    const maxAllowed = isHighRiseApt ? 78.0 : Math.max(14.0, safeW * 4.0);
+    const maxAllowed = isHighRiseApt ? 75.0 : Math.max(14.0, safeW * 4.0);
     calculatedH = Math.max(7.5, Math.min(rawHeight, maxAllowed));
   } else {
     calculatedH = VworldMasterEngine.calculateBuildingHeight(

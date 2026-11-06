@@ -662,16 +662,16 @@ export function stampBuildingWithMasterData(
     areaSqm >= 600 &&
     realUse !== '공동주택(아파트)' && !isExplicitAptTag
   ) {
-    realLevels = 7 + (seed % 9); // 7~15층
-    realHeight = 24.0 + (seed % 25) * 1.0; // 24m ~ 48m
+    realLevels = 7 + (seed % 8); // 7~14층
+    realHeight = 22.0 + (seed % 24) * 1.0; // 22m ~ 45m
     realUse = '업무시설(관공서/오피스)';
     realRoof = '슬래브지붕';
   } else if (
     // 4) 전 권역 아파트 단지 (area >= 350)
     (realUse === '공동주택(아파트)' || isExplicitAptTag) && areaSqm >= 350
   ) {
-    if (realHeight < 45.0 || realHeight > 78.0) {
-      realHeight = 45.0 + (seed % 34) * 1.0; // 45m ~ 78m
+    if (realHeight < 45.0 || realHeight > 75.0) {
+      realHeight = 45.0 + (seed % 31) * 1.0; // 45m ~ 75m (상한선 75m 고정)
       realLevels = Math.round(realHeight / 3.1);
     }
     realRoof = '슬래브지붕';

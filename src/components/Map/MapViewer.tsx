@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import { useMapStore, WONJU_DEFAULT_POLYGON } from '@/store/useMapStore';
-import { SAMPLE_BUILDINGS } from '@/data/sampleBuildings';
 import { BORDER_SECURITY_GEOJSON } from '@/constants/borderSecurityZones';
 import { Compass, updateCompassDOM } from './Compass';
 import { ScaleBar, updateScaleBarDOM } from './ScaleBar';
@@ -895,19 +894,6 @@ export const MapViewer: React.FC = () => {
   const syncAbortControllerRef = useRef<AbortController | null>(null);
   const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // [1단계 직결] 로컬 실측 데이터베이스(30,037동) 시작 즉시 프리로드 및 실측 저장소 RBush 자동 적재
-  useEffect(() => {
-    fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-      .then((res) => {
-        if (res.features.length > 0 && mapRef.current) {
-          const { merged } = mergeIntoPersistentBuildingCache(res.features);
-          const { enrichedFeatures } = injectRealDataIntoFeatures(merged);
-          applyInjectedDataToMap(mapRef.current, enrichedFeatures, realisticKoreanCityLayerRef.current);
-        }
-      })
-      .catch(() => {});
-  }, [selectedRegionId, mergeIntoPersistentBuildingCache]);
-
   const syncExternalSpatialBuildings = useCallback(
     (mapInstance: maplibregl.Map) => {
       if (!mapInstance) return;
@@ -1039,6 +1025,18 @@ export const MapViewer: React.FC = () => {
     [mergeIntoPersistentBuildingCache, setVworldDiagnostic, selectedRegionId]
   );
 
+  // [1-2 동적 바인딩] 시·군 전환 시 이전 지역 캐시 정리 및 베이스맵 원본 건물 벡터 타일 동기화
+  useEffect(() => {
+    persistentBuildingCacheRef.current.clear();
+    fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
+      .then(() => {
+        if (mapRef.current) {
+          syncExternalSpatialBuildings(mapRef.current);
+        }
+      })
+      .catch(() => {});
+  }, [selectedRegionId, syncExternalSpatialBuildings]);
+
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
 
@@ -1072,18 +1070,6 @@ export const MapViewer: React.FC = () => {
         if (isBldgVisible) {
           if (realisticKoreanCityLayerRef.current) {
             count = realisticKoreanCityLayerRef.current.getBuildingCount();
-          }
-          if (count === 0) {
-            const zoom = map.getZoom();
-            if (zoom >= 15.5) {
-              count = 6985;
-            } else if (zoom >= 14) {
-              count = Math.min(6985, Math.round(4200 + (zoom - 14) * 1800));
-            } else if (zoom >= 12) {
-              count = Math.min(4200, Math.round(1500 + (zoom - 12) * 1350));
-            } else if (zoom >= 11) {
-              count = 850;
-            }
           }
         }
 
@@ -1469,7 +1455,7 @@ export const MapViewer: React.FC = () => {
           // 전략 대상지 인근 주요 거점 3D 건물 GeoJSON 소스
           'sample-buildings-source': {
             type: 'geojson',
-            data: SAMPLE_BUILDINGS,
+            data: { type: 'FeatureCollection', features: [] },
           },
           // 임시 드로잉 피처 소스
           'drawing-temp-source': {
@@ -2628,11 +2614,9 @@ export const MapViewer: React.FC = () => {
       setIsMapLoaded(true);
       updateRealtimeMetrics();
       fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-        .then((res) => {
-          if (res.features.length > 0 && map) {
-            const { merged } = mergeIntoPersistentBuildingCache(res.features);
-            const { enrichedFeatures } = injectRealDataIntoFeatures(merged);
-            applyInjectedDataToMap(map, enrichedFeatures, realisticKoreanCityLayerRef.current);
+        .then(() => {
+          if (map) {
+            syncExternalSpatialBuildings(map);
             updateRealtimeMetrics();
           }
         })
@@ -4345,11 +4329,9 @@ export const MapViewer: React.FC = () => {
     if (!layers.buildings3D) return;
 
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-      .then((res) => {
-        if (res.features.length > 0 && mapRef.current) {
-          const { merged } = mergeIntoPersistentBuildingCache(res.features);
-          const { enrichedFeatures } = injectRealDataIntoFeatures(merged);
-          applyInjectedDataToMap(mapRef.current, enrichedFeatures, realisticKoreanCityLayerRef.current);
+      .then(() => {
+        if (mapRef.current) {
+          syncExternalSpatialBuildings(mapRef.current);
           updateRealtimeMetrics();
         }
       })
@@ -4357,7 +4339,7 @@ export const MapViewer: React.FC = () => {
 
     // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
     syncExternalSpatialBuildings(map);
-  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncExternalSpatialBuildings, mergeIntoPersistentBuildingCache, updateRealtimeMetrics]);
+  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncExternalSpatialBuildings, updateRealtimeMetrics]);
 
   // 9. 베이스맵 전환 (4종 원클릭: 국토부 V-World 항공실사, Google 위성, V-World 클린, Google 로드맵)
   useEffect(() => {
