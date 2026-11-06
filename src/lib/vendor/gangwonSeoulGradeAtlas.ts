@@ -887,9 +887,10 @@ function drawSlot15_RuralStuccoCement(ctx: CanvasRenderingContext2D, s: number):
 }
 
 // ---------------------------------------------------------------------------
-// 16종 독립 Material 싱글톤 캐시
+// 16종 독립 Material 전역 싱글톤 1회 생성 (Pre-baked Singleton Cache)
 // ---------------------------------------------------------------------------
 
+export let GLOBAL_BUILDING_MATERIALS: THREE.MeshLambertMaterial[] | null = null;
 let cachedGangwonSeoulMaterials: THREE.MeshLambertMaterial[] | null = null;
 
 export const GANGWON_SEOUL_GRADE_DRAW_FNS = [
@@ -916,6 +917,7 @@ export const GANGWON_SEOUL_GRADE_DRAW_FNS = [
 ];
 
 export function getGangwonSeoulGradeMaterials(): THREE.MeshLambertMaterial[] {
+  if (GLOBAL_BUILDING_MATERIALS) return GLOBAL_BUILDING_MATERIALS;
   if (cachedGangwonSeoulMaterials) return cachedGangwonSeoulMaterials;
 
   const materials: THREE.MeshLambertMaterial[] = [];
@@ -947,6 +949,7 @@ export function getGangwonSeoulGradeMaterials(): THREE.MeshLambertMaterial[] {
   }
 
   cachedGangwonSeoulMaterials = materials;
+  GLOBAL_BUILDING_MATERIALS = materials;
   return materials;
 }
 

@@ -1025,7 +1025,7 @@ export const MapViewer: React.FC = () => {
     [mergeIntoPersistentBuildingCache, setVworldDiagnostic, selectedRegionId]
   );
 
-  // [1-2 동적 바인딩] 시·군 전환 시 이전 지역 캐시 정리 및 베이스맵 원본 건물 벡터 타일 동기화
+  // [1-2 동적 바인딩] 시·군 및 유휴부지 전환 시 이전 지역 캐시 정리 및 베이스맵 원본 건물 벡터 타일 동기화
   useEffect(() => {
     persistentBuildingCacheRef.current.clear();
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
@@ -1035,7 +1035,7 @@ export const MapViewer: React.FC = () => {
         }
       })
       .catch(() => {});
-  }, [selectedRegionId, syncExternalSpatialBuildings]);
+  }, [selectedRegionId, selectedIdleSiteId, syncExternalSpatialBuildings]);
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
@@ -2306,11 +2306,13 @@ export const MapViewer: React.FC = () => {
     });
 
     (window as any).__map = map;
+    (window as any).__mapInstance = map;
     (window as any).__mapLibreMap = map;
     (window as any).__geobrief_map = map;
     (window as any).map = map;
     (window as any).__setRenderMode3D = setRenderMode3D;
     (window as any).__useMapStore = useMapStore;
+    (window as any).useMapStore = useMapStore;
     (window as any).__spatialAnalysisEngine = {
       runViewshedSimulation: calculateViewshed,
       runFloodSimulation,
@@ -2592,7 +2594,7 @@ export const MapViewer: React.FC = () => {
         });
         syncExternalSpatialBuildings(map);
         updateRealtimeMetrics();
-      }, 400); // [60fps 보장] 400ms 디바운스
+      }, 450); // [60fps 보장] 450ms 디바운스
     };
     map.on('moveend', handleViewportMoveEnd);
 

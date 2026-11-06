@@ -546,13 +546,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.moveEndTimer = null;
       if (!this.map) return;
       if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
-        this.moveEndTimer = setTimeout(checkAndComplete, 350);
+        this.moveEndTimer = setTimeout(checkAndComplete, 450);
         return;
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
     };
-    this.moveEndTimer = setTimeout(checkAndComplete, 350);
+    this.moveEndTimer = setTimeout(checkAndComplete, 450);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -1833,17 +1833,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.camera.projectionMatrix.copy(this.renderMatrix).multiply(this.localMatrix);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
-      // [GeoBrief 3D 1단계] 16종 독립 Material PBR Uniform 동기화
-      if (this.buildingMaterials && this.buildingMaterials.length > 0) {
-        for (const mat of this.buildingMaterials) {
-          if ((mat as any).userData?.customUniforms) {
-            updatePhotorealisticPbrUniforms(mat, this.camera, this.sunLight);
-          }
-        }
-      }
-      if (this.rooftopMaterial) {
-        updatePhotorealisticPbrUniforms(this.rooftopMaterial, this.camera, this.sunLight);
-      }
+      // [3-2 최적화]: render() 내부 불필요한 PBR 루프 제거 (60fps 직결)
 
       if (gl) {
         gl.enable(gl.DEPTH_TEST);
@@ -1895,17 +1885,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.masterGeometry?.dispose();
       this.masterMesh = null;
     }
-    if (this.buildingMaterials && this.buildingMaterials.length > 0) {
-      for (const mat of this.buildingMaterials) {
-        mat.dispose();
-      }
-      this.buildingMaterials = [];
-      this.materialMeshes = [];
-    }
+    // [3-1 싱글톤 보존]: 16종 독립 Material 및 옥상 재질은 전역 싱글톤으로 영구 보존하여 렉 원천 차단
+    this.buildingMaterials = [];
+    this.materialMeshes = [];
     if (this.rooftopMesh) {
       this.scene.remove(this.rooftopMesh);
       this.rooftopGeometry?.dispose();
-      this.rooftopMaterial?.dispose();
       this.rooftopMesh = null;
     }
     if (this.bridgeGroup) {
