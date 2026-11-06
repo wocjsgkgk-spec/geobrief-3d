@@ -158,18 +158,15 @@ export function syncMaster3DRenderer(
     threeboxLayer.setVisible(placedFacilitiesCount > 0);
   }
 
-  // 4. [강제 집행 2] 베이스맵 원본 건물 폴리곤(25,719동) 100% 정위치 3D 솟아오름 유지
-  // 모드 A, 모드 B, 모드 C 무관하게 베이스맵 실제 건물이 숨겨지지 않고 위성사진 자리 위에서 100% 솟아오르도록 보장
-  if (isBuildingsVisible) {
-    setGpuBuildingLayersVisibility(map, true);
-  } else {
-    hideAllFillExtrusionLayers(map);
-  }
+  // 4. [1단계 해체] 단일 베이지+흑갈색 fill-extrusion 영구 비활성화
+  // Three.js RealisticKoreanCityLayer가 16종 멀티 재질(materials[0..15])로 전담 렌더링하도록 MapLibre fill-extrusion 차단
+  hideAllFillExtrusionLayers(map);
+  setGpuBuildingLayersVisibility(map, false);
 }
 
 /**
  * [전역 기하 필터] 비건물 및 이상 거대 폴리곤 검증 (VworldMasterEngine 연동)
- * - [신규] 폭 5.5m 미만 보행로/화단/담장/경계석 세장형 비건물 폴리곤 압출 원천 차단
+ * - 폭 2.8m 미만 보행로/화단/담장/경계석 비건물 차단 (소형 단독주택·상가 100% 허용)
  */
 export function isPermittedBuildingPolygon(
   featProps: Record<string, any> = {},
@@ -235,6 +232,9 @@ export function isPermittedBuildingPolygon(
     featProps.source === 'vworld_local' ||
     featProps.source === 'vworld_wfs' ||
     featProps.source === 'LT_C_SPBD' ||
+    featProps.source === 'openfreemap' ||
+    featProps.bld_category ||
+    featProps.usageType ||
     featProps.bd_mgt_sn ||
     featProps.mgmBldrgstPk ||
     featProps.buld_nm ||
@@ -247,31 +247,31 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [3단계: 거대 비건물 필지 area > 4,500㎡ 단독 폴리곤 100% 영구 차단]
-  const maxAreaLimit = 4500.0;
-  if (areaSqm > maxAreaLimit || areaSqm < 20.0) {
+  // [3단계: 거대 비건물 필지 area > 50,000㎡ 단독 폴리곤 100% 영구 차단 (대형 공공청사·병원·학교 허용)]
+  const maxAreaLimit = 50000.0;
+  if (areaSqm > maxAreaLimit || areaSqm < 5.0) {
     return false;
   }
 
   // [4단계: 삼각형 찢어짐 및 비정상 스팬 차단]
-  if (spanX > 250 || spanZ > 250 || maxEdgeLen > 220) {
+  if (spanX > 450 || spanZ > 450 || maxEdgeLen > 350) {
     return false;
   }
 
-  // [5단계: 골목길, 도로, 연석, 수직 장벽(폭 < 4.5m, 세장비 > 7.0) 차단]
+  // [5단계: 골목길, 도로, 연석, 수직 장벽(폭 < 2.8m, 세장비 > 9.5) 차단 - 소형 단독주택 100% 통과]
   const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
   const maxSpan = Math.max(spanX, spanZ);
 
-  if (calculatedMinWidth < 4.5) {
+  if (calculatedMinWidth < 2.8) {
     return false;
   }
 
   const aspectRatio = maxSpan / calculatedMinWidth;
-  if (aspectRatio > 7.0) {
+  if (aspectRatio > 9.5) {
     return false;
   }
 
-  if (maxEdgeLen > 0 && (areaSqm / (maxEdgeLen * maxEdgeLen)) < 0.05) {
+  if (maxEdgeLen > 0 && (areaSqm / (maxEdgeLen * maxEdgeLen)) < 0.03) {
     return false;
   }
 

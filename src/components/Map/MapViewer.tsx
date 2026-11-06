@@ -2950,7 +2950,9 @@ export const MapViewer: React.FC = () => {
             }
           }
         });
-        setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
+        // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 렌더링
+        // MapLibre 단일 베이지/흑갈색 fill-extrusion 비활성화
+        setGpuBuildingLayersVisibility(map, false);
 
         // [전술·분석 GeoJSON 소스 및 오버레이 레이어 동적 안전 주입]
         if (fullMapStyle.sources) {
@@ -5922,8 +5924,8 @@ export const MapViewer: React.FC = () => {
       realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
       realisticKoreanCityLayerRef.current.setBuildingTheme(buildingTheme);
     }
-    // [강제 집행 2] 베이스맵 원본 건물 25,719동 100% 3D 솟아오름 유지
-    setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
+    // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 (MapLibre fill-extrusion 비활성화)
+    setGpuBuildingLayersVisibility(map, false);
   }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
   // 21. [3D 다목적 실측 줄자 (3D Ruler & Area) 인터랙션 & GeoJSON 동기화]
@@ -6432,7 +6434,7 @@ export const MapViewer: React.FC = () => {
     if (realisticKoreanCityLayerRef.current) {
       realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
     }
-    setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
+    setGpuBuildingLayersVisibility(map, false);
     map.triggerRepaint();
   }, [layers.buildings3D, isMapLoaded]);
 
@@ -6909,7 +6911,9 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
         }
-        setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
+        // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 렌더링
+        // MapLibre 단일 베이지/흑갈색 fill-extrusion 비활성화
+        setGpuBuildingLayersVisibility(map, false);
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
@@ -7025,7 +7029,9 @@ export const MapViewer: React.FC = () => {
         }
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
         // [강제 집행 2] 모드 무관하게 베이스맵 원본 건물 25,719동 100% 3D 렌더링 유지
-        setGpuBuildingLayersVisibility(map, Boolean(layers.buildings3D));
+        // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 렌더링
+        // MapLibre 단일 베이지/흑갈색 fill-extrusion 비활성화
+        setGpuBuildingLayersVisibility(map, false);
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }

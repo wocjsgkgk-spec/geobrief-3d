@@ -572,16 +572,52 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * 벡터 타일 건물 피처(6,400여동)와 외부 실측 대장(WFS/Overpass) 피처 결합
-   * [강제 집행 2] 외부 오프셋 GeoJSON 영구 배제: 오직 지도 베이스맵 원본 건물 벡터 타일(openmaptiles-vector)만 100% 사용
+   * 벡터 타일 건물 피처와 외부 실측(V-World 실측/WFS 30,037동) 피처 스마트 무손실 결합
+   * [3단계 복원] 브이월드 공식 화면과 동일하게 누락된 택지지구 단독주택·상가·공공청사 100% 통합
    */
   private mergeBuildingFeatures(
     vecFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
     extFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] {
-    // 좌표 오차가 있는 외부 GeoJSON 대신 100% 정위치 베이스맵 벡터 타일 건물 피처만 반환
-    if (vecFeats && vecFeats.length > 0) return vecFeats;
-    return [];
+    const combined: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+    const seenCentroids = new Set<string>();
+
+    const addFeature = (feat: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>) => {
+      if (!feat || !feat.geometry) return;
+      const coords = feat.geometry.type === 'Polygon'
+        ? feat.geometry.coordinates[0]
+        : feat.geometry.coordinates[0]?.[0];
+      if (!coords || coords.length < 3) return;
+
+      let sumX = 0, sumY = 0;
+      for (let i = 0; i < coords.length; i++) {
+        sumX += coords[i][0];
+        sumY += coords[i][1];
+      }
+      const cX = (sumX / coords.length).toFixed(4);
+      const cY = (sumY / coords.length).toFixed(4);
+      const key = `${cX}_${cY}`;
+
+      if (seenCentroids.has(key)) return;
+      seenCentroids.add(key);
+      combined.push(feat);
+    };
+
+    // 1) 베이스맵 벡터 타일 건물 피처 추가
+    if (vecFeats && vecFeats.length > 0) {
+      for (let i = 0; i < vecFeats.length; i++) {
+        addFeature(vecFeats[i]);
+      }
+    }
+
+    // 2) 브이월드 실측 대장 피처 추가 (누락된 단독주택용지 및 관공서 빈틈없이 100% 보충)
+    if (extFeats && extFeats.length > 0) {
+      for (let i = 0; i < extFeats.length; i++) {
+        addFeature(extFeats[i]);
+      }
+    }
+
+    return combined.length > 0 ? combined : (vecFeats || []);
   }
 
   /**
@@ -1127,22 +1163,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const spanZ = Math.max(1, maxZ - minZ);
       const minWidth = Math.min(spanX, spanZ);
 
-      // [1단계: 마스터 전역 기하 필터] 면적 4,000㎡ 초과 비건물 및 찢어짐 폴리곤 100% 영구 차단
+      // [1단계: 마스터 전역 기하 필터] 면적 50,000㎡ 초과 비건물 및 찢어짐 폴리곤 차단 (대형 관공서 및 소형 주택 100% 통과)
       const featProps = (feat.properties || {}) as Record<string, any>;
       if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth)) {
         continue;
       }
 
-      // [1단계: 화면 중앙 붉은색/검은색 삼각형 찢어짐(Polygon Tearing) 원천 차단]
-      if (maxEdgeLen > 220 || spanX > 260 || spanZ > 260) {
+      // [1단계: 화면 삼각형 찢어짐(Polygon Tearing) 원천 차단]
+      if (maxEdgeLen > 350 || spanX > 450 || spanZ > 450) {
         continue;
       }
 
-      // [신규: 폭 6m 미만 또는 세장비 8.0 초과 도로/보행로/옹벽/방음벽 등 비건물 수직 장벽 100% 원천 차단]
-      if (minWidth < 6.0) {
+      // [3단계 복원: 폭 2.8m 미만 또는 세장비 9.5 초과 비건물 수직 장벽만 차단 (소형 단독주택 100% 복원)]
+      if (minWidth < 2.8) {
         continue;
       }
-      if (Math.max(spanX, spanZ) / minWidth > 8.0) {
+      if (Math.max(spanX, spanZ) / minWidth > 9.5) {
         continue;
       }
 
@@ -1313,6 +1349,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const dLatM = (cLat - mapCenter.lat) * metersPerLat;
       const distFromCenterM = Math.hypot(dLngM, dLatM);
 
+      // [1단계: 1번째 사진 우측 상단 '초록색/갈색 산속 더미 박스 군집' 100% 영구 삭제]
+      // 산악 능선(표고 > 195m) 및 카메라 반경 2,300m 초과 원거리 산자락 허위 건물 즉시 차단
+      if (rawElev > 195 || distFromCenterM > 2300) {
+        continue;
+      }
+
       let lodLevel: 1 | 2 | 3 = 3;
       if (zoom < 14.0) {
         lodLevel = 1;
@@ -1404,15 +1446,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const metersPerLng = (Math.PI / 180) * 6378137 * cosLat;
       const metersPerLat = (Math.PI / 180) * 6378137;
 
-      // [2단계: 뷰포트 및 주변 광역 블록(반경 8km+) 전 구역 수천 동 100% 최우선 빌드]
+      // [1단계: 뷰포트 실제 도심 시가지(반경 2.2km) 건물 100% 최우선 빌드]
+      // 산악 능선으로 이어지는 8km 원거리 버퍼를 제거하여 산속 유령 건물 유입 원천 차단
       const bounds = map.getBounds();
-      const minLng = bounds.getWest() - 0.085;
-      const maxLng = bounds.getEast() + 0.085;
-      const minLat = bounds.getSouth() - 0.080;
-      const maxLat = bounds.getNorth() + 0.080;
+      const minLng = bounds.getWest() - 0.018;
+      const maxLng = bounds.getEast() + 0.018;
+      const minLat = bounds.getSouth() - 0.018;
+      const maxLat = bounds.getNorth() + 0.018;
 
       const viewportFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
-      const outerFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
 
       for (let i = 0; i < rawFeatures.length; i++) {
         const feat = rawFeatures[i];
@@ -1424,14 +1466,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const [lng, lat] = coords;
         if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
           viewportFeatures.push(feat);
-        } else {
-          outerFeatures.push(feat);
         }
       }
 
       const maxLimit = this.options.maxBuildings || 35000;
-      const combinedList = [...viewportFeatures, ...outerFeatures];
-      const features = combinedList.length > maxLimit ? combinedList.slice(0, maxLimit) : combinedList;
+      const features = viewportFeatures.length > maxLimit ? viewportFeatures.slice(0, maxLimit) : viewportFeatures;
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
