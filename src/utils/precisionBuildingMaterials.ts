@@ -32,6 +32,10 @@ import {
   getSeoulGradeRooftopTexture,
 } from '@/lib/vendor/seoulGradeRooftopEngine';
 import { getSeoulGradeBuildingMaterials } from '@/lib/vendor/seoulGradeFacadeAtlas';
+import {
+  getGangwonSeoulGradeMaterials,
+  classifyGangwonSeoulBuildingStyle,
+} from '@/lib/vendor/gangwonSeoulGradeAtlas';
 
 export {
   SEOUL_ROOFTOP_COLORS,
@@ -39,6 +43,8 @@ export {
   getSeoulGradeRooftopMaterial,
   getSeoulGradeRooftopTexture,
   getSeoulGradeBuildingMaterials,
+  getGangwonSeoulGradeMaterials,
+  classifyGangwonSeoulBuildingStyle,
 };
 
 // 옥상 4대 실측 컬러 및 서울 실사 옥상 디테일 컬러 정의
@@ -70,145 +76,18 @@ export function classifyBuildingStyle(
   height: number,
   centerLngLat?: [number, number]
 ): BuildingStyleAssignment {
-  const buldNm = String(featProps.buld_nm || featProps.name || '');
-  const realUse = String(featProps.realUse || featProps.use || featProps.type || '');
-  const absSeed = Math.abs(seed);
-
-  // ---------------------------------------------------------------------------
-  // 1. [소형 단독주택·다세대·원룸] area < 220㎡ 최우선 강제 분기
-  // - 주변에 아파트 POI가 있더라도 절대 11m(3.5층) 초과 금지
-  // - 외관: 서울 밀집 적벽돌(#7f1d1d), 황토 적벽돌(#9a3412), 베이지 석재(#d6d3d1),
-  //         백색 타일 바둑판(#f8fafc), 스타코 우드 (Slot 5..9)
-  // - 지붕: 서울 실사 4대 컬러 비율 완벽 매칭 (50% 우레탄 녹색, 30% 콘크리트, 15% 기와, 5% 코발트)
-  // ---------------------------------------------------------------------------
-  if (areaSqm < 220) {
-    const facadeSlot = 5 + (absSeed % 5); // Slot 5..9
-    const roof = assignSeoulRooftopStyle('villa', seed, areaSqm, height);
-
-    return {
-      category: 'villa',
-      facadeSlot,
-      sideWallSlot: facadeSlot,
-      podiumSlot: facadeSlot,
-      signboardSlot: facadeSlot,
-      porchSlot: facadeSlot,
-      roofType: roof.roofType,
-      roofColorRgb: roof.roofColorRgb,
-      parapetColorRgb: roof.parapetColorRgb,
-      penthouseColorRgb: roof.penthouseColorRgb,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // 2. [학교·공공청사·업무타워]
-  // - 외관: 청록 커튼월(10), 스카이블루(11), PC 리본창(12), 테라코타 사옥(13)
-  // ---------------------------------------------------------------------------
-  const isSchool =
-    buldNm.includes('학교') ||
-    buldNm.includes('초등') ||
-    buldNm.includes('중학') ||
-    buldNm.includes('고등') ||
-    realUse.includes('학교') ||
-    realUse.includes('교육');
-
-  const isGovPublic =
-    isSchool ||
-    realUse.includes('공공') ||
-    realUse.includes('관공서') ||
-    realUse.includes('업무') ||
-    realUse.includes('청사') ||
-    realUse.includes('병원') ||
-    buldNm.includes('청사') ||
-    buldNm.includes('시청') ||
-    buldNm.includes('도청') ||
-    buldNm.includes('군청') ||
-    buldNm.includes('구청') ||
-    buldNm.includes('공단') ||
-    buldNm.includes('공사') ||
-    buldNm.includes('센터') ||
-    buldNm.includes('병원') ||
-    buldNm.includes('의료원') ||
-    buldNm.includes('보건') ||
-    buldNm.includes('소방') ||
-    buldNm.includes('경찰') ||
-    buldNm.includes('법원') ||
-    (areaSqm >= 600 && height >= 20 && !buldNm.includes('아파트'));
-
-  if (isGovPublic) {
-    const facadeSlot = isSchool ? 13 : 10 + (absSeed % 4); // Slot 10..13
-    const roof = assignSeoulRooftopStyle('public', seed, areaSqm, height);
-
-    return {
-      category: 'public',
-      facadeSlot,
-      sideWallSlot: 16,
-      podiumSlot: 17,
-      signboardSlot: 18,
-      porchSlot: 19,
-      roofType: roof.roofType,
-      roofColorRgb: roof.roofColorRgb,
-      parapetColorRgb: roof.parapetColorRgb,
-      penthouseColorRgb: roof.penthouseColorRgb,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // 3. [진짜 아파트 단지] (apartments 또는 area >= 400㎡인 장방형/타워형 주거 건물)
-  // - 높이 45m ~ 75m (15층 ~ 25층)
-  // - 외관: 순백색(#f8fafc)·크림 아이보리(#f1f5f9)·은회색(#e2e8f0) 몸통 +
-  //         수직 청록/블루/그린 그라데이션 브랜드 스트라이프 (Slot 0..4)
-  // ---------------------------------------------------------------------------
-  const isApt =
-    (realUse.includes('아파트') ||
-      buldNm.includes('아파트') ||
-      buldNm.includes('아이파크') ||
-      buldNm.includes('푸르지오') ||
-      buldNm.includes('힐스테이트') ||
-      buldNm.includes('자이') ||
-      buldNm.includes('롯데캐슬') ||
-      buldNm.includes('에버빌') ||
-      buldNm.includes('더샵') ||
-      buldNm.includes('청솔') ||
-      (height >= 25 && areaSqm >= 350)) &&
-    areaSqm >= 250;
-
-  if (isApt) {
-    const facadeSlot = absSeed % 5; // Group 0~4
-    const roof = assignSeoulRooftopStyle('apartment', seed, areaSqm, height);
-
-    return {
-      category: 'apartment',
-      facadeSlot,
-      sideWallSlot: 16, // 아파트 측벽 동 번호
-      podiumSlot: 17,
-      signboardSlot: 18,
-      porchSlot: 19,
-      roofType: roof.roofType,
-      roofColorRgb: roof.roofColorRgb,
-      parapetColorRgb: roof.parapetColorRgb,
-      penthouseColorRgb: roof.penthouseColorRgb,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // 4. [시내 상가 및 근린생활시설]
-  // - 외관: 1~2층 짙은 화강석 + 레드(#dc2626)·블루(#2563eb)·옐로우(#eab308) 실사 간판(14)
-  //         또는 모던 차콜 메탈 복합패널(15)
-  // ---------------------------------------------------------------------------
-  const facadeSlot = absSeed % 2 === 0 ? 14 : 15;
-  const roof = assignSeoulRooftopStyle('commercial', seed, areaSqm, height);
-
+  const gStyle = classifyGangwonSeoulBuildingStyle(featProps, seed, areaSqm, height, centerLngLat);
   return {
-    category: 'commercial',
-    facadeSlot,
-    sideWallSlot: 16,
-    podiumSlot: 17,
-    signboardSlot: 18,
-    porchSlot: 19,
-    roofType: roof.roofType,
-    roofColorRgb: roof.roofColorRgb,
-    parapetColorRgb: roof.parapetColorRgb,
-    penthouseColorRgb: roof.penthouseColorRgb,
+    category: gStyle.category,
+    facadeSlot: gStyle.facadeSlot,
+    sideWallSlot: gStyle.sideWallSlot,
+    podiumSlot: gStyle.podiumSlot,
+    signboardSlot: gStyle.signboardSlot,
+    porchSlot: gStyle.facadeSlot,
+    roofType: gStyle.roofType,
+    roofColorRgb: gStyle.roofColorRgb,
+    parapetColorRgb: gStyle.parapetColorRgb,
+    penthouseColorRgb: gStyle.penthouseColorRgb,
   };
 }
 
@@ -877,6 +756,6 @@ import {
   PHOTOREAL_ROOF_COLORS,
 } from '@/lib/vendor/vworldPhotorealEngine';
 
-export function getPrecisionBuildingMaterials(): THREE.MeshStandardMaterial[] {
-  return getSeoulGradeBuildingMaterials();
+export function getPrecisionBuildingMaterials(): (THREE.MeshStandardMaterial | THREE.MeshLambertMaterial)[] {
+  return getGangwonSeoulGradeMaterials() as any;
 }

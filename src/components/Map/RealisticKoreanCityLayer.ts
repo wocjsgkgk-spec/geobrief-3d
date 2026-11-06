@@ -130,7 +130,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   // 16종 독립 Material & 단일 씬 메쉬
   public masterMesh: THREE.Mesh | null = null;
   public masterGeometry: THREE.BufferGeometry | null = null;
-  public buildingMaterials: THREE.MeshStandardMaterial[] = [];
+  public buildingMaterials: (THREE.MeshStandardMaterial | THREE.MeshLambertMaterial)[] = [];
   public materialMeshes: THREE.Mesh[] = [];
 
   // 줌 14.5 ~ 15.5 정밀 페이드인을 위한 옥상 난간 및 옥탑 코어 메쉬/재질
@@ -272,15 +272,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const mat = this.buildingMaterials[i];
       if (theme === 'photorealistic') {
         mat.color.setHex(0xffffff);
-        mat.roughness = 0.45;
+        if ('roughness' in mat) (mat as any).roughness = 0.45;
       } else if (theme === 'landuse') {
         const hex = landuseColors[i % landuseColors.length];
         mat.color.setHex(hex);
-        mat.roughness = 0.55;
+        if ('roughness' in mat) (mat as any).roughness = 0.55;
       } else if (theme === 'height_spectrum') {
         const hex = heightSpectrumColors[i % heightSpectrumColors.length];
         mat.color.setHex(hex);
-        mat.roughness = 0.55;
+        if ('roughness' in mat) (mat as any).roughness = 0.55;
       }
       mat.needsUpdate = true;
     }
@@ -428,8 +428,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.fillLight.position.set(100, 120, -110).normalize();
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 강도 1.15로 대폭 강화하여 그림자 진 반대편 벽면의 어두움 완전 해소
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.15);
+      // - AmbientLight(환경광): 강도 1.2로 강화하여 서울 사진처럼 밝고 선명한 주광 제공
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
       this.scene.add(this.ambientLight);
 
       // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 0.95로 서울 사진처럼 밝고 선명한 반사광 제공
@@ -796,7 +796,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.color.set(colorOrAz);
     }
     this.sunLight.intensity = Math.max(0.2, intensity);
-    if (this.ambientLight) this.ambientLight.intensity = 1.15;
+    if (this.ambientLight) this.ambientLight.intensity = 1.20;
     if (this.hemisphereLight) {
       this.hemisphereLight.intensity = 0.95;
       this.hemisphereLight.color.set(0xffffff);
