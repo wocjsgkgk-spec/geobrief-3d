@@ -60,6 +60,7 @@ import { PrecisionBuildingBuilder } from '@/lib/vendor/precisionBuildingBuilder'
 import {
   getPrecisionBuildingMaterials,
   classifyBuildingStyle,
+  getSeoulGradeRooftopMaterial,
 } from '@/utils/precisionBuildingMaterials';
 import {
   classifyBuildingWithVendor,
@@ -411,6 +412,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   public onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     this.map = map;
+    if (typeof window !== 'undefined') {
+      (window as any).__mapInstance = map;
+      (window as any).__realisticKoreanCityLayer = this;
+    }
 
     try {
       // 1. 조명 설정 (자연스러운 한국 도심 주간광: 따뜻한 주광색 sunLight 1.35 + 하늘 반사광 hemisphereLight 0.85)
@@ -432,14 +437,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // 2. [GeoBrief 3D 1단계] 16종 독립 건축 Material 배열 직결
       this.buildingMaterials = getPrecisionBuildingMaterials().slice(0, 16);
 
-      // [지붕 옥상 윗면 4대 실측 톤 완전 분리: vertexColors 100% 표출]
-      this.rooftopMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        roughness: 0.65,
-        metalness: 0.05,
-        side: THREE.DoubleSide,
-      });
+      // [GeoBrief 3D 2단계] 지붕 옥상 윗면 실사 항공 텍스처 및 서울 4대 실측 컬러 100% 표출
+      this.rooftopMaterial = getSeoulGradeRooftopMaterial();
 
       // 2-B. 국토교통부 전국 교량 및 터널 실사 PBR 재질 초기화
       this.bridgeMaterial = new THREE.MeshStandardMaterial({

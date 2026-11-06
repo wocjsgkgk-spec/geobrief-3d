@@ -147,6 +147,14 @@ export class PrecisionBuildingBuilder {
       if (p.z > maxZ) maxZ = p.z;
     }
     const minWidth = Math.min(Math.max(1, maxX - minX), Math.max(1, maxZ - minZ));
+    const spanX = Math.max(1, maxX - minX);
+    const spanZ = Math.max(1, maxZ - minZ);
+    const uvScale = Math.max(1, Math.floor(Math.max(spanX, spanZ) / 28));
+
+    const getRoofUv = (px: number, pz: number): [number, number] => [
+      ((px - minX) / spanX) * uvScale,
+      ((pz - minZ) / spanZ) * uvScale,
+    ];
 
     let clampedHeight = Math.max(3.5, rawHeight);
     if (areaSqm < 220 || minWidth < 7.5) {
@@ -282,9 +290,9 @@ export class PrecisionBuildingBuilder {
             [pB.x, topElev, pB.z],
             [pC.x, topElev, pC.z],
             [0, 1, 0],
-            [0, 0],
-            [1, 0],
-            [1, 1],
+            getRoofUv(pA.x, pA.z),
+            getRoofUv(pB.x, pB.z),
+            getRoofUv(pC.x, pC.z),
             style.roofColorRgb
           );
         }
@@ -436,9 +444,9 @@ export class PrecisionBuildingBuilder {
             [pB.x, topElev, pB.z],
             [pC.x, topElev, pC.z],
             [0, 1, 0],
-            [0, 0],
-            [1, 0],
-            [1, 1],
+            getRoofUv(pA.x, pA.z),
+            getRoofUv(pB.x, pB.z),
+            getRoofUv(pC.x, pC.z),
             style.roofColorRgb
           );
         }
@@ -948,9 +956,9 @@ export class PrecisionBuildingBuilder {
           [pB.x, topElev, pB.z],
           [pC.x, topElev, pC.z],
           [0, 1, 0],
-          [0, 0],
-          [1, 0],
-          [1, 1],
+          getRoofUv(pA.x, pA.z),
+          getRoofUv(pB.x, pB.z),
+          getRoofUv(pC.x, pC.z),
           style.roofColorRgb
         );
       }
