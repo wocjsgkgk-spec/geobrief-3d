@@ -528,7 +528,7 @@ export interface SecurityWallState {
 export interface LosPoint {
   coords: [number, number]; // [lng, lat]
   elevation: number; // 지면 해발고도 EL. m
-  heightOffset: number; // 관측자/목표물 높이 m (관측점: 2.5m, 목표점: 1.8m)
+  heightOffset: number; // 관측자/목표물 높이 m (관측점: 2.5m ~ 50m, 목표점: 2.0m)
   name?: string; // 관측점/목표점 명칭
 }
 
@@ -553,6 +553,11 @@ export interface LosAnalysisResult {
   };
   samplingCount: number;
   calculatedAt: number;
+  visibilityRate?: number; // 가시율 (%)
+  statusText?: string; // '🟢 관측 확보' | '🔴 지형 차폐' | '🔴 건물 차폐'
+  firstObstacleName?: string; // 최초 차폐 장애물명 (산악 능선 또는 차폐 건물명)
+  firstObstacleHeight?: number; // 차폐 건물 높이 (m)
+  obstacleType?: 'terrain' | 'building'; // 차폐 유형
 }
 
 export interface LosAnalysisState {
@@ -561,6 +566,11 @@ export interface LosAnalysisState {
   pointA: LosPoint | null;
   pointB: LosPoint | null;
   result: LosAnalysisResult | null;
+  observerHeight?: number; // 관측점 높이 m (2 ~ 50m)
+  targetHeight?: number; // 표적점 높이 m (1 ~ 20m)
+  viewshedMode?: boolean; // 360도 전방위 관측권 모드 여부
+  viewshedRadius?: number; // 전방위 관측 반경 m (500 ~ 5000m)
+  viewshedResult?: any; // 전방위 관측권 계산 결과
 }
 
 // =========================================================================

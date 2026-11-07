@@ -564,10 +564,14 @@ interface MapStoreState {
   toggleThreatDome: () => void;
   setSecurityWall: (updates: Partial<SecurityWallState>) => void;
   toggleSecurityWall: () => void;
-  startLosAnalysis: () => void;
+  startLosAnalysis: (options?: { viewshedMode?: boolean; observerHeight?: number }) => void;
   setLosPointA: (point: LosPoint) => void;
   setLosPointB: (point: LosPoint) => void;
   setLosResult: (result: LosAnalysisResult | null) => void;
+  setLosObserverHeight: (height: number) => void;
+  setLosViewshedMode: (enabled: boolean) => void;
+  setLosViewshedRadius: (radius: number) => void;
+  setLosViewshedResult: (result: any) => void;
   resetLosAnalysis: () => void;
 
   // [4단계 신규: 웨이포인트 3D 시네마틱 카메라 패스 및 녹화 엔진]
@@ -1787,6 +1791,11 @@ export const useMapStore = create<MapStoreState>()(
         pointA: null,
         pointB: null,
         result: null,
+        observerHeight: 15,
+        targetHeight: 2,
+        viewshedMode: false,
+        viewshedRadius: 1500,
+        viewshedResult: null,
       },
 
       setThreatDome: (updates) =>
@@ -1809,23 +1818,28 @@ export const useMapStore = create<MapStoreState>()(
           securityWall: { ...s.securityWall, enabled: !s.securityWall.enabled },
         })),
 
-      startLosAnalysis: () =>
-        set({
+      startLosAnalysis: (options) =>
+        set((s) => ({
           losAnalysis: {
             isActive: true,
             step: 'pick_a',
             pointA: null,
             pointB: null,
             result: null,
+            observerHeight: options?.observerHeight ?? s.losAnalysis.observerHeight ?? 15,
+            targetHeight: 2,
+            viewshedMode: options?.viewshedMode ?? s.losAnalysis.viewshedMode ?? false,
+            viewshedRadius: s.losAnalysis.viewshedRadius ?? 1500,
+            viewshedResult: null,
           },
-        }),
+        })),
 
       setLosPointA: (point) =>
         set((s) => ({
           losAnalysis: {
             ...s.losAnalysis,
-            step: 'pick_b',
-            pointA: point,
+            step: s.losAnalysis.viewshedMode ? 'analyzed' : 'pick_b',
+            pointA: { ...point, heightOffset: s.losAnalysis.observerHeight ?? point.heightOffset ?? 15 },
           },
         })),
 
@@ -1834,7 +1848,7 @@ export const useMapStore = create<MapStoreState>()(
           losAnalysis: {
             ...s.losAnalysis,
             step: 'analyzed',
-            pointB: point,
+            pointB: { ...point, heightOffset: s.losAnalysis.targetHeight ?? point.heightOffset ?? 2 },
           },
         })),
 
@@ -1846,6 +1860,41 @@ export const useMapStore = create<MapStoreState>()(
           },
         })),
 
+      setLosObserverHeight: (height) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            observerHeight: height,
+            pointA: s.losAnalysis.pointA
+              ? { ...s.losAnalysis.pointA, heightOffset: height }
+              : null,
+          },
+        })),
+
+      setLosViewshedMode: (enabled) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            viewshedMode: enabled,
+          },
+        })),
+
+      setLosViewshedRadius: (radius) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            viewshedRadius: radius,
+          },
+        })),
+
+      setLosViewshedResult: (result) =>
+        set((s) => ({
+          losAnalysis: {
+            ...s.losAnalysis,
+            viewshedResult: result,
+          },
+        })),
+
       resetLosAnalysis: () =>
         set({
           losAnalysis: {
@@ -1854,6 +1903,11 @@ export const useMapStore = create<MapStoreState>()(
             pointA: null,
             pointB: null,
             result: null,
+            observerHeight: 15,
+            targetHeight: 2,
+            viewshedMode: false,
+            viewshedRadius: 1500,
+            viewshedResult: null,
           },
         }),
 

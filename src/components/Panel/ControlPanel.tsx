@@ -3004,7 +3004,7 @@ export const ControlPanel: React.FC = () => {
             </div>
             <button
               type="button"
-              onClick={losAnalysis.isActive ? resetLosAnalysis : startLosAnalysis}
+              onClick={losAnalysis.isActive ? resetLosAnalysis : () => startLosAnalysis()}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
                 losAnalysis.isActive
                   ? 'bg-cyan-600 text-white border-cyan-400 shadow-lg shadow-cyan-900/40'

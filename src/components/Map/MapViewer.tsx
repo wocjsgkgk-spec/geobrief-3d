@@ -870,6 +870,9 @@ export const MapViewer: React.FC = () => {
     setLosPointA,
     setLosPointB,
     setLosResult,
+    setLosObserverHeight,
+    setLosViewshedMode,
+    setLosViewshedRadius,
     resetLosAnalysis,
     // [4단계 신규: 3D 시네마틱 카메라 패스 및 녹화 엔진]
     cinematicFlight,
@@ -3309,6 +3312,7 @@ export const MapViewer: React.FC = () => {
         });
         map.addLayer(tdLayer);
         tacticalDefenseLayerRef.current = tdLayer;
+        (window as any).__tacticalDefenseLayer = tdLayer;
       } catch (tdErr) {
         console.error(
           `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 TacticalDefenseLayer 등록 실패!\n` +
@@ -6452,15 +6456,15 @@ export const MapViewer: React.FC = () => {
           setLosPointA({
             coords,
             elevation,
-            heightOffset: 2.5,
-            name: '관측점 A (초소/고지대)',
+            heightOffset: losAnalysis.observerHeight || 15.0,
+            name: '관측점 A (OP/감시초소/레이다)',
           });
         } else if (losAnalysis.step === 'pick_b' || !losAnalysis.pointB) {
           setLosPointB({
             coords,
             elevation,
-            heightOffset: 1.8,
-            name: '목표점 B (시설/접근로)',
+            heightOffset: losAnalysis.targetHeight || 2.0,
+            name: '목표점 B (표적/접근로)',
           });
         }
       };
@@ -6476,6 +6480,9 @@ export const MapViewer: React.FC = () => {
     losAnalysis.step,
     losAnalysis.pointA,
     losAnalysis.pointB,
+    losAnalysis.observerHeight,
+    losAnalysis.targetHeight,
+    losAnalysis.viewshedMode,
     isMapLoaded,
     setLosPointA,
     setLosPointB,
@@ -7426,7 +7433,7 @@ export const MapViewer: React.FC = () => {
 
         {/* [지휘통제 및 보안 관제] 정밀 3D 가시선 (Line of Sight, LOS) 플로팅 HUD 카드 */}
         {(losAnalysis.isActive || losAnalysis.result) && (
-          <div className="absolute top-16 right-6 z-30 w-84 max-w-[calc(100vw-3rem)] bg-[#0a151d]/95 backdrop-blur-md border border-cyan-500/80 rounded-xl shadow-2xl p-3.5 text-xs space-y-3 ring-1 ring-cyan-500/30 animate-fade-in">
+          <div className="absolute top-16 right-6 z-30 w-88 max-w-[calc(100vw-3rem)] bg-[#0a151d]/95 backdrop-blur-md border border-cyan-500/80 rounded-xl shadow-2xl p-3.5 text-xs space-y-3 ring-1 ring-cyan-500/30 animate-fade-in">
             {/* 헤더 */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-1.5">
@@ -7435,10 +7442,10 @@ export const MapViewer: React.FC = () => {
                 </span>
                 <div>
                   <h3 className="font-bold text-slate-100 text-xs">
-                    3D 입체 가시선 (LOS) 분석
+                    3D 전술 가시선(LOS) & 관측권 분석
                   </h3>
                   <p className="text-[10px] text-cyan-300/80">
-                    DEM 고도 기반 140샘플 광선 추적 (Raycasting)
+                    DEM 고도 + 3D 건물 통합 레이캐스팅 (Raycasting)
                   </p>
                 </div>
               </div>
@@ -7452,6 +7459,90 @@ export const MapViewer: React.FC = () => {
               </button>
             </div>
 
+            {/* 모드 선택 탭 (1:1 직시 광선 vs 360° 전방위 관측권) */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900/80 rounded-lg border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setLosViewshedMode(false)}
+                className={`py-1 px-2 rounded font-medium text-[11px] transition-colors flex items-center justify-center gap-1 ${
+                  !losAnalysis.viewshedMode
+                    ? 'bg-cyan-600 text-white shadow-sm font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Target className="w-3 h-3" />
+                1:1 직시 광선
+              </button>
+              <button
+                type="button"
+                onClick={() => setLosViewshedMode(true)}
+                className={`py-1 px-2 rounded font-medium text-[11px] transition-colors flex items-center justify-center gap-1 ${
+                  losAnalysis.viewshedMode
+                    ? 'bg-cyan-600 text-white shadow-sm font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Radio className="w-3 h-3" />
+                360° 전방위
+              </button>
+            </div>
+
+            {/* 관측점 OP 높이 설정 */}
+            <div className="space-y-1 bg-[#0f1d2a] p-2 rounded-lg border border-[#1d354a]">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-400">관측점(OP/초소) 지상고</span>
+                <span className="font-mono font-bold text-cyan-300">
+                  +{losAnalysis.observerHeight || 15}m
+                </span>
+              </div>
+              <div className="flex gap-1">
+                {[2, 10, 15, 30, 50].map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => setLosObserverHeight(h)}
+                    className={`flex-1 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                      (losAnalysis.observerHeight || 15) === h
+                        ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-400/50 font-bold'
+                        : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 border border-slate-700/40'
+                    }`}
+                  >
+                    {h}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 360° 전방위 반경 설정 (전방위 모드일 때만) */}
+            {losAnalysis.viewshedMode && (
+              <div className="space-y-1 bg-[#0f1d2a] p-2 rounded-lg border border-[#1d354a]">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400">전방위 탐지 반경</span>
+                  <span className="font-mono font-bold text-emerald-300">
+                    {(losAnalysis.viewshedRadius || 1500) >= 1000
+                      ? `${((losAnalysis.viewshedRadius || 1500) / 1000).toFixed(1)} km`
+                      : `${losAnalysis.viewshedRadius || 1500} m`}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  {[500, 1500, 3000, 5000].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setLosViewshedRadius(r)}
+                      className={`flex-1 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                        (losAnalysis.viewshedRadius || 1500) === r
+                          ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400/50 font-bold'
+                          : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 border border-slate-700/40'
+                      }`}
+                    >
+                      {r >= 1000 ? `${r / 1000}km` : `${r}m`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 단계 안내 */}
             {!losAnalysis.result ? (
               <div className="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-800/40 space-y-1.5">
@@ -7459,14 +7550,18 @@ export const MapViewer: React.FC = () => {
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
                   <span>
                     {!losAnalysis.pointA
-                      ? '1단계: 관측점 A (초소/고지대)를 클릭하세요'
-                      : '2단계: 목표점 B (시설/접근로)를 클릭하세요'}
+                      ? '1단계: 관측점 A (OP/감시초소/고지대)를 클릭하세요'
+                      : losAnalysis.viewshedMode
+                      ? '관측점 A 설정 완료! 360° 전방위 관측권을 분석 중입니다.'
+                      : '2단계: 표적점 B (표적/접근로)를 클릭하세요'}
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-300 leading-relaxed">
                   {!losAnalysis.pointA
-                    ? '지도에서 관측 지점을 클릭하세요. 지표면 +2.5m 기준 시선 시작점이 생성됩니다.'
-                    : `관측점 A 설정 완료 (EL. ${losAnalysis.pointA.elevation}m). 목표 지점을 클릭하면 실시간 지형 차폐를 판정합니다.`}
+                    ? `지도에서 관측 지점을 클릭하세요. 지표면 +${losAnalysis.observerHeight || 15}m 기준 3D 가시선이 투사됩니다.`
+                    : losAnalysis.viewshedMode
+                    ? `관측점 A(EL. ${losAnalysis.pointA.elevation}m) 기준 반경 ${(losAnalysis.viewshedRadius || 1500) / 1000}km 360° 전방위 분석이 적용됩니다.`
+                    : `관측점 A 설정 완료 (EL. ${losAnalysis.pointA.elevation}m). 목표 지점을 클릭하면 실시간 지형·건물 차폐를 판정합니다.`}
                 </p>
               </div>
             ) : (
@@ -7483,18 +7578,34 @@ export const MapViewer: React.FC = () => {
                     {losAnalysis.result.isClear ? (
                       <>
                         <Check className="w-4 h-4 text-emerald-400" />
-                        <span>시계 확보 (Clear LOS)</span>
+                        <span>🟢 관측 확보 (Clear LOS)</span>
                       </>
                     ) : (
                       <>
                         <AlertTriangle className="w-4 h-4 text-rose-400" />
-                        <span>시계 차단 (Blocked LOS)</span>
+                        <span>🔴 {losAnalysis.result.statusText || '지형·건물 차폐'}</span>
                       </>
                     )}
                   </div>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40">
-                    전술 광선 유효
+                    가시율 {losAnalysis.result.visibilityRate !== undefined ? `${losAnalysis.result.visibilityRate}%` : (losAnalysis.result.isClear ? '100%' : '0%')}
                   </span>
+                </div>
+
+                {/* 가시율 시각화 프로그레스 바 */}
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-300 ${
+                      (losAnalysis.result.visibilityRate ?? (losAnalysis.result.isClear ? 100 : 0)) >= 80
+                        ? 'bg-emerald-500'
+                        : (losAnalysis.result.visibilityRate ?? 0) >= 40
+                        ? 'bg-amber-500'
+                        : 'bg-rose-500'
+                    }`}
+                    style={{
+                      width: `${losAnalysis.result.visibilityRate !== undefined ? losAnalysis.result.visibilityRate : (losAnalysis.result.isClear ? 100 : 0)}%`,
+                    }}
+                  />
                 </div>
 
                 {/* 거리 및 표고 정보 */}
@@ -7526,7 +7637,7 @@ export const MapViewer: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 최대 차폐 장애물 분석 */}
+                {/* 차폐 장애물 분석 */}
                 <div
                   className={`p-2.5 rounded-lg border text-[10.5px] space-y-1.5 ${
                     losAnalysis.result.isClear
@@ -7536,10 +7647,10 @@ export const MapViewer: React.FC = () => {
                 >
                   <div className="flex items-center justify-between font-semibold">
                     <span className={losAnalysis.result.isClear ? 'text-emerald-300' : 'text-rose-300'}>
-                      {losAnalysis.result.isClear ? '경로상 최고 지형 고도' : '최대 차폐 장애물 고도'}
+                      {losAnalysis.result.isClear ? '경로상 최고 표고' : '최초 차폐 장애물'}
                     </span>
                     <span className={`font-mono font-bold text-xs ${losAnalysis.result.isClear ? 'text-emerald-200' : 'text-rose-200'}`}>
-                      EL. {losAnalysis.result.maxObstacleElevation || (losAnalysis.result.blockedPoint?.elevation ?? 0)} m
+                      {losAnalysis.result.firstObstacleName || `EL. ${losAnalysis.result.maxObstacleElevation || (losAnalysis.result.blockedPoint?.elevation ?? 0)} m`}
                     </span>
                   </div>
 
@@ -7558,17 +7669,17 @@ export const MapViewer: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-[9.5px] text-rose-300/90 leading-tight pt-0.5">
-                        ⚠️ [시계 차단 봉우리] 산등성이에 가려져 직시가 불가능합니다. (3D 적색 경고 마커 및 펄스 표출 중)
+                        ⚠️ [{losAnalysis.result.obstacleType === 'building' ? '건물 차폐' : '시계 차단 능선'}] {losAnalysis.result.firstObstacleName || '장애물'}에 가려져 직시가 불가능합니다. (3D 적색 경고 마커 및 펄스 표출)
                       </div>
                     </>
                   ) : (
                     <div className="text-[9.5px] text-emerald-300/90 leading-tight pt-0.5">
-                      ✅ [직시 가능 (Clear LOS)] 관측점과 목표점 간 지형 간섭이 없습니다. (네온 그린 빔 및 발광 펄스 활성화)
+                      ✅ [직시 가능 (Clear LOS)] 관측점과 목표점 간 지형·건물 간섭이 없습니다. (에메랄드 그린 빔 활성화)
                     </div>
                   )}
 
                   <div className="text-[9px] text-slate-400 pt-1 border-t border-slate-800/60 flex items-center justify-between font-mono">
-                    <span>DEM 정밀 샘플링</span>
+                    <span>DEM + 3D 건물 레이캐스팅</span>
                     <span className="text-slate-300">{losAnalysis.result.samplingCount}개 지점 (5m 간격)</span>
                   </div>
                 </div>
@@ -7577,7 +7688,7 @@ export const MapViewer: React.FC = () => {
                 <div className="flex items-center gap-1.5 pt-1">
                   <button
                     type="button"
-                    onClick={startLosAnalysis}
+                    onClick={() => startLosAnalysis({ viewshedMode: losAnalysis.viewshedMode, observerHeight: losAnalysis.observerHeight })}
                     className="flex-1 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-sm"
                   >
                     <Target className="w-3.5 h-3.5" />

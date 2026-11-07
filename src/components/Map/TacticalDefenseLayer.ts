@@ -10,6 +10,7 @@ import {
   LosPoint,
 } from '@/types/map';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
+import { TacticalLosEngine } from '@/lib/vendor/tacticalLosEngine';
 
 /**
  * [3단계 신규: 지휘통제 및 보안 관제]
@@ -551,20 +552,51 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
     this.losClearPulseMesh = null;
 
     if (!this.map) return;
-    const { pointA, pointB } = this.losState;
+    const { pointA, pointB, viewshedMode, viewshedRadius, observerHeight, targetHeight } = this.losState;
     if (!pointA) return;
 
-    // 1. 관측점 A 단독 마커 렌더링
+    const obsH = observerHeight ?? pointA.heightOffset ?? 15.0;
+    const tgtH = targetHeight ?? pointB?.heightOffset ?? 2.0;
+
+    // 1. 360° 전방위 관측권(Viewshed) 분석 및 3D 부채꼴 메쉬 표출
+    if (viewshedMode) {
+      const radius = viewshedRadius || 1500;
+      const viewshed = TacticalLosEngine.analyzeViewshed360(this.map, { ...pointA, heightOffset: obsH }, radius, 36);
+      const viewshedMesh = TacticalLosEngine.buildViewshed3DMesh(viewshed, this.map);
+      this.losGroup.add(viewshedMesh);
+
+      if (this.onLosCalculated && !pointB && !this.losState.result) {
+        this.onLosCalculated({
+          pointA: { ...pointA, heightOffset: obsH },
+          pointB: {
+            coords: pointA.coords,
+            elevation: pointA.elevation,
+            heightOffset: radius,
+            name: `360° 전방위 관측권 (${radius}m)`,
+          },
+          isClear: viewshed.overallVisibilityRate > 50,
+          distanceMeters: radius,
+          horizontalDistanceMeters: radius,
+          elevationDiffMeters: 0,
+          samplingCount: 36,
+          calculatedAt: viewshed.calculatedAt,
+          visibilityRate: viewshed.overallVisibilityRate,
+          statusText: `360° 전방위 가시율 ${viewshed.overallVisibilityRate}%`,
+        });
+      }
+    }
+
+    // 2. 관측점 A 단독 마커 렌더링
     const mercA = maplibregl.MercatorCoordinate.fromLngLat(
       pointA.coords,
-      pointA.elevation + (pointA.heightOffset || 2.5)
+      pointA.elevation + obsH
     );
     const markerAMesh = this.buildPointMarker(
       mercA,
       '#10B981',
       pointA.coords,
       pointA.elevation,
-      pointA.heightOffset || 2.5
+      obsH
     );
     this.losGroup.add(markerAMesh);
 
@@ -573,106 +605,36 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       return;
     }
 
-    // 2. 목표점 B 마커 렌더링
+    // 3. 목표점 B 마커 렌더링
     const mercB = maplibregl.MercatorCoordinate.fromLngLat(
       pointB.coords,
-      pointB.elevation + (pointB.heightOffset || 1.8)
+      pointB.elevation + tgtH
     );
     const markerBMesh = this.buildPointMarker(
       mercB,
       '#38BDF8',
       pointB.coords,
       pointB.elevation,
-      pointB.heightOffset || 1.8
+      tgtH
     );
     this.losGroup.add(markerBMesh);
 
-    // 3. DEM 표고 광선 추적 (Terrarium DEM 지형 표고 5m 간격 정밀 샘플링)
-    const startAlt = pointA.elevation + (pointA.heightOffset || 2.5);
-    const endAlt = pointB.elevation + (pointB.heightOffset || 1.8);
-    const dx = (pointB.coords[0] - pointA.coords[0]) * 88000;
-    const dy = (pointB.coords[1] - pointA.coords[1]) * 111000;
-    const horizDist = Math.hypot(dx, dy);
-    const elevDiff = endAlt - startAlt;
-    const directDist = Math.hypot(horizDist, elevDiff);
+    // 4. 지형(DEM) + 3D 건물 통합 광선(Raycasting) 분석
+    const losResult = TacticalLosEngine.analyzeRay(
+      this.map,
+      { ...pointA, heightOffset: obsH },
+      { ...pointB, heightOffset: tgtH },
+      { observerHeight: obsH, targetHeight: tgtH }
+    );
 
-    // 5m 간격 정밀 샘플링 (최소 20개, 최대 1000개)
-    const sampleInterval = 5.0;
-    const samples = Math.max(20, Math.min(1000, Math.ceil(directDist / sampleInterval)));
-
-    let isBlocked = false;
-    let blockedT = 1.0;
-    let blockedCoord: [number, number] = [0, 0];
-    let blockedTerrainAlt = 0;
-    let blockedRayAlt = 0;
-    let maxObstacleElevation = Math.max(startAlt, endAlt);
-    let maxPenetration = 0;
-
-    for (let i = 1; i < samples; i++) {
-      const t = i / samples;
-      const curLng = pointA.coords[0] + t * (pointB.coords[0] - pointA.coords[0]);
-      const curLat = pointA.coords[1] + t * (pointB.coords[1] - pointA.coords[1]);
-      const curRayAlt = startAlt + t * (endAlt - startAlt);
-
-      let curTerrainAlt = 0;
-      if (this.map.queryTerrainElevation) {
-        const queryVal = this.map.queryTerrainElevation([curLng, curLat]);
-        if (queryVal !== null && queryVal !== undefined) {
-          curTerrainAlt = queryVal;
-        }
-      }
-
-      if (curTerrainAlt > maxObstacleElevation) {
-        maxObstacleElevation = curTerrainAlt;
-      }
-
-      const pen = curTerrainAlt - curRayAlt;
-      // 지형이 광선보다 0.5m 이상 높을 경우 시계 차단으로 판정
-      if (pen > 0.5) {
-        if (!isBlocked) {
-          isBlocked = true;
-          blockedT = t;
-          blockedCoord = [curLng, curLat];
-          blockedTerrainAlt = curTerrainAlt;
-          blockedRayAlt = curRayAlt;
-        }
-        if (pen > maxPenetration) {
-          maxPenetration = pen;
-        }
-      }
-    }
-
-    // 4. 결과 통계 및 콜백 통지
-    if (this.onLosCalculated && this.losState.step === 'analyzed') {
-      this.onLosCalculated({
-        pointA,
-        pointB,
-        isClear: !isBlocked,
-        distanceMeters: Math.round(directDist),
-        horizontalDistanceMeters: Math.round(horizDist),
-        elevationDiffMeters: Math.round(elevDiff),
-        maxObstacleElevation: Math.round(maxObstacleElevation),
-        maxPenetrationDepth: Math.round(maxPenetration * 10) / 10,
-        samplingIntervalMeters: 5,
-        blockedPoint: isBlocked
-          ? {
-              coords: blockedCoord,
-              elevation: Math.round(blockedTerrainAlt),
-              rayElevation: Math.round(blockedRayAlt),
-              distanceFromA: Math.round(directDist * blockedT),
-              t: blockedT,
-              maxObstacleElevation: Math.round(maxObstacleElevation),
-              maxPenetration: Math.round(maxPenetration * 10) / 10,
-            }
-          : undefined,
-        samplingCount: samples,
-        calculatedAt: Date.now(),
-      });
+    // 결과 통지
+    if (this.onLosCalculated && this.losState.step === 'analyzed' && !this.losState.result) {
+      this.onLosCalculated(losResult);
     }
 
     // 5. 3D 가시선 빔 렌더링 & 발광 펄스
-    if (!isBlocked) {
-      // (1) 관측 성공: A부터 B까지 네온 그린(#10B981) 실선 빔
+    if (losResult.isClear || !losResult.blockedPoint) {
+      // (1) 관측 확보: A부터 B까지 에메랄드 그린(#10B981) 실선 빔
       const lineGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercA.x, mercA.y, mercA.z),
         new THREE.Vector3(mercB.x, mercB.y, mercB.z),
@@ -685,7 +647,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       });
       this.losGroup.add(new THREE.Line(lineGeo, lineMat));
 
-      // 네온 그린 발광 펄스 패킷 (빛 알갱이의 실시간 광선 주사)
+      // 에메랄드 그린 발광 펄스 패킷
       const pulseGroup = new THREE.Group();
       const photon = new THREE.Mesh(
         new THREE.SphereGeometry(3.5, 12, 12),
@@ -710,13 +672,14 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       this.losClearStartPt.set(mercA.x, mercA.y, mercA.z);
       this.losClearEndPt.set(mercB.x, mercB.y, mercB.z);
     } else {
-      // (2) 관측 차단: A -> 차단점(네온 그린 실선 + 펄스), 차단점 -> B(붉은색 점선)
+      // (2) 관측 차폐: A -> 차폐점(에메랄드 그린 실선), 차폐점 -> B(선명한 적색 점선)
+      const bPt = losResult.blockedPoint;
       const mercBlocked = maplibregl.MercatorCoordinate.fromLngLat(
-        blockedCoord,
-        blockedRayAlt
+        bPt.coords,
+        bPt.rayElevation
       );
 
-      // A -> 차단점 (네온 그린 실선)
+      // A -> 차폐점 (에메랄드 그린 실선)
       const clearGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercA.x, mercA.y, mercA.z),
         new THREE.Vector3(mercBlocked.x, mercBlocked.y, mercBlocked.z),
@@ -729,7 +692,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       });
       this.losGroup.add(new THREE.Line(clearGeo, clearMat));
 
-      // 네온 그린 발광 펄스 패킷
+      // 에메랄드 그린 발광 펄스 패킷
       const pulseGroup = new THREE.Group();
       const photon = new THREE.Mesh(
         new THREE.SphereGeometry(3.5, 12, 12),
@@ -754,7 +717,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       this.losClearStartPt.set(mercA.x, mercA.y, mercA.z);
       this.losClearEndPt.set(mercBlocked.x, mercBlocked.y, mercBlocked.z);
 
-      // 차단점 -> B (붉은색 점선 #EF4444)
+      // 차폐점 -> B (선명한 적색 점선 #EF4444)
       const blockedGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercBlocked.x, mercBlocked.y, mercBlocked.z),
         new THREE.Vector3(mercB.x, mercB.y, mercB.z),
@@ -771,7 +734,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       blockedLine.computeLineDistances();
       this.losGroup.add(blockedLine);
 
-      // (3) [시계 차단 봉우리] 3D 경고 마커 & 능선 충돌 펄스 링 & 3D 라벨
+      // (3) [최초 차폐 장애물] 3D 적색 경고 마커 & 능선/건물 충돌 펄스 링 & 3D 빌보드 라벨
       const meterScale = mercBlocked.meterInMercatorCoordinateUnits();
       const markerGroup = new THREE.Group();
       markerGroup.position.set(mercBlocked.x, mercBlocked.y, mercBlocked.z);
@@ -801,10 +764,10 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       markerGroup.add(diamondMesh);
       this.losBlockedRotMesh = diamondMesh;
 
-      // 지면까지 이어지는 수직 적색 점선 지시선
+      // 지면/장애물 상단까지 이어지는 수직 적색 점선 지시선
       const mercGround = maplibregl.MercatorCoordinate.fromLngLat(
-        blockedCoord,
-        blockedTerrainAlt
+        bPt.coords,
+        bPt.elevation
       );
       const groundLineGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(mercBlocked.x, mercBlocked.y, mercBlocked.z),
@@ -817,7 +780,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       });
       this.losGroup.add(new THREE.Line(groundLineGeo, groundLineMat));
 
-      // 차단점 충돌 펄스 링
+      // 차폐점 충돌 펄스 링
       const pulseGeo = new THREE.RingGeometry(8, 11, 24);
       const pulseMat = new THREE.MeshBasicMaterial({
         color: 0xef4444,
@@ -830,27 +793,30 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       markerGroup.add(pulseRing);
       this.losBlockedPulseMesh = pulseRing;
 
-      // 3D 텍스트 빌보드 스프라이트 [⚠️ 시계 차단 봉우리 EL. xxx m]
+      // 3D 텍스트 빌보드 스프라이트
       try {
         const labelCanvas = document.createElement('canvas');
-        labelCanvas.width = 384;
-        labelCanvas.height = 72;
+        labelCanvas.width = 460;
+        labelCanvas.height = 76;
         const lCtx = labelCanvas.getContext('2d');
         if (lCtx) {
-          lCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          lCtx.fillStyle = 'rgba(15, 23, 42, 0.94)';
           lCtx.beginPath();
-          lCtx.roundRect(4, 4, 376, 64, 10);
+          lCtx.roundRect(4, 4, 452, 68, 10);
           lCtx.fill();
           lCtx.strokeStyle = '#EF4444';
           lCtx.lineWidth = 3;
           lCtx.stroke();
 
           lCtx.fillStyle = '#EF4444';
-          lCtx.fillRect(10, 10, 8, 52);
+          lCtx.fillRect(10, 10, 8, 56);
 
           lCtx.fillStyle = '#FFFFFF';
-          lCtx.font = 'bold 22px sans-serif';
-          lCtx.fillText(`⚠️ 시계 차단 봉우리 EL. ${Math.round(blockedTerrainAlt)}m`, 28, 44);
+          lCtx.font = 'bold 20px sans-serif';
+          const obstacleLabel = losResult.firstObstacleName
+            ? `⚠️ ${losResult.firstObstacleName}`
+            : `⚠️ 차폐 장애물 EL. ${Math.round(bPt.elevation)}m`;
+          lCtx.fillText(obstacleLabel, 28, 46);
         }
         const labelTex = new THREE.CanvasTexture(labelCanvas);
         const spriteMat = new THREE.SpriteMaterial({
@@ -859,8 +825,8 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
           transparent: true,
         });
         const labelSprite = new THREE.Sprite(spriteMat);
-        labelSprite.scale.set(45, 9, 1);
-        labelSprite.position.set(0, 28, 0);
+        labelSprite.scale.set(52, 9, 1);
+        labelSprite.position.set(0, 30, 0);
         markerGroup.add(labelSprite);
       } catch (spriteErr) {
         // Sprite creation fallback
