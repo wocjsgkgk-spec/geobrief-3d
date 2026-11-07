@@ -156,11 +156,25 @@ export class PrecisionBuildingBuilder {
       ((pz - minZ) / spanZ) * uvScale,
     ];
 
-    let clampedHeight = Math.max(3.5, rawHeight);
+    let clampedHeight = Math.max(6.0, rawHeight);
+    const isApartmentFeat =
+      featProps.building === 'apartments' ||
+      featProps.usageType === 'apartment' ||
+      featProps.bld_category === 'apartment' ||
+      String(featProps.buld_nm || featProps.name || '').includes('아파트');
+
     if (areaSqm < 220 || minWidth < 7.5) {
-      clampedHeight = Math.min(10.5, Math.max(6.5, clampedHeight));
-    } else if (areaSqm >= 220 && areaSqm < 500 && rawHeight < 25.0) {
-      clampedHeight = Math.min(20.0, Math.max(12.0, clampedHeight));
+      // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층, 최대 10.5m 상한 제한)
+      clampedHeight = Math.min(10.5, Math.max(6.0, rawHeight > 0 ? rawHeight : 6.0 + (seed % 45) * 0.1));
+    } else if (isApartmentFeat && areaSqm >= 320) {
+      // 아파트 단지: 45m ~ 75m (15층 ~ 25층)
+      clampedHeight = Math.min(75.0, Math.max(45.0, rawHeight > 0 ? rawHeight : 45.0 + (seed % 31)));
+    } else if (areaSqm >= 220 && areaSqm < 600) {
+      // 시·군 중심 상가·원룸·근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
+      clampedHeight = Math.min(21.0, Math.max(12.0, rawHeight > 0 ? rawHeight : 12.0 + (seed % 10)));
+    } else if (areaSqm >= 600) {
+      // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 16m ~ 45m (4층 ~ 14층)
+      clampedHeight = Math.min(45.0, Math.max(16.0, rawHeight > 0 ? rawHeight : 16.0 + (seed % 30)));
     }
     const height = clampedHeight;
     const topElev = baseElev + height;

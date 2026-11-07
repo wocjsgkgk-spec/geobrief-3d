@@ -214,9 +214,16 @@ export function classifyBuildingWithVendor(
   // [수정: 건물 태그 및 형상 적합성 정밀 판정]
   const isAuthenticBuildingTag = Boolean(
     (typeof properties.building === 'string' && properties.building !== 'no') ||
+    properties.sourceLayer === 'building' ||
+    properties.source === 'openfreemap' ||
     properties.source === 'vworld_local' ||
     properties.source === 'vworld_wfs' ||
     properties.source === 'LT_C_SPBD' ||
+    properties.render_height !== undefined ||
+    properties.render_min_height !== undefined ||
+    properties.levels !== undefined ||
+    properties.bld_category ||
+    properties.usageType ||
     properties.bd_mgt_sn ||
     properties.mgmBldrgstPk ||
     properties.buld_nm ||
@@ -251,7 +258,7 @@ export function classifyBuildingWithVendor(
     metrics.maxLength || 0
   );
 
-  if (isNonBuildingTag || !isAuthenticBuildingTag || (areaSqm > (isVerifiedApt ? 8000 : 5000)) || !isValidGeometry) {
+  if (isNonBuildingTag || !isAuthenticBuildingTag || areaSqm > 4500.0 || areaSqm < 30.0 || (metrics.minWidth && metrics.minWidth < 5.0) || !isValidGeometry) {
     return {
       type: 'residential',
       typeIndex: 0,
@@ -733,30 +740,25 @@ export function classifyBuildingWithVendor(
     }
   }
 
-  // [2단계: 소형 단독주택·다세대·원룸 area < 220㎡ 10.5m 절대 상한 엄격 적용]
-  if (areaSqm < 220 || minWidth < 7.5) {
-    height = Math.min(10.5, Math.max(6.5, 6.5 + (seed % 36) * 0.1));
-    floors = Math.min(3, Math.max(2, Math.round(height / 3.2)));
+  // [강원 전역 건물 규모·용도별 정밀 층고 자동 산출]
+  if (bType === 'apartment' && areaSqm >= 320) {
+    // 아파트 단지: 45m ~ 75m (15층 ~ 25층)
+    height = Math.min(75.0, Math.max(45.0, height > 0 ? height : 45.0 + (seed % 31)));
+    floors = Math.round(height / 3.1);
+  } else if (areaSqm < 220 || minWidth < 7.5) {
+    // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층, 최대 10.5m 상한 제한)
+    height = Math.min(10.5, Math.max(6.0, height > 0 ? height : 6.0 + (seed % 45) * 0.1));
+    floors = Math.min(3, Math.max(1, Math.round(height / 3.2)));
     bType = 'residential';
+  } else if (areaSqm >= 220 && areaSqm < 600) {
+    // 시·군 중심 상가·원룸·근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
+    height = Math.min(21.0, Math.max(12.0, height > 0 ? height : 12.0 + (seed % 10)));
+    floors = Math.min(6, Math.max(4, Math.round(height / 3.3)));
+    bType = 'commercial';
   } else {
-    // ---------------------------------------------------------------------------
-    // [브이월드 실사 마스터 엔진 연동: 100% 실사 높이 보장 (0m 평면화 원천 방지)]
-    // ---------------------------------------------------------------------------
-    const masterEngineH = VworldMasterEngine.calculateBuildingHeight(
-      properties,
-      areaSqm,
-      minWidth,
-      seed,
-      [centerLng, centerLat]
-    );
-    if (masterEngineH > height) {
-      height = masterEngineH;
-      floors = Math.max(floors, Math.max(2, Math.round(height / 3.3)));
-    }
-
-    // 일반 건물 최소 볼륨 보장 (0% Flat 납작화 방지: 최소 7.5m 이상 입체 복원)
-    height = Math.max(7.5, height);
-    floors = Math.max(2, floors);
+    // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 16m ~ 45m (4층 ~ 14층)
+    height = Math.min(45.0, Math.max(16.0, height > 0 ? height : 16.0 + (seed % 30)));
+    floors = Math.min(14, Math.max(4, Math.round(height / 3.3)));
   }
 
   // 최종 안전 확인: 소형 주택은 절대 10.5m 초과 불가

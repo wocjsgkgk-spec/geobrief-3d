@@ -231,18 +231,14 @@ export function extractRenderedVectorBuildings(
         const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
         renderHeight = Math.min(10.5, Math.max(6.0, 6.0 + seed * 4.5));
       } else if (!renderHeight || renderHeight < 8.0) {
-        if (isMilitary) {
-          // 군 표준 병영막사: 1층~3층 (4.5m~9.5m)
-          const seed = Math.abs(Math.sin(cLng * 71.1 + cLat * 193.3 + approxArea)) % 1;
-          renderHeight = 4.5 + seed * 4.5;
-        } else if (isApartment && approxArea >= 320) {
+        if (isApartment && approxArea >= 320) {
           // 전 권역 아파트 단지: 15층~25층 (45m~75m, 최대 75m 상한선 고정)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
           renderHeight = Math.min(75.0, 45.0 + seed * 30.0); // 45m ~ 75m
         } else if (approxArea >= 600) {
-          // 도청·시청·군청·공공기관·병원·리조트: 7층~14층 (22m~45m)
+          // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 4층~14층 (16m~45m)
           const seed = Math.abs(Math.sin(cLng * 113.7 + cLat * 271.3 + approxArea * 0.19)) % 1;
-          renderHeight = Math.min(45.0, 22.0 + seed * 23.0); // 22m ~ 45m
+          renderHeight = Math.min(45.0, 16.0 + seed * 29.0); // 16m ~ 45m
         } else if (isCommercial || (approxArea >= 220 && approxArea < 600)) {
           // 중심 상권 상가/원룸/근린생활시설: 4층~6층 (12m~21m)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;

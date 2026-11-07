@@ -584,8 +584,8 @@ export async function GET(request: NextRequest) {
           // 상가/업무 빌딩: 3 ~ 5층 (9.6 ~ 16m)
           levels = 3 + ((idx * 2) % 3);
         } else if (usageType === 'military' || isMilitaryOrPublic) {
-          // 군 막사 및 공공청사: 1 ~ 2층 (3.2 ~ 6.4m)
-          levels = 1 + (idx % 2);
+          // 공공청사 및 행정·지원시설: 4 ~ 6층 (12.8 ~ 19.2m)
+          levels = 4 + (idx % 3);
         } else if (usageType === 'residential') {
           // 단독/연립 주택: 1 ~ 2층 (3.2 ~ 6.4m)
           levels = 1 + (idx % 2);

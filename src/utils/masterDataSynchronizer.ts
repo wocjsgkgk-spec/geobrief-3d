@@ -658,12 +658,12 @@ export function stampBuildingWithMasterData(
     realUse = '제1·2종근린생활시설(상가)';
     realRoof = '슬래브지붕';
   } else if (
-    // 3) 도청(춘천)·시청·군청·공공기관·병원·리조트 (area >= 600 비주거/복합)
+    // 3) 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·학교 (area >= 600 비주거)
     areaSqm >= 600 &&
     realUse !== '공동주택(아파트)' && !isExplicitAptTag
   ) {
-    realLevels = 7 + (seed % 8); // 7~14층
-    realHeight = 22.0 + (seed % 24) * 1.0; // 22m ~ 45m
+    realLevels = 4 + (seed % 11); // 4~14층
+    realHeight = 16.0 + (seed % 30) * 1.0; // 16m ~ 45m
     realUse = '업무시설(관공서/오피스)';
     realRoof = '슬래브지붕';
   } else if (

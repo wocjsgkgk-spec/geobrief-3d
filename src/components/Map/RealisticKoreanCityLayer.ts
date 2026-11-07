@@ -515,7 +515,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   };
 
   private handleMapIdle = (): void => {
-    if (this.map && !this.isMoving) {
+    if (this.map) {
+      if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
+        this.isMoving = true;
+        return;
+      }
+      this.isMoving = false;
       this.extractAndBuildFromMap();
     }
   };
@@ -690,13 +695,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
    * MapLibre 맵 소스 및 캐시로부터 화면 내 건물을 추출하여 3D 빌드 실행 (100% 입체화)
    */
   public extractAndBuildFromMap(): void {
-    if (!this.map || this.isMoving) return;
+    if (!this.map) return;
     if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
+      this.isMoving = true;
       return;
     }
     this.isMoving = false;
 
-    // 1) 뷰포트 내 MapLibre 벡터 타일 피처 전체 수집 (6,400+ 저층/중층 건물 100% 추출)
+    // 1) 뷰포트 내 MapLibre 벡터 타일 피처 전체 수집 (실제 건물 100% 추출 및 비건물·대형필지 100% 필터링)
     let candidateFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
     try {
       const extracted = extractRenderedVectorBuildings(this.map);
@@ -704,22 +710,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         candidateFeatures = extracted;
       }
     } catch {}
-
-    const vectorSources = ['openmaptiles-vector', 'openfreemap', 'openmaptiles'].filter((s) =>
-      this.map?.getSource(s)
-    );
-
-    for (const srcId of vectorSources) {
-      try {
-        const srcFeats = this.map.querySourceFeatures(srcId, { sourceLayer: 'building' });
-        if (srcFeats && srcFeats.length > 0) {
-          const valid = srcFeats.filter((f: any) => f && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
-          if (valid.length > candidateFeatures.length) {
-            candidateFeatures = valid as any[];
-          }
-        }
-      } catch {}
-    }
 
     if (candidateFeatures.length > 0) {
       this.vectorTileFeatures = candidateFeatures;
@@ -1321,20 +1311,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [강제 집행 3] 5대 층고 분리 (소형 단독 6.0~10.5m / 일반 상가 12~21m / 도청·시청·공공 22~45m / 아파트 45~75m)
+      // [1-2 강원 전역 건물 규모·용도별 정밀 층고 자동 산출]
       if (isTrueHighRiseApt) {
-        // 5) 전 권역 아파트 단지: 45m ~ 75m (최대 높이 75m 상한선 고정)
-        height = Math.min(75.0, Math.max(45.0, height));
+        // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
+        height = Math.min(75.0, Math.max(45.0, height > 0 ? height : 45.0 + (diverseSeed % 31)));
       } else if (areaSqm < 220 || minWidth < 7.5) {
-        // 2) 농어촌 주택·구도심 단독·다가구·빌라 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층)
-        // 절대 11m를 넘지 못하게 강제 클램핑 (Math.min(height, 10.5))
-        height = Math.min(10.5, Math.max(6.0, height));
+        // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층, 최대 10.5m 상한 제한)
+        height = Math.min(10.5, Math.max(6.0, height > 0 ? height : 6.0 + (diverseSeed % 45) * 0.1));
       } else if (areaSqm >= 220 && areaSqm < 600) {
-        // 3) 18개 시·군 시내 중심 상가·원룸·근린생활시설 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
-        height = Math.min(21.0, Math.max(12.0, height));
+        // 시·군 중심 상가·원룸·근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
+        height = Math.min(21.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 10)));
       } else {
-        // 4) 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·동해안 리조트 (area >= 600㎡ 비주거): 22m ~ 45m (7층 ~ 14층)
-        height = Math.min(45.0, Math.max(22.0, height));
+        // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 16m ~ 45m (4층 ~ 14층)
+        height = Math.min(45.0, Math.max(16.0, height > 0 ? height : 16.0 + (diverseSeed % 30)));
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!
@@ -1556,10 +1545,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         // [인터랙션 잠금: 카메라 이동/회전/줌 중에는 가벼운 대기 후 재시도 (60fps 유지)]
-        if (this.isMoving || (this.map && (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()))) {
+        if (this.map && (this.map.isMoving() || this.map.isRotating() || this.map.isZooming())) {
+          this.isMoving = true;
           this.activeBuildIdleId = setTimeout(executeSlice, 180);
           return;
         }
+        this.isMoving = false;
 
         const sliceStartTime = performance.now();
         let sliceCount = 0;

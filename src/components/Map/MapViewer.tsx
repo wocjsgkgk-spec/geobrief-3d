@@ -1060,12 +1060,7 @@ export const MapViewer: React.FC = () => {
 
       try {
         let count = 0;
-        const currentMode = useMapStore.getState().renderMode3D;
-        const isBldgVisible =
-          (map.getLayer('bldg-tier1-podium') && map.getLayoutProperty('bldg-tier1-podium', 'visibility') !== 'none') ||
-          (map.getLayer('3d-buildings') && map.getLayoutProperty('3d-buildings', 'visibility') !== 'none') ||
-          (currentMode === 'facade' && !!layers.buildings3D) ||
-          (currentMode === 'tiles3d' && !!layers.buildings3D);
+        const isBldgVisible = Boolean(layers.buildings3D);
 
         if (isBldgVisible) {
           if (realisticKoreanCityLayerRef.current) {

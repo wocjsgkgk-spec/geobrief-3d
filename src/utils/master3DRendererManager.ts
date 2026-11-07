@@ -335,13 +335,13 @@ export function sanitizeBuildingHeight(
   }
 
   // ---------------------------------------------------------------------------
-  // [규격 4] 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·동해안 리조트 (area >= 600㎡ 비주거/복합)
-  // - 높이 22m ~ 45m (7층 ~ 14층)
+  // [규격 4] 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·학교 (area >= 600㎡ 비주거)
+  // - 높이 16m ~ 45m (4층 ~ 14층)
   // ---------------------------------------------------------------------------
   if (areaSqm >= 600 && !isHighRiseApt) {
-    const publicH = 22.0 + (seed % 24) * 1.0;
+    const publicH = 16.0 + (seed % 30) * 1.0;
     if (rawHeight > 0) {
-      return Math.min(45.0, Math.max(22.0, rawHeight));
+      return Math.min(45.0, Math.max(16.0, rawHeight));
     }
     return publicH;
   }
