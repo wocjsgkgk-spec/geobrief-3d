@@ -37,6 +37,12 @@ import {
   classifyGangwonSeoulBuildingStyle,
 } from '@/lib/vendor/gangwonSeoulGradeAtlas';
 
+import {
+  getScenarioBuildingMaterials,
+  getScenarioRooftopPbrMaterial,
+  GLOBAL_SCENARIO_MATERIALS,
+} from '@/lib/vendor/scenarioTexturePipeline';
+
 export {
   SEOUL_ROOFTOP_COLORS,
   assignSeoulRooftopStyle,
@@ -45,6 +51,9 @@ export {
   getSeoulGradeBuildingMaterials,
   getGangwonSeoulGradeMaterials,
   classifyGangwonSeoulBuildingStyle,
+  getScenarioBuildingMaterials,
+  getScenarioRooftopPbrMaterial,
+  GLOBAL_SCENARIO_MATERIALS,
 };
 
 // 옥상 4대 실측 컬러 및 서울 실사 옥상 디테일 컬러 정의
@@ -756,6 +765,6 @@ import {
   PHOTOREAL_ROOF_COLORS,
 } from '@/lib/vendor/vworldPhotorealEngine';
 
-export function getPrecisionBuildingMaterials(): (THREE.MeshStandardMaterial | THREE.MeshLambertMaterial)[] {
-  return getGangwonSeoulGradeMaterials() as any;
+export function getPrecisionBuildingMaterials(): THREE.MeshStandardMaterial[] {
+  return getScenarioBuildingMaterials();
 }
