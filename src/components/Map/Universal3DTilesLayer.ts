@@ -145,6 +145,17 @@ export class Universal3DTilesManager {
         (this.map as any).addControl(this.overlay as unknown as IControl);
       }
 
+      // [보조 오버레이 캔버스 마우스 이벤트 가로채기 100% 해제: MapLibre 메인 캔버스 클릭 보장]
+      try {
+        const container = (this.map as any).getContainer?.();
+        if (container) {
+          const deckCanvases = container.querySelectorAll('canvas:not(.maplibregl-canvas)');
+          deckCanvases.forEach((cvs: any) => {
+            cvs.style.pointerEvents = 'none';
+          });
+        }
+      } catch {}
+
       this.map.on('moveend', this.handleMapMoveEnd);
     } catch (err) {
       console.error('[Universal3DTilesManager] Failed to attach MapboxOverlay to MapLibre:', err);

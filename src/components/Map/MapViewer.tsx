@@ -19,7 +19,7 @@ import {
   resolveGangwonDistrictByCoords,
   masterDataSynchronizer,
 } from '@/utils/masterDataSynchronizer';
-import { BUILDING_MASS_PRESETS } from '@/types/map';
+import { BUILDING_MASS_PRESETS, FACILITY_PRESETS } from '@/types/map';
 import { isVworldConfigured, fetchVworldBuildings } from '@/services/vworldService';
 import { fetchFusionBuildings } from '@/services/fusionBuildingsService';
 import { fetchHybridSpatialBuildings, extractRenderedVectorBuildings } from '@/utils/spatialDataFetcher';
@@ -788,6 +788,7 @@ export const MapViewer: React.FC = () => {
     setShowTerrainProfile,
     // [신규] 실시간 일조/태양광 시뮬레이션
     sunHour,
+    sunSeason,
     setSunHour,
     // [신규] 3D 가시권(Viewshed) 분석
     isViewshedMode,
@@ -858,6 +859,9 @@ export const MapViewer: React.FC = () => {
     // [2단계 신규: 3D 인터랙티브 배치 시설물 & TransformControls]
     placedFacilities,
     selectedFacilityId,
+    placingFacilityPreset,
+    setPlacingFacilityPreset,
+    addPlacedFacility,
     transformGizmoMode,
     selectFacility,
     updateFacilityTransform,
@@ -2314,6 +2318,8 @@ export const MapViewer: React.FC = () => {
     (window as any).__mapLibreMap = map;
     (window as any).__geobrief_map = map;
     (window as any).map = map;
+    (window as any).__setSelectedBuilding = setSelectedBuilding;
+    (window as any).__fetchCadastralAnalysis = fetchCadastralAnalysis;
     (window as any).__setRenderMode3D = setRenderMode3D;
     (window as any).__useMapStore = useMapStore;
     (window as any).useMapStore = useMapStore;
@@ -2615,6 +2621,18 @@ export const MapViewer: React.FC = () => {
       registerNativeBuildingPatterns(map);
       registerRealisticBuildingPatterns(map);
       ensureBuildingPatterns(map);
+
+      // [3-1-1: 보조 오버레이 캔버스 마우스/포인터 이벤트 가로채기 100% 해제: MapLibre 메인 캔버스에 마우스 이벤트 전달]
+      try {
+        const container = map.getContainer();
+        if (container) {
+          const secondaryCanvases = container.querySelectorAll('canvas:not(.maplibregl-canvas)');
+          secondaryCanvases.forEach((cvs: any) => {
+            cvs.style.pointerEvents = 'none';
+          });
+        }
+      } catch {}
+
       if (hasInitializedMapLayers) return;
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
@@ -5015,14 +5033,21 @@ export const MapViewer: React.FC = () => {
     const buildingLayers = [
       'real-bldg-tier2-mainwall',
       'real-bldg-tier1-podium',
+      'real-bldg-tier3-pattern',
       'real-bldg-tier4-roofcap',
+      'real-bldg-tier5-penthouse',
       'fusion-bldg-tier2-mainwall',
       'fusion-bldg-tier1-podium',
+      'fusion-bldg-tier3-pattern',
       'fusion-bldg-tier4-roofcap',
+      'fusion-bldg-tier5-penthouse',
       'bldg-tier2-mainwall',
       'bldg-tier1-podium',
+      'bldg-tier3-pattern',
       'bldg-tier4-roofcap',
+      'bldg-tier5-penthouse',
       '3d-buildings',
+      'building-vector-carrier',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
     // 마우스 호버 커서 처리 (RAF 스로틀링 및 드래그 중 쿼리 100% 완전 차단)
@@ -5040,7 +5065,8 @@ export const MapViewer: React.FC = () => {
         isPinMode ||
         isArrowMode ||
         isSensorPlacementMode ||
-        losAnalysis.isActive
+        losAnalysis.isActive ||
+        placingFacilityPreset
       ) {
         return;
       }
@@ -5087,7 +5113,8 @@ export const MapViewer: React.FC = () => {
         isPinMode ||
         isArrowMode ||
         isSensorPlacementMode ||
-        losAnalysis.isActive
+        losAnalysis.isActive ||
+        placingFacilityPreset
       )
         return;
 
@@ -5308,6 +5335,7 @@ export const MapViewer: React.FC = () => {
     isArrowMode,
     isSensorPlacementMode,
     losAnalysis.isActive,
+    placingFacilityPreset,
   ]);
 
   // 지도 이동 시 건물 팝업 화면 좌표 동기화 (DOM 직접 조작 방식으로 리렌더링 차단)
@@ -5681,7 +5709,7 @@ export const MapViewer: React.FC = () => {
       : map
       ? map.getCenter().lng
       : initialViewport.longitude;
-    const sunConfig = calculateSunLight(sunHour, lat, lng);
+    const sunConfig = calculateSunLight(sunHour, lat, lng, sunSeason);
 
     try {
       if (sunHour === 14) {
@@ -5801,7 +5829,7 @@ export const MapViewer: React.FC = () => {
     } catch (e) {
       console.warn('[3D Building] Failed to update sun light and shadows:', e);
     }
-  }, [sunHour, isMapLoaded, polygonCenter]);
+  }, [sunHour, sunSeason, isMapLoaded, polygonCenter]);
 
   // 20. [3D 가시권(Viewshed/사계) 분석 인터랙션 & GeoJSON 동기화]
   useEffect(() => {
@@ -6385,6 +6413,32 @@ export const MapViewer: React.FC = () => {
     surveillanceSensors.length,
     addSurveillanceSensor,
   ]);
+
+  // 28-B. [3D 시설물 마우스 클릭 안착 인터랙션 & 지형 고도(Terrain Clamping) 직결]
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapLoaded || !placingFacilityPreset) return;
+
+    map.getCanvas().style.cursor = 'crosshair';
+
+    const handleFacilityPlaceClick = (e: maplibregl.MapMouseEvent) => {
+      const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      let elev = 120;
+      try {
+        if (map.queryTerrainElevation) {
+          elev = map.queryTerrainElevation(coords) || 120;
+        }
+      } catch {}
+      addPlacedFacility(placingFacilityPreset, coords, Math.round(elev * 10) / 10);
+      setPlacingFacilityPreset(null);
+    };
+
+    map.on('click', handleFacilityPlaceClick);
+    return () => {
+      map.getCanvas().style.cursor = '';
+      map.off('click', handleFacilityPlaceClick);
+    };
+  }, [placingFacilityPreset, isMapLoaded, addPlacedFacility, setPlacingFacilityPreset]);
 
   // 29. [V-World 실사 3D 마스터 렌더러 100% 상시 활성화 유지 (0 버텍스 은폐 로직 영구 폐기)]
   useEffect(() => {
@@ -8006,6 +8060,25 @@ export const MapViewer: React.FC = () => {
                 className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-200 text-[10px] font-bold transition-colors"
               >
                 배치 종료
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* [3D 시설물 배치 모드] 상단 인터랙티브 안내 배너 */}
+        {placingFacilityPreset && (
+          <div className="absolute top-20 right-16 z-30 pointer-events-auto animate-bounce">
+            <div className="bg-[#041a24]/95 backdrop-blur-md border border-cyan-400 text-white px-4 py-2 rounded-2xl shadow-2xl text-xs font-bold flex items-center space-x-2.5 ring-1 ring-cyan-500/50">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+              <span>
+                [3D 시설물 배치] 지도 위 설치 지점을 클릭하세요 ({FACILITY_PRESETS[placingFacilityPreset]?.name || '시설물'})
+              </span>
+              <button
+                type="button"
+                onClick={() => setPlacingFacilityPreset(null)}
+                className="ml-2 px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-200 text-[10px] font-bold transition-colors"
+              >
+                취소
               </button>
             </div>
           </div>

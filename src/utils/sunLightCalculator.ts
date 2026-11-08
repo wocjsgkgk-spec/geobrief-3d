@@ -1,4 +1,5 @@
 import { calculateSunPosition } from '../lib/vendor/safeGeoAlgorithms';
+import { SunSeasonType } from '@/types/map';
 
 export interface SunLightConfig {
   hour: number; // 9 ~ 18
@@ -27,7 +28,8 @@ export interface SunLightConfig {
 export function calculateSunLight(
   hour: number,
   lat = 37.342, // 기본값: 원주
-  lng = 127.925
+  lng = 127.925,
+  season: SunSeasonType = 'winter_solstice'
 ): SunLightConfig {
   // 1. 입력 파라미터 무결성 검증 (NaN, undefined, 비정상 타입 방어)
   const safeLat = typeof lat === 'number' && Number.isFinite(lat) ? lat : 37.342;
@@ -37,12 +39,25 @@ export function calculateSunLight(
       ? Math.max(0, Math.min(24, hour))
       : 12;
 
-  // 2. 오늘 날짜 기준 특정 시간(hour) 생성
+  // 2. 절기(동지 12/22, 하지 6/21, 춘분 3/21) 기준 특정 시간(hour) 생성
   const now = new Date();
+  const year = now.getFullYear();
+  let month = now.getMonth();
+  let day = now.getDate();
+  if (season === 'winter_solstice') {
+    month = 11; // 12월
+    day = 22;   // 동지
+  } else if (season === 'summer_solstice') {
+    month = 5;  // 6월
+    day = 21;   // 하지
+  } else if (season === 'equinox') {
+    month = 2;  // 3월
+    day = 21;   // 춘분
+  }
   const date = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
+    year,
+    month,
+    day,
     Math.floor(safeHour),
     Math.round((safeHour % 1) * 60)
   );

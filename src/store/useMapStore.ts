@@ -521,6 +521,8 @@ interface MapStoreState {
   placedFacilities: PlacedFacility3D[];
   selectedFacilityId: string | null;
   transformGizmoMode: TransformGizmoMode;
+  placingFacilityPreset: FacilityPresetId | null;
+  setPlacingFacilityPreset: (preset: FacilityPresetId | null) => void;
 
   addPlacedFacility: (presetId: FacilityPresetId, coords?: [number, number], elevation?: number) => string;
   removePlacedFacility: (id: string) => void;
@@ -646,7 +648,13 @@ export const useMapStore = create<MapStoreState>()(
       buildingTheme: 'photorealistic',
       setTerrainEnabled: (terrainEnabled) => set({ terrainEnabled }),
       setTerrainExaggeration: (terrainExaggeration) => set({ terrainExaggeration }),
-      setBaseMap: (baseMap) => set({ baseMap }),
+      setBaseMap: (baseMap) => {
+        let normalized = baseMap as string;
+        if (normalized === 'vworld_satellite') normalized = 'satellite';
+        else if (normalized === 'vworld_base') normalized = 'clean';
+        else if (normalized === 'streets') normalized = 'google-roadmap';
+        set({ baseMap: normalized as BaseMapType });
+      },
       setBuildingTheme: (buildingTheme) => set({ buildingTheme }),
 
       viewMode: '3D',
@@ -1665,6 +1673,8 @@ export const useMapStore = create<MapStoreState>()(
       placedFacilities: [],
       selectedFacilityId: null,
       transformGizmoMode: 'translate',
+      placingFacilityPreset: null,
+      setPlacingFacilityPreset: (preset) => set({ placingFacilityPreset: preset }),
 
       // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+) 토글 관리]
       detail3DMode: 'lod2',

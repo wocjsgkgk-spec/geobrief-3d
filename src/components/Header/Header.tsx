@@ -123,6 +123,8 @@ export const Header: React.FC = () => {
     toggleLayer,
     addPlacedFacility,
     placedFacilities,
+    baseMap,
+    setBaseMap,
   } = useMapStore();
 
   const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
@@ -519,6 +521,71 @@ export const Header: React.FC = () => {
                   Pitch 65°
                 </span>
               </button>
+
+              {/* [3단계 신규: 베이스맵 4종 즉시 전환] */}
+              <div className="pt-1.5 pb-1 border-t border-[#24372a] space-y-1 px-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  🗺️ 베이스맵 4종 전환
+                </span>
+                <div className="grid grid-cols-2 gap-1 text-[10px]">
+                  <button
+                    onClick={() => {
+                      setBaseMap('satellite');
+                      setActiveDropdown(null);
+                    }}
+                    className={`p-1.5 rounded text-left transition-all font-semibold flex items-center gap-1.5 ${
+                      baseMap === 'satellite'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold'
+                        : 'bg-[#101913] hover:bg-[#18281d] text-slate-300 border border-[#213526]'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <span className="truncate">V-World 항공실사</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBaseMap('google-satellite');
+                      setActiveDropdown(null);
+                    }}
+                    className={`p-1.5 rounded text-left transition-all font-semibold flex items-center gap-1.5 ${
+                      baseMap === 'google-satellite'
+                        ? 'bg-cyan-950 text-cyan-200 border border-cyan-400 font-bold'
+                        : 'bg-[#101913] hover:bg-[#18281d] text-slate-300 border border-[#213526]'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                    <span className="truncate">Google 위성</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBaseMap('clean');
+                      setActiveDropdown(null);
+                    }}
+                    className={`p-1.5 rounded text-left transition-all font-semibold flex items-center gap-1.5 ${
+                      baseMap === 'clean'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold'
+                        : 'bg-[#101913] hover:bg-[#18281d] text-slate-300 border border-[#213526]'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                    <span className="truncate">V-World 일반</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBaseMap('google-roadmap');
+                      setActiveDropdown(null);
+                    }}
+                    className={`p-1.5 rounded text-left transition-all font-semibold flex items-center gap-1.5 ${
+                      baseMap === 'google-roadmap'
+                        ? 'bg-cyan-950 text-cyan-200 border border-cyan-400 font-bold'
+                        : 'bg-[#101913] hover:bg-[#18281d] text-slate-300 border border-[#213526]'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                    <span className="truncate">Google 로드맵</span>
+                  </button>
+                </div>
+              </div>
 
               {/* 시점 프리셋 */}
               <div className="pt-1 border-t border-[#24372a] space-y-1 px-1">

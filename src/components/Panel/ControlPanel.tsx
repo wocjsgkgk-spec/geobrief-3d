@@ -231,6 +231,8 @@ export const ControlPanel: React.FC = () => {
     placedFacilities,
     selectedFacilityId,
     transformGizmoMode,
+    placingFacilityPreset,
+    setPlacingFacilityPreset,
     addPlacedFacility,
     removePlacedFacility,
     clearAllPlacedFacilities,
@@ -1949,20 +1951,40 @@ export const ControlPanel: React.FC = () => {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const vp = useMapStore.getState().viewport;
-                      const polyCenter = useMapStore.getState().polygonCenter;
-                      const coords: [number, number] = polyCenter || [vp.longitude, vp.latitude];
-                      addPlacedFacility(key, coords);
-                    }}
-                    className="flex-shrink-0 px-2 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-[10.5px] flex items-center gap-1 transition-colors shadow-sm"
-                    title="현재 부지 또는 화면 중앙에 즉시 배치"
-                  >
-                    <Plus className="w-3 h-3" />
-                    배치
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (placingFacilityPreset === key) {
+                          setPlacingFacilityPreset(null);
+                        } else {
+                          setPlacingFacilityPreset(key);
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded font-semibold text-[10.5px] flex items-center gap-1 transition-all shadow-sm ${
+                        placingFacilityPreset === key
+                          ? 'bg-amber-500 text-slate-950 font-bold border border-amber-300 animate-pulse'
+                          : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                      }`}
+                      title="클릭 후 지도 위 원하는 위치를 클릭하여 안착시키세요"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {placingFacilityPreset === key ? '위치 클릭 대기' : '+ 배치'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const vp = useMapStore.getState().viewport;
+                        const polyCenter = useMapStore.getState().polygonCenter;
+                        const coords: [number, number] = polyCenter || [vp.longitude, vp.latitude];
+                        addPlacedFacility(key, coords);
+                      }}
+                      className="px-1.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
+                      title="부지 또는 화면 중앙에 즉시 배치"
+                    >
+                      중앙
+                    </button>
+                  </div>
                 </div>
               );
             })}
