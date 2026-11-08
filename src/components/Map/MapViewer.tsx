@@ -43,6 +43,13 @@ import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
 import { syncMaster3DRenderer, isPermittedBuildingPolygon } from '@/utils/master3DRendererManager';
 import {
+  setupTerrainClampedBuildingLayers,
+  setTerrainClampedBuildingsVisible,
+  setTerrainClampedBuildingTheme,
+  queryRenderedBuildingCount,
+  purgeFloatingDummyBuildings,
+} from '@/lib/vendor/terrainClampedBuildingEngine';
+import {
   createGpuBuildingStackLayers,
   ensureBuildingPatterns,
   setGpuBuildingLayersMode,
@@ -1066,9 +1073,8 @@ export const MapViewer: React.FC = () => {
         const isBldgVisible = Boolean(layers.buildings3D);
 
         if (isBldgVisible) {
-          if (realisticKoreanCityLayerRef.current) {
-            count = realisticKoreanCityLayerRef.current.getBuildingCount();
-          }
+          // [1-3] 상단 상태바 실제 렌더링 건물 수 100% 실시간 연동 (28동 고정 버그 완전 박멸)
+          count = queryRenderedBuildingCount(map);
         }
 
         const styleLayers = map.getStyle()?.layers || [];
@@ -2934,9 +2940,10 @@ export const MapViewer: React.FC = () => {
             }
           }
         });
-        // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 렌더링
-        // MapLibre 단일 베이지/흑갈색 fill-extrusion 비활성화
-        setGpuBuildingLayersVisibility(map, false);
+        // [1단계: 지형 밀착(Terrain-Clamped) 100% 정위치 3D 건물 활성화]
+        purgeFloatingDummyBuildings(map);
+        setupTerrainClampedBuildingLayers(map);
+        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
 
         // [전술·분석 GeoJSON 소스 및 오버레이 레이어 동적 안전 주입]
         if (fullMapStyle.sources) {
@@ -3189,19 +3196,11 @@ export const MapViewer: React.FC = () => {
       // [1단계: 구형 충돌 레이어 완전 제거]
       // 구형 LOD2BuildingEngine 중복 등록을 영구 배제하여 RealisticKoreanCityLayer가 단독 전담 렌더링하도록 일원화
 
-      // [2단계 신규: Three.js 단일 버퍼 기반 한국형 실사 포토 파사드 & 입체 지붕 메쉬 엔진 등록]
+      // [1단계: 공중에 뜨고 위치가 틀어진 구형 Three.js 더미 레이어 영구 제거 & 지형 밀착 엔진 등록]
       try {
-        const initRenderMode = useMapStore.getState().renderMode3D;
-        const realisticCityLayer = new RealisticKoreanCityLayer({
-          onBuildingCountChange: () => {
-            updateRealtimeMetrics();
-          },
-        });
-        realisticCityLayer.setVisible(!!layers.buildings3D);
-        map.addLayer(realisticCityLayer);
-        realisticKoreanCityLayerRef.current = realisticCityLayer;
-        (window as any).__realisticCityLayer = realisticCityLayer;
-        (window as any).__realisticKoreanCityLayer = realisticCityLayer;
+        purgeFloatingDummyBuildings(map);
+        setupTerrainClampedBuildingLayers(map);
+        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
 
         // [3단계 신규]: 브이월드 스타일 노란 핀 + 한글 건물/지역 명칭(POI) 심볼 레이어 등록
         setupVworldPoiLayer(map);
@@ -3209,19 +3208,7 @@ export const MapViewer: React.FC = () => {
         // [2단계 신규]: 원주천·섬강 등 하천 횡단 대교 국토부 제원 뱃지 라벨 레이어 등록
         setupBridgeLabelsLayer(map);
       } catch (rcErr) {
-        console.warn('[RealisticKoreanCityLayer] Registration warning:', rcErr);
-      }
-
-      // [강원 군 유휴부지 3D 시각화: 병영 막사 vs 미래 마스터플랜 레이어 등록]
-      // [강제 집행 1] 산속 유령 군 막사·연병장·더미 박멸: 기본 등록 및 노출 완전 차단
-      try {
-        const smartCityLayer = new SmartCityComplex3DLayer(selectedIdleSiteId || 'wj-1st-logistics');
-        smartCityLayer.setMode('future_masterplan');
-        smartCityLayer.setVisible(false);
-        // map.addLayer(smartCityLayer) 호출 배제하여 산속 절차적 막사 영구 차단
-        smartCityComplexLayerRef.current = smartCityLayer;
-      } catch (scErr) {
-        console.warn('[SmartCityComplex3DLayer] registration notice:', scErr);
+        console.warn('[TerrainClampedBuildingEngine] Registration warning:', rcErr);
       }
 
       // [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진]
@@ -5903,12 +5890,8 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (realisticKoreanCityLayerRef.current) {
-      realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
-      realisticKoreanCityLayerRef.current.setBuildingTheme(buildingTheme);
-    }
-    // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 (MapLibre fill-extrusion 비활성화)
-    setGpuBuildingLayersVisibility(map, false);
+    setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
+    setTerrainClampedBuildingTheme(map, buildingTheme);
   }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
   // 21. [3D 다목적 실측 줄자 (3D Ruler & Area) 인터랙션 & GeoJSON 동기화]
@@ -6414,10 +6397,7 @@ export const MapViewer: React.FC = () => {
     if (lod2BuildingEngineRef.current) {
       lod2BuildingEngineRef.current.setVisible(false);
     }
-    if (realisticKoreanCityLayerRef.current) {
-      realisticKoreanCityLayerRef.current.setVisible(layers.buildings3D);
-    }
-    setGpuBuildingLayersVisibility(map, false);
+    setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
     map.triggerRepaint();
   }, [layers.buildings3D, isMapLoaded]);
 
@@ -6897,9 +6877,10 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
         }
-        // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 렌더링
-        // MapLibre 단일 베이지/흑갈색 fill-extrusion 비활성화
-        setGpuBuildingLayersVisibility(map, false);
+        // [1단계: 지형 밀착(Terrain-Clamped) 100% 정위치 3D 건물 활성화]
+        purgeFloatingDummyBuildings(map);
+        setupTerrainClampedBuildingLayers(map);
+        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
@@ -7015,9 +6996,10 @@ export const MapViewer: React.FC = () => {
         }
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
         // [강제 집행 2] 모드 무관하게 베이스맵 원본 건물 25,719동 100% 3D 렌더링 유지
-        // [1단계] Three.js RealisticKoreanCityLayer 16종 멀티 재질 전담 렌더링
-        // MapLibre 단일 베이지/흑갈색 fill-extrusion 비활성화
-        setGpuBuildingLayersVisibility(map, false);
+        // [1단계: 지형 밀착(Terrain-Clamped) 100% 정위치 3D 건물 활성화]
+        purgeFloatingDummyBuildings(map);
+        setupTerrainClampedBuildingLayers(map);
+        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }

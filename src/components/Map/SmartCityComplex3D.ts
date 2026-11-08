@@ -1116,6 +1116,15 @@ export function buildComplexForSite(
   mats: SmartCityMaterials,
   mode: 'current_military' | 'future_masterplan' = 'future_masterplan'
 ): THREE.Group {
+  // [1-1 영구 차단] 강원 18개 시·군 전역 가짜 더미/판상형 아파트/오프셋 건물 생성 100% 영구 차단
+  return new THREE.Group();
+}
+
+export function buildComplexForSiteLegacy(
+  siteId: string,
+  mats: SmartCityMaterials,
+  mode: 'current_military' | 'future_masterplan' = 'future_masterplan'
+): THREE.Group {
   if (mode === 'current_military') {
     // [강제 집행 1] 산속 유령 군 막사·연병장·더미 박멸: 빈 Group 반환
     return new THREE.Group();

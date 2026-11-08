@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import maplibregl from 'maplibre-gl';
 import { LosPoint, LosAnalysisResult } from '@/types/map';
+import { getRenderedBuildingsForLos } from './terrainClampedBuildingEngine';
 
 export interface TacticalObstacle {
   type: 'terrain' | 'building';
@@ -79,9 +80,12 @@ export class TacticalLosEngine {
     let maxPenetration = 0;
     let firstObstacle: TacticalObstacle | null = null;
 
-    // 3D 건물 캐시 확인 및 광선 2D BBOX 사전 필터링 (800회 루프 병목 0% 박멸)
-    const cityLayer = (window as any).__realisticKoreanCityLayer;
-    const buildingMap = cityLayer?.persistentBuildingMap;
+    // 3D 지형 밀착 건물 확인 및 광선 2D BBOX 사전 필터링 (800회 루프 병목 0% 박멸)
+    const rayMinLng = Math.min(pointA.coords[0], pointB.coords[0]) - 0.001;
+    const rayMaxLng = Math.max(pointA.coords[0], pointB.coords[0]) + 0.001;
+    const rayMinLat = Math.min(pointA.coords[1], pointB.coords[1]) - 0.001;
+    const rayMaxLat = Math.max(pointA.coords[1], pointB.coords[1]) + 0.001;
+
     const candidateBuildings: {
       cLng: number;
       cLat: number;
@@ -90,11 +94,22 @@ export class TacticalLosEngine {
       name: string;
     }[] = [];
 
-    if (buildingMap && buildingMap.size > 0) {
-      const rayMinLng = Math.min(pointA.coords[0], pointB.coords[0]) - 0.001;
-      const rayMaxLng = Math.max(pointA.coords[0], pointB.coords[0]) + 0.001;
-      const rayMinLat = Math.min(pointA.coords[1], pointB.coords[1]) - 0.001;
-      const rayMaxLat = Math.max(pointA.coords[1], pointB.coords[1]) + 0.001;
+    if (typeof window !== 'undefined' && (window as any).__mapInstance) {
+      try {
+        const tcBldgs = getRenderedBuildingsForLos((window as any).__mapInstance);
+        for (let bIdx = 0; bIdx < tcBldgs.length; bIdx++) {
+          const b = tcBldgs[bIdx];
+          if (b.cLng >= rayMinLng && b.cLng <= rayMaxLng && b.cLat >= rayMinLat && b.cLat <= rayMaxLat) {
+            candidateBuildings.push(b);
+          }
+        }
+      } catch {}
+    }
+
+    const cityLayer = typeof window !== 'undefined' ? (window as any).__realisticKoreanCityLayer : null;
+    const buildingMap = cityLayer?.persistentBuildingMap;
+
+    if (buildingMap && buildingMap.size > 0 && candidateBuildings.length === 0) {
 
       for (const feat of buildingMap.values()) {
         const geom = feat.geometry;
