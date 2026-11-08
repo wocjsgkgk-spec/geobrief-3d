@@ -125,6 +125,9 @@ export const Header: React.FC = () => {
     placedFacilities,
     baseMap,
     setBaseMap,
+    detail3DMode,
+    toggleDetail3DMode,
+    renderMode3D,
   } = useMapStore();
 
   const [activeDropdown, setActiveDropdown] = useState<DropdownCategory>(null);
@@ -1209,17 +1212,25 @@ export const Header: React.FC = () => {
 
       {/* 3. 우측: [✨ 3D 디테일: 실사(LOD2+)] + [🖨️ 도면 저장] 버튼 */}
       <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0 ml-auto">
-        {/* [✨ 3D 디테일: 실사(LOD2+)] 배지 */}
-        <div
-          className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/80 bg-emerald-950/40 text-emerald-200 shadow-emerald-950/40 ring-1 ring-emerald-500/50 flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm"
-          title="국토교통부 브이월드 LT_C_SPBD + 건축물대장 + 실사 포토 아틀라스 100% 통합 가동 중"
+        {/* [✨ 3D 디테일: 상시 토글 버튼] */}
+        <button
+          type="button"
+          onClick={toggleDetail3DMode}
+          className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/80 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-200 shadow-emerald-950/40 ring-1 ring-emerald-500/50 flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm transition-all cursor-pointer group"
+          title="클릭하여 3D 디테일 모드(경량 네이티브 / 실감 LOD2+)를 원클릭 전환합니다"
         >
-          <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
           <span className="hidden sm:inline text-slate-300 font-medium">3D 디테일:</span>
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/25 text-emerald-300 border border-emerald-500/50">
-            실사(LOD2+)
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
+            detail3DMode === 'lod2'
+              ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50'
+              : 'bg-blue-500/25 text-blue-300 border-blue-500/50'
+          }`}>
+            {detail3DMode === 'lod2'
+              ? (renderMode3D === 'tiles3d' ? '실측 트윈(C)' : '실사(LOD2+)')
+              : '경량(LOD1)'}
           </span>
-        </div>
+        </button>
 
         {/* [🖨️ 도면 저장]: 프로젝트 보관함 및 클라우드/로컬 저장 */}
         <button

@@ -297,9 +297,18 @@ export interface SelectedBuildingInfo {
 // [3D 건축물 및 3D 볼륨 최상단 렌더링 승격 헬퍼 함수] GPU 다층 슬라이스 및 3D 볼륨 승격
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
-    'realistic-korean-city-layer',
+    'building-vector-carrier',
+    'bldg-tier1-podium',
+    'bldg-tier2-mainwall',
+    'bldg-tier3-pattern',
+    'bldg-tier4-roofcap',
+    'bldg-tier5-roofdetail',
+    'real-bldg-tier1-podium',
+    'real-bldg-tier2-mainwall',
+    'real-bldg-tier3-pattern',
+    'real-bldg-tier4-roofcap',
+    'real-bldg-tier5-roofdetail',
     'threebox-building-layer',
-    'lod2-building-engine-layer',
     'procedural-trees-3d-layer',
     'building-highlight-fill',
     'flight-ceiling-slab',
@@ -3349,6 +3358,8 @@ export const MapViewer: React.FC = () => {
             },
             onExternalActiveChange: (_isActive) => {
               // V-World 실사 3D 마스터 렌더러 100% 상시 활성화 유지 (0 버텍스 은폐 로직 영구 폐기)
+              setTerrainClampedBuildingsVisible(map, Boolean(useMapStore.getState().layers.buildings3D));
+              setGpuBuildingLayersVisibility(map, Boolean(useMapStore.getState().layers.buildings3D));
               if (realisticKoreanCityLayerRef.current) {
                 realisticKoreanCityLayerRef.current.setVisible(true);
               }

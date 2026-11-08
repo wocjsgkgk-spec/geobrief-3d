@@ -11,6 +11,7 @@ export const LegendBox: React.FC = () => {
     terrainEnabled,
     terrainExaggeration,
     layers,
+    toggleLayer,
     completedPolygon,
     bufferRings,
     borderSecurityVisible,
@@ -108,13 +109,21 @@ export const LegendBox: React.FC = () => {
 
             {/* 4. 3D 지형 및 건축물 */}
             <div className="pt-1.5 border-t border-[#232f26] space-y-1.5">
-              <div className="flex items-center justify-between">
+              <div
+                className="flex items-center justify-between cursor-pointer hover:bg-slate-800/60 px-1 py-0.5 rounded transition-colors group"
+                onClick={() => toggleLayer('buildings3D')}
+                title="클릭하여 건축물 3D 돌출 On/Off 토글"
+              >
                 <div className="flex items-center space-x-2">
-                  <span className="w-3 h-3 rounded bg-blue-600/80 border border-blue-400 inline-block" />
-                  <span>건축물 3D 돌출</span>
+                  <span className={`w-3 h-3 rounded border inline-block transition-colors ${
+                    layers.buildings3D ? 'bg-blue-600/80 border-blue-400' : 'bg-slate-700/80 border-slate-500'
+                  }`} />
+                  <span className="group-hover:text-emerald-300 transition-colors">건축물 3D 돌출</span>
                 </div>
-                <span className="text-[10px] font-mono text-blue-400">
-                  {layers.buildings3D ? '입체 음영' : '숨김'}
+                <span className={`text-[10px] font-mono font-bold ${
+                  layers.buildings3D ? 'text-emerald-400' : 'text-slate-500'
+                }`}>
+                  {layers.buildings3D ? 'ON (실사)' : 'OFF'}
                 </span>
               </div>
               <div className="flex items-center justify-between">

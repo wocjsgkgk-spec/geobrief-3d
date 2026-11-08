@@ -20,7 +20,8 @@ import type { RealisticKoreanCityLayer } from '@/components/Map/RealisticKoreanC
 import type { LOD2BuildingEngine } from '@/components/Map/LOD2BuildingEngine';
 import type { RenderMode3D, Tile3DStreamState } from '@/types/map';
 import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
-import { setGpuBuildingLayersVisibility } from '@/utils/gpuRealisticBuildingStack';
+import { setGpuBuildingLayersVisibility, setGpuBuildingLayersMode } from '@/utils/gpuRealisticBuildingStack';
+import { setTerrainClampedBuildingsVisible } from '@/lib/vendor/terrainClampedBuildingEngine';
 
 export const ALL_FILL_EXTRUSION_LAYER_IDS = [
   'bldg-tier1-podium',
@@ -112,7 +113,7 @@ export function syncMaster3DRenderer(
   if (!map) return;
 
   const {
-    renderMode3D,
+    renderMode3D = 'facade',
     isBuildingsVisible,
     realisticKoreanCityLayer,
     lod2BuildingEngine,
@@ -122,7 +123,7 @@ export function syncMaster3DRenderer(
     tile3DStream,
   } = opts;
 
-  // 1. 건물이 꺼져 있는 경우: 모든 3D 엔진 일괄 숨김
+  // 1. 건물이 꺼져 있는 경우: 모든 3D 엔진 및 레이어 일괄 숨김
   if (!isBuildingsVisible) {
     if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(false);
     if (lod2BuildingEngine) lod2BuildingEngine.setVisible(false);
@@ -130,10 +131,13 @@ export function syncMaster3DRenderer(
     if (threeboxLayer) threeboxLayer.setVisible(false);
 
     hideAllFillExtrusionLayers(map);
+    setGpuBuildingLayersVisibility(map, false);
+    setTerrainClampedBuildingsVisible(map, false);
     return;
   }
 
-  // 2. 3D 타일셋 스트리밍(Tile3DLayer) 처리
+  // 2. 3D 타일셋 스트리밍(Tile3DLayer) 처리 (추가 보강 오버레이)
+  // [절대 불변 규칙]: 고정밀 3D 타일셋 스위치를 켜든 끄든, 모드 A/B/C 무엇이든 기존 3D 실사 건물은 절대 끄면 안 됨!
   const isTiles3DActive = renderMode3D === 'tiles3d' || Boolean(tile3DStream?.enabled);
   if (isTiles3DActive && deck3DTilesManager) {
     deck3DTilesManager.attachToMap(map);
@@ -144,8 +148,12 @@ export function syncMaster3DRenderer(
     deck3DTilesManager.detachFromMap();
   }
 
-  // 3. [단일 통합 V-World 실사 3D 마스터 렌더러 100% 무조건 가동]
-  // 타일셋 스트리밍 전환 중 미로드 구역에서도 건물이 평면으로 사라지지 않도록 무중단 폴백 가드 유지
+  // 3. [단일 통합 V-World 실사 3D 마스터 렌더러 100% 무조건 상시 가동 - 0동 발생 원천 방지]
+  // 지형 밀착(Terrain-Clamped) REA 5단 다층 실사 건물 레이어 상시 가시화
+  setGpuBuildingLayersVisibility(map, true);
+  setTerrainClampedBuildingsVisible(map, true);
+  setGpuBuildingLayersMode(map, renderMode3D === 'native' ? 'native' : 'facade');
+
   if (realisticKoreanCityLayer) {
     realisticKoreanCityLayer.setVisible(true);
   }
@@ -157,11 +165,6 @@ export function syncMaster3DRenderer(
     threeboxLayer.setLodMode('lod2');
     threeboxLayer.setVisible(placedFacilitiesCount > 0);
   }
-
-  // 4. [1단계 해체] 단일 베이지+흑갈색 fill-extrusion 영구 비활성화
-  // Three.js RealisticKoreanCityLayer가 16종 멀티 재질(materials[0..15])로 전담 렌더링하도록 MapLibre fill-extrusion 차단
-  hideAllFillExtrusionLayers(map);
-  setGpuBuildingLayersVisibility(map, false);
 }
 
 /**

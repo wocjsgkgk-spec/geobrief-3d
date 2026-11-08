@@ -46,6 +46,7 @@ import {
   Detail3DMode,
   RenderMode3D,
   SidebarTab,
+  Master3DConfig,
 } from '@/types/map';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
@@ -544,6 +545,10 @@ interface MapStoreState {
   renderMode3D: RenderMode3D;
   setRenderMode3D: (mode: RenderMode3D) => void;
 
+  // [1단계: 단일 통합 3D 마스터 컨트롤 설정]
+  master3DConfig: Master3DConfig;
+  setMaster3DConfig: (updates: Partial<Master3DConfig>) => void;
+
   // [신규] 좌측 분석 패널 3단 탭
   activeSidebarTab: SidebarTab;
   setActiveSidebarTab: (tab: SidebarTab) => void;
@@ -655,7 +660,14 @@ export const useMapStore = create<MapStoreState>()(
         else if (normalized === 'streets') normalized = 'google-roadmap';
         set({ baseMap: normalized as BaseMapType });
       },
-      setBuildingTheme: (buildingTheme) => set({ buildingTheme }),
+      setBuildingTheme: (buildingTheme) =>
+        set((s) => ({
+          buildingTheme,
+          master3DConfig: {
+            ...s.master3DConfig,
+            vworldTheme: buildingTheme,
+          },
+        })),
 
       viewMode: '3D',
       setViewMode: (mode) => {
@@ -695,9 +707,20 @@ export const useMapStore = create<MapStoreState>()(
       },
       setVworldTileStats: (stats) => set({ vworldTileStats: stats }),
       toggleLayer: (key) =>
-        set((state) => ({
-          layers: { ...state.layers, [key]: !state.layers[key] },
-        })),
+        set((state) => {
+          const nextVal = !state.layers[key];
+          return {
+            layers: { ...state.layers, [key]: nextVal },
+            ...(key === 'buildings3D'
+              ? {
+                  master3DConfig: {
+                    ...state.master3DConfig,
+                    enabled: nextVal,
+                  },
+                }
+              : {}),
+          };
+        }),
 
       bufferRings: {
         r500m: false,
@@ -1562,30 +1585,56 @@ export const useMapStore = create<MapStoreState>()(
       toggleTile3DStream: () =>
         set((state) => {
           const nextEnabled = !state.tile3DStream.enabled;
+          const nextMode: RenderMode3D = nextEnabled ? 'tiles3d' : 'facade';
           return {
             tile3DStream: {
               ...state.tile3DStream,
               enabled: nextEnabled,
               statusText: nextEnabled
-                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (전 지역 활성화)'
-                : '⚪ 3D 타일셋 일시 정지 (LOD2 메쉬 가동 중)',
+                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (실측 디지털 트윈)'
+                : '⚪ 3D 타일셋 일시 정지 (LOD2 실사 메쉬 가동 중)',
             },
-            renderMode3D: 'facade',
+            renderMode3D: nextMode,
             detail3DMode: 'lod2',
+            layers: {
+              ...state.layers,
+              buildings3D: true,
+            },
+            master3DConfig: {
+              ...state.master3DConfig,
+              enabled: true,
+              mode: nextMode,
+              lodLevel: 'lod2',
+              tilesetStreaming: nextEnabled,
+            },
           };
         }),
       setTile3DStreamEnabled: (enabled) =>
-        set((state) => ({
-          tile3DStream: {
-            ...state.tile3DStream,
-            enabled,
-            statusText: enabled
-              ? '🟢 V-World 실사 3D 마스터 렌더러 가동 중'
-              : '⚪ V-World 실사 3D 마스터 렌더러 가동 중',
-          },
-          renderMode3D: 'facade',
-          detail3DMode: 'lod2',
-        })),
+        set((state) => {
+          const nextMode: RenderMode3D = enabled ? 'tiles3d' : 'facade';
+          return {
+            tile3DStream: {
+              ...state.tile3DStream,
+              enabled,
+              statusText: enabled
+                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (실측 디지털 트윈)'
+                : '⚪ 3D 타일셋 일시 정지 (LOD2 실사 메쉬 가동 중)',
+            },
+            renderMode3D: nextMode,
+            detail3DMode: 'lod2',
+            layers: {
+              ...state.layers,
+              buildings3D: true,
+            },
+            master3DConfig: {
+              ...state.master3DConfig,
+              enabled: true,
+              mode: nextMode,
+              lodLevel: 'lod2',
+              tilesetStreaming: enabled,
+            },
+          };
+        }),
       setTile3DStreamUrl: (url) =>
         set((state) => ({
           tile3DStream: {
@@ -1678,32 +1727,108 @@ export const useMapStore = create<MapStoreState>()(
 
       // [3D 디테일 LOD 모드: 일반(LOD1) / 실감(LOD2+) 토글 관리]
       detail3DMode: 'lod2',
-      setDetail3DMode: (mode) => set({ detail3DMode: mode }),
+      setDetail3DMode: (mode) =>
+        set((s) => {
+          const nextMode: RenderMode3D = mode === 'lod2' ? 'facade' : 'native';
+          return {
+            detail3DMode: mode,
+            renderMode3D: nextMode,
+            layers: {
+              ...s.layers,
+              buildings3D: true,
+            },
+            master3DConfig: {
+              ...s.master3DConfig,
+              enabled: true,
+              mode: nextMode,
+              lodLevel: mode,
+            },
+          };
+        }),
       toggleDetail3DMode: () =>
         set((s) => {
-          const next = s.detail3DMode === 'lod2' ? 'lod1' : 'lod2';
+          const next: Detail3DMode = s.detail3DMode === 'lod2' ? 'lod1' : 'lod2';
+          const nextMode: RenderMode3D = next === 'lod2' ? 'facade' : 'native';
           return {
             detail3DMode: next,
-            renderMode3D: next === 'lod2' ? 'facade' : 'native',
+            renderMode3D: nextMode,
+            layers: {
+              ...s.layers,
+              buildings3D: true,
+            },
+            master3DConfig: {
+              ...s.master3DConfig,
+              enabled: true,
+              mode: nextMode,
+              lodLevel: next,
+            },
+          };
+        }),
+
+      // [1단계: 단일 통합 3D 마스터 컨트롤 설정]
+      master3DConfig: {
+        enabled: true,
+        mode: 'facade',
+        lodLevel: 'lod2',
+        tilesetStreaming: false,
+        vworldTheme: 'photorealistic',
+        xdoStreaming: false,
+      },
+      setMaster3DConfig: (updates) =>
+        set((state) => {
+          const merged: Master3DConfig = {
+            ...state.master3DConfig,
+            ...updates,
+          };
+          return {
+            master3DConfig: merged,
+            renderMode3D: merged.mode,
+            detail3DMode: merged.lodLevel,
+            layers: {
+              ...state.layers,
+              buildings3D: merged.enabled,
+            },
+            tile3DStream: {
+              ...state.tile3DStream,
+              enabled: merged.tilesetStreaming,
+              statusText: merged.tilesetStreaming
+                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (실측 디지털 트윈)'
+                : '⚪ 3D 타일셋 일시 정지 (LOD2 실사 메쉬 가동 중)',
+            },
+            buildingTheme: merged.vworldTheme,
           };
         }),
 
       // [통합 단일화] V-World 실사 3D 마스터 렌더러 단일 고정
       renderMode3D: 'facade',
-      setRenderMode3D: (_mode) =>
-        set((s) => ({
-          renderMode3D: 'facade',
-          detail3DMode: 'lod2',
-          layers: {
-            ...s.layers,
-            buildings3D: true,
-          },
-          tile3DStream: {
-            ...s.tile3DStream,
-            enabled: false,
-            statusText: '🟢 V-World 실사 3D 마스터 렌더러 100% 통합 가동 중',
-          },
-        })),
+      setRenderMode3D: (mode) =>
+        set((s) => {
+          const isTiles = mode === 'tiles3d';
+          const isNative = mode === 'native';
+          const nextLod: Detail3DMode = isNative ? 'lod1' : 'lod2';
+          return {
+            renderMode3D: mode,
+            detail3DMode: nextLod,
+            layers: {
+              ...s.layers,
+              buildings3D: true, // 절대 0동 소실 방지!
+            },
+            tile3DStream: {
+              ...s.tile3DStream,
+              enabled: isTiles,
+              statusText: isTiles
+                ? '🟢 고정밀 3D 타일셋 스트리밍 가동 중 (실측 디지털 트윈)'
+                : '⚪ 3D 타일셋 일시 정지 (V-World 실사 메쉬 가동 중)',
+            },
+            master3DConfig: {
+              ...s.master3DConfig,
+              enabled: true,
+              mode,
+              lodLevel: nextLod,
+              tilesetStreaming: isTiles,
+            },
+          };
+        }),
 
       // [신규] 좌측 분석 패널 3단 탭
       activeSidebarTab: 'terrain_infra',

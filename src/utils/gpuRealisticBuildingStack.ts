@@ -612,6 +612,8 @@ export function setGpuBuildingLayersVisibility(
     'real-buildings-roof',
     'vworld-3d-buildings-extrusion',
     'sample-buildings-extrusion',
+    'building-vector-carrier',
+    'real-bldg-tier5-penthouse',
   ];
 
   extrusionLayers.forEach((id) => {
@@ -634,30 +636,54 @@ export function setGpuBuildingLayersMode(
   mode: 'native' | 'facade' | 'tiles3d'
 ): void {
   if (!map) return;
-  // 모드 A (경량 네이티브): 패턴 오버레이 끄고 단일 톤
-  // 모드 B (실감 파사드 LOD2): 4단 GPU 슬라이스 전체 표출
-  // 모드 C (고정밀 3D): 타일셋과 공존하되 건물 소실 방지
-  if (mode === 'native') {
-    if (map.getLayer('bldg-tier3-pattern')) {
-      map.setLayoutProperty('bldg-tier3-pattern', 'visibility', 'none');
+  // 모드 A (경량 네이티브): 패턴 오버레이만 끄고 단일 톤 (건물 본체는 100% 보존)
+  // 모드 B (실감 파사드 LOD2): 5단 GPU 슬라이스 전체 표출
+  // 모드 C (고정밀 3D): 5단 GPU 슬라이스 + 외부 3D 타일셋 공존 (최고 디테일)
+  const patternLayers = [
+    'bldg-tier3-pattern',
+    'real-bldg-tier3-pattern',
+    'fusion-bldg-tier3-pattern',
+  ];
+  const patternVis = mode === 'native' ? 'none' : 'visible';
+  patternLayers.forEach((id) => {
+    if (map.getLayer(id)) {
+      try {
+        map.setLayoutProperty(id, 'visibility', patternVis);
+      } catch {}
     }
-    if (map.getLayer('bldg-tier5-roofdetail')) {
-      map.setLayoutProperty('bldg-tier5-roofdetail', 'visibility', 'visible');
+  });
+
+  const wallLayers = [
+    'bldg-tier2-mainwall',
+    'real-bldg-tier2-mainwall',
+    'fusion-bldg-tier2-mainwall',
+  ];
+  wallLayers.forEach((id) => {
+    if (map.getLayer(id)) {
+      try {
+        map.setLayoutProperty(id, 'visibility', 'visible');
+      } catch {}
     }
-    if (map.getLayer('bldg-tier2-mainwall')) {
-      map.setPaintProperty('bldg-tier2-mainwall', 'fill-extrusion-color', gpuBuildingWallColorExpr);
+  });
+
+  const detailLayers = [
+    'bldg-tier1-podium',
+    'real-bldg-tier1-podium',
+    'fusion-bldg-tier1-podium',
+    'bldg-tier4-roofcap',
+    'real-bldg-tier4-roofcap',
+    'fusion-bldg-tier4-roofcap',
+    'bldg-tier5-roofdetail',
+    'real-bldg-tier5-roofdetail',
+    'fusion-bldg-tier5-roofdetail',
+  ];
+  detailLayers.forEach((id) => {
+    if (map.getLayer(id)) {
+      try {
+        map.setLayoutProperty(id, 'visibility', 'visible');
+      } catch {}
     }
-  } else {
-    if (map.getLayer('bldg-tier3-pattern')) {
-      map.setLayoutProperty('bldg-tier3-pattern', 'visibility', 'visible');
-    }
-    if (map.getLayer('bldg-tier5-roofdetail')) {
-      map.setLayoutProperty('bldg-tier5-roofdetail', 'visibility', 'visible');
-    }
-    if (map.getLayer('bldg-tier2-mainwall')) {
-      map.setPaintProperty('bldg-tier2-mainwall', 'fill-extrusion-color', gpuBuildingWallColorExpr);
-    }
-  }
+  });
 }
 
 /**

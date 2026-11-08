@@ -219,6 +219,16 @@ export type Detail3DMode = 'lod1' | 'lod2';
 // - tiles3d: Deck.gl Tile3DLayer 브이월드 OGC 실사 3D 메쉬 스트리밍
 export type RenderMode3D = 'native' | 'facade' | 'tiles3d';
 
+// [1단계: 단일 통합 3D 마스터 컨트롤 설정]
+export interface Master3DConfig {
+  enabled: boolean;
+  mode: RenderMode3D; // 'native' | 'facade' | 'tiles3d'
+  lodLevel: Detail3DMode; // 'lod1' | 'lod2'
+  tilesetStreaming: boolean;
+  vworldTheme: 'photorealistic' | 'landuse' | 'height_spectrum';
+  xdoStreaming: boolean;
+}
+
 // [신규] 좌측 분석 패널 3단 탭
 export type SidebarTab = 'terrain_infra' | 'buildings_complex' | 'site_access';
 

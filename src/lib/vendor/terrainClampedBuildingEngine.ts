@@ -266,7 +266,20 @@ export function queryRenderedBuildingCount(map: maplibregl.Map): number {
       layers: activeLayers,
     });
 
-    if (!rendered || rendered.length === 0) return 0;
+    if (!rendered || rendered.length === 0) {
+      for (const srcId of ['openmaptiles-vector', 'openfreemap', 'openmaptiles']) {
+        if (map.getSource(srcId)) {
+          try {
+            const sf = map.querySourceFeatures(srcId, { sourceLayer: 'building' });
+            if (sf && sf.length > 0) {
+              const uniqueIds = new Set(sf.map((f: any) => f.id || f.geometry?.coordinates?.[0]?.[0]?.join?.('_')).filter(Boolean));
+              return Math.max(uniqueIds.size, sf.length);
+            }
+          } catch {}
+        }
+      }
+      return 0;
+    }
 
     const seenKeys = new Set<string>();
     for (let i = 0; i < rendered.length; i++) {
