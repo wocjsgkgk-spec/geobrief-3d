@@ -32,6 +32,12 @@
 import maplibregl from 'maplibre-gl';
 import { BuildingThemeType } from '@/types/map';
 import {
+  createReaBuildingStackLayers,
+  ensureReaPatterns,
+  REA_SEOUL_16_SPECTRUM_EXPR,
+  REA_ROOFTOP_4TYPE_COLOR_EXPR,
+} from './reaRealisticBuildingComposer';
+import {
   createGpuBuildingStackLayers,
   ensureBuildingPatterns,
   gpuBuildingBaseExpr,
@@ -102,19 +108,21 @@ export function purgeFloatingDummyBuildings(map: maplibregl.Map): void {
 
 /**
  * 2. MapLibre Terrarium DEM 3D 지형에 1:1 밀착(Clamped)되는 실사 건축물 레이어 전체 등록
+ * - REA 5단 다층 건축 파츠(1층 기단부, 기준층 본동 16색 스펙트럼, 3.0m 창문 파사드, 옥상 우레탄/시멘트/기와 바닥, 5층 이상 옥탑방) 직결
  */
 export function setupTerrainClampedBuildingLayers(map: maplibregl.Map): void {
   if (!map) return;
 
-  // 1) 고해상도 아파트 창호 및 옥상 파라펫 텍스처 패턴 등록
+  // 1) 고해상도 아파트 창호 및 REA 절차적 텍스처 패턴 등록
+  ensureReaPatterns(map);
   ensureBuildingPatterns(map);
 
-  // 2) 베이스맵 오픈 벡터 타일('openmaptiles-vector') 4단 지형 밀착 레이어 등록
+  // 2) 베이스맵 오픈 벡터 타일('openmaptiles-vector') REA 5단 지형 밀착 레이어 등록
   const vectorSources = ['openmaptiles-vector', 'openmaptiles', 'openfreemap'].filter((s) => map.getSource(s));
   const mainVectorSource = vectorSources[0] || 'openmaptiles-vector';
 
   if (map.getSource(mainVectorSource)) {
-    const vectorLayers = createGpuBuildingStackLayers(mainVectorSource, 'building');
+    const vectorLayers = createReaBuildingStackLayers(mainVectorSource, 'building');
     for (const layer of vectorLayers) {
       if (!map.getLayer(layer.id)) {
         try {
@@ -128,7 +136,7 @@ export function setupTerrainClampedBuildingLayers(map: maplibregl.Map): void {
 
   // 3) 국토부 브이월드 실시간 WFS('LT_C_SPBD' - EPSG:4326) 실측 지형 밀착 레이어 등록
   if (map.getSource('real-buildings-source')) {
-    const realLayers = createGpuBuildingStackLayers('real-buildings-source', undefined, 'real');
+    const realLayers = createReaBuildingStackLayers('real-buildings-source', undefined, 'real');
     for (const layer of realLayers) {
       if (!map.getLayer(layer.id)) {
         try {
@@ -142,7 +150,7 @@ export function setupTerrainClampedBuildingLayers(map: maplibregl.Map): void {
 
   // 4) 건축물대장 융합 소스('fusion-buildings-source') 지형 밀착 레이어 등록
   if (map.getSource('fusion-buildings-source')) {
-    const fusionLayers = createGpuBuildingStackLayers('fusion-buildings-source', undefined, 'fusion');
+    const fusionLayers = createReaBuildingStackLayers('fusion-buildings-source', undefined, 'fusion');
     for (const layer of fusionLayers) {
       if (!map.getLayer(layer.id)) {
         try {
@@ -197,8 +205,8 @@ export function setTerrainClampedBuildingTheme(
   const wallLayers = ['bldg-tier2-mainwall', 'real-bldg-tier2-mainwall', 'fusion-bldg-tier2-mainwall'];
   const roofLayers = ['bldg-tier4-roofcap', 'real-bldg-tier4-roofcap', 'fusion-bldg-tier4-roofcap'];
 
-  let wallExpr: any = gpuBuildingWallColorExpr;
-  let roofExpr: any = gpuBuildingRoofColorExpr;
+  let wallExpr: any = REA_SEOUL_16_SPECTRUM_EXPR;
+  let roofExpr: any = REA_ROOFTOP_4TYPE_COLOR_EXPR;
 
   if (theme === 'landuse') {
     wallExpr = gpuBuildingLanduseWallColorExpr;
