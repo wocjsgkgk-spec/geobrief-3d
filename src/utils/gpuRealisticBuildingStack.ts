@@ -41,15 +41,19 @@ export const gpuBuildingTotalHeightExpr: any = [
     ['to-number', ['get', 'hei'], 0],
     ['to-number', ['get', 'HEI'], 0],
     ['to-number', ['get', 'bld_hgt'], 0],
+    ['to-number', ['get', 'BLD_HGT'], 0],
     ['*', ['to-number', ['get', 'grnd_flr'], 0], 3.2],
     ['*', ['to-number', ['get', 'GRND_FLR'], 0], 3.2],
     ['*', ['to-number', ['get', 'gro_flo_co'], 0], 3.2],
     ['*', ['to-number', ['get', 'GRO_FLO_CO'], 0], 3.2],
     ['*', ['to-number', ['get', 'flr_cnt'], 0], 3.2],
+    ['*', ['to-number', ['get', 'FLR_CNT'], 0], 3.2],
     ['*', ['to-number', ['get', 'levels'], 0], 3.2],
     ['*', ['to-number', ['get', 'building:levels'], 0], 3.2],
     0,
   ],
+  'areaVal',
+  ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 150], 150],
   [
     'case',
     // 0. 비건물 / 부지 경계 / 연속지적도 필지 / 용도지역 / 면적 4,500㎡ 초과 시 높이 0m (3D 압출 즉시 제외)
@@ -57,7 +61,7 @@ export const gpuBuildingTotalHeightExpr: any = [
       'any',
       ['==', ['get', 'is_non_building'], true],
       ['==', ['get', 'is_site_boundary'], true],
-      ['>', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 0], 0], 4500],
+      ['>', ['var', 'areaVal'], 4500],
       ['has', 'UQ111'],
       ['has', 'UQ111_NM'],
       ['has', 'uq111'],
@@ -70,18 +74,7 @@ export const gpuBuildingTotalHeightExpr: any = [
     ],
     0,
 
-    // [절대 규칙 1 & 2: 소형 필지 면적 280㎡ 미만은 절대로 고층 불가 - 6.5m~11.5m 제한]
-    ['<', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 999], 999], 220],
-    ['+', 6.5, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 5]],
-
-    ['<', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 999], 999], 280],
-    ['+', 8.0, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 6]],
-
-    // 1. 이미 실측 높이(>= 10.0m)가 선언되어 있다면 우선 적용 (단, 면적 280㎡ 미만은 위에서 사전 필터링)
-    ['>=', ['var', 'declaredHeight'], 10.0],
-    ['var', 'declaredHeight'],
-
-    // 2. 아파트 단지 및 고층 주거: 48m ~ 75m (16~25층)
+    // 1. 아파트 단지 (apartments 또는 단지 내 판상형/ㄱ자형/타워형): 45m ~ 75m (15~25층)
     [
       'any',
       ['==', ['get', 'class'], 'apartments'],
@@ -91,57 +84,90 @@ export const gpuBuildingTotalHeightExpr: any = [
       ['==', ['get', 'bld_category'], 'apartment'],
     ],
     [
-      '+',
-      48,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 28], // 48..75m
+      'case',
+      ['>=', ['var', 'declaredHeight'], 15.0],
+      ['max', 45, ['min', 75, ['var', 'declaredHeight']]],
+      ['+', 45, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 12345], 12345]], 31]],
     ],
 
-    // 3. 중·저층 상가·원룸·근린생활 블록: 14m ~ 26m (4~8층 중층 빌딩)
+    // 2. 소형 주택/빌라/농가 (30㎡ <= area < 220㎡): 6.5m ~ 10.5m (2~3층, 최대 10.5m 상한으로 뾰족 기둥 방지)
+    ['<', ['var', 'areaVal'], 220],
+    [
+      'case',
+      ['>=', ['var', 'declaredHeight'], 3.0],
+      ['min', 10.5, ['max', 6.5, ['var', 'declaredHeight']]],
+      ['+', 6.5, ['*', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 41], 0.1]],
+    ],
+
+    // 3. 도청/시청/군청/혁신도시 공공기관(심평원, 건보공단 등)/학교/병원 (area >= 600㎡ 비주거): 16m ~ 45m (4~14층)
+    [
+      'all',
+      ['>=', ['var', 'areaVal'], 600],
+      [
+        'any',
+        ['==', ['get', 'class'], 'commercial'],
+        ['==', ['get', 'class'], 'office'],
+        ['==', ['get', 'class'], 'public'],
+        ['==', ['get', 'class'], 'hospital'],
+        ['==', ['get', 'class'], 'university'],
+        ['==', ['get', 'class'], 'school'],
+        ['==', ['get', 'class'], 'government'],
+        ['==', ['get', 'class'], 'military'],
+        ['==', ['get', 'building'], 'commercial'],
+        ['==', ['get', 'building'], 'office'],
+        ['==', ['get', 'building'], 'public'],
+        ['==', ['get', 'building'], 'government'],
+        ['==', ['get', 'building'], 'hospital'],
+        ['==', ['get', 'building'], 'school'],
+        ['==', ['get', 'usageType'], 'commercial'],
+        ['==', ['get', 'usageType'], 'military_public'],
+        ['==', ['get', 'bld_category'], 'commercial'],
+        ['==', ['get', 'bld_category'], 'public_military'],
+      ],
+    ],
+    [
+      'case',
+      ['>=', ['var', 'declaredHeight'], 10.0],
+      ['max', 16, ['min', 45, ['var', 'declaredHeight']]],
+      ['+', 16, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 30]],
+    ],
+
+    // 4. 시·군 중심 상가/원룸/근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4~6층)
     [
       'any',
+      [
+        'all',
+        ['>=', ['var', 'areaVal'], 220],
+        ['<', ['var', 'areaVal'], 600],
+      ],
       ['==', ['get', 'class'], 'commercial'],
       ['==', ['get', 'class'], 'retail'],
       ['==', ['get', 'class'], 'office'],
-      ['==', ['get', 'class'], 'public'],
-      ['==', ['get', 'class'], 'hospital'],
-      ['==', ['get', 'class'], 'university'],
       ['==', ['get', 'building'], 'commercial'],
+      ['==', ['get', 'building'], 'retail'],
       ['==', ['get', 'building'], 'office'],
       ['==', ['get', 'usageType'], 'commercial'],
-      ['==', ['get', 'bld_category'], 'commercial'],
     ],
-    [
-      '+',
-      14,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 13], // 14..26m
-    ],
-
-    // 4. 산업/군사/물류/창고: 10m ~ 18m
-    [
-      'any',
-      ['==', ['get', 'class'], 'industrial'],
-      ['==', ['get', 'class'], 'warehouse'],
-      ['==', ['get', 'class'], 'military'],
-      ['==', ['get', 'building'], 'industrial'],
-      ['==', ['get', 'building'], 'warehouse'],
-    ],
-    [
-      '+',
-      10,
-      ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 34567], 34567]], 9], // 10..18m
-    ],
-
-    // 5. 일반 시가지 / 단지형 중대형 건물 vs 시내 상가 vs 일반 주택가 (100% 입체화)
     [
       'case',
-      // 단지형 중대형 건물: 42m ~ 68m (14층 ~ 23층 아파트)
-      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 40],
-      ['+', 42, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 27]], // 42..68m
-      // 시내 상가·오피스 블록: 14m ~ 26m (4층 ~ 8층)
+      ['>=', ['var', 'declaredHeight'], 4.0],
+      ['max', 12, ['min', 21, ['var', 'declaredHeight']]],
+      ['+', 12, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 23456], 23456]], 10]],
+    ],
+
+    // 5. 이미 실측 높이(>= 6.0m)가 선언된 일반 건물: 선언 높이 반영
+    ['>=', ['var', 'declaredHeight'], 6.0],
+    ['var', 'declaredHeight'],
+
+    // 6. 폴백 일반 시가지 건물 (면적/ID 해시 분배):
+    // 35% 단지형(45~68m), 40% 시내 상가/빌딩(14~24m), 25% 일반 단독/다세대(7~10.5m)
+    [
+      'case',
+      ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 35],
+      ['+', 45, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 56789], 56789]], 24]],
       ['<', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 45678], 45678]], 100], 75],
-      ['+', 14, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 13]], // 14..26m
-      // 일반 주택가: 8m ~ 13m (2.5층 ~ 4층)
-      ['+', 8, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 6]],   // 8..13m
+      ['+', 14, ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 67890], 67890]], 11]],
+      ['+', 7, ['*', ['%', ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], 89012], 89012]], 36], 0.1]],
     ],
   ],
 ];
@@ -508,7 +534,7 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 4: 옥상 슬래브 / 0.9m 파라펫 캡 (Roof Cap H ~ H + 0.9m)
+  // Tier 4: 옥상 슬래브 / 0.85m 파라펫 캡 (Roof Cap H ~ H + 0.85m)
   // 아파트: 짙은 슬래브(#57534e) / 박공 캡(#6b3426)
   // 상가: 에메랄드 우레탄(#2e6f4e, 50%), 테라코타(#7c3626, 25%), 시멘트(#64748b, 25%)
   // 주택: 테라코타 기와(#6e2c1b, 40%), 청색 강판(#254e7a, 30%), 우레탄(#356854, 30%)
@@ -523,7 +549,7 @@ export function createGpuBuildingStackLayers(
     paint: {
       'fill-extrusion-color': VWORLD_ROOF_COLOR_EXPR,
       'fill-extrusion-base': BUILDING_HEIGHT_EXPR,
-      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 0.9],
+      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 0.85],
       'fill-extrusion-opacity': 1.0,
       'fill-extrusion-vertical-gradient': false,
     },
@@ -532,26 +558,20 @@ export function createGpuBuildingStackLayers(
     },
   };
 
-  // Tier 5: [1단계 신규] 옥상 난간 테두리 코핑 & 내부 그늘(Inner AO) 디테일 (줌 14.5 ~ 15.5 정밀 페이드인)
+  // Tier 5: [2단계 신규] 옥상 난간 테두리 코핑 & 옥탑방 엘리베이터 권상기실 코어 (+3.2m = 4.05m)
   const tier5RoofDetail: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier5-roofdetail`,
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
     filter: buildingFilter,
-    minzoom: 14.5,
+    minzoom: 13.5,
     maxzoom: 24,
     paint: {
       'fill-extrusion-pattern': VWORLD_ROOF_PARAPET_AO_PATTERN_ID,
-      'fill-extrusion-base': ['+', BUILDING_HEIGHT_EXPR, 0.9],
-      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 1.2],
-      'fill-extrusion-opacity': [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        14.5, 0.0,
-        15.5, 0.90,
-      ],
+      'fill-extrusion-base': ['+', BUILDING_HEIGHT_EXPR, 0.85],
+      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 4.05],
+      'fill-extrusion-opacity': 0.95,
       'fill-extrusion-vertical-gradient': false,
     },
     layout: {

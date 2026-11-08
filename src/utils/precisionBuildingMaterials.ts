@@ -41,6 +41,8 @@ import {
   getScenarioBuildingMaterials,
   getScenarioRooftopPbrMaterial,
   GLOBAL_SCENARIO_MATERIALS,
+  GLOBAL_VWORLD_MATERIALS,
+  getVWorldBuildingMaterials,
 } from '@/lib/vendor/scenarioTexturePipeline';
 
 export {
@@ -54,6 +56,8 @@ export {
   getScenarioBuildingMaterials,
   getScenarioRooftopPbrMaterial,
   GLOBAL_SCENARIO_MATERIALS,
+  GLOBAL_VWORLD_MATERIALS,
+  getVWorldBuildingMaterials,
 };
 
 // 옥상 4대 실측 컬러 및 서울 실사 옥상 디테일 컬러 정의

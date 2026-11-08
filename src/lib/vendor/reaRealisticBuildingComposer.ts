@@ -31,29 +31,35 @@ import {
 // =============================================================================
 
 export const REA_SEOUL_16_PALETTE = {
-  // 아파트 단지 (15~25층, 45~75m)
-  aptCreamWhite: '#f8fafc',      // 0: 눈부신 크림 화이트
-  aptSandBeige: '#ece4d5',       // 1: 소프트 샌드 베이지
-  aptSilverGray: '#e2e8f0',      // 2: 라이트 실버 그레이
-  aptModernCoolGray: '#f1f5f9',  // 3: 모던 쿨 그레이
+  // 아파트 단지 (15~25층, 45~75m) - Mat 0~4
+  aptPureWhite: '#f8fafc',       // 0: 순백색 외벽
+  aptCreamIvory: '#f4f1ea',      // 1: 크림 아이보리 외벽
+  aptSilverGray: '#e2e8f0',      // 2: 라이트 실버 그레이 외벽
+  aptModernCoolGray: '#f1f5f9',  // 3: 모던 쿨 그레이 외벽
+  aptSoftWarmGray: '#e7e5e4',    // 4: 소프트 웜 그레이 외벽
 
-  // 도청·시청·혁신도시 공공기관·오피스 타워 (7~15층, 22~48m)
-  officeEmeraldGlass: '#0f766e', // 4: 에메랄드 반사 유리 커튼월
-  officeSkyBlueGlass: '#0284c7', // 5: 스카이블루 유리 커튼월
-  officeIvoryFrame: '#cbd5e1',   // 6: 아이보리 PC 콘크리트 프레임 오피스
+  // 하위 호환 별칭
+  aptCreamWhite: '#f8fafc',
+  aptSandBeige: '#f4f1ea',
 
-  // 시내 중심 상가·근린생활 빌딩 (3~6층, 11~20m)
-  commercialSabiseok: '#d6cfc2', // 7: 밝은 사비석 화강석
-  commercialRedBrick: '#7f1d1d', // 8: 붉은 적벽돌
-  commercialCharcoal: '#334155', // 9: 다크 차콜 모던 메탈
-  commercialBrownBrick: '#6e473b',// 10: 갈색 파벽돌
+  // 도청·시청·혁신도시 공공기관·오피스 타워·학교 (7~15층, 16~45m) - Mat 10~12
+  officeEmeraldGlass: '#0f766e', // 10: 에메랄드 반사 유리 커튼월
+  officeSkyBlueGlass: '#0284c7', // 11: 스카이블루 유리 커튼월
+  schoolTerracotta: '#d97742',   // 12: 살구색/테라코타 학교 교사동
+  officeIvoryFrame: '#cbd5e1',
 
-  // 단독주택·다세대 빌라·농어촌 주택 (1.5~3층, 6~10m)
-  villaRedBrick: '#8c2d19',      // 11: 적벽돌 빌라
-  villaOchreBrick: '#9a3412',    // 12: 황토벽돌
-  villaCreamStucco: '#f5f5f4',   // 13: 밝은 크림 스타코
-  schoolTerracotta: '#d97742',   // 14: 살구색/테라코타 학교 교사동
-  villaWarmBeige: '#e7e5e4',     // 15: 웜 라이트 베이지 빌라
+  // 시내 중심 상가·근린생활 빌딩 (3~6층, 12~21m) - Mat 5~9
+  commercialSabiseok: '#d6cfc2', // 5: 밝은 사비석 화강석
+  commercialRedBrick: '#7f1d1d', // 6: 붉은 적벽돌
+  commercialCharcoal: '#334155', // 7: 다크 차콜 모던 메탈
+  commercialBrownBrick: '#6e473b',// 8: 갈색 파벽돌
+  commercialWarmStone: '#bfa588', // 9: 웜스톤 대리석
+
+  // 단독주택·다세대 빌라·농어촌 주택 (2~3층, 6.5~10.5m) - Mat 13~15
+  villaRedBrick: '#7c2d12',      // 13: 적벽돌 빌라
+  villaOchreBrick: '#9a3412',    // 14: 황토벽돌
+  villaCreamStucco: '#f5f5f4',   // 15: 밝은 크림 스타코
+  villaWarmBeige: '#e7e5e4',     // 폴백 웜 라이트 베이지
 };
 
 /**
@@ -77,7 +83,7 @@ export const REA_BUILDING_HASH_EXPR: any = [
 
 export const REA_SEOUL_16_SPECTRUM_EXPR: any = [
   'case',
-  // 1) 고층 아파트 단지 (H >= 38m 또는 아파트 명칭)
+  // 1) 고층 아파트 단지 (H >= 38m 또는 아파트 명칭) - Mat 0~4
   [
     'any',
     ['>=', BUILDING_HEIGHT_EXPR, 38.0],
@@ -89,48 +95,63 @@ export const REA_SEOUL_16_SPECTRUM_EXPR: any = [
   ],
   [
     'case',
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 4], 0], REA_SEOUL_16_PALETTE.aptCreamWhite,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 4], 1], REA_SEOUL_16_PALETTE.aptSandBeige,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 4], 2], REA_SEOUL_16_PALETTE.aptSilverGray,
-    REA_SEOUL_16_PALETTE.aptModernCoolGray,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 0], REA_SEOUL_16_PALETTE.aptPureWhite,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 1], REA_SEOUL_16_PALETTE.aptCreamIvory,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 2], REA_SEOUL_16_PALETTE.aptSilverGray,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 3], REA_SEOUL_16_PALETTE.aptModernCoolGray,
+    REA_SEOUL_16_PALETTE.aptSoftWarmGray,
   ],
 
-  // 2) 도청·시청·혁신도시 공공기관·오피스 타워 (H >= 22m 또는 오피스/공공 명칭)
+  // 2) 도청·시청·혁신도시 공공기관·오피스 타워·학교 (H >= 22m 또는 오피스/공공/학교 명칭) - Mat 10~12
   [
     'any',
     ['>=', BUILDING_HEIGHT_EXPR, 22.0],
-    ['==', ['get', 'class'], 'commercial'],
     ['==', ['get', 'class'], 'office'],
     ['==', ['get', 'class'], 'public'],
+    ['==', ['get', 'class'], 'government'],
+    ['==', ['get', 'class'], 'school'],
+    ['==', ['get', 'class'], 'university'],
+    ['==', ['get', 'class'], 'hospital'],
     ['==', ['get', 'building'], 'office'],
-    ['==', ['get', 'usageType'], 'commercial'],
-    ['==', ['get', 'bld_category'], 'commercial'],
+    ['==', ['get', 'building'], 'public'],
+    ['==', ['get', 'building'], 'government'],
+    ['==', ['get', 'building'], 'school'],
+    ['==', ['get', 'usageType'], 'military_public'],
+    ['==', ['get', 'bld_category'], 'public_military'],
   ],
   [
     'case',
     ['==', ['%', REA_BUILDING_HASH_EXPR, 3], 0], REA_SEOUL_16_PALETTE.officeEmeraldGlass,
     ['==', ['%', REA_BUILDING_HASH_EXPR, 3], 1], REA_SEOUL_16_PALETTE.officeSkyBlueGlass,
-    REA_SEOUL_16_PALETTE.officeIvoryFrame,
+    REA_SEOUL_16_PALETTE.schoolTerracotta,
   ],
 
-  // 3) 시내 중심 상가·근린생활 빌딩 (H >= 11m)
-  ['>=', BUILDING_HEIGHT_EXPR, 11.0],
+  // 3) 시내 중심 상가·근린생활 빌딩 (H >= 11m 또는 상가 명칭) - Mat 5~9
+  [
+    'any',
+    ['>=', BUILDING_HEIGHT_EXPR, 11.0],
+    ['==', ['get', 'class'], 'commercial'],
+    ['==', ['get', 'class'], 'retail'],
+    ['==', ['get', 'building'], 'commercial'],
+    ['==', ['get', 'building'], 'retail'],
+    ['==', ['get', 'usageType'], 'commercial'],
+    ['==', ['get', 'bld_category'], 'commercial'],
+  ],
   [
     'case',
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 4], 0], REA_SEOUL_16_PALETTE.commercialSabiseok,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 4], 1], REA_SEOUL_16_PALETTE.commercialRedBrick,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 4], 2], REA_SEOUL_16_PALETTE.commercialCharcoal,
-    REA_SEOUL_16_PALETTE.commercialBrownBrick,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 0], REA_SEOUL_16_PALETTE.commercialSabiseok,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 1], REA_SEOUL_16_PALETTE.commercialRedBrick,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 2], REA_SEOUL_16_PALETTE.commercialCharcoal,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 3], REA_SEOUL_16_PALETTE.commercialBrownBrick,
+    REA_SEOUL_16_PALETTE.commercialWarmStone,
   ],
 
-  // 4) 저층 단독주택·다세대 빌라·학교 (H < 11m)
+  // 4) 저층 단독주택·다세대 빌라·농가 (H < 11m) - Mat 13~15
   [
     'case',
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 0], REA_SEOUL_16_PALETTE.villaRedBrick,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 1], REA_SEOUL_16_PALETTE.villaOchreBrick,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 2], REA_SEOUL_16_PALETTE.villaCreamStucco,
-    ['==', ['%', REA_BUILDING_HASH_EXPR, 5], 3], REA_SEOUL_16_PALETTE.schoolTerracotta,
-    REA_SEOUL_16_PALETTE.villaWarmBeige,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 3], 0], REA_SEOUL_16_PALETTE.villaRedBrick,
+    ['==', ['%', REA_BUILDING_HASH_EXPR, 3], 1], REA_SEOUL_16_PALETTE.villaOchreBrick,
+    REA_SEOUL_16_PALETTE.villaCreamStucco,
   ],
 ];
 
@@ -577,7 +598,7 @@ export function createReaBuildingStackLayers(
   };
 
   // ---------------------------------------------------------------------------
-  // Part 4: 옥상 테두리 입체 난간(Parapet, H ~ H + 0.9m) & 옥상 바닥 4종 분리
+  // Part 4: 옥상 테두리 입체 난간(Parapet, H ~ H + 0.85m) & 옥상 바닥 4종 분리
   // ---------------------------------------------------------------------------
   const part4RoofCap: maplibregl.LayerSpecification = {
     id: `${p}bldg-tier4-roofcap`,
@@ -590,7 +611,7 @@ export function createReaBuildingStackLayers(
     paint: {
       'fill-extrusion-color': REA_ROOFTOP_4TYPE_COLOR_EXPR,
       'fill-extrusion-base': BUILDING_HEIGHT_EXPR,
-      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 0.9],
+      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 0.85],
       'fill-extrusion-opacity': 1.0,
       'fill-extrusion-vertical-gradient': false,
     },
@@ -600,7 +621,7 @@ export function createReaBuildingStackLayers(
   };
 
   // ---------------------------------------------------------------------------
-  // Part 5: 5층 이상 옥상 엘리베이터 권상기실 (Penthouse Core, H + 0.9m ~ H + 4.1m)
+  // Part 5: 5층 이상 옥상 엘리베이터 권상기실 (Penthouse Core, H + 0.85m ~ H + 4.05m)
   // - 5층 이상(H >= 14m) 건물 옥상 중앙에 +3.2m 솟아오른 옥탑방 코어 메쉬
   // ---------------------------------------------------------------------------
   const penthouseFilter: any = [
@@ -619,8 +640,8 @@ export function createReaBuildingStackLayers(
     maxzoom: 24,
     paint: {
       'fill-extrusion-pattern': REA_PATTERN_IDS.PENTHOUSE_CORE,
-      'fill-extrusion-base': ['+', BUILDING_HEIGHT_EXPR, 0.9],
-      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 4.1], // +3.2m 엘리베이터 권상기실
+      'fill-extrusion-base': ['+', BUILDING_HEIGHT_EXPR, 0.85],
+      'fill-extrusion-height': ['+', BUILDING_HEIGHT_EXPR, 4.05], // Parapet(0.85m) 위 +3.2m 엘리베이터 권상기실
       'fill-extrusion-opacity': 0.95,
       'fill-extrusion-vertical-gradient': true,
     },

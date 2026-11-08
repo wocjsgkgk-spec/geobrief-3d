@@ -33,6 +33,7 @@ export type { SeoulRooftopAssignment };
 // ---------------------------------------------------------------------------
 
 export let GLOBAL_SCENARIO_MATERIALS: THREE.MeshStandardMaterial[] | null = null;
+export let GLOBAL_VWORLD_MATERIALS: THREE.MeshStandardMaterial[] | null = null;
 let cachedRooftopPbrMaterial: THREE.MeshStandardMaterial | null = null;
 
 function createOffscreen1024Canvas(): HTMLCanvasElement {
@@ -834,7 +835,12 @@ export function getScenarioBuildingMaterials(): THREE.MeshStandardMaterial[] {
   }
 
   GLOBAL_SCENARIO_MATERIALS = materials;
+  GLOBAL_VWORLD_MATERIALS = materials;
   return GLOBAL_SCENARIO_MATERIALS;
+}
+
+export function getVWorldBuildingMaterials(): THREE.MeshStandardMaterial[] {
+  return getScenarioBuildingMaterials();
 }
 
 export function getScenarioRooftopPbrMaterial(): THREE.MeshStandardMaterial {
