@@ -68,7 +68,12 @@ import { TerrainProfileModal } from '@/components/Analysis/TerrainProfileModal';
 import { getGangwon18MilitarySiteById } from '@/constants/gangwon18MilitarySites';
 import {
   VWorld3DMeasureEngine,
+  VWorldProfileEngine,
+  VWorldSlopeEngine,
   VWorldDaylightEngine,
+  VWorldViewshedEngine,
+  VWorldTacticalLosEngine,
+  VWorldInspectorEngine,
   VWorldCutFillEngine,
   VWorldSiteDevelopmentEngine,
 } from '@/lib/vendor/vworldAnalysisSuite';
@@ -1882,7 +1887,7 @@ export const MapViewer: React.FC = () => {
             type: 'fill',
             source: 'slope-analysis-source',
             paint: {
-              'fill-color': ['coalesce', ['get', 'fillColor'], '#10B981'],
+              'fill-color': ['coalesce', ['get', 'fillColor'], ['get', 'color'], '#22c55e'],
               'fill-opacity': 0.65,
             },
             layout: { visibility: 'none' },
@@ -1892,7 +1897,7 @@ export const MapViewer: React.FC = () => {
             type: 'line',
             source: 'slope-analysis-source',
             paint: {
-              'line-color': ['coalesce', ['get', 'strokeColor'], '#059669'],
+              'line-color': ['coalesce', ['get', 'strokeColor'], ['get', 'color'], '#16a34a'],
               'line-width': 1.2,
               'line-opacity': 0.85,
             },
@@ -2124,7 +2129,7 @@ export const MapViewer: React.FC = () => {
             type: 'line',
             source: 'building-highlight-source',
             paint: {
-              'line-color': '#F59E0B', // 골드 외곽선
+              'line-color': '#10B981', // 에메랄드 외곽선
               'line-width': 3.5,
               'line-opacity': 1.0,
             },
@@ -2336,6 +2341,17 @@ export const MapViewer: React.FC = () => {
       runViewshedSimulation: calculateViewshed,
       runFloodSimulation,
       runCutFillCalculation: calculateCutFill,
+    };
+    (window as any).__vworldAnalysisSuite = {
+      measure: VWorld3DMeasureEngine,
+      profile: VWorldProfileEngine,
+      slope: VWorldSlopeEngine,
+      daylight: VWorldDaylightEngine,
+      viewshed: VWorldViewshedEngine,
+      los: VWorldTacticalLosEngine,
+      inspector: VWorldInspectorEngine,
+      cutFill: VWorldCutFillEngine,
+      feasibility: VWorldSiteDevelopmentEngine,
     };
 
     // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
@@ -4902,11 +4918,15 @@ export const MapViewer: React.FC = () => {
     }
   }, [polygonStyle, isMapLoaded]);
 
-  // [신규] 17. 토목·지형 3단 경사도 분석 격자 및 고도 단면 데이터 실시간 연산
+  // [신규] 17. 토목·지형 3단 경사도 분석 격자 및 고도 단면 데이터 실시간 연산 (V-World 엔진 결합)
   const slopeAnalysisResult = React.useMemo(() => {
+    const map = mapRef.current;
     const poly = completedPolygon || WONJU_DEFAULT_POLYGON;
     if (!poly) return null;
     try {
+      if (map) {
+        return VWorldSlopeEngine.analyzeSlopeGrid(map, poly as any) as any;
+      }
       return analyzeSlopeGrid(poly, (coord: [number, number]) => {
         if (!mapRef.current) return 150;
         return elevationCache.getFromMap(mapRef.current, coord) || 150;
@@ -4918,9 +4938,27 @@ export const MapViewer: React.FC = () => {
   }, [completedPolygon, isMapLoaded]);
 
   const elevationProfileResult = React.useMemo(() => {
+    const map = mapRef.current;
     const poly = completedPolygon || WONJU_DEFAULT_POLYGON;
     if (!poly) return null;
     try {
+      if (map) {
+        const res = VWorldProfileEngine.generateProfileFromPolygon(map, poly as any);
+        return {
+          points: res.points.map((p) => ({
+            distanceM: p.distanceM,
+            elevation: p.terrainElevation,
+            coords: p.coords,
+          })),
+          minElev: res.minElevation,
+          maxElev: res.maxElevation,
+          deltaElev: res.maxElevation - res.minElevation,
+          totalLengthM: res.totalDistanceM,
+          avgSlope: res.avgSlopeDeg,
+          startCoords: res.startCoords,
+          endCoords: res.endCoords,
+        };
+      }
       return generateElevationProfile(
         poly,
         (coord: [number, number]) => {
@@ -5046,16 +5084,19 @@ export const MapViewer: React.FC = () => {
       'real-bldg-tier1-podium',
       'real-bldg-tier3-pattern',
       'real-bldg-tier4-roofcap',
+      'real-bldg-tier5-roofdetail',
       'real-bldg-tier5-penthouse',
       'fusion-bldg-tier2-mainwall',
       'fusion-bldg-tier1-podium',
       'fusion-bldg-tier3-pattern',
       'fusion-bldg-tier4-roofcap',
+      'fusion-bldg-tier5-roofdetail',
       'fusion-bldg-tier5-penthouse',
       'bldg-tier2-mainwall',
       'bldg-tier1-podium',
       'bldg-tier3-pattern',
       'bldg-tier4-roofcap',
+      'bldg-tier5-roofdetail',
       'bldg-tier5-penthouse',
       '3d-buildings',
       'building-vector-carrier',
@@ -5853,6 +5894,7 @@ export const MapViewer: React.FC = () => {
       const handleViewshedClick = (e: maplibregl.MapMouseEvent) => {
         const origin: [number, number] = [e.lngLat.lng, e.lngLat.lat];
         const res =
+          VWorldViewshedEngine.runViewshed(map, origin, 12, 1500) ||
           PrecisionAnalysisEngine.executePrecisionViewshed(map, origin, {
             observerHeightMeters: 10,
             targetHeightMeters: 2,
