@@ -581,12 +581,8 @@ export function mergeSpatialFeatures(
           vworld: true,
         },
       };
-    } else {
-      // 신규 V-World 피처 추가
-      mergedList.push(vwFeat);
-      if (!grid.has(key)) grid.set(key, []);
-      grid.get(key)!.push(vwFeat);
     }
+    // [1-1 조치]: 베이스맵 벡터 타일과 매칭되지 않는 외부 비정합 폴리곤은 산속/허공 유령 건물 발생 방지를 위해 배제
   }
 
   // 3. OSM Overpass 세부 속성 (지붕, 층수, 높이, 외벽색) 보강

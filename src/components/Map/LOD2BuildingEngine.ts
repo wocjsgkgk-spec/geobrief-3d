@@ -2157,12 +2157,11 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
     this.setStyleMode(this.styleMode);
     this.updateZoomLOD(this.currentZoomLOD);
 
-    // [LOD2 실사 파사드 활성화]: Three.js 실사 메쉬가 표출되면 MapLibre fill-extrusion과의 Z-Fighting 및 중복 렌더링을 차단
+    // [LOD2 실사 파사드 활성화]: 3D 건물 레이어 상시 유지 (0동 증발 방지)
     if (this.map && this.buildingCount > 0) {
       try {
-        const currentMode = useMapStore.getState().renderMode3D;
-        if ((currentMode === 'facade' || currentMode === 'tiles3d') && this.map.getLayer('3d-buildings')) {
-          this.map.setLayoutProperty('3d-buildings', 'visibility', 'none');
+        if (this.map.getLayer('3d-buildings')) {
+          this.map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
         }
       } catch {}
     }

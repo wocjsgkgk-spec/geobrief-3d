@@ -43,6 +43,11 @@ import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
 import { syncMaster3DRenderer, isPermittedBuildingPolygon } from '@/utils/master3DRendererManager';
 import {
+  VWorldReaCoreEngine,
+  getTerrainClampedMercator,
+  getTerrainElevation,
+} from '@/lib/vendor/vworldReaCore';
+import {
   setupTerrainClampedBuildingLayers,
   setTerrainClampedBuildingsVisible,
   setTerrainClampedBuildingTheme,
@@ -2353,6 +2358,9 @@ export const MapViewer: React.FC = () => {
       cutFill: VWorldCutFillEngine,
       feasibility: VWorldSiteDevelopmentEngine,
     };
+    (window as any).__vworldReaCore = VWorldReaCoreEngine;
+    (window as any).getTerrainClampedMercator = getTerrainClampedMercator;
+    (window as any).getTerrainElevation = getTerrainElevation;
 
     // [3단계: 캔버스 크기 재계산 강제 실행 - 300ms 지연 호출]
     setTimeout(() => {
