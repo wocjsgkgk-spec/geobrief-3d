@@ -44,6 +44,19 @@ import {
   GLOBAL_VWORLD_MATERIALS,
   getVWorldBuildingMaterials,
 } from '@/lib/vendor/scenarioTexturePipeline';
+import {
+  getVWorldRea16Materials,
+  getVWorldReaAllMaterials,
+  getVWorldReaRooftopMaterials,
+  getVWorldReaParapetMaterial,
+  getVWorldReaPenthouseMaterial,
+  classifyVWorldReaBuildingStyle,
+  buildVWorldMultiPartGeometry,
+  composeVWorldBuildingMesh,
+  GLOBAL_VWORLD_REA_MATERIALS,
+  VWORLD_REA_ROOF_COLORS,
+  VWORLD_REA_16_PALETTE,
+} from '@/lib/vendor/vworldReaComposer';
 
 export {
   SEOUL_ROOFTOP_COLORS,
@@ -58,6 +71,17 @@ export {
   GLOBAL_SCENARIO_MATERIALS,
   GLOBAL_VWORLD_MATERIALS,
   getVWorldBuildingMaterials,
+  getVWorldRea16Materials,
+  getVWorldReaAllMaterials,
+  getVWorldReaRooftopMaterials,
+  getVWorldReaParapetMaterial,
+  getVWorldReaPenthouseMaterial,
+  classifyVWorldReaBuildingStyle,
+  buildVWorldMultiPartGeometry,
+  composeVWorldBuildingMesh,
+  GLOBAL_VWORLD_REA_MATERIALS,
+  VWORLD_REA_ROOF_COLORS,
+  VWORLD_REA_16_PALETTE,
 };
 
 // 옥상 4대 실측 컬러 및 서울 실사 옥상 디테일 컬러 정의

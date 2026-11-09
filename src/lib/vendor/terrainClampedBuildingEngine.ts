@@ -32,11 +32,15 @@
 import maplibregl from 'maplibre-gl';
 import { BuildingThemeType } from '@/types/map';
 import {
+  createVWorldReaBuildingLayers,
+  ensureVWorldReaPatterns,
   createReaBuildingStackLayers,
   ensureReaPatterns,
+  VWORLD_REA_16_SPECTRUM_EXPR,
+  VWORLD_REA_ROOFTOP_4TYPE_COLOR_EXPR,
   REA_SEOUL_16_SPECTRUM_EXPR,
   REA_ROOFTOP_4TYPE_COLOR_EXPR,
-} from './reaRealisticBuildingComposer';
+} from './vworldReaComposer';
 import {
   createGpuBuildingStackLayers,
   ensureBuildingPatterns,
