@@ -57,6 +57,11 @@ import { HybridVworldRenderer } from '@/lib/vendor/hybridVworldRenderer';
 import { VworldRealRenderer } from '@/lib/vendor/vworldRealRenderer';
 import { PrecisionBuildingBuilder } from '@/lib/vendor/precisionBuildingBuilder';
 import {
+  VWorldBuildingComposer,
+  getGlobalVWorldMaterials,
+  getGlobalAllMaterialsArray,
+} from '@/lib/vendor/vworldBuildingComposer';
+import {
   getPrecisionBuildingMaterials,
   classifyBuildingStyle,
   getSeoulGradeRooftopMaterial,
@@ -440,8 +445,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 0.95);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 2단계] V-World REA 16종 독립 PBR Material 싱글톤 엔진
-      this.buildingMaterials = getVWorldRea16Materials() || getScenarioBuildingMaterials();
+      // 2. [GeoBrief 3D 2단계] V-World 16종 독립 PBR Material 싱글톤 엔진
+      this.buildingMaterials = VWorldBuildingComposer.getMaterials() || getVWorldRea16Materials() || getScenarioBuildingMaterials();
 
       // [GeoBrief 3D 2단계] 입체 옥상(윗면) 및 0.85m 테두리 난간 실사 PBR 재질 직결
       this.rooftopMaterial = getScenarioRooftopPbrMaterial();

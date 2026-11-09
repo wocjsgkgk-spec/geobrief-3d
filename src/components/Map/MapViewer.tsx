@@ -47,6 +47,7 @@ import {
   getTerrainClampedMercator,
   getTerrainElevation,
 } from '@/lib/vendor/vworldReaCore';
+import { VWorldBuildingComposer } from '@/lib/vendor/vworldBuildingComposer';
 import {
   setupTerrainClampedBuildingLayers,
   setTerrainClampedBuildingsVisible,
@@ -2359,6 +2360,7 @@ export const MapViewer: React.FC = () => {
       feasibility: VWorldSiteDevelopmentEngine,
     };
     (window as any).__vworldReaCore = VWorldReaCoreEngine;
+    (window as any).__vworldBuildingComposer = VWorldBuildingComposer;
     (window as any).getTerrainClampedMercator = getTerrainClampedMercator;
     (window as any).getTerrainElevation = getTerrainElevation;
 
