@@ -62,6 +62,12 @@ import {
   getGlobalAllMaterialsArray,
 } from '@/lib/vendor/vworldBuildingComposer';
 import {
+  VWorldReaRenderer,
+  GLOBAL_VWORLD_MATERIALS as VWORLD_REA_MATERIALS,
+  getGlobalVWorldMaterials as getReaMaterials,
+  getGlobalAllMaterialsArray as getReaAllMaterials,
+} from '@/lib/vendor/vworldReaRenderer';
+import {
   getPrecisionBuildingMaterials,
   classifyBuildingStyle,
   getSeoulGradeRooftopMaterial,
@@ -139,7 +145,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   // 16종 독립 Material & 단일 씬 메쉬
   public masterMesh: THREE.Mesh | null = null;
   public masterGeometry: THREE.BufferGeometry | null = null;
-  public buildingMaterials: (THREE.MeshStandardMaterial | THREE.MeshLambertMaterial)[] = [];
+  public buildingMaterials: (THREE.MeshStandardMaterial | THREE.MeshLambertMaterial)[] = VWorldReaRenderer.getAllMaterials();
   public materialMeshes: THREE.Mesh[] = [];
 
   // 줌 14.5 ~ 15.5 정밀 페이드인을 위한 옥상 난간 및 옥탑 코어 메쉬/재질
@@ -177,17 +183,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private activeBuildIdleId: any = null;
   private activeBuildTaskId: number = 0;
 
-  // [3단계: Multi-Material 16종 독립 슬롯 버퍼 (Draw Call <= 16 및 60fps 무지연)]
-  private static readonly NUM_SLOTS = 16;
+  // [3단계: Multi-Material 22종 독립 슬롯 버퍼 (외벽 16종 + 옥상 4종 + 난간 1종 + 옥탑 1종, Draw Call <= 22 무결점 60fps)]
+  private static readonly NUM_SLOTS = 22;
   private slotPosBuf: Float32Array[] = [];
   private slotNormBuf: Float32Array[] = [];
   private slotColorBuf: Float32Array[] = [];
   private slotUvBuf: Float32Array[] = [];
   private slotHeightBuf: Float32Array[] = [];
-  private slotPosIdx: number[] = new Array(16).fill(0);
-  private slotUvIdx: number[] = new Array(16).fill(0);
-  private slotHeightIdx: number[] = new Array(16).fill(0);
+  private slotPosIdx: number[] = new Array(22).fill(0);
+  private slotUvIdx: number[] = new Array(22).fill(0);
+  private slotHeightIdx: number[] = new Array(22).fill(0);
   private currentBuildingSlot: number = 0;
+  private currentRooftopSlot: number = 16;
+  private currentParapetSlot: number = 20;
+  private currentPenthouseSlot: number = 21;
+  private currentBuildingHeight: number = 10;
 
   // 1:1 위성사진 완벽 정합용 Mercator 원점 캐시
   private originMercator = { x: 0, y: 0 };
@@ -223,7 +233,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   constructor(options: RealisticKoreanCityLayerOptions = {}) {
     this.options = options;
-    for (let s = 0; s < 16; s++) {
+    this.buildingMaterials = VWorldReaRenderer.getAllMaterials();
+    for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
       this.slotPosBuf.push(new Float32Array(300000));
       this.slotNormBuf.push(new Float32Array(300000));
       this.slotColorBuf.push(new Float32Array(300000));
@@ -445,8 +456,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 0.95);
       this.scene.add(this.hemisphereLight);
 
-      // 2. [GeoBrief 3D 2단계] V-World 16종 독립 PBR Material 싱글톤 엔진
-      this.buildingMaterials = VWorldBuildingComposer.getMaterials() || getVWorldRea16Materials() || getScenarioBuildingMaterials();
+      // 2. [GeoBrief 3D 2단계] V-World 22종(외벽 16종 + 지붕 4종 + 난간 + 옥탑) 독립 Material 싱글톤 엔진
+      this.buildingMaterials = VWorldReaRenderer.getAllMaterials() || VWorldBuildingComposer.getMaterials() || getVWorldRea16Materials() || getScenarioBuildingMaterials();
+      console.log('[RealisticKoreanCityLayer] onAdd assigned buildingMaterials count:', this.buildingMaterials?.length);
 
       // [GeoBrief 3D 2단계] 입체 옥상(윗면) 및 0.85m 테두리 난간 실사 PBR 재질 직결
       this.rooftopMaterial = getScenarioRooftopPbrMaterial();
@@ -594,7 +606,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     vecFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
     extFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] {
-    if (!vecFeats || vecFeats.length === 0) return [];
+    if (!vecFeats || vecFeats.length === 0) {
+      return extFeats || [];
+    }
 
     if (!extFeats || extFeats.length === 0) {
       return vecFeats;
@@ -843,7 +857,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private resetAccumulatedBuffers(): void {
     this.builtBuildingKeys.clear();
-    for (let s = 0; s < 16; s++) {
+    for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
       this.slotPosIdx[s] = 0;
       this.slotUvIdx[s] = 0;
       this.slotHeightIdx[s] = 0;
@@ -855,7 +869,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   private hasAnySlotVertices(): boolean {
-    for (let s = 0; s < 16; s++) {
+    for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
       if (this.slotPosIdx[s] > 0) return true;
     }
     return false;
@@ -897,9 +911,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     color?: [number, number, number]
   ): void => {
     const s =
-      typeof slot === 'number' && slot >= 0 && slot < 16
+      typeof slot === 'number' && slot >= 0 && slot < RealisticKoreanCityLayer.NUM_SLOTS
         ? slot
-        : this.currentBuildingSlot >= 0 && this.currentBuildingSlot < 16
+        : this.currentBuildingSlot >= 0 && this.currentBuildingSlot < RealisticKoreanCityLayer.NUM_SLOTS
         ? this.currentBuildingSlot
         : 0;
     this.ensureSlotCapacity(s, 3);
@@ -1035,6 +1049,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uv2: [number, number],
     color?: [number, number, number]
   ): void => {
+    // 1. 단일 다중 재질 메쉬(geometry.addGroup) 22슬롯 버퍼에 직접 주입
+    const isHorizontal = Math.abs(norm[1]) > 0.5;
+    const maxP = Math.max(p0[1], p1[1], p2[1]);
+    const isPenthouse = maxP > this.currentBuildingBaseElev + this.currentBuildingHeight + 1.2;
+    const isParapet = !isHorizontal && !isPenthouse;
+
+    let targetSlot = this.currentRooftopSlot; // 16, 17, 18, 19
+    if (isPenthouse) {
+      targetSlot = 21; // Penthouse (3.0m 옥탑 권상기실)
+    } else if (isParapet) {
+      targetSlot = 20; // Parapet (0.85m 테두리 난간)
+    }
+
+    this.addSlotTriangle(targetSlot, p0, p1, p2, norm, uv0, uv1, uv2, color);
+
     this.ensureRooftopCapacity(3);
     const p = this.accRooftopPosIdx;
     const u = this.accRooftopUvIdx;
@@ -1325,8 +1354,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
         height = Math.min(75.0, Math.max(45.0, height > 0 ? height : 45.0 + (diverseSeed % 31)));
       } else if (areaSqm < 220 || minWidth < 7.5) {
-        // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층, 최대 10.5m 상한 제한)
-        height = Math.min(10.5, Math.max(6.0, height > 0 ? height : 6.0 + (diverseSeed % 45) * 0.1));
+        // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.5m ~ 10.5m (2층 ~ 3층, 최대 10.5m 상한 제한)
+        height = Math.min(10.5, Math.max(6.5, height > 0 ? height : 6.5 + (diverseSeed % 41) * 0.1));
       } else if (areaSqm >= 220 && areaSqm < 600) {
         // 시·군 중심 상가·원룸·근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
         height = Math.min(21.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 10)));
@@ -1388,10 +1417,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.currentBuildingBaseElev = baseElev;
       const topElev = baseElev + height;
 
-      // [GeoBrief 3D 3단계: Multi-Material 16종 독립 슬롯 분기]
+      // [GeoBrief 3D 2단계: V-World REA 16종 독립 슬롯 및 4종 옥상·난간·옥탑 슬롯 배분]
       const bldgSeed = Math.abs(Math.floor(cLng * 100000 + cLat * 100000));
-      const bldgStyle = classifyBuildingStyle(featProps, bldgSeed, areaSqm, height, [cLng, cLat]);
-      this.currentBuildingSlot = (bldgStyle.facadeSlot ?? 0) % 16;
+      const reaStyle = VWorldReaRenderer.classifyBuildingStyle(featProps, bldgSeed, areaSqm, height);
+      this.currentBuildingSlot = reaStyle.slot;
+      this.currentRooftopSlot = 16 + reaStyle.roofMaterialIndex;
+      this.currentParapetSlot = 20;
+      this.currentPenthouseSlot = 21;
+      this.currentBuildingHeight = height;
 
       // [2단계: 강원 18개 시·군 관공서·공공기관·학교·병원 랜드마크 3단 복합 조형 생성]
       const landmarkInfo = detectLandmarkType(rawCoords, featProps, cLng, cLat, areaSqm);
@@ -1633,13 +1666,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * [3단계: Multi-Material 16종 슬롯별 TypedArray 일괄 병합 & GPU Draw Call <= 16 무결점 60fps]
+   * [3단계: Multi-Material 22종 슬롯별 TypedArray 일괄 병합 & GPU Draw Call <= 22 무결점 60fps]
    */
   private commitAccumulatedGeometry(): void {
     if (!this.map || !this.scene) return;
 
+    if (!this.buildingMaterials || this.buildingMaterials.length === 0) {
+      this.buildingMaterials = VWorldReaRenderer.getAllMaterials();
+    }
+
     let totalVertices = 0;
-    for (let s = 0; s < 16; s++) {
+    for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
       totalVertices += this.slotPosIdx[s] / 3;
     }
 
@@ -1658,7 +1695,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       let uvOffset = 0;
       let heightOffset = 0;
 
-      for (let s = 0; s < 16; s++) {
+      for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
         const pCount = this.slotPosIdx[s];
         const uCount = this.slotUvIdx[s];
         const hCount = this.slotHeightIdx[s];
@@ -1711,39 +1748,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
     }
 
-    // 2-B. 옥상 난간 및 옥탑 코어 분리 메쉬 생성 (더블 버퍼링 적용 및 항상 가시성 보장)
-    if (this.accRooftopPosIdx > 0 && this.rooftopMaterial) {
-      const finalRooftopPositions = this.accRooftopPosBuf.subarray(0, this.accRooftopPosIdx);
-      const finalRooftopNormals = this.accRooftopNormBuf.subarray(0, this.accRooftopPosIdx);
-      const finalRooftopColors = this.accRooftopColorBuf.subarray(0, this.accRooftopPosIdx);
-      const finalRooftopUvs = this.accRooftopUvBuf.subarray(0, this.accRooftopUvIdx);
-      const finalRooftopHeights = this.accRooftopHeightBuf.subarray(0, this.accRooftopHeightIdx);
-
-      const newRooftopGeometry = new THREE.BufferGeometry();
-      newRooftopGeometry.setAttribute('position', new THREE.BufferAttribute(finalRooftopPositions, 3));
-      newRooftopGeometry.setAttribute('normal', new THREE.BufferAttribute(finalRooftopNormals, 3));
-      newRooftopGeometry.setAttribute('color', new THREE.BufferAttribute(finalRooftopColors, 3));
-      newRooftopGeometry.setAttribute('uv', new THREE.BufferAttribute(finalRooftopUvs, 2));
-      newRooftopGeometry.setAttribute('aHeight', new THREE.BufferAttribute(finalRooftopHeights, 1));
-      newRooftopGeometry.computeBoundingSphere();
-
-      const newRooftopMesh = new THREE.Mesh(newRooftopGeometry, this.rooftopMaterial);
-      newRooftopMesh.frustumCulled = false;
-      newRooftopMesh.visible = this.isVisible;
-      this.rooftopMaterial.opacity = 1.0;
-
-      const oldRooftop = this.rooftopMesh;
-      const oldRooftopGeo = this.rooftopGeometry;
-
-      this.rooftopMesh = newRooftopMesh;
-      this.rooftopGeometry = newRooftopGeometry;
-      this.scene.add(this.rooftopMesh);
-
-      if (oldRooftop) {
-        this.scene.remove(oldRooftop);
-        oldRooftopGeo?.dispose();
-      }
-    } else if (this.rooftopMesh) {
+    // 2-B. 옥상 난간 및 옥탑 코어는 masterMesh 내 슬롯 16..21(geometry.addGroup)로 완전 통합되었으므로 중복 메쉬 안전 해제
+    if (this.rooftopMesh) {
       this.scene.remove(this.rooftopMesh);
       this.rooftopGeometry?.dispose();
       this.rooftopMesh = null;
@@ -1885,8 +1891,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.masterGeometry?.dispose();
       this.masterMesh = null;
     }
+    console.log('[RealisticKoreanCityLayer] onRemove CALLED!');
     // [3-1 싱글톤 보존]: 16종 독립 Material 및 옥상 재질은 전역 싱글톤으로 영구 보존하여 렉 원천 차단
-    this.buildingMaterials = [];
     this.materialMeshes = [];
     if (this.rooftopMesh) {
       this.scene.remove(this.rooftopMesh);

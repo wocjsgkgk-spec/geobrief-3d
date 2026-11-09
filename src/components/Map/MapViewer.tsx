@@ -49,6 +49,10 @@ import {
 } from '@/lib/vendor/vworldReaCore';
 import { VWorldBuildingComposer } from '@/lib/vendor/vworldBuildingComposer';
 import {
+  VWorldReaRenderer,
+  GLOBAL_VWORLD_MATERIALS,
+} from '@/lib/vendor/vworldReaRenderer';
+import {
   setupTerrainClampedBuildingLayers,
   setTerrainClampedBuildingsVisible,
   setTerrainClampedBuildingTheme,
@@ -2361,6 +2365,8 @@ export const MapViewer: React.FC = () => {
     };
     (window as any).__vworldReaCore = VWorldReaCoreEngine;
     (window as any).__vworldBuildingComposer = VWorldBuildingComposer;
+    (window as any).__vworldReaRenderer = VWorldReaRenderer;
+    (window as any).__GLOBAL_VWORLD_MATERIALS = VWorldReaRenderer.getMaterials();
     (window as any).getTerrainClampedMercator = getTerrainClampedMercator;
     (window as any).getTerrainElevation = getTerrainElevation;
 
@@ -2656,6 +2662,7 @@ export const MapViewer: React.FC = () => {
       registerNativeBuildingPatterns(map);
       registerRealisticBuildingPatterns(map);
       ensureBuildingPatterns(map);
+      VWorldReaRenderer.ensurePatterns(map);
 
       // [3-1-1: 보조 오버레이 캔버스 마우스/포인터 이벤트 가로채기 100% 해제: MapLibre 메인 캔버스에 마우스 이벤트 전달]
       try {
@@ -3248,6 +3255,19 @@ export const MapViewer: React.FC = () => {
 
       // [1단계: 구형 충돌 레이어 완전 제거]
       // 구형 LOD2BuildingEngine 중복 등록을 영구 배제하여 RealisticKoreanCityLayer가 단독 전담 렌더링하도록 일원화
+      try {
+        const cityLayer = new RealisticKoreanCityLayer({
+          onBuildingCountChange: (cnt) => {
+            console.log('[RealisticKoreanCityLayer] Rendered building count:', cnt);
+          },
+        });
+        cityLayer.setVisible(Boolean(layers.buildings3D));
+        map.addLayer(cityLayer);
+        realisticKoreanCityLayerRef.current = cityLayer;
+        (window as any).__realisticKoreanCityLayer = cityLayer;
+      } catch (cityErr) {
+        console.warn('[MapViewer] RealisticKoreanCityLayer registration notice:', cityErr);
+      }
 
       // [1단계: 공중에 뜨고 위치가 틀어진 구형 Three.js 더미 레이어 영구 제거 & 지형 밀착 엔진 등록]
       try {

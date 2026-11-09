@@ -164,8 +164,8 @@ export class PrecisionBuildingBuilder {
       String(featProps.buld_nm || featProps.name || '').includes('아파트');
 
     if (areaSqm < 220 || minWidth < 7.5) {
-      // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.0m ~ 10.5m (1.5층 ~ 3층, 최대 10.5m 상한 제한)
-      clampedHeight = Math.min(10.5, Math.max(6.0, rawHeight > 0 ? rawHeight : 6.0 + (seed % 45) * 0.1));
+      // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.5m ~ 10.5m (2층 ~ 3층, 최대 10.5m 상한 제한)
+      clampedHeight = Math.min(10.5, Math.max(6.5, rawHeight > 0 ? rawHeight : 6.5 + (seed % 41) * 0.1));
     } else if (isApartmentFeat && areaSqm >= 320) {
       // 아파트 단지: 45m ~ 75m (15층 ~ 25층)
       clampedHeight = Math.min(75.0, Math.max(45.0, rawHeight > 0 ? rawHeight : 45.0 + (seed % 31)));

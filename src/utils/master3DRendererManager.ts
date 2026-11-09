@@ -343,9 +343,9 @@ export function sanitizeBuildingHeight(
   // ---------------------------------------------------------------------------
   if (areaSqm < 220 || minWidth < 7.5) {
     if (rawHeight > 0) {
-      return Math.min(10.5, Math.max(6.0, rawHeight));
+      return Math.min(10.5, Math.max(6.5, rawHeight));
     }
-    return Math.min(10.5, 6.0 + (seed % 45) * 0.1);
+    return Math.min(10.5, 6.5 + (seed % 41) * 0.1);
   }
 
   // ---------------------------------------------------------------------------
