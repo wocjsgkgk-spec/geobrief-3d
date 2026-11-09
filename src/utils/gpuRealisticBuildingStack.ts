@@ -56,11 +56,15 @@ export const gpuBuildingTotalHeightExpr: any = [
   ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 150], 150],
   [
     'case',
-    // 0. 비건물 / 부지 경계 / 연속지적도 필지 / 용도지역 / 면적 4,500㎡ 초과 시 높이 0m (3D 압출 즉시 제외)
+    // 0. 비건물 / 부지 경계 / 연속지적도 필지 / 용도지역 / 면적 4,500㎡ 초과 시 높이 0m (산속 유령 건물 원천 차단)
     [
       'any',
       ['==', ['get', 'is_non_building'], true],
       ['==', ['get', 'is_site_boundary'], true],
+      ['==', ['get', 'building'], 'no'],
+      ['==', ['get', 'jimok'], '임'],
+      ['==', ['get', 'jimok'], '임야'],
+      ['==', ['get', 'jimok_nm'], '임야'],
       ['>', ['var', 'areaVal'], 4500],
       ['has', 'UQ111'],
       ['has', 'UQ111_NM'],
@@ -71,6 +75,7 @@ export const gpuBuildingTotalHeightExpr: any = [
       ['has', 'spfc_cd'],
       ['has', 'landuse'],
       ['has', 'leisure'],
+      ['has', 'natural'],
     ],
     0,
 

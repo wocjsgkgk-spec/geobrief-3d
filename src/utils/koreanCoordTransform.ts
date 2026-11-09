@@ -37,15 +37,15 @@ export const KOREAN_PROJ_DEFINITIONS: Record<string, string> = {
   'EPSG:5181':
     '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=bessel +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
 
-  // 2. GRS80 계열 (현행 한국 측지계 - 국토지리정보원 표준 7-파라미터 적용)
+  // 2. GRS80 계열 (현행 한국 측지계 - 타원체 GRS80은 WGS84와 0.1mm 이하로 일치하므로 +towgs84 오프셋 일절 제거)
   'EPSG:5179':
-    '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
+    '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs',
   'EPSG:5186':
-    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs',
   'EPSG:5185':
-    '+proj=tmerc +lat_0=38 +lon_0=125 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
+    '+proj=tmerc +lat_0=38 +lon_0=125 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs',
   'EPSG:5187':
-    '+proj=tmerc +lat_0=38 +lon_0=129 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
+    '+proj=tmerc +lat_0=38 +lon_0=129 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs',
 
   // 3. 글로벌 표준
   'EPSG:3857':
@@ -63,9 +63,14 @@ for (const [code, def] of Object.entries(KOREAN_PROJ_DEFINITIONS)) {
  * 좌표 샘플(x, y) 기반 한국 좌표계 자동 판별
  */
 export function detectKoreanCrs(x: number, y: number): string {
-  // 이미 WGS84 경위도인 경우 (한반도 범위: 경도 124~132, 위도 33~39)
+  // 이미 WGS84 경위도인 경우 (한반도 범위: 경도 124~132, 위도 33~39 [lon, lat])
   if (x >= 123.5 && x <= 132.5 && y >= 32.5 && y <= 39.5) {
     return 'EPSG:4326';
+  }
+
+  // OGC WFS 1.1.0 축 순서 역전 [lat, lon] 케이스 감지 (위도 32.5~39.5, 경도 123.5~132.5)
+  if (x >= 32.5 && x <= 39.5 && y >= 123.5 && y <= 132.5) {
+    return 'EPSG:4326_LATLON';
   }
 
   // UTM-K (EPSG:5179): x ~ 800,000 ~ 1,200,000, y ~ 1,600,000 ~ 2,200,000
@@ -112,9 +117,17 @@ export function transformPointToWgs84(
     return [127.925, 37.342];
   }
 
+  // WFS 1.1.0 축 순서 역전 [lat, lon] 즉시 교정
+  if (x >= 32.5 && x <= 39.5 && y >= 123.5 && y <= 132.5) {
+    return [Number(y.toFixed(7)), Number(x.toFixed(7))];
+  }
+
   const crs = sourceCrs || detectKoreanCrs(x, y);
   if (crs === 'EPSG:4326') {
     return [x, y];
+  }
+  if (crs === 'EPSG:4326_LATLON') {
+    return [Number(y.toFixed(7)), Number(x.toFixed(7))];
   }
 
   try {
@@ -122,6 +135,10 @@ export function transformPointToWgs84(
     // WGS84 좌표 유효성 검증
     if (lon >= 120 && lon <= 135 && lat >= 30 && lat <= 42) {
       return [Number(lon.toFixed(7)), Number(lat.toFixed(7))];
+    }
+    // 변환 결과 축 순서가 [lat, lon]으로 나온 경우 자동 역전 교정
+    if (lat >= 120 && lat <= 135 && lon >= 30 && lon <= 42) {
+      return [Number(lat.toFixed(7)), Number(lon.toFixed(7))];
     }
   } catch {
     // 변환 실패 시 원본 좌표 반환

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
+import { transformGeometryCoordinatesToWgs84 } from '@/utils/koreanCoordTransform';
 
 /**
  * 건물 용도 및 명칭을 바탕으로 표준 용도 카테고리와 국방/공공 플래그를 판별합니다.
@@ -668,7 +669,10 @@ export async function GET(request: NextRequest) {
             osm: isOsmFallback || !!osmData,
           },
         },
-        geometry: item.geometry,
+        geometry: {
+          ...item.geometry,
+          coordinates: transformGeometryCoordinatesToWgs84(item.geometry.coordinates),
+        },
       };
     })
     .filter(Boolean);

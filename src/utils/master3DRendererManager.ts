@@ -199,6 +199,8 @@ export function isPermittedBuildingPolygon(
     featProps.spfc_nm ||
     featProps.spfc_cd ||
     featProps.jimok ||
+    featProps.jimok_nm === '임야' ||
+    (typeof featProps.slope === 'number' && featProps.slope >= 25) ||
     featProps.amenity === 'parking' ||
     featProps.amenity === 'bicycle_parking' ||
     featProps.building === 'no' ||
@@ -289,6 +291,44 @@ export function isPermittedBuildingPolygon(
  * [관문 엄격 필터] 진짜 개별 건축물 Footprint 전수 검증용 별칭 (100% 동일 사양)
  */
 export const isAuthenticBuildingFootprint = isPermittedBuildingPolygon;
+
+/**
+ * 3D DEM 표고 및 경사도(Slope) 기반 급경사 산림/임야 유령 건물 판별
+ * - DEM 표고가 높고 경사도가 25도 이상인 순수 산림(임야) 구역의 건물 압출을 원천 차단
+ */
+export function isSteepMountainSlope(
+  map: any,
+  lng: number,
+  lat: number,
+  maxSlopeDeg = 25
+): boolean {
+  if (!map || typeof map.queryTerrainElevation !== 'function') return false;
+  try {
+    const centerElev = map.queryTerrainElevation([lng, lat]);
+    if (centerElev === null || centerElev === undefined) return false;
+
+    // 평지(표고 180m 이하)는 안전 구역
+    if (centerElev < 180) return false;
+
+    // 25m 동/북 지점의 고도 샘플링
+    const dDeg = 0.00025; // ~25m
+    const eEast = map.queryTerrainElevation([lng + dDeg, lat]) ?? centerElev;
+    const eNorth = map.queryTerrainElevation([lng, lat + dDeg]) ?? centerElev;
+
+    const dzE = Math.abs(eEast - centerElev) / 25;
+    const dzN = Math.abs(eNorth - centerElev) / 25;
+    const maxGrade = Math.max(dzE, dzN);
+    const slopeDeg = Math.atan(maxGrade) * (180 / Math.PI);
+
+    // 경사도 25도 이상이거나, 표고 350m 이상의 20도 이상 경사지는 산림 차폐 처리
+    if (slopeDeg >= maxSlopeDeg || (centerElev >= 350 && slopeDeg >= 20)) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
 
 /**
  * [전역 높이 필터] 브이월드 REA 역공학 4단계 스펙 연동 & 뾰족 기둥(바늘 타워) 방지 클램핑

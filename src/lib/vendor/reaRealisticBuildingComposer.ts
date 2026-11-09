@@ -509,13 +509,17 @@ export function createReaBuildingStackLayers(
   const isGeojson = sourceId.endsWith('-source') || sourceId.includes('geojson') || !sourceLayer || sourceLayer === 'none';
   const srcLayerObj = isGeojson ? {} : { 'source-layer': sourceLayer || 'building' };
 
-  // 비건물 거대 폴리곤 & 옹벽 필터링
+  // 비건물 거대 폴리곤 & 옹벽 필터링 (골프장, 산림 임야, 4,500㎡ 초과 대형 구획 원천 차단)
   const buildingFilter: any = [
     'all',
     ['!=', ['get', 'is_non_building'], true],
     ['!=', ['get', 'is_site_boundary'], true],
     ['!=', ['get', 'layer_type'], 'cadastral'],
     ['!=', ['get', 'layer_type'], 'zoning'],
+    ['!=', ['get', 'building'], 'no'],
+    ['!=', ['get', 'jimok'], '임'],
+    ['!=', ['get', 'jimok'], '임야'],
+    ['!=', ['get', 'jimok_nm'], '임야'],
     ['<=', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 0], 0], 4500],
     ['!', ['has', 'UQ111']],
     ['!', ['has', 'UQ111_NM']],
@@ -526,6 +530,7 @@ export function createReaBuildingStackLayers(
     ['!', ['has', 'spfc_cd']],
     ['!', ['has', 'landuse']],
     ['!', ['has', 'leisure']],
+    ['!', ['has', 'natural']],
   ];
 
   // ---------------------------------------------------------------------------
