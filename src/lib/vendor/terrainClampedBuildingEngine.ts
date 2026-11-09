@@ -329,12 +329,13 @@ export function queryRenderedBuildingCount(map: maplibregl.Map): number {
       }
     }
 
-    // 소스 피처 폴백 및 보강 (벡터 타일 비동기 스트리밍 중에도 실제 시가지 건물 수 충실 반영)
+    // 소스 피처 폴백 및 보강 (벡터 타일 및 실측 융합 소스 비동기 스트리밍 중에도 실제 시가지 건물 수 충실 반영)
     let sourceCount = 0;
-    for (const srcId of ['openmaptiles-vector', 'openfreemap', 'openmaptiles']) {
+    for (const srcId of ['real-buildings-source', 'fusion-buildings-source', 'openmaptiles-vector', 'openfreemap', 'openmaptiles']) {
       if (map.getSource(srcId)) {
         try {
-          const sf = map.querySourceFeatures(srcId, { sourceLayer: 'building' });
+          const isVector = srcId.includes('vector') || srcId.includes('open');
+          const sf = map.querySourceFeatures(srcId, isVector ? { sourceLayer: 'building' } : undefined);
           if (sf && sf.length > 0) {
             const uniqueIds = new Set(
               sf.map((f: any) => f.id || f.geometry?.coordinates?.[0]?.[0]?.join?.('_')).filter(Boolean)

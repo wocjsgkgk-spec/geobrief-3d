@@ -1094,7 +1094,7 @@ export const MapViewer: React.FC = () => {
 
       try {
         let count = 0;
-        const isBldgVisible = Boolean(layers.buildings3D);
+        const isBldgVisible = Boolean(useMapStore.getState().layers?.buildings3D ?? true);
 
         if (isBldgVisible) {
           // [1-3] 상단 상태바 실제 렌더링 건물 수 100% 실시간 연동 (28동 고정 버그 완전 박멸)

@@ -23,6 +23,7 @@ import { spatialTileCache, bboxToTileKeys, prioritizeTilesByCamera } from '@/uti
 import { loadGangwonRealDataBulk } from '@/utils/gangwonRealDataLoader';
 import { resolveFullUrl } from '@/utils/urlHelper';
 import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
+import { findGangwonRegionByCoords } from '@/constants/gangwon18Regions';
 
 
 export interface ExternalSpatialBuildingProperties {
@@ -581,8 +582,19 @@ export function mergeSpatialFeatures(
           vworld: true,
         },
       };
+    } else {
+      // [1-2 복원]: 베이스맵에 누락된 V-World 국토부 실측 건물 폴리곤(WGS84 EPSG:4326) 100% 직접 수용
+      // 단독주택 택지지구(수백 채), 아파트 단지, 대형 공공청사, 구도심 건물을 제자리에 복원 (탈락 0%)
+      const p = vwFeat.properties || {};
+      const isForest = p.jimok === '임' || p.jimok === '임야' || p.jimok_nm === '임야';
+      const isOversized = Number(p.areaSqm || p.area || 0) > 4500;
+      const isNonBldg = p.is_non_building === true || p.is_site_boundary === true || p.layer_type === 'cadastral' || p.layer_type === 'zoning';
+      if (!isForest && !isOversized && !isNonBldg) {
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key)!.push(vwFeat);
+        mergedList.push(vwFeat);
+      }
     }
-    // [1-1 조치]: 베이스맵 벡터 타일과 매칭되지 않는 외부 비정합 폴리곤은 산속/허공 유령 건물 발생 방지를 위해 배제
   }
 
   // 3. OSM Overpass 세부 속성 (지붕, 층수, 높이, 외벽색) 보강
@@ -681,16 +693,65 @@ export async function fetchExternalSpatialData(
     options.onImmediate(immediateResult);
   }
 
-  // 1단계: 브이월드 로컬 다운로드 정밀 데이터(GIS건물통합정보) 1순위 최우선 공간 속성 저장소 프리로드
-  fetchLocalVworldBuildings({ bbox, regionId: options?.regionId || 'wonju', useCoreOnly: true })
-    .catch(() => {});
+  // 1단계: 브이월드 로컬 정밀 실측 건물 데이터(GIS건물통합정보) 최우선 직결 (< 50ms)
+  let localVworldFeatures: ExternalSpatialBuildingFeature[] = [];
+  try {
+    const localRes = await fetchLocalVworldBuildings({ bbox, regionId: options?.regionId || 'wonju', useCoreOnly: true });
+    if (localRes.hasLocalData && localRes.features.length > 0) {
+      localVworldFeatures = localRes.features.map((f, idx) => {
+        const p = (f.properties || {}) as Record<string, any>;
+        const rawHei = Number(p.height || p.hei || 0);
+        const rawFlr = Number(p.levels || p.grnd_flr || 1);
+        const isApt = p.usageType === 'apartment' || p.bld_category === 'apartment' || String(p.name || '').includes('아파트');
+        const height = rawHei >= 3.0 ? rawHei : (rawFlr >= 1 ? rawFlr * 3.2 : (isApt ? 45.0 : 8.5));
+        return {
+          type: 'Feature',
+          id: f.id || `vw-loc-${idx}`,
+          properties: {
+            ...p,
+            id: f.id || `vw-loc-${idx}`,
+            name: p.name || p.buildingName || (isApt ? '아파트' : '건물'),
+            buildingName: p.buildingName || p.name || '',
+            height,
+            levels: rawFlr,
+            grnd_flr: rawFlr,
+            roofShape: p.roofShape || p.roofType || 'flat',
+            isMilitaryOrPublic: false,
+            usageType: (p.usageType || (isApt ? 'apartment' : 'general')) as any,
+            bld_category: p.bld_category || (isApt ? 'apartment' : 'general'),
+            source: 'vworld',
+            sources: { ofm: false, vworld: true, overpass: false },
+          },
+          geometry: f.geometry,
+        };
+      });
+
+      if (localVworldFeatures.length > 0 && options?.onImmediate) {
+        options.onImmediate({
+          success: true,
+          totalCount: localVworldFeatures.length,
+          openFreeMapCount: ofmCount,
+          overpassCount: 0,
+          vworldCount: localVworldFeatures.length,
+          status: 'connected',
+          message: `V-World 국토부 실측 건물 로드 (${localVworldFeatures.length.toLocaleString()}동 즉시 표출)`,
+          features: {
+            type: 'FeatureCollection',
+            features: localVworldFeatures,
+          },
+        });
+      }
+    }
+  } catch (locErr) {
+    console.warn('[fetchExternalSpatialData] Local V-World load notice:', locErr);
+  }
 
   // 1-2단계: IndexedDB 영구 캐시에서 정면 우선 타일 피처 선조회 (0.02초 이내 초고속 직결 반환)
   if (prioritizedTileKeys[0]) {
     spatialTileCache
       .getFeatures(prioritizedTileKeys[0])
       .then((idbCached) => {
-        if (idbCached && idbCached.length > 0 && options?.onImmediate) {
+        if (idbCached && idbCached.length > 0 && options?.onImmediate && localVworldFeatures.length === 0) {
           options.onImmediate({
             success: true,
             totalCount: idbCached.length,
@@ -709,15 +770,19 @@ export async function fetchExternalSpatialData(
       .catch(() => {});
   }
 
-  // 2단계: 백그라운드에서 강원권 광역 공공 공간정보 통합 게이트웨이(/api/gangwon-spatial) 1차 연동 (2.5초 타임아웃)
+  // 2단계: 백그라운드에서 강원권 광역 공공 공간정보 통합 게이트웨이(/api/gangwon-spatial) 1차 연동 (7초 타임아웃)
   try {
     const gatewayCtrl = new AbortController();
-    const gatewayTimeout = setTimeout(() => gatewayCtrl.abort(), 2500);
+    const gatewayTimeout = setTimeout(() => gatewayCtrl.abort(), 7000);
     if (options?.signal) {
       options.signal.addEventListener('abort', () => gatewayCtrl.abort(), { once: true });
     }
 
-    const regParam = options?.regionId ? `&regionId=${options.regionId}` : '';
+    const cLng = (minLng + maxLng) / 2;
+    const cLat = (minLat + maxLat) / 2;
+    const coordsRegion = findGangwonRegionByCoords(cLng, cLat);
+    const activeRegId = coordsRegion?.id || options?.regionId || 'wonju';
+    const regParam = `&regionId=${activeRegId}`;
     const gwUrl = resolveFullUrl(`/api/gangwon-spatial?bbox=${minLng},${minLat},${maxLng},${maxLat}${regParam}`);
     const gwRes = await fetch(gwUrl, {
       signal: gatewayCtrl.signal,
@@ -748,7 +813,7 @@ export async function fetchExternalSpatialData(
         };
       });
 
-      const mergedFeatures = mergeSpatialFeatures(ofmFeatures, styledServerBuildings, []);
+      const mergedFeatures = mergeSpatialFeatures(ofmFeatures, [...localVworldFeatures, ...styledServerBuildings], []);
       const totalCount = Math.max(mergedFeatures.length, ofmCount);
       const regName = gwJson.region?.name ? `${gwJson.region.name} ` : '';
       const regCode = gwJson.region?.admCode ? `(${gwJson.region.admCode}) ` : '';
@@ -820,7 +885,11 @@ export async function fetchExternalSpatialData(
   const vworldFeatures = vworldRes.status === 'fulfilled' ? vworldRes.value : [];
   const overpassFeatures = overpassRes.status === 'fulfilled' ? overpassRes.value : [];
 
-  const mergedFeatures = mergeSpatialFeatures(ofmFeatures, vworldFeatures, overpassFeatures);
+  const mergedFeatures = mergeSpatialFeatures(
+    ofmFeatures,
+    [...localVworldFeatures, ...vworldFeatures],
+    overpassFeatures
+  );
   const totalCount = Math.max(mergedFeatures.length, ofmCount);
 
   for (const tk of prioritizedTileKeys.slice(0, 8)) {

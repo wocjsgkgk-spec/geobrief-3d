@@ -376,13 +376,10 @@ export async function GET(req: NextRequest) {
   const cLng = (minLng + maxLng) / 2;
   const cLat = (minLat + maxLat) / 2;
 
-  // 1. 강원도 18개 시·군 판별
-  let currentRegion: GangwonRegionPreset | undefined;
-  if (regionId) {
+  // 1. 강원도 18개 시·군 판별 (카메라 BBOX 중심 좌표를 최우선으로 감지하여 전역 동기화)
+  let currentRegion: GangwonRegionPreset | undefined = findGangwonRegionByCoords(cLng, cLat);
+  if (!currentRegion && regionId) {
     currentRegion = getGangwonRegionByIdOrName(regionId);
-  }
-  if (!currentRegion) {
-    currentRegion = findGangwonRegionByCoords(cLng, cLat);
   }
   if (!currentRegion) {
     currentRegion = getGangwonRegionByIdOrName('wonju')!;
@@ -415,14 +412,14 @@ export async function GET(req: NextRequest) {
   // (1) 브이월드 건물통합정보 (1순위: 로컬 다운로드 정밀 데이터 -> 2순위: 실시간 WFS API 폴백)
   if (requestedLayers.includes('buildings')) {
     promises.push(
-      fetchLocalVworldBuildings({ bbox, regionId: currentRegion.id, useCoreOnly: false })
+      fetchLocalVworldBuildings({ bbox, regionId: currentRegion.id, useCoreOnly: true })
         .then((localRes) => {
           if (localRes.hasLocalData && localRes.features.length > 0) {
-            return localRes.features;
+            return localRes.features.slice(0, 10000);
           }
-          return fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 3500).catch(() => []);
+          return fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 4000).catch(() => []);
         })
-        .catch(() => fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 3500).catch(() => []))
+        .catch(() => fetchVworldDataLayer('LT_C_SPBD', bbox, vworldApiKey, 4000).catch(() => []))
     );
   } else {
     promises.push(Promise.resolve([]));

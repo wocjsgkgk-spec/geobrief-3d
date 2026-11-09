@@ -1769,28 +1769,20 @@ export function createVWorldReaBuildingLayers(
   const isGeojson = sourceId.endsWith('-source') || sourceId.includes('geojson') || !sourceLayer || sourceLayer === 'none';
   const srcLayerObj = isGeojson ? {} : { 'source-layer': sourceLayer || 'building' };
 
-  // 비건물 거대 폴리곤 & 임야 마스킹 필터링 (산림 임야, 골프장, 4,500㎡ 초과 비건물 원천 배제)
+  // 비건물 거대 폴리곤 & 임야 마스킹 필터링 (산림 임야, 4,500㎡ 초과 비건물 구획 배제)
+  // 주의: 일반 시가지 건물에 붙은 spfc_nm, zoneName, landuse 태그로 인한 레이어 제외 버그 원천 박멸!
   const buildingFilter: any = [
     'all',
     ['!=', ['get', 'is_non_building'], true],
     ['!=', ['get', 'is_site_boundary'], true],
     ['!=', ['get', 'layer_type'], 'cadastral'],
     ['!=', ['get', 'layer_type'], 'zoning'],
+    ['!=', ['get', 'layer_type'], 'landuse'],
     ['!=', ['get', 'building'], 'no'],
     ['!=', ['get', 'jimok'], '임'],
     ['!=', ['get', 'jimok'], '임야'],
     ['!=', ['get', 'jimok_nm'], '임야'],
     ['<=', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 0], 0], 4500],
-    ['!', ['has', 'UQ111']],
-    ['!', ['has', 'UQ111_NM']],
-    ['!', ['has', 'uq111']],
-    ['!', ['has', 'zoneName']],
-    ['!', ['has', 'zone_nm']],
-    ['!', ['has', 'spfc_nm']],
-    ['!', ['has', 'spfc_cd']],
-    ['!', ['has', 'landuse']],
-    ['!', ['has', 'leisure']],
-    ['!', ['has', 'natural']],
   ];
 
   // Part 1: 1층 상가/로비 기단부 (0m ~ 3.8m)

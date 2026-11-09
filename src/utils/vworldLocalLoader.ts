@@ -133,16 +133,7 @@ export async function hasLocalVworldData(
     return { hasData: false };
   }
 
-  // 1) regionId 직결 매칭
-  if (regionId && manifest.regions[regionId.toLowerCase()]) {
-    return {
-      hasData: true,
-      matchedRegionId: regionId.toLowerCase(),
-      manifestInfo: manifest.regions[regionId.toLowerCase()],
-    };
-  }
-
-  // 2) BBOX 공간 겹침 매칭
+  // 1) BBOX 공간 겹침 매칭을 최우선으로 검사 (카메라가 타 시군으로 이동했을 때 이전 regionId의 데이터 반환 방지)
   if (bbox) {
     const [minLng, minLat, maxLng, maxLat] = bbox;
     for (const [rId, info] of Object.entries(manifest.regions)) {
@@ -161,6 +152,15 @@ export async function hasLocalVworldData(
         };
       }
     }
+  }
+
+  // 2) regionId 직결 매칭 (BBOX 미제공 시 또는 폴백)
+  if (regionId && manifest.regions[regionId.toLowerCase()]) {
+    return {
+      hasData: true,
+      matchedRegionId: regionId.toLowerCase(),
+      manifestInfo: manifest.regions[regionId.toLowerCase()],
+    };
   }
 
   return { hasData: false };

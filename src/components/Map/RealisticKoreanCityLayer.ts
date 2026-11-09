@@ -1588,10 +1588,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [화면 즉시 표시 및 주기적 커밋]: 최초 30동 생성 시 즉시 표출, 이후 350동 단위로 증분 커밋
+          // [화면 즉시 표시 및 주기적 증분 커밋]: 350동 단위로 연속 커밋하여 수천 동 건물 중단 없이 빌드
           if (
             this.hasAnySlotVertices() &&
-            (newlyAddedCount >= 350 || (!this.hasInitialBuilt && newlyAddedCount >= 30))
+            (newlyAddedCount >= 350 || !this.hasInitialBuilt)
           ) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);

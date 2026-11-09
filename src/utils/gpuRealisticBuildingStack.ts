@@ -56,26 +56,20 @@ export const gpuBuildingTotalHeightExpr: any = [
   ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 150], 150],
   [
     'case',
-    // 0. 비건물 / 부지 경계 / 연속지적도 필지 / 용도지역 / 면적 4,500㎡ 초과 시 높이 0m (산속 유령 건물 원천 차단)
+    // 0. 비건물(지적도 필지선, 용도지역 경계선, 면적 4,500㎡ 초과 운동장, 산림 임야)만 엄격히 높이 0m 차단
+    // 주의: 일반 시가지 건물에 붙은 spfc_nm(용도지역), zone_nm, landuse 태그로 인해 높이가 0m로 납작해지는 버그 원천 박멸!
     [
       'any',
       ['==', ['get', 'is_non_building'], true],
       ['==', ['get', 'is_site_boundary'], true],
+      ['==', ['get', 'layer_type'], 'zoning'],
+      ['==', ['get', 'layer_type'], 'cadastral'],
+      ['==', ['get', 'layer_type'], 'landuse'],
       ['==', ['get', 'building'], 'no'],
       ['==', ['get', 'jimok'], '임'],
       ['==', ['get', 'jimok'], '임야'],
       ['==', ['get', 'jimok_nm'], '임야'],
       ['>', ['var', 'areaVal'], 4500],
-      ['has', 'UQ111'],
-      ['has', 'UQ111_NM'],
-      ['has', 'uq111'],
-      ['has', 'zoneName'],
-      ['has', 'zone_nm'],
-      ['has', 'spfc_nm'],
-      ['has', 'spfc_cd'],
-      ['has', 'landuse'],
-      ['has', 'leisure'],
-      ['has', 'natural'],
     ],
     0,
 

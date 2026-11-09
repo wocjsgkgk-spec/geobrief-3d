@@ -180,6 +180,7 @@ export function isPermittedBuildingPolygon(
   minWidth?: number
 ): boolean {
   // [1단계: 비건물·지적도 필지·도시계획구역·운동장·공터·도로 100% 원천 차단]
+  // 주의: 건물 속성에 붙은 spfc_nm(용도지역), zoneName, landuse 태그로 인한 정상 건물 배제 버그 원천 차단!
   if (
     featProps.is_site_boundary === true ||
     featProps.is_non_building === true ||
@@ -188,19 +189,12 @@ export function isPermittedBuildingPolygon(
     featProps.layer_type === 'landuse' ||
     featProps.boundary ||
     featProps.admin_level ||
-    featProps.natural ||
-    featProps.landuse ||
-    featProps.leisure ||
-    featProps.UQ111 ||
-    featProps.UQ111_NM ||
-    featProps.uq111 ||
-    featProps.zoneName ||
-    featProps.zone_nm ||
-    featProps.spfc_nm ||
-    featProps.spfc_cd ||
-    featProps.jimok ||
+    featProps.natural === 'wood' ||
+    featProps.natural === 'water' ||
+    featProps.jimok === '임' ||
+    featProps.jimok === '임야' ||
     featProps.jimok_nm === '임야' ||
-    (typeof featProps.slope === 'number' && featProps.slope >= 25) ||
+    (typeof featProps.slope === 'number' && featProps.slope >= 30) ||
     featProps.amenity === 'parking' ||
     featProps.amenity === 'bicycle_parking' ||
     featProps.building === 'no' ||
@@ -267,16 +261,16 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 5.0m, 세장비 > 8.0) 100% 차단]
+  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 2.5m, 세장비 > 12.0) 100% 차단 (소형 단독주택·구도심 빌라 100% 수용)]
   const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
   const maxSpan = Math.max(spanX, spanZ);
 
-  if (calculatedMinWidth < 5.0) {
+  if (calculatedMinWidth < 2.5) {
     return false;
   }
 
   const aspectRatio = maxSpan / calculatedMinWidth;
-  if (aspectRatio > 8.0) {
+  if (aspectRatio > 12.0) {
     return false;
   }
 
