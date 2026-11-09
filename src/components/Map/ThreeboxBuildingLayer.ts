@@ -87,6 +87,12 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   private lodMode: Detail3DMode = 'lod2';
   private currentFacilities: PlacedFacility3D[] = [];
 
+  // 60fps 무할당 렌더링용 캐시 행렬 및 벡터
+  private readonly cachedRotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  private readonly cachedRawMatrix = new THREE.Matrix4();
+  private readonly cachedLocalMatrix = new THREE.Matrix4();
+  private readonly cachedScaleVector = new THREE.Vector3();
+
   public setInteracting(val: boolean): void {
     this.isInteracting = val;
   }
@@ -380,18 +386,13 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       // 3. units: 'meters' 스케일 환산 (1 유닛 = 실측 1m 정밀 대응)
       const meterScale = mercator.meterInMercatorCoordinateUnits();
 
-      // 4. 좌표계 회전 변환 (Three.js Y-Up -> MapLibre Z-Up)
-      const rotationX = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(1, 0, 0),
-        Math.PI / 2
-      );
-
-      // 5. 복합 변환 행렬 구성
-      const m = new THREE.Matrix4().fromArray(rawMatrix);
-      const l = new THREE.Matrix4()
+      // 4. 좌표계 변환 및 복합 행렬 계산 (무할당 캐시 사용)
+      this.cachedRawMatrix.fromArray(rawMatrix);
+      this.cachedScaleVector.set(meterScale, -meterScale, meterScale);
+      this.cachedLocalMatrix
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
-        .multiply(rotationX);
+        .scale(this.cachedScaleVector)
+        .multiply(this.cachedRotationX);
 
       // MapLibre 카메라 위치를 Three.js 카메라 위치에 정밀 동기화 (기즈모 스케일 및 피킹 정확도 100% 보장)
       if (this.map && typeof (this.map as any).getFreeCameraOptions === 'function') {
@@ -405,7 +406,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         }
       }
 
-      this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrix.copy(this.cachedRawMatrix).multiply(this.cachedLocalMatrix);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       // 6. WebGL 상태 보존 및 MapLibre 네이티브 렌더링 루프 직접 호출 (GPU 파이프라인 스톨 방지)

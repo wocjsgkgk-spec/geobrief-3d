@@ -28,6 +28,12 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
   private planeSizeMeters = 8000; // 가로/세로 8km 수면 평면
   private animTime = 0;
 
+  // 60fps 무할당 렌더링용 캐시 행렬 및 벡터
+  private readonly cachedRotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  private readonly cachedRawMatrix = new THREE.Matrix4();
+  private readonly cachedLocalMatrix = new THREE.Matrix4();
+  private readonly cachedScaleVector = new THREE.Vector3();
+
   constructor() {
     this.initWaterMesh();
   }
@@ -202,19 +208,15 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
 
       const meterScale = mercator.meterInMercatorCoordinateUnits();
 
-      // Three.js Plane(XY)을 MapLibre 지표면 수평면으로 회전
-      const rotationX = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(1, 0, 0),
-        Math.PI / 2
-      );
-
-      const m = new THREE.Matrix4().fromArray(rawMatrix);
-      const l = new THREE.Matrix4()
+      // Three.js Plane(XY)을 MapLibre 지표면 수평면으로 회전 (무할당 캐시 사용)
+      this.cachedRawMatrix.fromArray(rawMatrix);
+      this.cachedScaleVector.set(meterScale, -meterScale, meterScale);
+      this.cachedLocalMatrix
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
-        .multiply(rotationX);
+        .scale(this.cachedScaleVector)
+        .multiply(this.cachedRotationX);
 
-      this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrix.copy(this.cachedRawMatrix).multiply(this.cachedLocalMatrix);
 
       // WebGL 상태 복원 및 렌더링 (GPU 파이프라인 스톨 방지)
       const prevFbo = options?.defaultFramebuffer ?? null;

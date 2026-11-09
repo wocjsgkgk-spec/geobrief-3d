@@ -378,6 +378,12 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
   // 폴백용 재질 참조
   private materials: KoreanBuildingMaterials | null = null;
 
+  // 60fps 무할당 렌더링용 캐시 행렬 및 벡터
+  private readonly cachedRotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  private readonly cachedRawMatrix = new THREE.Matrix4();
+  private readonly cachedLocalMatrix = new THREE.Matrix4();
+  private readonly cachedScaleVector = new THREE.Vector3();
+
   private originLngLat: [number, number] = [127.9358, 37.3592]; // 원주 기준
   private clampedAltitude = 0;
   private lastFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
@@ -2240,18 +2246,14 @@ export class LOD2BuildingEngine implements maplibregl.CustomLayerInterface {
         0
       ).meterInMercatorCoordinateUnits();
 
-      const rotationX = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(1, 0, 0),
-        Math.PI / 2
-      );
-
-      const m = new THREE.Matrix4().fromArray(rawMatrix);
-      const l = new THREE.Matrix4()
+      this.cachedRawMatrix.fromArray(rawMatrix);
+      this.cachedScaleVector.set(meterScale, -meterScale, meterScale);
+      this.cachedLocalMatrix
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
-        .multiply(rotationX);
+        .scale(this.cachedScaleVector)
+        .multiply(this.cachedRotationX);
 
-      this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrix.copy(this.cachedRawMatrix).multiply(this.cachedLocalMatrix);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       if (gl) {

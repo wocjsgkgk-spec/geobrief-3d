@@ -1846,8 +1846,9 @@ export const useMapStore = create<MapStoreState>()(
       addPlacedFacility: (presetId, customCoords, customElevation) => {
         const state = get();
         const preset = FACILITY_PRESETS[presetId];
-        const count = state.placedFacilities.filter((f) => f.presetId === presetId).length + 1;
-        const name = `${preset.name} #${count}`;
+        const existing = Array.isArray(state.placedFacilities) ? state.placedFacilities : [];
+        const count = existing.filter((f) => f.presetId === presetId).length + 1;
+        const name = `${preset?.name || presetId} #${count}`;
         const coords: [number, number] =
           customCoords || state.polygonCenter || [state.viewport.longitude, state.viewport.latitude];
         const elevation = customElevation !== undefined ? customElevation : 100;
@@ -1859,12 +1860,12 @@ export const useMapStore = create<MapStoreState>()(
           elevation,
           rotationY: 0,
           scale: 1,
-          heightMeters: preset.defaultHeight,
+          heightMeters: preset?.defaultHeight || 20,
           createdAt: Date.now(),
         };
 
         set((s) => ({
-          placedFacilities: [...s.placedFacilities, newFacility],
+          placedFacilities: [...(Array.isArray(s.placedFacilities) ? s.placedFacilities : []), newFacility],
           selectedFacilityId: newFacility.id,
         }));
         return newFacility.id;

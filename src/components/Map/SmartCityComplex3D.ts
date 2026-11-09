@@ -1504,6 +1504,14 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
   private scaleY = 0; // 초기 스케일 0
   private targetScaleY = 0;
 
+  // 60fps 무할당 렌더링용 캐시 행렬 및 벡터
+  private readonly cachedRotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  private readonly cachedRotationZ = new THREE.Matrix4();
+  private readonly cachedRawMatrix = new THREE.Matrix4();
+  private readonly cachedLocalMatrix = new THREE.Matrix4();
+  private readonly cachedScaleVector = new THREE.Vector3();
+  private readonly cachedAxisZ = new THREE.Vector3(0, 0, 1);
+
   constructor(initialSiteId = 'first-logistics-wonju') {
     this.currentSiteId = initialSiteId;
     const site = getGangwon18MilitarySiteById(initialSiteId) || getGangwonMilitarySiteById(initialSiteId);
@@ -1711,25 +1719,18 @@ export class SmartCityComplex3DLayer implements maplibregl.CustomLayerInterface 
       // 3. 실측 미터 단위(meterScale) 스케일링
       const meterScale = mercator.meterInMercatorCoordinateUnits();
 
-      // 4. 좌표계 변환 행렬 (Three.js Y-Up -> MapLibre Z-Up & 부지 방위각 회전)
-      const rotationX = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(1, 0, 0),
-        Math.PI / 2
-      );
-
-      const rotationZ = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(0, 0, 1),
-        (this.rotationDeg * Math.PI) / 180
-      );
-
-      const m = new THREE.Matrix4().fromArray(rawMatrix);
-      const l = new THREE.Matrix4()
+      // 4. 좌표계 변환 행렬 (무할당 캐시 사용)
+      this.cachedRotationZ.makeRotationAxis(this.cachedAxisZ, (this.rotationDeg * Math.PI) / 180);
+      this.cachedRawMatrix.fromArray(rawMatrix);
+      this.cachedScaleVector.set(meterScale, -meterScale, meterScale);
+      this.cachedLocalMatrix
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
-        .multiply(rotationX)
-        .multiply(rotationZ);
+        .scale(this.cachedScaleVector)
+        .multiply(this.cachedRotationX)
+        .multiply(this.cachedRotationZ);
 
-      this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrix.copy(this.cachedRawMatrix).multiply(this.cachedLocalMatrix);
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       // 5. 렌더링 및 WebGL 상태 완전 복원 (GPU 파이프라인 스톨 방지)
       const prevFbo = options?.defaultFramebuffer ?? null;

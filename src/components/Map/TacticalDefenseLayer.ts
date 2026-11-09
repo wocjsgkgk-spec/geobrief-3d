@@ -136,7 +136,7 @@ export class TacticalDefenseLayer implements maplibregl.CustomLayerInterface {
       const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
-      this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);
+      this.camera.projectionMatrix.fromArray(rawMatrix);
 
       const now = performance.now();
       const deltaSec = this.lastTime ? Math.min((now - this.lastTime) / 1000, 0.1) : 0.016;

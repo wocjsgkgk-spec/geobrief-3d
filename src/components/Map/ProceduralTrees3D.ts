@@ -576,6 +576,14 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
 
   private isInteracting = false;
 
+  // 60fps 무할당 렌더링용 캐시 행렬 및 벡터
+  private readonly cachedRotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  private readonly cachedRotationZ = new THREE.Matrix4();
+  private readonly cachedRawMatrix = new THREE.Matrix4();
+  private readonly cachedLocalMatrix = new THREE.Matrix4();
+  private readonly cachedScaleVector = new THREE.Vector3();
+  private readonly cachedAxisZ = new THREE.Vector3(0, 0, 1);
+
   public setInteracting(interacting: boolean): void {
     this.isInteracting = interacting;
   }
@@ -977,24 +985,18 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
 
       const meterScale = mercator.meterInMercatorCoordinateUnits();
 
-      const rotationX = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(1, 0, 0),
-        Math.PI / 2
-      );
-
-      const rotationZ = new THREE.Matrix4().makeRotationAxis(
-        new THREE.Vector3(0, 0, 1),
-        (this.rotationDeg * Math.PI) / 180
-      );
-
-      const m = new THREE.Matrix4().fromArray(rawMatrix);
-      const l = new THREE.Matrix4()
+      // 2. 좌표계 변환 행렬 (무할당 캐시 사용)
+      this.cachedRotationZ.makeRotationAxis(this.cachedAxisZ, (this.rotationDeg * Math.PI) / 180);
+      this.cachedRawMatrix.fromArray(rawMatrix);
+      this.cachedScaleVector.set(meterScale, -meterScale, meterScale);
+      this.cachedLocalMatrix
         .makeTranslation(mercator.x, mercator.y, mercator.z)
-        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
-        .multiply(rotationX)
-        .multiply(rotationZ);
+        .scale(this.cachedScaleVector)
+        .multiply(this.cachedRotationX)
+        .multiply(this.cachedRotationZ);
 
-      this.camera.projectionMatrix = m.multiply(l);
+      this.camera.projectionMatrix.copy(this.cachedRawMatrix).multiply(this.cachedLocalMatrix);
+      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       // 3. WebGL 상태 보존 및 렌더링 (GPU 파이프라인 스톨 방지)
       const prevFbo = (options as any)?.defaultFramebuffer ?? null;
