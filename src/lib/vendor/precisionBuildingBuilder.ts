@@ -164,16 +164,16 @@ export class PrecisionBuildingBuilder {
       String(featProps.buld_nm || featProps.name || '').includes('아파트');
 
     if (areaSqm < 220 || minWidth < 7.5) {
-      // 단독주택·다세대 빌라 (35㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
+      // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
       clampedHeight = Math.min(10.0, Math.max(6.5, rawHeight > 0 ? rawHeight : 6.5 + (seed % 36) * 0.1));
-    } else if (isApartmentFeat && areaSqm >= 320) {
-      // 아파트 단지: 45m ~ 75m (15층 ~ 25층)
+    } else if (isApartmentFeat || areaSqm >= 2000 || (maxEdgeLen && maxEdgeLen >= 35.0)) {
+      // 아파트 단지 주거동: 45m ~ 75m (15층 ~ 25층)
       clampedHeight = Math.min(75.0, Math.max(45.0, rawHeight > 0 ? rawHeight : 45.0 + (seed % 31)));
-    } else if (areaSqm >= 220 && areaSqm < 600) {
-      // 시내 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
+    } else if (areaSqm >= 220 && areaSqm < 800) {
+      // 근린상가·오피스 빌딩 (220㎡ <= area < 800㎡): 12.0m ~ 20.0m (4~6층)
       clampedHeight = Math.min(20.0, Math.max(12.0, rawHeight > 0 ? rawHeight : 12.0 + (seed % 9)));
-    } else if (areaSqm >= 600) {
-      // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (area >= 600㎡ 비주거): 16.0m ~ 42.0m (4~13층)
+    } else if (areaSqm >= 800) {
+      // 공공청사·학교·종합병원 (800㎡ <= area < 2000㎡): 16.0m ~ 42.0m (5~12층)
       clampedHeight = Math.min(42.0, Math.max(16.0, rawHeight > 0 ? rawHeight : 16.0 + (seed % 27)));
     }
     const height = clampedHeight;
@@ -238,10 +238,28 @@ export class PrecisionBuildingBuilder {
 
         const isSide = sideWallEdgeIndices.has(i);
         const slot = isSide ? style.sideWallSlot : style.facadeSlot;
-        const u = isSide ? 1.0 : elen / 3.2;
-        const v = height / 3.0;
+        let u0 = 0, u1 = 1;
+        let v0 = 0, v1 = 1;
+        if (isApartment) {
+          if (isSide) {
+            u0 = 0.92;
+            u1 = 1.0;
+            v0 = 0;
+            v1 = 1.0;
+          } else {
+            u0 = 0;
+            u1 = (elen / 3.2) * 0.92;
+            v0 = 0;
+            v1 = height / 3.0;
+          }
+        } else {
+          u0 = 0;
+          u1 = elen / 3.2;
+          v0 = 0;
+          v1 = height / 3.0;
+        }
 
-        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [0, 0], [u, 0], [u, v], [0, v]);
+        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, v0], [u1, v0], [u1, v1], [u0, v1]);
       }
 
       // 4단: 단일 솔리드 옥상 바닥 캡 (절대 지붕 뚫림 없음)
@@ -340,9 +358,21 @@ export class PrecisionBuildingBuilder {
 
         const isSide = sideWallEdgeIndices.has(i);
         const slot = isSide ? style.sideWallSlot : isApartment ? style.facadeSlot : style.podiumSlot;
-        const u = isSide ? 1.0 : elen / 3.2;
+        let u0 = 0, u1 = 1;
+        if (isApartment) {
+          if (isSide) {
+            u0 = 0.92;
+            u1 = 1.0;
+          } else {
+            u0 = 0;
+            u1 = (elen / 3.2) * 0.92;
+          }
+        } else {
+          u0 = 0;
+          u1 = elen / 3.2;
+        }
 
-        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [0, 0], [u, 0], [u, 1], [0, 1]);
+        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, 0], [u1, 0], [u1, 1], [u0, 1]);
 
         // 2단 본동 외벽
         if (mainH > 0.5) {
@@ -352,10 +382,22 @@ export class PrecisionBuildingBuilder {
           const wTL: [number, number, number] = [p0.x, topElev, p0.z];
 
           const mainSlot = isSide ? style.sideWallSlot : style.facadeSlot;
-          const vu = isSide ? 1.0 : elen / 3.2;
-          const vv = mainH / 3.0;
+          let vu0 = 0, vu1 = 1;
+          let vv0 = 0, vv1 = mainH / 3.0;
+          if (isApartment) {
+            if (isSide) {
+              vu0 = 0.92;
+              vu1 = 1.0;
+            } else {
+              vu0 = 0;
+              vu1 = (elen / 3.2) * 0.92;
+            }
+          } else {
+            vu0 = 0;
+            vu1 = elen / 3.2;
+          }
 
-          addSlotQuad(mainSlot, wBL, wBR, wTR, wTL, [nx, 0, nz], [0, 0], [vu, 0], [vu, vv], [0, vv]);
+          addSlotQuad(mainSlot, wBL, wBR, wTR, wTL, [nx, 0, nz], [vu0, vv0], [vu1, vv0], [vu1, vv1], [vu0, vv1]);
         }
 
         // 3단 단일 옥상 난간 (내벽 인셋 생략)
@@ -636,7 +678,19 @@ export class PrecisionBuildingBuilder {
 
         const isSide = sideWallEdgeIndices.has(i);
         const slot = isSide ? style.sideWallSlot : isApartment ? style.facadeSlot : style.podiumSlot;
-        const u = isSide ? 1.0 : elen / 3.2;
+        let u0 = 0, u1 = 1;
+        if (isApartment) {
+          if (isSide) {
+            u0 = 0.92;
+            u1 = 1.0;
+          } else {
+            u0 = 0;
+            u1 = (elen / 3.2) * 0.92;
+          }
+        } else {
+          u0 = 0;
+          u1 = elen / 3.2;
+        }
 
         addSlotQuad(
           slot,
@@ -645,10 +699,10 @@ export class PrecisionBuildingBuilder {
           pTR,
           pTL,
           [nx, 0, nz],
-          [0, 0],
-          [u, 0],
-          [u, 1],
-          [0, 1]
+          [u0, 0],
+          [u1, 0],
+          [u1, 1],
+          [u0, 1]
         );
       }
     }
@@ -748,7 +802,7 @@ export class PrecisionBuildingBuilder {
         const isSide = sideWallEdgeIndices.has(i);
 
         if (isSide) {
-          // 아파트 측벽: 매끈한 콘크리트 + 단지 브랜드 수직 컬러 줄눈 전용 재질 (Slot 16)
+          // 아파트 측벽: 매끈한 콘크리트 + 단지 브랜드 수직 컬러 줄눈 전용 영역 (Slot 0..4 우측 [0.92..1.0] 스트립)
           addSlotQuad(
             style.sideWallSlot,
             pBL,
@@ -756,14 +810,14 @@ export class PrecisionBuildingBuilder {
             pTR,
             pTL,
             [nx, 0, nz],
-            [0, 0],
-            [1, 0],
-            [1, 1],
-            [0, 1]
+            [0.92, 0],
+            [1.0, 0],
+            [1.0, 1],
+            [0.92, 1]
           );
         } else {
           // 기준층 본동 외벽: 3.2m 베이 × 3.0m 층고 정밀 타일링
-          const u = elen / 3.2;
+          const u = (elen / 3.2) * (isApartment ? 0.92 : 1.0);
           const v = mainH / 3.0;
 
           addSlotQuad(

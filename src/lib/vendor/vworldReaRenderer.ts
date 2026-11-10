@@ -133,27 +133,30 @@ function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillStyle = baseColor;
   ctx.fillRect(0, 0, w, h);
 
+  // 전면/배면 메인 창호 영역 (0 ~ w - 80px)
+  const mainW = w - 80;
+
   // 하단 3개 층 (0 ~ 3.8m, 캔버스 하단 260px) 화강석/브라운 기단부 투톤 도색
   const podiumColors = ['#44403c', '#57534e', '#3f3f46', '#475569', '#78350f'];
   ctx.fillStyle = podiumColors[variant % podiumColors.length];
-  ctx.fillRect(0, h - 260, w, 260);
+  ctx.fillRect(0, h - 260, mainW, 260);
 
   // 기단부 상단 띠선
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(0, h - 268, w, 8);
+  ctx.fillRect(0, h - 268, mainW, 8);
 
   // 촘촘한 다크 차콜(#1e293b) 발코니 유리창 격자 + 백색 창틀
-  const cols = 8;
+  const cols = 7;
   const rows = 12;
-  const cellW = w / cols;
+  const cellW = mainW / cols;
   const cellH = (h - 280) / rows;
 
   for (let r = 0; r < rows; r++) {
     const y = r * cellH + 15;
     for (let c = 0; c < cols; c++) {
-      const x = c * cellW + 12;
-      const winW = cellW - 24;
-      const winH = cellH - 22;
+      const x = c * cellW + 10;
+      const winW = cellW - 20;
+      const winH = cellH - 20;
 
       // 순백색 외부 창틀
       ctx.fillStyle = '#ffffff';
@@ -185,22 +188,41 @@ function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number
     }
   }
 
-  // 아파트 양옆 좁은 측벽(Side Wall) 무창 청록/블루/브라운 수직 브랜드 라인
-  const brandColors = ['#0284c7', '#10b981', '#6b4423', '#0f766e', '#1e3a5f'];
+  // 아파트 양옆 좁은 측벽(Side Wall) 무창 영역 (w - 80 ~ w):
+  // 창문 없는 순백색/아이보리 콘크리트 외벽 + 청록/블루/브라운 수직 브랜드 라인
+  const sideStartX = w - 80;
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(sideStartX, 0, 80, h);
+
+  // 미세한 콘크리트 패널 줄눈
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1.5;
+  for (let y = 0; y < h; y += 64) {
+    ctx.beginPath();
+    ctx.moveTo(sideStartX, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  // 수직 브랜드 악센트 컬러 띠
+  const brandColors = ['#0284c7', '#10b981', '#78350f', '#0f766e', '#1e3a5f'];
   ctx.fillStyle = brandColors[variant % brandColors.length];
-  ctx.fillRect(w - 38, 0, 38, h);
+  ctx.fillRect(sideStartX + 24, 0, 32, h);
+
+  // 브랜드 엠블럼 백색 사각 포인트
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(w - 28, 60, 18, 180);
+  ctx.fillRect(sideStartX + 28, 80, 24, 160);
+  ctx.fillStyle = brandColors[variant % brandColors.length];
+  ctx.fillRect(sideStartX + 34, 110, 12, 100);
 }
 
 function drawPublicHQFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // [Mat 5~8]: 혁신도시 공공청사·관공서·오피스 (4종)
+  // [Mat 10~12]: 혁신도시 공공청사·관공서·학교·군부대 (3종)
   // 밝은 화강석 포디움(1~2층) + 은청색/스카이블루(#38bdf8 ~ #0284c7) 및 에메랄드 반사 유리 커튼월 + 은백색 알루미늄 멀리언 격자 프레임
   const glassThemes = [
     { start: '#042f2e', mid: '#0f766e', end: '#14b8a6' }, // 0: Emerald Reflective Glass
     { start: '#082f49', mid: '#0284c7', end: '#38bdf8' }, // 1: Sky Blue Reflective Glass
     { start: '#0c4a6e', mid: '#0369a1', end: '#7dd3fc' }, // 2: Cyan / Silver Blue Glass
-    { start: '#075985', mid: '#38bdf8', end: '#bae6fd' }, // 3: Light Azure / Modern Corporate Glass
   ];
   const glassTheme = glassThemes[variant % glassThemes.length];
 
@@ -233,7 +255,7 @@ function drawPublicHQFacade(ctx: CanvasRenderingContext2D, w: number, h: number,
   }
 
   // 1~2층 (하단 22%) 밝은 화강석 포디움 (시커먼 흑색 완전 배제!)
-  const podiumStone = ['#cbd5e1', '#e2e8f0', '#d6cfc2', '#94a3b8'][variant % 4];
+  const podiumStone = ['#cbd5e1', '#e2e8f0', '#d6cfc2'][variant % 3];
   ctx.fillStyle = podiumStone;
   ctx.fillRect(0, curtainH, w, h - curtainH);
 
@@ -264,9 +286,9 @@ function drawPublicHQFacade(ctx: CanvasRenderingContext2D, w: number, h: number,
 }
 
 function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // [Mat 9~12]: 시내 상가·근린생활 (4종)
-  // Base: 차분한 베이지 화강석(#d6cfc2), 짙은 적벽돌(#7f1d1d), 다크 차콜 메탈(#334155), 갈색 파벽돌(#6e473b)
-  const wallColors = ['#d6cfc2', '#7f1d1d', '#334155', '#6e473b'];
+  // [Mat 5~9]: 시내 상가·근린생활 (5종)
+  // Base: 차분한 베이지 화강석(#d6cfc2), 짙은 적벽돌(#7f1d1d), 다크 차콜 메탈(#334155), 갈색 파벽돌(#6e473b), 모던 슬레이트(#94a3b8)
+  const wallColors = ['#d6cfc2', '#7f1d1d', '#334155', '#6e473b', '#94a3b8'];
   ctx.fillStyle = wallColors[variant % wallColors.length];
   ctx.fillRect(0, 0, w, h);
 
@@ -334,6 +356,10 @@ function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: numbe
     }
   }
 }
+
+
+
+
 
 function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
   // [Mat 13~15]: 단독주택·빌라·학교 (3종)
@@ -535,25 +561,25 @@ export function getGlobalVWorldMaterials(): THREE.MeshLambertMaterial[] {
 
   const materials: THREE.MeshLambertMaterial[] = [];
 
-  // Mat 0~4: 아파트 단지 (5종) - 순백색, 크림 아이보리, 실버 그레이 + 다크차콜 발코니 + 하단 화강석 기단 + 측벽 수직 브랜드 도색
+  // Mat 0~4: 아파트 단지 (5종) - 순백색, 크림 아이보리, 실버 그레이 + 다크차콜 발코니 + 하단 화강석 기단 + 측벽 무창 브랜드 도색
   for (let i = 0; i < 5; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentFacade(ctx, w, h, i));
     materials.push(new THREE.MeshLambertMaterial({ map: tex }));
   }
 
-  // Mat 5~8: 혁신도시 공공청사·관공서·오피스 (4종) - 밝은 화강석 포디움 + 에메랄드/스카이블루/코발트 반사 유리 커튼월 + 은백색 알루미늄 멀리언
-  for (let i = 0; i < 4; i++) {
-    const tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i));
-    materials.push(new THREE.MeshLambertMaterial({ map: tex }));
-  }
-
-  // Mat 9~12: 시내 상가·근린생활 (4종) - 1층 통유리 쇼윈도 + 한국형 가로 간판 패치 + 베이지 화강석, 적벽돌, 다크 차콜 메탈
-  for (let i = 0; i < 4; i++) {
+  // Mat 5~9: 시내 상가·오피스 빌딩 (5종) - 1층 통유리 쇼윈도 + 한국형 가로 간판 패치 + 베이지 화강석, 적벽돌, 다크 차콜 메탈
+  for (let i = 0; i < 5; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshLambertMaterial({ map: tex }));
   }
 
-  // Mat 13~15: 단독주택·빌라·학교 (3종) - 차분한 적벽돌, 황토벽돌, 아이보리 스타코
+  // Mat 10~12: 혁신도시 공공청사·관공서·학교·군부대 (3종) - 밝은 화강석 포디움 + 에메랄드/스카이블루/코발트 반사 유리 커튼월 + 은백색 알루미늄 멀리언
+  for (let i = 0; i < 3; i++) {
+    const tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i));
+    materials.push(new THREE.MeshLambertMaterial({ map: tex }));
+  }
+
+  // Mat 13~15: 단독주택·빌라·농어촌주택 (3종) - 차분한 적벽돌, 황토벽돌, 아이보리 스타코
   for (let i = 0; i < 3; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawVillaResidentialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshLambertMaterial({ map: tex }));
@@ -653,7 +679,7 @@ export function calculateVWorldPreciseBuildingHeight(
     featProps.natural === 'wood' ||
     featProps.natural === 'water' ||
     areaSqm > 4500.0 ||
-    areaSqm < 35.0 ||
+    areaSqm < 30.0 ||
     minWidth < 4.5
   ) {
     return 0;
@@ -673,7 +699,7 @@ export function calculateVWorldPreciseBuildingHeight(
   if (rawFlr > 0) {
     return Math.max(6.5, rawFlr * 3.1);
   }
-  if (rawH >= 3.0) {
+  if (rawH >= 4.0) {
     return rawH;
   }
 
@@ -683,7 +709,8 @@ export function calculateVWorldPreciseBuildingHeight(
     featProps.bld_category === 'apartment' ||
     featProps.class === 'apartments' ||
     featProps.building === 'apartments' ||
-    String(featProps.name || featProps.buld_nm || '').includes('아파트')
+    String(featProps.name || featProps.buld_nm || '').includes('아파트') ||
+    areaSqm >= 2000.0
   );
 
   // 4) 아파트 단지 (15층 ~ 25층): 45m ~ 75m
@@ -691,17 +718,17 @@ export function calculateVWorldPreciseBuildingHeight(
     return 45.0 + (Math.abs(seed) % 31) * 1.0;
   }
 
-  // 1) 단독주택·다세대 빌라 (`35㎡ <= area < 220㎡`): 6.5m ~ 10.0m (2~3층)
+  // 1) 단독주택·다세대 빌라·농어촌 주택 (`30㎡ <= area < 220㎡`): 6.5m ~ 10.0m (2~3층)
   if (areaSqm < 220 || minWidth < 7.5) {
     return 6.5 + (Math.abs(seed) % 36) * 0.1; // 6.5m ~ 10.0m
   }
 
-  // 2) 시내 상가·근린생활 (`220㎡ <= area < 600㎡`): 12.0m ~ 20.0m (4~6층)
-  if (areaSqm >= 220 && areaSqm < 600) {
+  // 2) 시내 상가·근린생활·오피스 (`220㎡ <= area < 800㎡`): 12.0m ~ 20.0m (4~6층)
+  if (areaSqm >= 220 && areaSqm < 800) {
     return 12.0 + (Math.abs(seed) % 9) * 1.0; // 12.0m ~ 20.0m
   }
 
-  // 3) 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (`area >= 600㎡` 비주거): 16.0m ~ 42.0m (4~13층)
+  // 3) 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (`area >= 800㎡` 비주거): 16.0m ~ 42.0m (5~12층)
   return 16.0 + (Math.abs(seed) % 27) * 1.0; // 16.0m ~ 42.0m
 }
 
@@ -722,6 +749,7 @@ export function classifyVWorldReaStyle(
     featProps.class === 'apartments' ||
     featProps.building === 'apartments' ||
     String(featProps.name || featProps.buld_nm || '').includes('아파트') ||
+    areaSqm >= 2000.0 ||
     height >= 38.0
   );
 
@@ -738,25 +766,27 @@ export function classifyVWorldReaStyle(
   const cLat = coordsLngLat ? coordsLngLat[1] : Number(featProps.centerLat || featProps.lat || 0);
   const isBangokZone = cLng > 0 && cLat > 0 && VworldMasterEngine.isBangokInnovationZone(cLng, cLat);
 
-  // [혁신도시 공공청사·관공서·오피스 (Mat 5~8)]: 밝은 화강석 포디움 + 에메랄드/스카이블루 커튼월
+  // [혁신도시 공공청사·관공서·학교·군부대 (Mat 10~12)]: 밝은 화강석 포디움 + 에메랄드/스카이블루 커튼월
   const isPublic =
-    (isBangokZone && !isApt && (areaSqm >= 250 || height >= 14.0)) ||
-    (areaSqm >= 600 &&
-      (rawUse.includes('public') ||
-        rawUse.includes('government') ||
-        rawUse.includes('hospital') ||
-        rawUse.includes('office') ||
-        String(featProps.name || featProps.buld_nm || '').includes('청사') ||
-        String(featProps.name || featProps.buld_nm || '').includes('공단') ||
-        String(featProps.name || featProps.buld_nm || '').includes('공사') ||
-        String(featProps.name || featProps.buld_nm || '').includes('병원')));
+    !isApt &&
+    ((isBangokZone && (areaSqm >= 250 || height >= 14.0)) ||
+      (areaSqm >= 600 &&
+        (rawUse.includes('public') ||
+          rawUse.includes('government') ||
+          rawUse.includes('hospital') ||
+          rawUse.includes('office') ||
+          String(featProps.name || featProps.buld_nm || '').includes('청사') ||
+          String(featProps.name || featProps.buld_nm || '').includes('공단') ||
+          String(featProps.name || featProps.buld_nm || '').includes('공사') ||
+          String(featProps.name || featProps.buld_nm || '').includes('병원'))));
 
+  // [시내 상가·오피스 (Mat 5~9)]: 쇼윈도 기단부 + 한국형 가로 간판
   const isCommercial =
     !isApt &&
     !isPublic &&
     (rawUse.includes('commercial') ||
       rawUse.includes('retail') ||
-      (areaSqm >= 220 && areaSqm < 600));
+      (areaSqm >= 220 && areaSqm < 800));
 
   let slot = 0;
   let category: VWorldReaBuildingStyle['category'] = 'residential';
@@ -766,38 +796,38 @@ export function classifyVWorldReaStyle(
   if (isApt) {
     category = 'apartment';
     slot = Math.abs(seed) % 5; // Mat 0~4: 아파트 단지 (5종)
-    // 아파트 옥상: 70% 밝은 시멘트 슬래브(Mat 17) + 30% 차분한 우레탄(Mat 16)
-    roofType = (Math.abs(seed) % 10) < 7 ? 'concrete' : 'urethane';
+    // 아파트 옥상: 60% 밝은 콘크리트 슬래브(Mat 17) + 40% 우레탄 방수 초록(Mat 16)
+    roofType = (Math.abs(seed) % 10) < 6 ? 'concrete' : 'urethane';
     roofMaterialIndex = roofType === 'concrete' ? 1 : 0;
   } else if (isPublic) {
     category = 'public';
-    // 혁신도시 및 공공청사: Mat 5~8 (에메랄드/스카이블루/코발트 유리 커튼월)
-    slot = 5 + (Math.abs(seed) % 4); // Mat 5~8
-    // 공공기관: 100% 밝고 정돈된 콘크리트 슬래브(Mat 17)
-    roofType = 'concrete';
-    roofMaterialIndex = 1;
+    // 혁신도시 및 공공청사: Mat 10~12 (에메랄드/스카이블루/코발트 유리 커튼월)
+    slot = 10 + (Math.abs(seed) % 3); // Mat 10~12
+    // 공공기관: 75% 콘크리트 슬래브(Mat 17) + 25% 우레탄 초록(Mat 16)
+    roofType = (Math.abs(seed) % 4) === 0 ? 'urethane' : 'concrete';
+    roofMaterialIndex = roofType === 'concrete' ? 1 : 0;
   } else if (isCommercial) {
     category = 'commercial';
-    // 시내 상가·근린생활: Mat 9~12 (베이지 화강석, 적벽돌, 다크 차콜 메탈, 브라운 벽돌)
-    slot = 9 + (Math.abs(seed) % 4); // Mat 9~12
-    // 상가: 75% 차분한 우레탄(Mat 16) + 25% 콘크리트 슬래브(Mat 17)
-    roofType = (Math.abs(seed) % 4) === 0 ? 'concrete' : 'urethane';
+    // 시내 상가·근린생활: Mat 5~9 (베이지 화강석, 적벽돌, 다크 차콜 메탈, 브라운 벽돌, 슬레이트)
+    slot = 5 + (Math.abs(seed) % 5); // Mat 5~9
+    // 상가: 65% 우레탄 방수 초록(Mat 16) + 35% 콘크리트 슬래브(Mat 17)
+    roofType = (Math.abs(seed) % 20) < 13 ? 'urethane' : 'concrete';
     roofMaterialIndex = roofType === 'urethane' ? 0 : 1;
   } else {
     category = 'residential';
     // 단독주택·빌라·학교: Mat 13~15 (적벽돌, 황토벽돌, 아이보리 스타코)
     slot = 13 + (Math.abs(seed) % 3); // Mat 13~15
-    // 단독주택·빌라: 45% 차분한 우레탄(Mat 16) + 35% 적갈색 기와(Mat 18) + 20% 콘크리트/강판(Mat 17/19)
-    const pick = Math.abs(seed) % 20;
-    if (pick < 9) {
+    // 단독주택·빌라: 45% 우레탄 방수 초록(Mat 16) + 35% 적갈색 기와 박공(Mat 18) + 20% 콘크리트/강판(Mat 17/19)
+    const pick = Math.abs(seed) % 100;
+    if (pick < 45) {
       roofType = 'urethane';
       roofMaterialIndex = 0;
-    } else if (pick < 16) {
+    } else if (pick < 80) {
       roofType = 'gabled';
       roofMaterialIndex = 2;
     } else {
-      roofType = (Math.abs(seed) % 2 === 0) ? 'concrete' : 'zinc';
-      roofMaterialIndex = roofType === 'concrete' ? 1 : 3;
+      roofType = 'concrete';
+      roofMaterialIndex = 1;
     }
   }
 
@@ -811,7 +841,7 @@ export function classifyVWorldReaStyle(
     isApartment: isApt,
     parapetHeight: 0.85,
     penthouseHeight: 3.0,
-    hasPenthouse: height >= 12.0,
+    hasPenthouse: height >= 12.0 && roofType !== 'gabled',
   };
 }
 

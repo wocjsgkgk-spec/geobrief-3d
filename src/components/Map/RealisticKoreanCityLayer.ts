@@ -572,13 +572,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.moveEndTimer = null;
       if (!this.map) return;
       if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
-        this.moveEndTimer = setTimeout(checkAndComplete, 450);
+        this.moveEndTimer = setTimeout(checkAndComplete, 500);
         return;
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
     };
-    this.moveEndTimer = setTimeout(checkAndComplete, 450);
+    this.moveEndTimer = setTimeout(checkAndComplete, 500);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -1295,7 +1295,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // [2-1: 비건물 폴리곤 엄격 필터링]
       // 산림(임야), 하천, 공원, 운동장, 대형 필지 경계선(area > 4,500㎡) 및 도로/옹벽(폭 < 4.5m) 100% 제외
-      if (areaSqm > 4500.0 || areaSqm < 35.0) {
+      if (areaSqm > 4500.0 || areaSqm < 30.0) {
         continue;
       }
       if (minWidth < 4.5) {
@@ -1382,17 +1382,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // [2-1-3 강원 18개 시·군 실제 도시 비례 층고 산출]
-      if (isTrueHighRiseApt) {
+      if (isTrueHighRiseApt || areaSqm >= 2000.0) {
         // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
         height = Math.min(75.0, Math.max(45.0, height > 0 ? height : 45.0 + (diverseSeed % 31)));
       } else if (areaSqm < 220 || minWidth < 7.5) {
-        // 단독주택·다세대 빌라 (35㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
+        // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
         height = Math.min(10.0, Math.max(6.5, height > 0 ? height : 6.5 + (diverseSeed % 36) * 0.1));
-      } else if (areaSqm >= 220 && areaSqm < 600) {
-        // 시내 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
+      } else if (areaSqm >= 220 && areaSqm < 800) {
+        // 근린상가·오피스 빌딩 (220㎡ <= area < 800㎡): 12.0m ~ 20.0m (4~6층)
         height = Math.min(20.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 9)));
       } else {
-        // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (area >= 600㎡ 비주거): 16.0m ~ 42.0m (4~13층)
+        // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (800㎡ <= area < 2000㎡): 16.0m ~ 42.0m (5~12층)
         height = Math.min(42.0, Math.max(16.0, height > 0 ? height : 16.0 + (diverseSeed % 27)));
       }
 

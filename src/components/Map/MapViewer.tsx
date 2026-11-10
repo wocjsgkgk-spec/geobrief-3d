@@ -1091,20 +1091,25 @@ export const MapViewer: React.FC = () => {
   const metricsDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const updateRealtimeMetrics = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) return;
+
     if (metricsDebounceTimerRef.current) return;
     metricsDebounceTimerRef.current = setTimeout(() => {
       metricsDebounceTimerRef.current = null;
-      const map = mapRef.current;
-      if (!map) return;
+      const currentMap = mapRef.current;
+      if (!currentMap) return;
+      if (isInteractingRef.current || currentMap.isMoving() || currentMap.isRotating() || currentMap.isZooming()) return;
 
       try {
         // [3-1 단일 마스터 렌더러 통합]: 어떤 스위치를 조작하더라도 화면 내 실제 렌더링 건물 수 상시 계산
-        const count = queryRenderedBuildingCount(map);
+        const count = queryRenderedBuildingCount(currentMap);
 
-        const styleLayers = map.getStyle()?.layers || [];
+        const styleLayers = currentMap.getStyle()?.layers || [];
         let activeCount = styleLayers.filter((l) => {
           try {
-            return map.getLayoutProperty(l.id, 'visibility') !== 'none';
+            return currentMap.getLayoutProperty(l.id, 'visibility') !== 'none';
           } catch {
             return false;
           }
@@ -1112,7 +1117,7 @@ export const MapViewer: React.FC = () => {
 
         // 전체 활성 레이어 수를 적정 한도 이하로 유지 (GPU 과부하 방지)
         if (activeCount > 85) {
-          activeCount = enforceMaxActiveLayers(map, 85);
+          activeCount = enforceMaxActiveLayers(currentMap, 85);
         }
 
         realtimeMetricsRef.current = { renderedBuildingCount: count, activeLayersCount: activeCount };
@@ -1123,7 +1128,7 @@ export const MapViewer: React.FC = () => {
       } catch {
         // ignore
       }
-    }, 200);
+    }, 500);
   }, []);
 
   // [긴급 에러 오버레이] Window Error & Unhandled Promise Rejection 실시간 감지 리스너
@@ -2530,10 +2535,15 @@ export const MapViewer: React.FC = () => {
       });
     };
 
-    // [1단계: 인터랙션 종료 - 300ms 디바운스 후 인터랙션 락 해제]
+    // [1단계: 인터랙션 종료 - 500ms 디바운스 후 인터랙션 락 해제]
     const handleInteractionEnd = () => {
       if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       moveEndThrottleTimer = setTimeout(() => {
+        if (!map) return;
+        if (map.isMoving() || map.isRotating() || map.isZooming()) {
+          handleInteractionEnd();
+          return;
+        }
         isInteractingRef.current = false;
         elevationCache.setInteractionLock(false);
         lod2BuildingEngineRef.current?.setInteracting(false);
@@ -2542,15 +2552,9 @@ export const MapViewer: React.FC = () => {
         proceduralTreesLayerRef.current?.setInteracting(false);
         deck3DTilesManagerRef.current?.setInteracting(false);
 
-        if (!map) return;
-        const bearing = map.getBearing();
-        const pitch = map.getPitch();
-        const zoom = map.getZoom();
-        const center = map.getCenter();
-
         // [GPU 다층 슬라이싱 엔진 가동으로 메인 스레드 JS 6,985동 루프 중단]
         updateRealtimeMetrics();
-      }, 300);
+      }, 500);
     };
 
     // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
@@ -2602,6 +2606,7 @@ export const MapViewer: React.FC = () => {
     map.on('zoomend', handleInteractionEnd);
 
     const handleMapIdle = () => {
+      if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) return;
       updateRealtimeMetrics();
     };
     map.on('idle', handleMapIdle);
@@ -2614,7 +2619,10 @@ export const MapViewer: React.FC = () => {
       viewportMoveEndDebounceTimer = setTimeout(() => {
         viewportMoveEndDebounceTimer = null;
         if (!map) return;
-        if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) return;
+        if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) {
+          handleViewportMoveEnd();
+          return;
+        }
 
         const c = map.getCenter();
         const b = map.getBearing();
@@ -2641,7 +2649,7 @@ export const MapViewer: React.FC = () => {
         });
         syncExternalSpatialBuildings(map);
         updateRealtimeMetrics();
-      }, 450); // [60fps 보장] 450ms 디바운스
+      }, 500); // [60fps 보장] 500ms 디바운스
     };
     map.on('moveend', handleViewportMoveEnd);
 
