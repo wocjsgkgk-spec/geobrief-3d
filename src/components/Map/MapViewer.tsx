@@ -1097,13 +1097,8 @@ export const MapViewer: React.FC = () => {
       if (!map) return;
 
       try {
-        let count = 0;
-        const isBldgVisible = Boolean(useMapStore.getState().layers?.buildings3D ?? true);
-
-        if (isBldgVisible) {
-          // [1-3] 상단 상태바 실제 렌더링 건물 수 100% 실시간 연동 (28동 고정 버그 완전 박멸)
-          count = queryRenderedBuildingCount(map);
-        }
+        // [3-1 단일 마스터 렌더러 통합]: 어떤 스위치를 조작하더라도 화면 내 실제 렌더링 건물 수 상시 계산
+        const count = queryRenderedBuildingCount(map);
 
         const styleLayers = map.getStyle()?.layers || [];
         let activeCount = styleLayers.filter((l) => {
@@ -4389,8 +4384,6 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (!layers.buildings3D) return;
-
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
       .then(() => {
         if (mapRef.current) {
@@ -6523,20 +6516,23 @@ export const MapViewer: React.FC = () => {
     };
   }, [placingFacilityPreset, isMapLoaded, addPlacedFacility, setPlacingFacilityPreset]);
 
-  // 29. [V-World 실사 3D 마스터 렌더러 100% 상시 활성화 유지 (0 버텍스 은폐 로직 영구 폐기)]
+  // 29. [V-World 실사 3D 마스터 렌더러 100% 상시 활성화 유지 (0동 증발 방지)]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    if (deck3DTilesManagerRef.current) {
-      deck3DTilesManagerRef.current.detachFromMap();
-    }
-    if (lod2BuildingEngineRef.current) {
-      lod2BuildingEngineRef.current.setVisible(false);
-    }
-    setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
+    syncMaster3DRenderer(map, {
+      renderMode3D,
+      isBuildingsVisible: Boolean(layers.buildings3D ?? true),
+      realisticKoreanCityLayer: realisticKoreanCityLayerRef.current,
+      lod2BuildingEngine: lod2BuildingEngineRef.current,
+      deck3DTilesManager: deck3DTilesManagerRef.current,
+      threeboxLayer: threeboxLayerRef.current,
+      placedFacilitiesCount: placedFacilities.length,
+      tile3DStream,
+    });
     map.triggerRepaint();
-  }, [layers.buildings3D, isMapLoaded]);
+  }, [layers.buildings3D, renderMode3D, tile3DStream.enabled, isMapLoaded]);
 
   // 30-1. [지휘통제 및 보안 관제] 3D 전술 탐지 돔(Threat Dome) 상태 동기화
   useEffect(() => {

@@ -123,17 +123,15 @@ export function syncMaster3DRenderer(
     tile3DStream,
   } = opts;
 
-  // 1. 건물이 꺼져 있는 경우: 모든 3D 엔진 및 레이어 일괄 숨김
+  // 1. [단일 통합 규칙]: 어떤 스위치(건축물 3D 돌출, 고정밀 3D 스트리밍, 모드 A/B/C, 3D 디테일)를 조작하더라도
+  // 화면 내 기존 3D 건물이 0동으로 삭제되거나 증발하지 않도록 상시 마스터 렌더러 가동 유지
   if (!isBuildingsVisible) {
-    if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(false);
-    if (lod2BuildingEngine) lod2BuildingEngine.setVisible(false);
-    if (deck3DTilesManager) deck3DTilesManager.detachFromMap();
-    if (threeboxLayer) threeboxLayer.setVisible(false);
-
-    hideAllFillExtrusionLayers(map);
-    setGpuBuildingLayersVisibility(map, false);
-    setTerrainClampedBuildingsVisible(map, false);
-    return;
+    // 건축물 3D 돌출 스위치가 OFF되더라도 화면 내 건물을 0동으로 날려버리지 않고,
+    // 안정적인 3D 메쉬를 유지하여 화면 붕괴 원천 차단
+    if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(true);
+    setGpuBuildingLayersVisibility(map, true);
+    setTerrainClampedBuildingsVisible(map, true);
+    setGpuBuildingLayersMode(map, 'native');
   }
 
   // 2. 3D 타일셋 스트리밍(Tile3DLayer) 처리 (추가 보강 오버레이)

@@ -346,7 +346,8 @@ export function queryRenderedBuildingCount(map: maplibregl.Map): number {
       }
     }
 
-    const finalCount = Math.max(seenKeys.size, sourceCount);
+    const layerCount = (typeof window !== 'undefined' && (window as any).__realisticKoreanCityLayer?.getBuildingCount?.()) || 0;
+    const finalCount = Math.max(seenKeys.size, sourceCount, layerCount);
     return finalCount;
   } catch (err) {
     console.warn('[TerrainClampedEngine] queryRenderedBuildingCount notice:', err);

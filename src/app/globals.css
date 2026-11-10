@@ -40,6 +40,13 @@ body {
   outline: none;
 }
 
+/* [3-2] 보조 오버레이 캔버스 클릭 가로채기 원천 해제 (MapLibre 클릭 이벤트 100% 보장) */
+.maplibregl-canvas-container canvas:not(.maplibregl-canvas),
+[id*="map-container"] canvas:not(.maplibregl-canvas),
+.maplibregl-map canvas:not(.maplibregl-canvas) {
+  pointer-events: none !important;
+}
+
 /* 모바일 서랍 슬라이드 애니메이션 */
 @keyframes slideInLeft {
   from {
