@@ -448,12 +448,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.fillLight.position.set(100, 120, -110).normalize();
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 강도 1.2로 강화하여 서울 사진처럼 밝고 선명한 주광 제공
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+      // - AmbientLight(환경광): 강도 1.25로 강화하여 서울 사진처럼 밝고 선명한 주광 제공
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 0.95로 서울 사진처럼 밝고 선명한 반사광 제공
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 0.95);
+      // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 1.0으로 서울 사진처럼 밝고 선명한 반사광 제공
+      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 1.0);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 2단계] V-World 22종(외벽 16종 + 지붕 4종 + 난간 + 옥탑) 독립 Material 싱글톤 엔진
@@ -809,9 +809,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.color.set(colorOrAz);
     }
     this.sunLight.intensity = Math.max(0.2, intensity);
-    if (this.ambientLight) this.ambientLight.intensity = 1.20;
+    if (this.ambientLight) this.ambientLight.intensity = 1.25;
     if (this.hemisphereLight) {
-      this.hemisphereLight.intensity = 0.95;
+      this.hemisphereLight.intensity = 1.0;
       this.hemisphereLight.color.set(0xffffff);
       this.hemisphereLight.groundColor.set(0xe2e8f0);
     }
@@ -1236,6 +1236,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         pts2D.reverse();
       }
 
+      // [2-1 원본 폴리곤 기하학 100% 보존 & 중심점 기준 0.95 스케일 미세 수축 (5% shrink)]
+      // 폴리곤 외곽선을 임의로 확장하지 않고 중심점 기준 0.95 스케일로 날렵하게 유지하여
+      // 다닥다닥 붙은 주택가에서도 건물 사이의 골목길과 대지 경계가 뭉개지지 않고 선명하게 분리되도록 보장
+      let sumMx = 0, sumMz = 0;
+      for (let i = 0; i < ptCount; i++) {
+        sumMx += pts2D[i].x;
+        sumMz += pts2D[i].z;
+      }
+      const centerMx = sumMx / ptCount;
+      const centerMz = sumMz / ptCount;
+      const SHRINK_SCALE = 0.95;
+      for (let i = 0; i < ptCount; i++) {
+        pts2D[i].x = centerMx + (pts2D[i].x - centerMx) * SHRINK_SCALE;
+        pts2D[i].z = centerMz + (pts2D[i].z - centerMz) * SHRINK_SCALE;
+      }
+
       // 가장 긴 변과 짧은 변 계산 (판상형 아파트 vs 단독주택 기하 판별)
       let maxEdgeLen = 0;
       let minEdgeLen = Infinity;
@@ -1262,13 +1278,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const spanZ = Math.max(1, maxZ - minZ);
       const minWidth = Math.min(spanX, spanZ);
 
-      // [1단계: 마스터 전역 기하 필터]
-      // 1) 비건물 거대 폴리곤 및 좁은 옹벽 제외:
-      // 바닥 면적 4,500㎡ 초과 단일 폴리곤(학교 운동장, 공원)이나 짧은 변 폭 5m 미만의 좁고 긴 도형(도로, 옹벽, 담장) 100% 제외
-      if (areaSqm > 4500.0 || areaSqm < 30.0) {
+      // [2-1: 비건물 폴리곤 엄격 필터링]
+      // 산림(임야), 하천, 공원, 운동장, 대형 필지 경계선(area > 4,500㎡) 및 도로/옹벽(폭 < 4.5m) 100% 제외
+      if (areaSqm > 4500.0 || areaSqm < 35.0) {
         continue;
       }
-      if (minWidth < 5.0) {
+      if (minWidth < 4.5) {
         continue;
       }
       if (Math.max(spanX, spanZ) / minWidth > 8.0) {
@@ -1303,7 +1318,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             const hCoord = maplibregl.MercatorCoordinate.fromLngLat([holeCoords[i][0], holeCoords[i][1]], 0);
             const hMx = (hCoord.x - this.originMercator.x) / this.originMeterScale;
             const hMz = (hCoord.y - this.originMercator.y) / this.originMeterScale;
-            holePts.push({ x: hMx, z: hMz });
+            const shMx = centerMx + (hMx - centerMx) * SHRINK_SCALE;
+            const shMz = centerMz + (hMz - centerMz) * SHRINK_SCALE;
+            holePts.push({ x: shMx, z: shMz });
           }
           if (holePts.length >= 3) {
             holeIndices.push(pts2D.length);
@@ -1349,19 +1366,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [1-2 강원 전역 건물 규모·용도별 정밀 층고 자동 산출]
+      // [2-1-3 강원 18개 시·군 실제 도시 비례 층고 산출]
       if (isTrueHighRiseApt) {
         // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
         height = Math.min(75.0, Math.max(45.0, height > 0 ? height : 45.0 + (diverseSeed % 31)));
       } else if (areaSqm < 220 || minWidth < 7.5) {
-        // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.5m ~ 10.5m (2층 ~ 3층, 최대 10.5m 상한 제한)
-        height = Math.min(10.5, Math.max(6.5, height > 0 ? height : 6.5 + (diverseSeed % 41) * 0.1));
+        // 단독주택·다세대 빌라 (35㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
+        height = Math.min(10.0, Math.max(6.5, height > 0 ? height : 6.5 + (diverseSeed % 36) * 0.1));
       } else if (areaSqm >= 220 && areaSqm < 600) {
-        // 시·군 중심 상가·원룸·근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
-        height = Math.min(21.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 10)));
+        // 시내 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
+        height = Math.min(20.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 9)));
       } else {
-        // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 16m ~ 45m (4층 ~ 14층)
-        height = Math.min(45.0, Math.max(16.0, height > 0 ? height : 16.0 + (diverseSeed % 30)));
+        // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (area >= 600㎡ 비주거): 16.0m ~ 42.0m (4~13층)
+        height = Math.min(42.0, Math.max(16.0, height > 0 ? height : 16.0 + (diverseSeed % 27)));
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!

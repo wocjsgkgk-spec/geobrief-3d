@@ -26,6 +26,10 @@ export interface BuildingStyleAssignment {
 }
 
 import {
+  VWorldReaRenderer,
+} from '@/lib/vendor/vworldReaRenderer';
+
+import {
   SEOUL_ROOFTOP_COLORS,
   assignSeoulRooftopStyle,
   getSeoulGradeRooftopMaterial,
@@ -104,7 +108,7 @@ export const ROOF_COLORS = {
 };
 
 /**
- * 건물 속성 및 해시를 기반으로 16개 스타일 중 최적 스타일 배분
+ * 건물 속성 및 해시를 기반으로 16개 스타일 중 최적 스타일 배분 (VWorldReaRenderer 마스터 동기화)
  */
 export function classifyBuildingStyle(
   featProps: Record<string, any> = {},
@@ -113,18 +117,27 @@ export function classifyBuildingStyle(
   height: number,
   centerLngLat?: [number, number]
 ): BuildingStyleAssignment {
-  const gStyle = classifyGangwonSeoulBuildingStyle(featProps, seed, areaSqm, height, centerLngLat);
+  const reaStyle = VWorldReaRenderer.classifyBuildingStyle(featProps, seed, areaSqm, height, centerLngLat);
+  const roofColorRgb: [number, number, number] =
+    reaStyle.roofMaterialIndex === 0
+      ? [0.176, 0.416, 0.310] // #2d6a4f (차분한 세이지/다크 우레탄 녹색)
+      : reaStyle.roofMaterialIndex === 1
+      ? [0.580, 0.639, 0.722] // #94a3b8 (밝은 콘크리트 회색 슬래브)
+      : reaStyle.roofMaterialIndex === 2
+      ? [0.424, 0.204, 0.157] // #6c3428 (차분한 적갈색 기와)
+      : [0.114, 0.306, 0.847]; // #1d4ed8 (코발트 강판)
+
   return {
-    category: gStyle.category,
-    facadeSlot: gStyle.facadeSlot,
-    sideWallSlot: gStyle.sideWallSlot,
-    podiumSlot: gStyle.podiumSlot,
-    signboardSlot: gStyle.signboardSlot,
-    porchSlot: gStyle.facadeSlot,
-    roofType: gStyle.roofType,
-    roofColorRgb: gStyle.roofColorRgb,
-    parapetColorRgb: gStyle.parapetColorRgb,
-    penthouseColorRgb: gStyle.penthouseColorRgb,
+    category: reaStyle.category === 'apartment' ? 'apartment' : reaStyle.category === 'commercial' ? 'commercial' : reaStyle.category === 'public' ? 'public' : 'villa',
+    facadeSlot: reaStyle.slot,
+    sideWallSlot: reaStyle.slot,
+    podiumSlot: reaStyle.slot,
+    signboardSlot: reaStyle.slot,
+    porchSlot: reaStyle.slot,
+    roofType: reaStyle.roofType,
+    roofColorRgb,
+    parapetColorRgb: [0.796, 0.835, 0.882],
+    penthouseColorRgb: [0.580, 0.639, 0.722],
   };
 }
 

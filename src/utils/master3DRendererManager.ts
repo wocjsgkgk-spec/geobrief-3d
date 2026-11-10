@@ -330,7 +330,7 @@ export function isPermittedBuildingPolygon(
 
   // [3단계: 거대 비건물 필지 area > 4,500㎡ 단독 폴리곤 100% 영구 차단 (학교 운동장 전체, 단지 외곽 필지선, 공원)]
   const maxAreaLimit = 4500.0;
-  if (areaSqm > maxAreaLimit || areaSqm < 30.0) {
+  if (areaSqm > maxAreaLimit || areaSqm < 35.0) {
     return false;
   }
 
@@ -339,16 +339,16 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 2.5m, 세장비 > 12.0) 100% 차단 (소형 단독주택·구도심 빌라 100% 수용)]
+  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 4.5m, 세장비 > 8.0) 100% 차단]
   const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
   const maxSpan = Math.max(spanX, spanZ);
 
-  if (calculatedMinWidth < 2.5) {
+  if (calculatedMinWidth < 4.5) {
     return false;
   }
 
   const aspectRatio = maxSpan / calculatedMinWidth;
-  if (aspectRatio > 12.0) {
+  if (aspectRatio > 8.0) {
     return false;
   }
 
@@ -415,48 +415,47 @@ export function sanitizeBuildingHeight(
   centerLngLat?: [number, number]
 ): number {
   // ---------------------------------------------------------------------------
-  // [규격 1] 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minWidth < 7.5m)
-  // - 주변에 아파트 POI가 있더라도 절대 11m(3.5층) 초과 금지: Math.min(height, 10.5)
-  // - 실제 층수: 6.0m ~ 10.5m (1.5층 ~ 3층)
+  // [규격 1] 소형 단독주택·다세대·원룸 (35㎡ <= area < 220㎡ 또는 minWidth < 7.5m)
+  // - 주변에 아파트 POI가 있더라도 절대 10.0m(3층) 초과 금지: 6.5m ~ 10.0m
   // ---------------------------------------------------------------------------
   if (areaSqm < 220 || minWidth < 7.5) {
     if (rawHeight > 0) {
-      return Math.min(10.5, Math.max(6.5, rawHeight));
+      return Math.min(10.0, Math.max(6.5, rawHeight));
     }
-    return Math.min(10.5, 6.5 + (seed % 41) * 0.1);
+    return Math.min(10.0, 6.5 + (seed % 36) * 0.1);
   }
 
   // ---------------------------------------------------------------------------
   // [규격 2] 학교·공공청사 (school, public 또는 운동장을 낀 중대형 건물)
-  // - 운동장은 0m 바닥 유지, 교사동 건물만 12m ~ 15m (3층 ~ 4층)
+  // - 운동장은 0m 바닥 유지, 교사동 건물만 12m ~ 16m (3층 ~ 4층)
   // ---------------------------------------------------------------------------
   const rawName = String(featProps.buld_nm || featProps.name || '').toLowerCase();
   const rawUse = String(featProps.realUse || featProps.use || featProps.mainPurpsCdNm || '').toLowerCase();
   const isSchool = rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등') || rawUse.includes('학교') || rawUse.includes('교육');
   if (isSchool && areaSqm < 1500) {
-    return 12.0 + (seed % 4) * 1.0;
+    return 12.0 + (seed % 5) * 1.0;
   }
 
   // ---------------------------------------------------------------------------
-  // [규격 3] 중심 상권 상가/원룸/근린생활시설 (220㎡ <= area < 600㎡)
-  // - 상업지역이나 주택가 대로변 상가: 높이 12m ~ 21m (4층 ~ 6층)
+  // [규격 3] 시내 상가·근린생활 (220㎡ <= area < 600㎡)
+  // - 상업지역이나 주택가 대로변 상가: 높이 12.0m ~ 20.0m (4층 ~ 6층)
   // ---------------------------------------------------------------------------
   if (areaSqm >= 220 && areaSqm < 600 && !isHighRiseApt) {
-    const commH = 12.0 + (seed % 10) * 1.0;
+    const commH = 12.0 + (seed % 9) * 1.0;
     if (rawHeight > 0) {
-      return Math.min(21.0, Math.max(12.0, rawHeight));
+      return Math.min(20.0, Math.max(12.0, rawHeight));
     }
     return commH;
   }
 
   // ---------------------------------------------------------------------------
-  // [규격 4] 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·학교 (area >= 600㎡ 비주거)
-  // - 높이 16m ~ 45m (4층 ~ 14층)
+  // [규격 4] 도청(춘천)·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거)
+  // - 높이 16.0m ~ 42.0m (4층 ~ 13층)
   // ---------------------------------------------------------------------------
   if (areaSqm >= 600 && !isHighRiseApt) {
-    const publicH = 16.0 + (seed % 30) * 1.0;
+    const publicH = 16.0 + (seed % 27) * 1.0;
     if (rawHeight > 0) {
-      return Math.min(45.0, Math.max(16.0, rawHeight));
+      return Math.min(42.0, Math.max(16.0, rawHeight));
     }
     return publicH;
   }

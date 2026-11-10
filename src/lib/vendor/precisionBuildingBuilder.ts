@@ -164,17 +164,17 @@ export class PrecisionBuildingBuilder {
       String(featProps.buld_nm || featProps.name || '').includes('아파트');
 
     if (areaSqm < 220 || minWidth < 7.5) {
-      // 소형 단독주택·빌라·농가 (30㎡ <= area < 220㎡): 6.5m ~ 10.5m (2층 ~ 3층, 최대 10.5m 상한 제한)
-      clampedHeight = Math.min(10.5, Math.max(6.5, rawHeight > 0 ? rawHeight : 6.5 + (seed % 41) * 0.1));
+      // 단독주택·다세대 빌라 (35㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
+      clampedHeight = Math.min(10.0, Math.max(6.5, rawHeight > 0 ? rawHeight : 6.5 + (seed % 36) * 0.1));
     } else if (isApartmentFeat && areaSqm >= 320) {
       // 아파트 단지: 45m ~ 75m (15층 ~ 25층)
       clampedHeight = Math.min(75.0, Math.max(45.0, rawHeight > 0 ? rawHeight : 45.0 + (seed % 31)));
     } else if (areaSqm >= 220 && areaSqm < 600) {
-      // 시·군 중심 상가·원룸·근린생활 (220㎡ <= area < 600㎡): 12m ~ 21m (4층 ~ 6층)
-      clampedHeight = Math.min(21.0, Math.max(12.0, rawHeight > 0 ? rawHeight : 12.0 + (seed % 10)));
+      // 시내 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
+      clampedHeight = Math.min(20.0, Math.max(12.0, rawHeight > 0 ? rawHeight : 12.0 + (seed % 9)));
     } else if (areaSqm >= 600) {
-      // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 16m ~ 45m (4층 ~ 14층)
-      clampedHeight = Math.min(45.0, Math.max(16.0, rawHeight > 0 ? rawHeight : 16.0 + (seed % 30)));
+      // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (area >= 600㎡ 비주거): 16.0m ~ 42.0m (4~13층)
+      clampedHeight = Math.min(42.0, Math.max(16.0, rawHeight > 0 ? rawHeight : 16.0 + (seed % 27)));
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
