@@ -44,8 +44,10 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 // [1. 한국 좌표계(CRS) 정의 등록]
 // -----------------------------------------------------------------------------
 const PROJ_DEFINITIONS = {
-  'EPSG:5186': '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
-  'EPSG:5179': '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
+  // GRS80 타원체 계열 (현행 한국 표준 측지계: 타원체가 WGS84와 0.1mm 이하로 일치하므로 towgs84 불필요)
+  'EPSG:5186': '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs',
+  'EPSG:5179': '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs',
+  // Bessel 1841 계열 (구 측지계만 Bessel->WGS84 7-parameter 변환 적용)
   'EPSG:5174': '+proj=tmerc +lat_0=38 +lon_0=127.0028902777778 +k=1 +x_0=200000 +y_0=500000 +ellps=bessel +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43 +units=m +no_defs',
   'EPSG:4326': '+proj=longlat +datum=WGS84 +no_defs',
 };

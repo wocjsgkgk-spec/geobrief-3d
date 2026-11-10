@@ -672,28 +672,46 @@ export async function fetchAndInjectViewportRealData(
   realDataSpatialStore.loadRecords(fetchedRecords);
   masterDataSynchronizer.ingestRecords(fetchedRecords as any);
 
-  // D. 건물 피처들에 실측 데이터 1:1 강제 주입
-  const baseFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] =
-    currentFeatures.length > 0
-      ? currentFeatures
-      : fetchedRecords
-          .filter((r) => r.geometry)
-          .map((r, idx) => ({
-            type: 'Feature' as const,
-            id: r.id || `real_${idx}`,
-            geometry: r.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
-            properties: {
-              name: r.bldNm,
-              bldNm: r.bldNm,
-              dongNm: r.dongNm,
-              grndFlrCnt: r.grndFlrCnt,
-              height: r.heit,
-              mainPurpsCdNm: r.mainPurpsCdNm,
-              strctCdNm: r.strctCdNm,
-              roofCdNm: r.roofCdNm,
-              source: r.source,
-            },
-          }));
+  // D. 건물 피처들에 실측 데이터 1:1 강제 주입 및 뷰포트 신규 V-World 피처 스마트 병합
+  const seenIds = new Set<string>();
+  const baseFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+
+  for (const f of currentFeatures) {
+    if (!f || !f.geometry) continue;
+    const fid = String(f.id || (f.properties as any)?.pnu || (f.properties as any)?.bd_mgt_sn || '');
+    if (fid) seenIds.add(fid);
+    baseFeatures.push(f);
+  }
+
+  for (let idx = 0; idx < fetchedRecords.length; idx++) {
+    const r = fetchedRecords[idx];
+    if (!r.geometry) continue;
+    const rid = String(r.id || r.pnu || r.mgmBldrgstPk || `vworld_${idx}`);
+    if (seenIds.has(rid)) continue;
+    seenIds.add(rid);
+
+    baseFeatures.push({
+      type: 'Feature' as const,
+      id: rid,
+      geometry: r.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
+      properties: {
+        id: rid,
+        name: r.bldNm,
+        buld_nm: r.bldNm,
+        buildingName: r.bldNm,
+        dongNm: r.dongNm,
+        grnd_flr: r.grndFlrCnt || 1,
+        gro_flo_co: r.grndFlrCnt || 1,
+        levels: r.grndFlrCnt || 1,
+        height: r.heit || (r.grndFlrCnt || 1) * 3.2,
+        hei: r.heit || (r.grndFlrCnt || 1) * 3.2,
+        main_purps_cd_nm: r.mainPurpsCdNm,
+        strct_cd_nm: r.strctCdNm,
+        roof_cd_nm: r.roofCdNm,
+        source: r.source,
+      },
+    });
+  }
 
   const { enrichedFeatures, matchedCount } = injectRealDataIntoFeatures(
     baseFeatures,

@@ -94,9 +94,7 @@ export function purgeFloatingDummyBuildings(map: maplibregl.Map): void {
 
   const dummyLayerIds = [
     'smart-city-complex-3d-layer',
-    'realistic-korean-city-layer',
     'custom-three-model-layer',
-    'threebox-building-layer',
   ];
 
   for (const layerId of dummyLayerIds) {

@@ -631,9 +631,15 @@ export function setGpuBuildingLayersVisibility(
     'real-buildings-roof',
     'vworld-3d-buildings-extrusion',
     'sample-buildings-extrusion',
-    'building-vector-carrier',
     'real-bldg-tier5-penthouse',
   ];
+
+  // building-vector-carrier는 MapLibre의 building 벡터 타일 디코딩 유지를 위해 상시 visible 유지
+  if (map.getLayer('building-vector-carrier')) {
+    try {
+      map.setLayoutProperty('building-vector-carrier', 'visibility', 'visible');
+    } catch {}
+  }
 
   extrusionLayers.forEach((id) => {
     if (map.getLayer(id)) {

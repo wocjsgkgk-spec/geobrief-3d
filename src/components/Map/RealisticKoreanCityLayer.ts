@@ -640,10 +640,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         list = [];
         extGrid.set(gKey, list);
       }
+      (ef as any).__extIdx = i;
       list.push(ef);
     }
 
-    // 2) 베이스맵 벡터 건물 피처마다 가장 가까운 외부 실측 피처를 찾아 속성만 주입 (지오메트리는 100% 벡터 타일 유지!)
+    const matchedExtIndices = new Set<number>();
+
+    // 2) 베이스맵 벡터 건물 피처마다 가장 가까운 외부 실측 피처를 찾아 속성 주입 (지오메트리는 100% 벡터 타일 유지)
     for (let i = 0; i < vecFeats.length; i++) {
       const vf = vecFeats[i];
       if (!vf || !vf.geometry) continue;
@@ -664,6 +667,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const gY = Math.round(cY * 5000);
 
       let bestMatch: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null;
+      let bestMatchIdx = -1;
       let bestDist = 0.00025; // 최대 약 25m 이내
 
       for (let dx = -1; dx <= 1; dx++) {
@@ -687,12 +691,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (dist < bestDist) {
               bestDist = dist;
               bestMatch = candidate;
+              bestMatchIdx = (candidate as any).__extIdx ?? -1;
             }
           }
         }
       }
 
       if (bestMatch && bestMatch.properties) {
+        if (bestMatchIdx >= 0) matchedExtIndices.add(bestMatchIdx);
         const bp = bestMatch.properties;
         const vp = vf.properties || {};
         vf.properties = {
@@ -711,7 +717,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    return vecFeats;
+    // 3) [진실된 제2 데이터 소스]: 베이스맵에 없는 V-World WFS 실측 건물들(혁신도시, 신규 아파트 단지 등) 100% 융합
+    const unmatchedExtFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+    for (let i = 0; i < extFeats.length; i++) {
+      if (matchedExtIndices.has(i)) continue;
+      const ef = extFeats[i];
+      if (!ef || !ef.geometry) continue;
+      unmatchedExtFeats.push(ef);
+    }
+
+    return unmatchedExtFeats.length > 0 ? [...vecFeats, ...unmatchedExtFeats] : vecFeats;
   }
 
   /**
