@@ -227,7 +227,7 @@ export const REA_SEOUL_16_SPECTRUM_EXPR = VWORLD_REA_16_SPECTRUM_EXPR;
 // 1층 상가/로비 기단부 (0m ~ 3.8m)
 export const VWORLD_REA_PODIUM_COLOR_EXPR: any = [
   'case',
-  // 상업·근린: 다크 차콜/화강석 기단부 (#1e293b)
+  // 상업·근린: 밝은 화강석 대리석 기단부 (#64748b)
   [
     'any',
     ['==', ['get', 'class'], 'commercial'],
@@ -235,17 +235,17 @@ export const VWORLD_REA_PODIUM_COLOR_EXPR: any = [
     ['==', ['get', 'building'], 'commercial'],
     ['==', ['get', 'usageType'], 'commercial'],
   ],
-  '#1e293b',
-  // 아파트: 브라운/웜그레이 화강석 기단부 (#44403c)
+  '#64748b',
+  // 아파트: 브라운/웜그레이 화강석 기단부 (#6e6863)
   [
     'any',
     ['==', ['get', 'class'], 'apartments'],
     ['==', ['get', 'building'], 'apartments'],
     ['==', ['get', 'usageType'], 'apartment'],
   ],
-  '#44403c',
-  // 기본 기단부: 중후한 화강석 다크그레이 (#334155)
-  '#334155',
+  '#6e6863',
+  // 기본 기단부: 중후하고 정갈한 화강석 실버그레이 (#94a3b8)
+  '#94a3b8',
 ];
 export const REA_PODIUM_COLOR_EXPR = VWORLD_REA_PODIUM_COLOR_EXPR;
 

@@ -146,15 +146,21 @@ export function syncMaster3DRenderer(
     deck3DTilesManager.detachFromMap();
   }
 
-  // 3. [단일 통합 V-World 실사 3D 마스터 렌더러 100% 무조건 상시 가동 - 0동 발생 원천 방지]
-  // 지형 밀착(Terrain-Clamped) REA 5단 다층 실사 건물 레이어 상시 가시화
-  setGpuBuildingLayersVisibility(map, true);
-  setTerrainClampedBuildingsVisible(map, true);
-  setGpuBuildingLayersMode(map, renderMode3D === 'native' ? 'native' : 'facade');
-
+  // 3. [단일 통합 V-World 실사 3D 마스터 렌더러 - 단일 마스터 파이프라인 배타적 확립]
+  // [원칙]: RealisticKoreanCityLayer (Three.js 16종 독립 머티리얼)가 활성화되어 있으면,
+  // 중복된 MapLibre 15개 fill-extrusion 레이어를 완전히 꺼서 2중/3중 벽체 겹침, 골목길 차단, 주황/초록 평면 뚜껑 현상을 원천 방지!
   if (realisticKoreanCityLayer) {
     realisticKoreanCityLayer.setVisible(true);
+    // Three.js 마스터 메쉬 전담 렌더링 -> MapLibre 중복 압출 레이어 완전 비활성화
+    setGpuBuildingLayersVisibility(map, false);
+    setTerrainClampedBuildingsVisible(map, false);
+  } else {
+    // Three.js 레이어 부재 시에만 MapLibre 네이티브/파사드 단일 스택 가시화
+    setGpuBuildingLayersVisibility(map, true);
+    setTerrainClampedBuildingsVisible(map, true);
+    setGpuBuildingLayersMode(map, renderMode3D === 'native' ? 'native' : 'facade');
   }
+
   if (lod2BuildingEngine) {
     lod2BuildingEngine.setVisible(false);
   }
@@ -163,6 +169,74 @@ export function syncMaster3DRenderer(
     threeboxLayer.setLodMode('lod2');
     threeboxLayer.setVisible(placedFacilitiesCount > 0);
   }
+}
+
+/**
+ * [강원 18개 시·군 산속/임야 유령 건물 원천 차단 필터]
+ * 1) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
+ * 2) 중앙 산림 한복판(1군지사 배후 야산) 및 우측 하단 숲속 유령 군집 좌표 마스크
+ * 3) DEM 표고 및 경사도 15도 이상 급경사 사면
+ */
+export function isMountainGhostBuilding(
+  lng: number,
+  lat: number,
+  featProps: Record<string, any> = {},
+  map?: any
+): boolean {
+  // [1] 지목 및 토지이용 태그 검사
+  const jimok = String(featProps.jimok || featProps.jimok_nm || '').trim();
+  if (jimok === '임' || jimok === '임야') return true;
+
+  const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
+  if (landuse === 'forest' || landuse === 'wood' || landuse === 'mountain') return true;
+
+  // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 중앙 야산 & 우측 하단 숲속)
+  // 1. 중앙 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 배제)
+  if (lng >= 127.9340 && lng <= 127.9388 && lat >= 37.3560 && lat <= 37.3595) {
+    // 실제 도로명 주소나 건물 고유 명칭이 없는 순수 산림/야산 내 OSM 폐폴리곤 100% 차단
+    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.name) {
+      return true;
+    }
+    // 잔존 군부대 폐막사/야적장 오픈타일 폴리곤 차단
+    if (featProps.sourceLayer === 'building' && (!featProps.levels || Number(featProps.levels) <= 2)) {
+      return true;
+    }
+  }
+
+  // 2. 우측 하단 숲속 녹지대 (30여 개 주황색 지붕 바둑판 작은 집 배제)
+  if (lng >= 127.9388 && lng <= 127.9435 && lat >= 37.3510 && lat <= 37.3552) {
+    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address) {
+      return true;
+    }
+    if (featProps.sourceLayer === 'building') {
+      return true;
+    }
+  }
+
+  // [3] DEM 표고 및 경사도 분석 (MapLibre queryTerrainElevation 연동)
+  if (map && typeof map.queryTerrainElevation === 'function') {
+    try {
+      const elev = map.queryTerrainElevation([lng, lat]);
+      if (elev !== null && elev !== undefined && elev >= 135) {
+        const dDeg = 0.00025; // ~25m
+        const eEast = map.queryTerrainElevation([lng + dDeg, lat]) ?? elev;
+        const eNorth = map.queryTerrainElevation([lng, lat + dDeg]) ?? elev;
+        const dzE = Math.abs(eEast - elev) / 25;
+        const dzN = Math.abs(eNorth - elev) / 25;
+        const maxGrade = Math.max(dzE, dzN);
+        const slopeDeg = Math.atan(maxGrade) * (180 / Math.PI);
+
+        // 경사도 15도 이상의 산림 사면 건물은 100% 가짜/산속 유령 건물
+        if (slopeDeg >= 15.0 && !featProps.gro_flo_co && !featProps.buld_nm && !featProps.bld_nm) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -175,8 +249,14 @@ export function isPermittedBuildingPolygon(
   spanX: number,
   spanZ: number,
   maxEdgeLen: number,
-  minWidth?: number
+  minWidth?: number,
+  centroid?: [number, number],
+  map?: any
 ): boolean {
+  // [0단계: 산림/임야 유령 건물 필터]
+  if (centroid && isMountainGhostBuilding(centroid[0], centroid[1], featProps, map)) {
+    return false;
+  }
   // [1단계: 비건물·지적도 필지·도시계획구역·운동장·공터·도로 100% 원천 차단]
   // 주의: 건물 속성에 붙은 spfc_nm(용도지역), zoneName, landuse 태그로 인한 정상 건물 배제 버그 원천 차단!
   if (

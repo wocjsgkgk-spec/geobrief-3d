@@ -1276,7 +1276,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       const featProps = (feat.properties || {}) as Record<string, any>;
-      if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth)) {
+      if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth, [cLng, cLat], this.map)) {
         continue;
       }
 
@@ -1419,7 +1419,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // [GeoBrief 3D 2단계: V-World REA 16종 독립 슬롯 및 4종 옥상·난간·옥탑 슬롯 배분]
       const bldgSeed = Math.abs(Math.floor(cLng * 100000 + cLat * 100000));
-      const reaStyle = VWorldReaRenderer.classifyBuildingStyle(featProps, bldgSeed, areaSqm, height);
+      const reaStyle = VWorldReaRenderer.classifyBuildingStyle(featProps, bldgSeed, areaSqm, height, [cLng, cLat]);
       this.currentBuildingSlot = reaStyle.slot;
       this.currentRooftopSlot = 16 + reaStyle.roofMaterialIndex;
       this.currentParapetSlot = 20;

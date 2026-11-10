@@ -9,6 +9,7 @@
 
 import type maplibregl from 'maplibre-gl';
 import { fetchFusionBuildings, FusionBuildingsFetchResult } from '@/services/fusionBuildingsService';
+import { isMountainGhostBuilding } from '@/utils/master3DRendererManager';
 
 export interface SpatialBuildingProperties {
   id?: string | number;
@@ -168,6 +169,9 @@ export function extractRenderedVectorBuildings(
       if (approxArea > 4500 || approxArea < 30) continue;
       if (dimMin < 5.0) continue;
       if (aspectRatio > 8.0) continue;
+
+      // [산림/임야 유령 건물 100% 영구 배제]: 중앙 산림 및 우측 하단 숲속 유령 건물 원천 차단
+      if (isMountainGhostBuilding(cLng, cLat, props, map)) continue;
 
       // -----------------------------------------------------------------------
       // [2단계: 지역별·용도별 실제 건물 층수(Height) 정밀 복원]

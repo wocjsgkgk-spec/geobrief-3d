@@ -43,6 +43,7 @@ import {
   gpuBuildingBaseExpr,
   BUILDING_HEIGHT_EXPR,
 } from '@/utils/gpuRealisticBuildingStack';
+import { VworldMasterEngine } from './vworldMasterEngine';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -709,7 +710,8 @@ export function classifyVWorldReaStyle(
   featProps: Record<string, any> = {},
   seed: number = 0,
   areaSqm: number = 150,
-  height: number = 10
+  height: number = 10,
+  coordsLngLat?: [number, number]
 ): VWorldReaBuildingStyle {
   const isApt = Boolean(
     featProps.usageType === 'apartment' ||
@@ -729,16 +731,24 @@ export function classifyVWorldReaStyle(
     ''
   ).toLowerCase();
 
+  const cLng = coordsLngLat ? coordsLngLat[0] : Number(featProps.centerLng || featProps.lng || 0);
+  const cLat = coordsLngLat ? coordsLngLat[1] : Number(featProps.centerLat || featProps.lat || 0);
+  const isBangokZone = cLng > 0 && cLat > 0 && VworldMasterEngine.isBangokInnovationZone(cLng, cLat);
+
+  // [원주 반곡동 혁신도시 특화]: 공공기관 클러스터 내 건물은 에메랄드/스카이블루 유리 커튼월(Mat 10~11)로 100% 실사화
   const isPublic =
-    areaSqm >= 600 &&
-    (rawUse.includes('public') ||
-      rawUse.includes('government') ||
-      rawUse.includes('school') ||
-      rawUse.includes('hospital') ||
-      rawUse.includes('office') ||
-      String(featProps.name || featProps.buld_nm || '').includes('청사') ||
-      String(featProps.name || featProps.buld_nm || '').includes('학교') ||
-      String(featProps.name || featProps.buld_nm || '').includes('병원'));
+    (isBangokZone && !isApt && (areaSqm >= 250 || height >= 14.0)) ||
+    (areaSqm >= 600 &&
+      (rawUse.includes('public') ||
+        rawUse.includes('government') ||
+        rawUse.includes('school') ||
+        rawUse.includes('hospital') ||
+        rawUse.includes('office') ||
+        String(featProps.name || featProps.buld_nm || '').includes('청사') ||
+        String(featProps.name || featProps.buld_nm || '').includes('학교') ||
+        String(featProps.name || featProps.buld_nm || '').includes('공단') ||
+        String(featProps.name || featProps.buld_nm || '').includes('공사') ||
+        String(featProps.name || featProps.buld_nm || '').includes('병원')));
 
   const isCommercial =
     !isApt &&
@@ -759,10 +769,11 @@ export function classifyVWorldReaStyle(
     roofMaterialIndex = roofType === 'concrete' ? 1 : 0;
   } else if (isPublic) {
     category = 'public';
-    slot = 10 + (Math.abs(seed) % 3); // Mat 10~12
-    // 공공기관: 80% 밝은 시멘트 슬래브(Mat 17) + 20% 초록 우레탄(Mat 16)
-    roofType = (Math.abs(seed) % 5) === 0 ? 'urethane' : 'concrete';
-    roofMaterialIndex = roofType === 'concrete' ? 1 : 0;
+    // 혁신도시 및 공공청사: 10(에메랄드 유리 커튼월), 11(스카이블루 유리 커튼월)
+    slot = 10 + (Math.abs(seed) % 2); // Mat 10~11
+    // 공공기관: 100% 밝고 정돈된 콘크리트 슬래브(Mat 17)
+    roofType = 'concrete';
+    roofMaterialIndex = 1;
   } else if (isCommercial) {
     category = 'commercial';
     slot = 5 + (Math.abs(seed) % 5); // Mat 5~9
@@ -1225,9 +1236,10 @@ export class VWorldReaRenderer {
     featProps: Record<string, any> = {},
     seed: number = 0,
     areaSqm: number = 150,
-    height: number = 10
+    height: number = 10,
+    coordsLngLat?: [number, number]
   ): VWorldReaBuildingStyle {
-    return classifyVWorldReaStyle(featProps, seed, areaSqm, height);
+    return classifyVWorldReaStyle(featProps, seed, areaSqm, height, coordsLngLat);
   }
 
   public static buildBuildingGeometry(options: BuildVWorldReaMeshOptions): THREE.BufferGeometry {

@@ -324,6 +324,7 @@ function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
     'real-bldg-tier4-roofcap',
     'real-bldg-tier5-roofdetail',
     'threebox-building-layer',
+    'realistic-korean-city-layer',
     'procedural-trees-3d-layer',
     'building-highlight-fill',
     'flight-ceiling-slab',
