@@ -928,159 +928,19 @@ export const MapViewer: React.FC = () => {
     showLegendBox,
   } = useMapStore();
 
-  // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화 엔진]
-  const syncAbortControllerRef = useRef<AbortController | null>(null);
-  const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-
+  // [조치 1: 자체 Three.js CPU 건물 생성 루프 전면 중단]
+  // 렉 원천 제거를 위해 메인 스레드 대량 지오메트리 계산 및 외부 공간데이터 주입 중단
   const syncExternalSpatialBuildings = useCallback(
-    (mapInstance: maplibregl.Map) => {
-      if (!mapInstance) return;
-      if (!useMapStore.getState().layers.buildings3D) return;
-      // [카메라 이동 중 연산 완전 잠금(Interaction Lock)]
-      if (isInteractingRef.current || mapInstance.isMoving() || mapInstance.isRotating() || mapInstance.isZooming()) {
-        return;
-      }
-
-      if (syncDebounceTimerRef.current) {
-        clearTimeout(syncDebounceTimerRef.current);
-      }
-
-      syncDebounceTimerRef.current = setTimeout(() => {
-        try {
-          if (!mapInstance || isInteractingRef.current || mapInstance.isMoving() || mapInstance.isRotating() || mapInstance.isZooming()) {
-            return;
-          }
-          const bounds = mapInstance.getBounds();
-          const bbox: [number, number, number, number] = [
-            bounds.getWest(),
-            bounds.getSouth(),
-            bounds.getEast(),
-            bounds.getNorth(),
-          ];
-
-          if (syncAbortControllerRef.current) {
-            syncAbortControllerRef.current.abort();
-          }
-          const controller = new AbortController();
-          syncAbortControllerRef.current = controller;
-
-          // [1단계: 외부 실측 데이터의 3D 지오메트리 강제 바인딩 및 형상 동기화 즉각 가동 (< 100ms No-Delay)]
-          fetchAndInjectViewportRealData(
-            mapInstance,
-            Array.from(persistentBuildingCacheRef.current.values()),
-            {
-              realisticLayer: realisticKoreanCityLayerRef.current,
-              signal: controller.signal,
-            }
-          ).catch(() => {});
-
-          fetchExternalSpatialData(mapInstance, bbox, {
-            regionId: selectedRegionId,
-            signal: controller.signal,
-            onImmediate: (immediate) => {
-              const { merged, addedCount } = mergeIntoPersistentBuildingCache(immediate.features.features);
-              const count = Math.max(merged.length, immediate.totalCount);
-              if (count > 0 && (addedCount > 0 || !hasInitialDataSetRef.current)) {
-                hasInitialDataSetRef.current = true;
-
-                // [1단계 직결] 로컬 실측 데이터베이스(30,466동) 1:1 공간 조인 및 실측 층수/재질 즉시 바인딩
-                const { enrichedFeatures, matchedCount } = injectRealDataIntoFeatures(merged);
-
-                // 지도의 메인 소스 및 Three.js 3D 레이어 즉시 주입 (< 100ms No-Delay Repaint)
-                applyInjectedDataToMap(mapInstance, enrichedFeatures, realisticKoreanCityLayerRef.current);
-
-                setVworldDiagnostic({
-                  status: 'connected',
-                  message: immediate.message || `오픈 벡터 타일 실시간 건물 렌더링 (${count.toLocaleString()}건 로드 / ${matchedCount}동 실측 속성 직결)`,
-                  lastChecked: Date.now(),
-                  featureCount: count,
-                });
-                if (deck3DTilesManagerRef.current && useMapStore.getState().renderMode3D === 'tiles3d') {
-                  deck3DTilesManagerRef.current.setBuildingFeatures(enrichedFeatures);
-                }
-                if (lod2BuildingEngineRef.current && useMapStore.getState().renderMode3D === 'native' && detail3DMode === 'lod2' && enrichedFeatures.length > 0) {
-                  try {
-                    const center = mapInstance.getCenter();
-                    lod2BuildingEngineRef.current.updateBuildings(enrichedFeatures, [center.lng, center.lat]);
-                  } catch {
-                    // ignore
-                  }
-                }
-                updateRealtimeMetrics();
-                mapInstance.triggerRepaint();
-              }
-            },
-          })
-            .then(async (result) => {
-              if (controller.signal.aborted) return;
-              const { merged, addedCount } = mergeIntoPersistentBuildingCache(result.features.features);
-              const count = Math.max(merged.length, result.totalCount);
-              if (count > 0 || result.features.features.length > 0) {
-                hasInitialDataSetRef.current = true;
-
-                // [1단계: 외부 실측 데이터의 3D 지오메트리 강제 바인딩 및 형상 동기화]
-                // 건축HUB(getBrTitleInfo) 및 브이월드 WFS(LT_C_SPBD) 실측 데이터를 중심점 반경 15m 공간 조인
-                const { enrichedFeatures, matchedCount } = await fetchAndInjectViewportRealData(
-                  mapInstance,
-                  merged,
-                  {
-                    realisticLayer: realisticKoreanCityLayerRef.current,
-                    signal: controller.signal,
-                  }
-                );
-
-                setVworldDiagnostic({
-                  status: 'connected',
-                  message: `실측 공간정보(건축HUB · V-World WFS) 1:1 바인딩 완료 (${matchedCount}동 실측 층수·명칭 즉시 동기화 / 총 ${count.toLocaleString()}건)`,
-                  lastChecked: Date.now(),
-                  featureCount: count,
-                });
-                if (deck3DTilesManagerRef.current && useMapStore.getState().renderMode3D === 'tiles3d') {
-                  deck3DTilesManagerRef.current.setBuildingFeatures(enrichedFeatures);
-                }
-                if (lod2BuildingEngineRef.current && useMapStore.getState().renderMode3D === 'native' && detail3DMode === 'lod2' && enrichedFeatures.length > 0) {
-                  try {
-                    const center = mapInstance.getCenter();
-                    lod2BuildingEngineRef.current.updateBuildings(enrichedFeatures, [center.lng, center.lat]);
-                  } catch {
-                    // ignore
-                  }
-                }
-                updateRealtimeMetrics();
-                mapInstance.triggerRepaint();
-              }
-            })
-            .catch((err) => {
-              if (err?.name !== 'AbortError') {
-                console.warn('[MapViewer] External spatial data sync notice:', err);
-              }
-            });
-        } catch (e) {
-          // ignore
-        }
-      }, 300);
+    (_mapInstance: maplibregl.Map) => {
+      // no-op to prevent CPU vertex calculations
     },
-    [mergeIntoPersistentBuildingCache, setVworldDiagnostic, selectedRegionId]
+    []
   );
 
-  // [1-2 동적 바인딩] 시·군 및 유휴부지 전환 시 이전 지역 캐시 정리 및 베이스맵 원본 건물 벡터 타일 동기화
+  // [1-2 동적 바인딩] 시·군 및 유휴부지 전환 시 이전 지역 캐시 정리
   useEffect(() => {
     persistentBuildingCacheRef.current.clear();
-    fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-      .then((res) => {
-        if (res && res.features && res.features.length > 0 && realisticKoreanCityLayerRef.current) {
-          const center = mapRef.current?.getCenter();
-          realisticKoreanCityLayerRef.current.updateBuildings(
-            res.features,
-            center ? [center.lng, center.lat] : undefined
-          );
-        }
-        if (mapRef.current) {
-          syncExternalSpatialBuildings(mapRef.current);
-        }
-      })
-      .catch(() => {});
-  }, [selectedRegionId, selectedIdleSiteId, syncExternalSpatialBuildings]);
+  }, [selectedRegionId, selectedIdleSiteId]);
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
   const [webglFallbackWarning, setWebglFallbackWarning] = useState<string | null>(null);
@@ -1109,27 +969,25 @@ export const MapViewer: React.FC = () => {
       if (isInteractingRef.current || currentMap.isMoving() || currentMap.isRotating() || currentMap.isZooming()) return;
 
       try {
-        // [3-1 단일 마스터 렌더러 통합]: 어떤 스위치를 조작하더라도 화면 내 실제 렌더링 건물 수 상시 계산
-        const count = queryRenderedBuildingCount(currentMap);
-
         const styleLayers = currentMap.getStyle()?.layers || [];
-        let activeCount = styleLayers.filter((l) => {
+        let activeCount = 0;
+        for (const l of styleLayers) {
           try {
-            return currentMap.getLayoutProperty(l.id, 'visibility') !== 'none';
-          } catch {
-            return false;
-          }
-        }).length;
+            if (currentMap.getLayoutProperty(l.id, 'visibility') !== 'none') {
+              activeCount++;
+            }
+          } catch {}
+        }
 
         // 전체 활성 레이어 수를 적정 한도(15개 이하)로 엄격 제한 (GPU 과부하 방지)
         if (activeCount > 15) {
           activeCount = enforceMaxActiveLayers(currentMap, 15);
         }
 
-        realtimeMetricsRef.current = { renderedBuildingCount: count, activeLayersCount: activeCount };
+        realtimeMetricsRef.current = { renderedBuildingCount: 0, activeLayersCount: activeCount };
         const badgeEl = document.getElementById('realtime-metrics-badge');
         if (badgeEl) {
-          badgeEl.textContent = `[V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: ${count.toLocaleString()}동 | 활성 레이어: ${activeCount}개]`;
+          badgeEl.textContent = `[60fps 최적화 클린 모드 | 활성 레이어: ${activeCount}개 | CPU 병목 루프 제거]`;
         }
       } catch {
         // ignore
@@ -2060,73 +1918,7 @@ export const MapViewer: React.FC = () => {
             layout: { visibility: 'none' },
           },
 
-          // [국방 규제 및 비행안전] 3D 비행안전 허용 개발 볼륨 (Envelope)
-          {
-            id: 'flight-envelope-volume',
-            type: 'fill-extrusion',
-            source: 'flight-ceiling-source',
-            filter: ['==', ['get', 'type'], 'envelope'],
-            paint: {
-              'fill-extrusion-color': '#3B82F6',
-              'fill-extrusion-height': ['get', 'height'],
-              'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.08,
-            },
-            layout: { visibility: 'none' },
-          },
-          // [국방 규제 및 비행안전] 3D 가상 비행안전 제한고도면 (Ceiling 경고 슬래브)
-          {
-            id: 'flight-ceiling-slab',
-            type: 'fill-extrusion',
-            source: 'flight-ceiling-source',
-            filter: ['==', ['get', 'type'], 'ceiling'],
-            paint: {
-              'fill-extrusion-color': '#EF4444',
-              'fill-extrusion-height': ['get', 'height'],
-              'fill-extrusion-base': ['get', 'min_height'],
-              'fill-extrusion-opacity': 0.28,
-            },
-            layout: { visibility: 'none' },
-          },
-          // [국방 규제 및 비행안전] 제한고도면 외곽 테두리 라인
-          {
-            id: 'flight-ceiling-border',
-            type: 'line',
-            source: 'flight-ceiling-source',
-            filter: ['==', ['get', 'type'], 'ceiling'],
-            paint: {
-              'line-color': '#EF4444',
-              'line-width': 2,
-              'line-opacity': 0.85,
-            },
-            layout: { visibility: 'none' },
-          },
-          // [3D 개발 구상안(Massing)] 가상 건축 매스 Extrusion 입체 레이어 - 2단 복합 매스 & 옥상 특화
-          {
-            id: 'building-mass-extrusion',
-            type: 'fill-extrusion',
-            source: 'building-mass-source',
-            paint: {
-              'fill-extrusion-color': ['coalesce', ['get', 'color'], '#0EA5E9'],
-              'fill-extrusion-height': ['coalesce', ['get', 'height'], 20],
-              'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-              'fill-extrusion-opacity': 0.78,
-              'fill-extrusion-vertical-gradient': true,
-            },
-            layout: { visibility: 'none' },
-          },
-          // [3D 개발 구상안(Massing)] 건물 모서리 및 옥상 헬리패드 마킹 라인
-          {
-            id: 'building-mass-edges',
-            type: 'line',
-            source: 'building-mass-source',
-            paint: {
-              'line-color': ['coalesce', ['get', 'edgeColor'], '#7DD3FC'],
-              'line-width': ['coalesce', ['get', 'lineWidth'], 2.0],
-              'line-opacity': ['coalesce', ['get', 'lineOpacity'], 0.95],
-            },
-            layout: { visibility: 'none' },
-          },
+          // [조치 1: 거대 평판 생성기 전면 제거 - flight-envelope-volume, flight-ceiling-slab, building-mass-extrusion 완전 삭제]
 
           // [클릭된 3D 건물 하이라이트 3D 돌출 및 에메랄드/골드 엣지 레이어]
           {
@@ -2439,199 +2231,26 @@ export const MapViewer: React.FC = () => {
     let moveEndThrottleTimer: NodeJS.Timeout | null = null;
     const targetPixelRatio = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
 
-    // [1단계: 인터랙션 시작 - Interaction Lock 설정]
+    // [조치 1: move / render 이벤트 핸들러 순수화 - 드래그/회전 중 일체의 연산 및 setState 배제]
     const handleInteractionStart = () => {
       isInteractingRef.current = true;
       elevationCache.setInteractionLock(true);
-      lod2BuildingEngineRef.current?.setInteracting(true);
-      realisticKoreanCityLayerRef.current?.setInteracting(true);
-      threeboxLayerRef.current?.setInteracting(true);
-      proceduralTreesLayerRef.current?.setInteracting(true);
-      deck3DTilesManagerRef.current?.setInteracting(true);
-
-      // [카메라 이동 중 모든 비동기 API 및 건물 지오메트리 동기화 즉시 취소]
-      if (syncAbortControllerRef.current) {
-        syncAbortControllerRef.current.abort();
-        syncAbortControllerRef.current = null;
-      }
-      if (syncDebounceTimerRef.current) {
-        clearTimeout(syncDebounceTimerRef.current);
-        syncDebounceTimerRef.current = null;
-      }
-
       if (moveEndThrottleTimer) {
         clearTimeout(moveEndThrottleTimer);
         moveEndThrottleTimer = null;
       }
     };
 
-    // [2단계: 메인 스레드 병목 제거 및 React 리렌더링 0회 달성]
-    // 지도를 드래그/회전/피치할 때 React setState를 전면 차단하고 DOM 직접 조작으로 리렌더링 횟수 0회 유지
-    const handleMove = () => {
-      if (moveRafId !== null) return;
-      moveRafId = requestAnimationFrame(() => {
-        moveRafId = null;
-        if (!map) return;
-        const bearing = map.getBearing();
-        const pitch = map.getPitch();
-        const zoom = map.getZoom();
-        const center = map.getCenter();
-
-        // 1. Ref 텔레메트리 최신화 (리렌더링 0회)
-        cameraTelemetryRef.current = {
-          bearing,
-          pitch,
-          zoom,
-          lat: center.lat,
-          lng: center.lng,
-        };
-
-        // 2. Compass & ScaleBar DOM 직접 조작 (0ms)
-        updateCompassDOM(bearing, pitch, zoom);
-        updateScaleBarDOM(center.lat, zoom);
-
-        // 3. 폴리곤 중심 라벨 DOM 직접 조작
-        const storeCenter = useMapStore.getState().polygonCenter;
-        if (storeCenter) {
-          const p = map.project(storeCenter);
-          const polyLabelEl = document.getElementById('polygon-center-label-wrap');
-          if (polyLabelEl) {
-            polyLabelEl.style.left = `${p.x}px`;
-            polyLabelEl.style.top = `${p.y}px`;
-          }
-          const ceilingLabelEl = document.getElementById('flight-ceiling-label-wrap');
-          if (ceilingLabelEl) {
-            ceilingLabelEl.style.left = `${p.x}px`;
-            ceilingLabelEl.style.top = `${p.y}px`;
-          }
-        }
-
-        // 4. 인프라 마커 핀 DOM 직접 조작
-        const hoveredRow = useMapStore.getState().hoveredInfrastructureRow;
-        if (hoveredRow) {
-          const pt = map.project(hoveredRow.coords);
-          const tieEl = document.getElementById('tieline-marker-wrap');
-          if (tieEl) {
-            tieEl.style.left = `${pt.x}px`;
-            tieEl.style.top = `${pt.y}px`;
-          }
-        }
-
-        // 5. 3D 건물 상세 정보 팝업 DOM 직접 조작
-        if (selectedBuildingCenterRef.current) {
-          const bldgPopupEl = document.getElementById('building-popup-wrap');
-          if (bldgPopupEl) {
-            const p = map.project(selectedBuildingCenterRef.current);
-            bldgPopupEl.style.left = `${p.x}px`;
-            bldgPopupEl.style.top = `${p.y}px`;
-          }
-        }
-
-        // 6. 3D 공간 주석 핀 DOM 직접 조작
-        if (spatialPinsRef.current && spatialPinsRef.current.length > 0) {
-          for (const pin of spatialPinsRef.current) {
-            const pinEl = document.getElementById(`pin-marker-wrap-${pin.id}`);
-            if (pinEl) {
-              const pt = map.project(pin.coords);
-              pinEl.style.left = `${pt.x}px`;
-              pinEl.style.top = `${pt.y}px`;
-            }
-          }
-        }
-
-        // 7. [줌 레벨 최적화 LOD 제어]
-        lod2BuildingEngineRef.current?.updateZoomLOD(zoom);
-      });
-    };
-
-    // [1단계: 인터랙션 종료 - 450ms 디바운스 후 인터랙션 락 해제]
     const handleInteractionEnd = () => {
       if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       moveEndThrottleTimer = setTimeout(() => {
+        moveEndThrottleTimer = null;
         if (!map) return;
         if (map.isMoving() || map.isRotating() || map.isZooming()) {
           handleInteractionEnd();
           return;
         }
         isInteractingRef.current = false;
-        elevationCache.setInteractionLock(false);
-        lod2BuildingEngineRef.current?.setInteracting(false);
-        realisticKoreanCityLayerRef.current?.setInteracting(false);
-        threeboxLayerRef.current?.setInteracting(false);
-        proceduralTreesLayerRef.current?.setInteracting(false);
-        deck3DTilesManagerRef.current?.setInteracting(false);
-
-        // [GPU 다층 슬라이싱 엔진 가동으로 메인 스레드 JS 6,985동 루프 중단]
-        updateRealtimeMetrics();
-      }, 450);
-    };
-
-    // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
-    const origFlyTo = map.flyTo.bind(map);
-    map.flyTo = function (options: any) {
-      try {
-        return origFlyTo(sanitizeCameraOptions(options, map));
-      } catch (err) {
-        console.warn('[MapViewer] flyTo warning suppressed:', err);
-        return this;
-      }
-    };
-
-    const origEaseTo = map.easeTo.bind(map);
-    map.easeTo = function (options: any) {
-      try {
-        return origEaseTo(sanitizeCameraOptions(options, map));
-      } catch (err) {
-        console.warn('[MapViewer] easeTo warning suppressed:', err);
-        return this;
-      }
-    };
-
-    const origJumpTo = map.jumpTo.bind(map);
-    map.jumpTo = function (options: any) {
-      try {
-        return origJumpTo(sanitizeCameraOptions(options, map));
-      } catch (err) {
-        console.warn('[MapViewer] jumpTo warning suppressed:', err);
-        return this;
-      }
-    };
-
-    // 인터랙션 잠금(Interaction Lock) 이벤트 바인딩
-    map.on('movestart', handleInteractionStart);
-    map.on('rotatestart', handleInteractionStart);
-    map.on('pitchstart', handleInteractionStart);
-    map.on('dragstart', handleInteractionStart);
-    map.on('zoomstart', handleInteractionStart);
-
-    map.on('move', handleMove);
-    map.on('rotate', handleMove);
-    map.on('pitch', handleMove);
-
-    map.on('moveend', handleInteractionEnd);
-    map.on('rotateend', handleInteractionEnd);
-    map.on('pitchend', handleInteractionEnd);
-    map.on('dragend', handleInteractionEnd);
-    map.on('zoomend', handleInteractionEnd);
-
-    const handleMapIdle = () => {
-      if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) return;
-      updateRealtimeMetrics();
-    };
-    map.on('idle', handleMapIdle);
-
-    let viewportMoveEndDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleViewportMoveEnd = () => {
-      if (viewportMoveEndDebounceTimer) {
-        clearTimeout(viewportMoveEndDebounceTimer);
-      }
-      viewportMoveEndDebounceTimer = setTimeout(() => {
-        viewportMoveEndDebounceTimer = null;
-        if (!map) return;
-        if (isInteractingRef.current || map.isMoving() || map.isRotating() || map.isZooming()) {
-          handleViewportMoveEnd();
-          return;
-        }
 
         const c = map.getCenter();
         const b = map.getBearing();
@@ -2646,7 +2265,9 @@ export const MapViewer: React.FC = () => {
           lng: c.lng,
         };
 
-        // Zustand 뷰포트 상태를 조용히 갱신하여 MapViewer 불필요한 전체 리렌더링 차단 (0ms)
+        updateCompassDOM(b, p, z);
+        updateScaleBarDOM(c.lat, z);
+
         useMapStore.setState({
           viewport: {
             longitude: c.lng,
@@ -2656,11 +2277,23 @@ export const MapViewer: React.FC = () => {
             bearing: b,
           },
         });
-        syncExternalSpatialBuildings(map);
+
         updateRealtimeMetrics();
-      }, 450); // [60fps 보장] 450ms 디바운스
+      }, 500); // [조치 1: 500ms 디바운스 엄격 준수]
     };
-    map.on('moveend', handleViewportMoveEnd);
+
+    // 인터랙션 잠금(Interaction Lock) 이벤트 바인딩 - move/rotate/pitch 리스너 제거로 60fps 확보
+    map.on('movestart', handleInteractionStart);
+    map.on('rotatestart', handleInteractionStart);
+    map.on('pitchstart', handleInteractionStart);
+    map.on('dragstart', handleInteractionStart);
+    map.on('zoomstart', handleInteractionStart);
+
+    map.on('moveend', handleInteractionEnd);
+    map.on('rotateend', handleInteractionEnd);
+    map.on('pitchend', handleInteractionEnd);
+    map.on('dragend', handleInteractionEnd);
+    map.on('zoomend', handleInteractionEnd);
 
     // sourcedata 이벤트에서는 건물 동기화 연산을 차단하여 지도 이동 중 버벅거림(렉) 완전 제거
     const handleSourceData = (_e: any) => {
@@ -2692,24 +2325,6 @@ export const MapViewer: React.FC = () => {
       hasInitializedMapLayers = true;
       setIsMapLoaded(true);
       updateRealtimeMetrics();
-      fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-        .then((res) => {
-          if (res && res.features && res.features.length > 0 && realisticKoreanCityLayerRef.current) {
-            const center = map?.getCenter();
-            realisticKoreanCityLayerRef.current.updateBuildings(
-              res.features,
-              center ? [center.lng, center.lat] : undefined
-            );
-          }
-          if (map) {
-            syncExternalSpatialBuildings(map);
-            updateRealtimeMetrics();
-          }
-        })
-        .catch(() => {});
-      setTimeout(() => {
-        syncExternalSpatialBuildings(map);
-      }, 600);
 
       // [1. 검은색 background 레이어 존재 시 제거하여 위성 타일 가림 방지]
       try {
@@ -3205,51 +2820,24 @@ export const MapViewer: React.FC = () => {
         );
       }
 
-      // [Threebox-MapLibre 연동 정밀 3D 건축물 레이어 등록]
+      // [조치 1: 자체 Three.js CPU 건물 생성 루프 전면 중단]
+      // 위치 왜곡 및 극심한 렉을 유발하는 커스텀 Three.js 건물 레이어를 지도에서 즉시 분리 및 영구 배제
       try {
-        const initRenderMode = useMapStore.getState().renderMode3D;
-        const tbLayer = new ThreeboxBuildingLayer();
-        tbLayer.setPostProcessingEnabled(false); // [긴급 조치: WebGL 검은 화면 방지 후처리 상시 바이패스]
-        tbLayer.setVisible(initRenderMode === 'facade' && !!layers.buildings3D);
-        tbLayer.setFacilityCallbacks(
-          (id, updates) => {
-            useMapStore.getState().updateFacilityTransform(id, updates);
-          },
-          (id) => {
-            useMapStore.getState().selectFacility(id);
-          }
-        );
-        map.addLayer(tbLayer);
-        threeboxLayerRef.current = tbLayer;
-        // [1단계: 단일 재질 덮어쓰기 버그 원천 제거]
-        // ThreeboxBuildingLayer의 구형 단일 재질(mats.upperResidential) facades 생성을 영구 배제하여
-        // RealisticKoreanCityLayer가 16종 독립 Multi-Material로 전 건물을 전담 렌더링하도록 보장
-        tbLayer.clearFacadesGroup();
-        tbLayer.clearRoofsGroup();
-      } catch (tbErr) {
-        console.error(
-          `%c[GeoBrief 3D MapLibre ERROR]%c 🚨 ThreeboxBuildingLayer 등록 실패!\n` +
-          ` • 레이어 ID: threebox-building-layer\n` +
-          ` • 오류 원인: ${(tbErr as Error)?.message || tbErr}`,
-          'background: #DC2626; color: #FFFFFF; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;',
-          'color: #EF4444; font-weight: bold;'
-        );
-      }
-
-      // [1단계: 구형 충돌 레이어 완전 제거]
-      // 구형 LOD2BuildingEngine 중복 등록을 영구 배제하여 RealisticKoreanCityLayer가 단독 전담 렌더링하도록 일원화
-      try {
-        const cityLayer = new RealisticKoreanCityLayer({
-          onBuildingCountChange: (cnt) => {
-            console.log('[RealisticKoreanCityLayer] Rendered building count:', cnt);
-          },
-        });
-        cityLayer.setVisible(Boolean(layers.buildings3D));
-        map.addLayer(cityLayer);
-        realisticKoreanCityLayerRef.current = cityLayer;
-        (window as any).__realisticKoreanCityLayer = cityLayer;
-      } catch (cityErr) {
-        console.warn('[MapViewer] RealisticKoreanCityLayer registration notice:', cityErr);
+        if (map.getLayer('threebox-building-layer')) {
+          map.removeLayer('threebox-building-layer');
+        }
+        if (map.getLayer('realistic-korean-city-layer')) {
+          map.removeLayer('realistic-korean-city-layer');
+        }
+        if (map.getLayer('procedural-trees-layer')) {
+          map.removeLayer('procedural-trees-layer');
+        }
+        threeboxLayerRef.current = null;
+        realisticKoreanCityLayerRef.current = null;
+        proceduralTreesLayerRef.current = null;
+        (window as any).__realisticKoreanCityLayer = null;
+      } catch (detachErr) {
+        console.warn('[MapViewer] Three.js custom layer detach notice:', detachErr);
       }
 
       // [1단계: 공중에 뜨고 위치가 틀어진 구형 Three.js 더미 레이어 영구 제거 & 브이월드 POI 및 교량 라벨 등록]
@@ -3303,15 +2891,8 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] VWorld3DTileLayer registration warning:', vwTileErr);
       }
 
-      // [4단계 신규: 3D 입체 수목(식생 InstancedMesh) 및 가로수 고성능 렌더러]
-      try {
-        const treesLayer = new ProceduralTrees3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
-        treesLayer.setVisible(!!layers.proceduralTrees);
-        map.addLayer(treesLayer);
-        proceduralTreesLayerRef.current = treesLayer;
-      } catch (treeErr) {
-        console.warn('[ProceduralTrees3DLayer] registration notice:', treeErr);
-      }
+      // [조치 1: 3D 수목 및 식생 InstancedMesh 비활성화]
+      proceduralTreesLayerRef.current = null;
 
       // [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어 등록]
       try {
@@ -3679,17 +3260,11 @@ export const MapViewer: React.FC = () => {
         map.off('dragstart', handleInteractionStart);
         map.off('zoomstart', handleInteractionStart);
 
-        map.off('move', handleMove);
-        map.off('rotate', handleMove);
-        map.off('pitch', handleMove);
-
         map.off('moveend', handleInteractionEnd);
         map.off('rotateend', handleInteractionEnd);
         map.off('pitchend', handleInteractionEnd);
         map.off('dragend', handleInteractionEnd);
         map.off('zoomend', handleInteractionEnd);
-        map.off('idle', handleMapIdle);
-        map.off('sourcedata', handleSourceData);
       } catch {}
       resizeObserver.disconnect();
       astryxAdapter.destroy();
@@ -4370,30 +3945,10 @@ export const MapViewer: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedFacilityId, setTransformGizmoMode, selectFacility, removePlacedFacility]);
 
-  // 8-1. [오픈 벡터 타일 기반 무중단 3D 건물 렌더링 및 상태 진단]
+  // 8-1. [조치 1: 메인 스레드 무거운 건물 지오메트리 업데이트 루프 비활성화]
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isMapLoaded) return;
-
-    fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-      .then((res) => {
-        if (res && res.features && res.features.length > 0 && realisticKoreanCityLayerRef.current) {
-          const center = mapRef.current?.getCenter();
-          realisticKoreanCityLayerRef.current.updateBuildings(
-            res.features,
-            center ? [center.lng, center.lat] : undefined
-          );
-        }
-        if (mapRef.current) {
-          syncExternalSpatialBuildings(mapRef.current);
-          updateRealtimeMetrics();
-        }
-      })
-      .catch(() => {});
-
-    // [2단계: 3대 외부 실측 건물 데이터(V-World WFS + OSM Overpass + OpenFreeMap) 통합 파이프라인 동기화]
-    syncExternalSpatialBuildings(map);
-  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncExternalSpatialBuildings, updateRealtimeMetrics]);
+    // no-op
+  }, [isMapLoaded, layers.buildings3D, selectedRegionId]);
 
   // 9. 베이스맵 전환 (4종 원클릭: 국토부 V-World 항공실사, Google 위성, V-World 클린, Google 로드맵)
   useEffect(() => {
@@ -4861,13 +4416,7 @@ export const MapViewer: React.FC = () => {
               }
             });
 
-            if (enrichedCount > 0 && realisticKoreanCityLayerRef.current) {
-              const center = map.getCenter();
-              realisticKoreanCityLayerRef.current.updateBuildings(
-                Array.from(persistentBuildingCacheRef.current.values()),
-                [center.lng, center.lat]
-              );
-            }
+            // [조치 1: Three.js CPU 건물 지오메트리 계산 중단]
           }
 
           setMolitDiagnostic({

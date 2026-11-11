@@ -125,25 +125,6 @@ export function getKoreanRoadLayerDefinitions(
     // -------------------------------------------------------------------------
     // [3단계] 원주천·섬강·소양강 하천 수면 및 둔치(Water & Floodplain) 레이어
     // -------------------------------------------------------------------------
-    // 0-1. 원주천·섬강 수변 둔치(Floodplain) 잔디/생태공원 폴리곤 (위성사진 원본 선명 노출을 위해 비활성화)
-    {
-      id: 'korean-riverbank-floodplain',
-      type: 'fill',
-      source: sourceId,
-      'source-layer': 'landcover',
-      minzoom: 10,
-      maxzoom: 24,
-      filter: ['match', ['get', 'class'], ['grass', 'wetland', 'park'], true, false],
-      paint: {
-        'fill-color': '#36533c', // 생기 있는 원주천 둔치 녹지 톤
-        'fill-opacity': 0.0,
-        'fill-antialias': false,
-      },
-      layout: {
-        visibility: 'none',
-      },
-    },
-
     // 0-2. [1단계: 위성사진 가림 방지] 원주천·섬강 등 수면 폴리곤은 위성 원본 노출을 위해 기본 none
     {
       id: 'korean-water-fill',
@@ -210,25 +191,8 @@ export function getKoreanRoadLayerDefinitions(
     },
 
     // -------------------------------------------------------------------------
-    // 단지 및 상업지구 지상 인프라 (위성사진 노면을 가리는 인위적 레이어 기본 OFF)
+    // 단지 및 상업지구 지상 인프라 (위성사진 노면을 가리는 인위적 레이어 영구 제거)
     // -------------------------------------------------------------------------
-    {
-      id: 'complex-parking-area',
-      type: 'fill',
-      source: sourceId,
-      'source-layer': 'landuse',
-      minzoom: 13,
-      maxzoom: 24,
-      filter: ['match', ['get', 'class'], ['parking', 'garages'], true, false],
-      paint: {
-        'fill-color': '#22262f', // 깔끔한 다크 아스팔트 주차장 포장 톤
-        'fill-opacity': 0.0,
-        'fill-antialias': true,
-      },
-      layout: {
-        visibility: 'none',
-      },
-    },
     {
       id: 'complex-parking-curb',
       type: 'line',
