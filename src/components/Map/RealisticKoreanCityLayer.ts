@@ -446,15 +446,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xbae6fd, 0.45);
-      this.fillLight.position.set(100, 120, -110).normalize();
+      this.fillLight = new THREE.DirectionalLight(0xffffff, 0.65);
+      this.fillLight.position.set(130, 120, -100).normalize();
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 강도 1.25로 강화하여 서울 사진처럼 밝고 선명한 주광 제공
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
+      // - AmbientLight(환경광): 강도 1.35로 설정하여 그림자가 진 벽면도 절대 시커멓게 죽지 않고 창문 격자와 벽돌·화강석 색감이 환하게 보이도록 교정
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 1.0으로 서울 사진처럼 밝고 선명한 반사광 제공
+      // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 1.0으로 반사광 제공
       this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 1.0);
       this.scene.add(this.hemisphereLight);
 
@@ -821,7 +821,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.color.set(colorOrAz);
     }
     this.sunLight.intensity = Math.max(0.2, intensity);
-    if (this.ambientLight) this.ambientLight.intensity = 1.25;
+    if (this.ambientLight) this.ambientLight.intensity = 1.35;
     if (this.hemisphereLight) {
       this.hemisphereLight.intensity = 1.0;
       this.hemisphereLight.color.set(0xffffff);
@@ -1432,11 +1432,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       } else if (areaSqm < 220 || minWidth < 7.5) {
         // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
         height = Math.min(10.0, Math.max(6.5, height > 0 ? height : 6.5 + (diverseSeed % 36) * 0.1));
-      } else if (areaSqm >= 220 && areaSqm < 800) {
-        // 근린상가·오피스 빌딩 (220㎡ <= area < 800㎡): 12.0m ~ 20.0m (4~6층)
+      } else if (areaSqm >= 220 && areaSqm < 600) {
+        // 시내 중심 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
         height = Math.min(20.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 9)));
       } else {
-        // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (800㎡ <= area < 2000㎡): 16.0m ~ 42.0m (5~12층)
+        // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (600㎡ <= area <= 3,800㎡ 비주거): 16.0m ~ 42.0m (4~13층)
         height = Math.min(42.0, Math.max(16.0, height > 0 ? height : 16.0 + (diverseSeed % 27)));
       }
 

@@ -169,11 +169,11 @@ export class PrecisionBuildingBuilder {
     } else if (isApartmentFeat || areaSqm >= 2000 || (maxEdgeLen && maxEdgeLen >= 35.0)) {
       // 아파트 단지 주거동: 45m ~ 75m (15층 ~ 25층)
       clampedHeight = Math.min(75.0, Math.max(45.0, rawHeight > 0 ? rawHeight : 45.0 + (seed % 31)));
-    } else if (areaSqm >= 220 && areaSqm < 800) {
-      // 근린상가·오피스 빌딩 (220㎡ <= area < 800㎡): 12.0m ~ 20.0m (4~6층)
+    } else if (areaSqm >= 220 && areaSqm < 600) {
+      // 시내 중심 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
       clampedHeight = Math.min(20.0, Math.max(12.0, rawHeight > 0 ? rawHeight : 12.0 + (seed % 9)));
-    } else if (areaSqm >= 800) {
-      // 공공청사·학교·종합병원 (800㎡ <= area < 2000㎡): 16.0m ~ 42.0m (5~12층)
+    } else if (areaSqm >= 600) {
+      // 공공청사·시군청·학교·병원 (600㎡ <= area <= 3,800㎡ 비주거): 16.0m ~ 42.0m (4~13층)
       clampedHeight = Math.min(42.0, Math.max(16.0, rawHeight > 0 ? rawHeight : 16.0 + (seed % 27)));
     }
     const height = clampedHeight;
@@ -228,8 +228,8 @@ export class PrecisionBuildingBuilder {
         const dx = p1.x - p0.x;
         const dz = p1.z - p0.z;
         const normLen = Math.hypot(dx, dz) || 1;
-        const nx = dz / normLen;
-        const nz = -dx / normLen;
+        const nx = -dz / normLen;
+        const nz = dx / normLen;
 
         const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
         const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
@@ -290,8 +290,8 @@ export class PrecisionBuildingBuilder {
           const dx = p1.x - p0.x;
           const dz = p1.z - p0.z;
           const normLen = Math.hypot(dx, dz) || 1;
-          const nx = dz / normLen;
-          const nz = -dx / normLen;
+          const nx = -dz / normLen;
+          const nz = dx / normLen;
           addRooftopQuad(
             [p0.x, topElev, p0.z],
             [p1.x, topElev, p1.z],
@@ -348,8 +348,8 @@ export class PrecisionBuildingBuilder {
         const dx = p1.x - p0.x;
         const dz = p1.z - p0.z;
         const normLen = Math.hypot(dx, dz) || 1;
-        const nx = dz / normLen;
-        const nz = -dx / normLen;
+        const nx = -dz / normLen;
+        const nz = dx / normLen;
 
         const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
         const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
@@ -468,8 +468,8 @@ export class PrecisionBuildingBuilder {
           const dx = p1.x - p0.x;
           const dz = p1.z - p0.z;
           const normLen = Math.hypot(dx, dz) || 1;
-          const nx = dz / normLen;
-          const nz = -dx / normLen;
+          const nx = -dz / normLen;
+          const nz = dx / normLen;
           addRooftopQuad(
             [p0.x, topElev, p0.z],
             [p1.x, topElev, p1.z],
@@ -525,12 +525,17 @@ export class PrecisionBuildingBuilder {
 
         for (let k = 0; k < 4; k++) {
           const nextK = (k + 1) % 4;
+          const cdx = corePts[nextK][0] - corePts[k][0];
+          const cdz = corePts[nextK][1] - corePts[k][1];
+          const clen = Math.hypot(cdx, cdz) || 1;
+          const cnx = -cdz / clen;
+          const cnz = cdx / clen;
           addRooftopQuad(
             [corePts[k][0], topElev, corePts[k][1]],
             [corePts[nextK][0], topElev, corePts[nextK][1]],
             [corePts[nextK][0], coreTop, corePts[nextK][1]],
             [corePts[k][0], coreTop, corePts[k][1]],
-            [0, 0, 1],
+            [cnx, 0, cnz],
             [0, 0],
             [1, 0],
             [1, 1],
@@ -572,12 +577,12 @@ export class PrecisionBuildingBuilder {
       const p0 = pts2D[i];
       const p1 = pts2D[j];
 
-      // 법선 벡터 (Outward Normal: CCW 기준 (dz, -dx))
+      // 법선 벡터 (Outward Normal: CCW 기준 (-dz, dx))
       const dx = p1.x - p0.x;
       const dz = p1.z - p0.z;
       const normLen = Math.hypot(dx, dz) || 1;
-      const nx = dz / normLen;
-      const nz = -dx / normLen;
+      const nx = -dz / normLen;
+      const nz = dx / normLen;
 
       if (!isApartment && podiumH >= 2.5) {
         // 상가·오피스·관공서 0.2m 돌출 화강석 기단부 외벽
@@ -726,8 +731,8 @@ export class PrecisionBuildingBuilder {
         const dx = p1.x - p0.x;
         const dz = p1.z - p0.z;
         const normLen = Math.hypot(dx, dz) || 1;
-        const nx = dz / normLen;
-        const nz = -dx / normLen;
+        const nx = -dz / normLen;
+        const nz = dx / normLen;
         const ux = dx / normLen;
         const uz = dz / normLen;
 
@@ -791,8 +796,8 @@ export class PrecisionBuildingBuilder {
         const dx = p1.x - p0.x;
         const dz = p1.z - p0.z;
         const normLen = Math.hypot(dx, dz) || 1;
-        const nx = dz / normLen;
-        const nz = -dx / normLen;
+        const nx = -dz / normLen;
+        const nz = dx / normLen;
 
         const pBL: [number, number, number] = [p0.x, podiumElev, p0.z];
         const pBR: [number, number, number] = [p1.x, podiumElev, p1.z];
@@ -852,14 +857,14 @@ export class PrecisionBuildingBuilder {
       const dPrevX = pts2D[i].x - pts2D[prev].x;
       const dPrevZ = pts2D[i].z - pts2D[prev].z;
       const lenPrev = Math.hypot(dPrevX, dPrevZ) || 1;
-      const nPrevX = -dPrevZ / lenPrev; // CCW inward normal
-      const nPrevZ = dPrevX / lenPrev;
+      const nPrevX = dPrevZ / lenPrev; // CCW inward normal
+      const nPrevZ = -dPrevX / lenPrev;
 
       const dNextX = pts2D[next].x - pts2D[i].x;
       const dNextZ = pts2D[next].z - pts2D[i].z;
       const lenNext = Math.hypot(dNextX, dNextZ) || 1;
-      const nNextX = -dNextZ / lenNext;
-      const nNextZ = dNextX / lenNext;
+      const nNextX = dNextZ / lenNext;
+      const nNextZ = -dNextX / lenNext;
 
       let avgNx = (nPrevX + nNextX) * 0.5;
       let avgNz = (nPrevZ + nNextZ) * 0.5;
@@ -889,8 +894,8 @@ export class PrecisionBuildingBuilder {
         const dx = p1.x - p0.x;
         const dz = p1.z - p0.z;
         const normLen = Math.hypot(dx, dz) || 1;
-        const nx = dz / normLen;
-        const nz = -dx / normLen;
+        const nx = -dz / normLen;
+        const nz = dx / normLen;
 
         // 1) 난간 외측 벽체 (H ~ H + 1.0m)
         addRooftopQuad(
@@ -970,8 +975,8 @@ export class PrecisionBuildingBuilder {
         const dx = e1.x - e0.x;
         const dz = e1.z - e0.z;
         const len = Math.hypot(dx, dz) || 1;
-        const nx = dz / len;
-        const nz = -dx / len;
+        const nx = -dz / len;
+        const nz = dx / len;
 
         const ov0: [number, number, number] = [e0.x + nx * 0.25, topElev, e0.z + nz * 0.25];
         const ov1: [number, number, number] = [e1.x + nx * 0.25, topElev, e1.z + nz * 0.25];
@@ -1060,13 +1065,18 @@ export class PrecisionBuildingBuilder {
           const nextK = (k + 1) % 4;
           const b0 = corePts[k];
           const b1 = corePts[nextK];
+          const cdx = b1[0] - b0[0];
+          const cdz = b1[1] - b0[1];
+          const clen = Math.hypot(cdx, cdz) || 1;
+          const cnx = -cdz / clen;
+          const cnz = cdx / clen;
 
           addRooftopQuad(
             [b0[0], topElev, b0[1]],
             [b1[0], topElev, b1[1]],
             [b1[0], coreTop, b1[1]],
             [b0[0], coreTop, b0[1]],
-            [0, 0, 1],
+            [cnx, 0, cnz],
             [0, 0],
             [1, 0],
             [1, 1],

@@ -333,23 +333,23 @@ export function getGlobalVWorldMaterials(): THREE.MeshLambertMaterial[] {
     let tex: THREE.CanvasTexture;
 
     if (i >= 0 && i <= 4) {
-      // Slot 0..4: 한국형 아파트 단지
+      // Slot 0..4: 한국형 아파트 단지 (5종)
       tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentFacade(ctx, w, h, i));
-    } else if (i >= 5 && i <= 9) {
-      // Slot 5..9: 시내 상가·오피스 빌딩 (간판 + 쇼윈도)
-      tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i - 5));
-    } else if (i >= 10 && i <= 12) {
-      // Slot 10..12: 혁신도시 공공기관·관공서·학교 (유리 커튼월)
-      tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i - 10));
+    } else if (i >= 5 && i <= 8) {
+      // Slot 5..8: 혁신도시 공공기관·관공서·학교·오피스 (4종)
+      tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i - 5));
+    } else if (i >= 9 && i <= 12) {
+      // Slot 9..12: 시내 상가·근린생활 빌딩 (4종)
+      tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i - 9));
     } else {
-      // Slot 13..15: 고밀도 적벽돌 빌라·단독주택
+      // Slot 13..15: 고밀도 적벽돌 빌라·단독주택·학교 (3종)
       tex = createProceduralCanvasTexture((ctx, w, h) => drawVillaResidentialFacade(ctx, w, h, i - 13));
     }
 
     const mat = new THREE.MeshLambertMaterial({
       map: tex,
       color: 0xffffff,
-      side: THREE.FrontSide,
+      side: THREE.DoubleSide,
     });
     mat.name = `vworld-mat-slot-${i}`;
     materials.push(mat);

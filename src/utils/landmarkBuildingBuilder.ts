@@ -398,8 +398,8 @@ export function buildGovernmentMultipartMesh(options: LandmarkBuildOptions): voi
     }
     if (elen < 0.2) continue;
 
-    const nx = dz / elen;
-    const nz = -dx / elen;
+    const nx = -dz / elen;
+    const nz = dx / elen;
 
     addQuad(
       [p1.x, baseElev, p1.z],
@@ -417,8 +417,8 @@ export function buildGovernmentMultipartMesh(options: LandmarkBuildOptions): voi
     const p2 = pts2D[(maxEdgeIdx + 1) % ptCount];
     const dx = p2.x - p1.x;
     const dz = p2.z - p1.z;
-    const nx = dz / maxEdgeLen;
-    const nz = -dx / maxEdgeLen;
+    const nx = -dz / maxEdgeLen;
+    const nz = dx / maxEdgeLen;
 
     const midX = (p1.x + p2.x) * 0.5;
     const midZ = (p1.z + p2.z) * 0.5;
@@ -520,8 +520,8 @@ export function buildGovernmentMultipartMesh(options: LandmarkBuildOptions): voi
     const elen = Math.hypot(dx, dz);
     if (elen < 0.2) continue;
 
-    const nx = dz / elen;
-    const nz = -dx / elen;
+    const nx = -dz / elen;
+    const nz = dx / elen;
 
     addQuad(
       [p1.x, podiumElev, p1.z],
@@ -654,8 +654,8 @@ export function buildSchoolMultipartMesh(options: LandmarkBuildOptions): void {
     }
     if (elen < 0.2) continue;
 
-    const nx = dz / elen;
-    const nz = -dx / elen;
+    const nx = -dz / elen;
+    const nz = dx / elen;
 
     addQuad(
       [p1.x, baseElev, p1.z],
@@ -673,8 +673,8 @@ export function buildSchoolMultipartMesh(options: LandmarkBuildOptions): void {
     const p2 = pts2D[(maxEdgeIdx + 1) % ptCount];
     const dx = p2.x - p1.x;
     const dz = p2.z - p1.z;
-    const nx = dz / maxEdgeLen;
-    const nz = -dx / maxEdgeLen;
+    const nx = -dz / maxEdgeLen;
+    const nz = dx / maxEdgeLen;
 
     const midX = (p1.x + p2.x) * 0.5;
     const midZ = (p1.z + p2.z) * 0.5;
@@ -800,8 +800,8 @@ export function buildHospitalMultipartMesh(options: LandmarkBuildOptions): void 
     }
     if (elen < 0.2) continue;
 
-    const nx = dz / elen;
-    const nz = -dx / elen;
+    const nx = -dz / elen;
+    const nz = dx / elen;
 
     addQuad(
       [p1.x, baseElev, p1.z],
@@ -819,8 +819,8 @@ export function buildHospitalMultipartMesh(options: LandmarkBuildOptions): void 
     const p2 = pts2D[(maxEdgeIdx + 1) % ptCount];
     const dx = p2.x - p1.x;
     const dz = p2.z - p1.z;
-    const nx = dz / maxEdgeLen;
-    const nz = -dx / maxEdgeLen;
+    const nx = -dz / maxEdgeLen;
+    const nz = dx / maxEdgeLen;
 
     const midX = (p1.x + p2.x) * 0.5;
     const midZ = (p1.z + p2.z) * 0.5;
@@ -950,8 +950,8 @@ export function buildKtxStationMesh(options: LandmarkBuildOptions): void {
     const elen = Math.hypot(dx, dz);
     if (elen < 0.2) continue;
 
-    const nx = dz / elen;
-    const nz = -dx / elen;
+    const nx = -dz / elen;
+    const nz = dx / elen;
 
     addQuad(
       [p1.x, baseElev, p1.z],
@@ -1053,8 +1053,8 @@ export function buildPoliceFireMesh(options: LandmarkBuildOptions): void {
     const elen = Math.hypot(dx, dz);
     if (elen < 0.2) continue;
 
-    const nx = dz / elen;
-    const nz = -dx / elen;
+    const nx = -dz / elen;
+    const nz = dx / elen;
 
     addQuad(
       [p1.x, baseElev, p1.z],
