@@ -273,9 +273,11 @@ export const ControlPanel: React.FC = () => {
     }
   };
 
-  // [1단계: 비동기 상태 전환 최적화] 탭/메뉴 버튼은 0.01초 즉시 반응하고 무거운 지도 렌더러 전환은 비동기 분리
+  // [1단계: 상태 <-> 맵 리스너 직결] 탭/메뉴 버튼은 즉시 반응하고 이벤트 디스패치로 지도 동기화
   const [localActiveTab, setLocalActiveTab] = useState(activeSidebarTab);
   const [localRenderMode3D, setLocalRenderMode3D] = useState(renderMode3D);
+  const currentTab = localActiveTab || activeSidebarTab;
+  const currentRenderMode = localRenderMode3D || renderMode3D;
 
   useEffect(() => {
     setLocalActiveTab(activeSidebarTab);
@@ -293,6 +295,16 @@ export const ControlPanel: React.FC = () => {
   const handleSelectRenderMode3D = (mode: typeof renderMode3D) => {
     setLocalRenderMode3D(mode);
     setRenderMode3D(mode);
+    if (typeof window !== 'undefined') {
+      try {
+        if ((window as any).__setRenderMode3D) {
+          (window as any).__setRenderMode3D(mode);
+        }
+        window.dispatchEvent(new CustomEvent('geobrief-render-mode-change', { detail: { mode } }));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
   };
 
   const handleToggleLayer = (key: keyof typeof layers) => {
@@ -378,7 +390,7 @@ export const ControlPanel: React.FC = () => {
       </div>
 
       {/* 1. [신규] 동적 주소/지번 검색창 (부지/접근성 탭) */}
-      {activeSidebarTab === 'site_access' && (
+      {currentTab === 'site_access' && (
         <section className="p-4 border-b border-[#242f27] space-y-2 bg-[#101712]">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
@@ -409,7 +421,7 @@ export const ControlPanel: React.FC = () => {
       )}
 
       {/* 2. [3D 일조권 및 시간대별 그림자 침해 시뮬레이터 (mourner/suncalc 연동)] */}
-      {activeSidebarTab === 'terrain_infra' &&
+      {currentTab === 'terrain_infra' &&
         (() => {
           const vp = useMapStore.getState().viewport;
           const centerLat = polygonCenter ? polygonCenter[1] : (vp?.latitude ?? 37.342);
@@ -570,7 +582,7 @@ export const ControlPanel: React.FC = () => {
         })()}
 
       {/* [부지정보/접근성 탭 섹션 그룹 (유휴지, 시군, 북마크, 구역지정)] */}
-      {activeSidebarTab === 'site_access' && (
+      {currentTab === 'site_access' && (
         <>
           {/* 3. [강원 18개 시·군 전역] 군 유휴부지 3D 실측 DB & 마스터플랜 카탈로그 */}
           {(() => {
@@ -1700,7 +1712,7 @@ export const ControlPanel: React.FC = () => {
       )}
 
       {/* [3D 건축/단지 탭: 3D 렌더러 단일 선택 + 시설물 카탈로그] */}
-      {activeSidebarTab === 'buildings_complex' && (
+      {currentTab === 'buildings_complex' && (
         <>
           {/* [V-World 3D 통합 렌더링 컨트롤 패널] */}
           <section className="p-4 border-b border-[#242f27] space-y-3.5 bg-gradient-to-b from-[#111c15] to-[#0d1611]">
@@ -1735,17 +1747,17 @@ export const ControlPanel: React.FC = () => {
                   }
                 }}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  localRenderMode3D === 'facade' && !tile3DStream.enabled
-                    ? 'bg-emerald-950/50 border-emerald-400 text-white shadow-lg ring-1 ring-emerald-400/40'
-                    : 'bg-[#152019] border-[#253529] text-slate-300 hover:bg-[#1b2b21]'
+                  currentRenderMode === 'facade' && !tile3DStream.enabled
+                    ? 'bg-emerald-950/60 border-emerald-400 text-white shadow-lg ring-2 ring-emerald-400/50'
+                    : 'bg-[#152019] border-[#253529] text-slate-300 hover:bg-[#1b2b21] hover:border-[#354c3b]'
                 }`}
               >
                 <input
                   type="radio"
                   name="unified3dEngine"
-                  checked={localRenderMode3D === 'facade' && !tile3DStream.enabled}
+                  checked={currentRenderMode === 'facade' && !tile3DStream.enabled}
                   readOnly
-                  className="mt-1 accent-emerald-500 pointer-events-none shrink-0"
+                  className="mt-1 accent-emerald-400 pointer-events-none shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1 mb-1">
@@ -1779,25 +1791,25 @@ export const ControlPanel: React.FC = () => {
                   }
                 }}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  localRenderMode3D === 'tiles3d' || tile3DStream.enabled
-                    ? 'bg-cyan-950/50 border-cyan-400 text-white shadow-lg ring-1 ring-cyan-400/40'
-                    : 'bg-[#152019] border-[#253529] text-slate-300 hover:bg-[#1b2b21]'
+                  currentRenderMode === 'tiles3d' || tile3DStream.enabled
+                    ? 'bg-emerald-950/60 border-emerald-400 text-white shadow-lg ring-2 ring-emerald-400/50'
+                    : 'bg-[#152019] border-[#253529] text-slate-300 hover:bg-[#1b2b21] hover:border-[#354c3b]'
                 }`}
               >
                 <input
                   type="radio"
                   name="unified3dEngine"
-                  checked={localRenderMode3D === 'tiles3d' || tile3DStream.enabled}
+                  checked={currentRenderMode === 'tiles3d' || tile3DStream.enabled}
                   readOnly
-                  className="mt-1 accent-cyan-500 pointer-events-none shrink-0"
+                  className="mt-1 accent-emerald-400 pointer-events-none shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-xs font-bold text-cyan-200 whitespace-nowrap flex items-center gap-1">
-                      <Boxes className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span className="text-xs font-bold text-emerald-200 whitespace-nowrap flex items-center gap-1">
+                      <Boxes className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span>고정밀 3D 타일셋 스트리밍</span>
                     </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 whitespace-nowrap shrink-0">
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 whitespace-nowrap shrink-0">
                       OGC 3D Tiles
                     </span>
                   </div>
@@ -1823,24 +1835,24 @@ export const ControlPanel: React.FC = () => {
                   }
                 }}
                 className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  localRenderMode3D === 'native' && !tile3DStream.enabled
-                    ? 'bg-blue-950/50 border-blue-400 text-white shadow-lg ring-1 ring-blue-400/40'
-                    : 'bg-[#152019] border-[#253529] text-slate-300 hover:bg-[#1b2b21]'
+                  currentRenderMode === 'native' && !tile3DStream.enabled
+                    ? 'bg-emerald-950/60 border-emerald-400 text-white shadow-lg ring-2 ring-emerald-400/50'
+                    : 'bg-[#152019] border-[#253529] text-slate-300 hover:bg-[#1b2b21] hover:border-[#354c3b]'
                 }`}
               >
                 <input
                   type="radio"
                   name="unified3dEngine"
-                  checked={localRenderMode3D === 'native' && !tile3DStream.enabled}
+                  checked={currentRenderMode === 'native' && !tile3DStream.enabled}
                   readOnly
-                  className="mt-1 accent-blue-500 pointer-events-none shrink-0"
+                  className="mt-1 accent-emerald-400 pointer-events-none shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-xs font-bold text-slate-200 whitespace-nowrap">
+                    <span className="text-xs font-bold text-slate-100 whitespace-nowrap">
                       V-World 공식 클린 화이트/아이보리 모형
                     </span>
-                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-700 whitespace-nowrap shrink-0">
+                    <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 whitespace-nowrap shrink-0">
                       V-World 3D
                     </span>
                   </div>
@@ -1855,7 +1867,12 @@ export const ControlPanel: React.FC = () => {
             <div className="pt-1">
               <button
                 type="button"
-                onClick={() => setCustom3DTilesModalOpen(true)}
+                onClick={() => {
+                  setCustom3DTilesModalOpen(true);
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('geobrief-open-custom-3dtiles-modal'));
+                  }
+                }}
                 className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#0d2218] via-[#102d20] to-[#0c1e15] hover:from-[#133224] hover:to-[#173d2c] border border-emerald-500/60 hover:border-emerald-400 text-emerald-200 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md group whitespace-nowrap ring-1 ring-emerald-500/20"
               >
                 <Sliders className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-45 transition-transform shrink-0" />
@@ -2290,7 +2307,7 @@ export const ControlPanel: React.FC = () => {
       )}
 
       {/* [부지정보/접근성 탭 섹션 그룹 (국방규제, 센서/UAV, 탐지돔, 버퍼링)] */}
-      {activeSidebarTab === 'site_access' && (
+      {currentTab === 'site_access' && (
         <>
           {/* 5. 국방 규제 및 비행안전 심층 분석 모듈 */}
           <section className="p-4 border-b border-[#242f27] space-y-3 bg-[#111914]/70">
@@ -3175,7 +3192,7 @@ export const ControlPanel: React.FC = () => {
       )}
 
       {/* [지형/인프라 탭: 3D 지형 DEM, 토목분석, 공간 인프라 레이어] */}
-      {activeSidebarTab === 'terrain_infra' && (
+      {currentTab === 'terrain_infra' && (
         <>
           {/* 7. 3D 지형(DEM) 및 베이스맵 스타일 원클릭 전환 */}
           <section className="p-4 border-b border-[#242f27] space-y-3">
@@ -4548,7 +4565,7 @@ export const ControlPanel: React.FC = () => {
       )}
 
       {/* [부지정보/접근성 탭: 보고서 메타데이터 설정] */}
-      {activeSidebarTab === 'site_access' && (
+      {currentTab === 'site_access' && (
         <>
           {/* 9. 보고서 메타데이터 인라인 편집 */}
           <section className="p-4 space-y-3 pb-8">

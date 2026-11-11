@@ -18,6 +18,11 @@ const ControlPanel = dynamic(
   }
 );
 
+const Custom3DTilesModal = dynamic(
+  () => import('@/components/Modal/Custom3DTilesModal').then((m) => m.Custom3DTilesModal),
+  { ssr: false }
+);
+
 // WebGL MapLibre GL은 클라이언트 전용으로 dynamic import
 const MapViewer = dynamic(
   () => import('@/components/Map/MapViewer').then((mod) => mod.MapViewer),
@@ -44,6 +49,8 @@ export default function Home() {
   const isMobilePanelOpen = useMapStore((s) => s.isMobilePanelOpen);
   const toggleMobilePanel = useMapStore((s) => s.toggleMobilePanel);
   const setIsMobilePanelOpen = useMapStore((s) => s.setIsMobilePanelOpen);
+  const isCustom3DTilesModalOpen = useMapStore((s) => s.isCustom3DTilesModalOpen);
+  const setCustom3DTilesModalOpen = useMapStore((s) => s.setCustom3DTilesModalOpen);
 
   // 브라우저 전체화면(Fullscreen) API 동기화 및 ESC 감지
   useEffect(() => {
@@ -240,6 +247,12 @@ export default function Home() {
           )}
         </main>
       </div>
+
+      {/* [3D Tiles OGC 스트리밍 설정] 화면 정중앙 와이드 모달 */}
+      <Custom3DTilesModal
+        isOpen={isCustom3DTilesModalOpen}
+        onClose={() => setCustom3DTilesModalOpen(false)}
+      />
     </div>
   );
 }

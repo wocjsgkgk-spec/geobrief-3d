@@ -2873,6 +2873,14 @@ export const MapViewer: React.FC = () => {
         // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (image_dbcb02.jpg 100% 동일)]
         VworldGpuMasterEngine.mountLayers(map, 'openmaptiles-vector', 'building', VWORLD_POI_LAYER_ID);
 
+        // [3D 시설물 인터랙티브 배치 및 TransformControls 기즈모 레이어]
+        if (!map.getLayer('threebox-building-layer')) {
+          const tbLayer = new ThreeboxBuildingLayer();
+          map.addLayer(tbLayer);
+          threeboxLayerRef.current = tbLayer;
+          (window as any).__threeboxLayer = tbLayer;
+        }
+
         // 초기 모드 가시성 동기화 (모드 1 vs 모드 2 배타적 제어)
         const curRenderMode = useMapStore.getState().renderMode3D || 'facade';
         const bldgVis = Boolean(layers.buildings3D ?? true);
@@ -3816,6 +3824,26 @@ export const MapViewer: React.FC = () => {
     isMapLoaded,
     updateRealtimeMetrics,
   ]);
+
+  // 7-B. [즉시 반응형 렌더 모드 이벤트 수신기: 0ms 레이턴시 배타적 3D 모드 전환]
+  useEffect(() => {
+    const handleRenderModeChange = (e: any) => {
+      const mode = e?.detail?.mode;
+      const map = mapRef.current;
+      if (!map || !mode) return;
+      const bldgVis = Boolean(useMapStore.getState().layers.buildings3D ?? true);
+      if (mode === 'facade' && realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setVisible(bldgVis);
+        VworldGpuMasterEngine.setVisible(map, false);
+      } else {
+        realisticKoreanCityLayerRef.current?.setVisible(false);
+        VworldGpuMasterEngine.setVisible(map, bldgVis);
+      }
+      map.triggerRepaint();
+    };
+    window.addEventListener('geobrief-render-mode-change', handleRenderModeChange);
+    return () => window.removeEventListener('geobrief-render-mode-change', handleRenderModeChange);
+  }, []);
 
   // 8-0-0. [2단계 신규: 국토지리정보원 정밀 등고선(Contour) 레이어 가시성 및 실시간 생성 동기화]
   useEffect(() => {
@@ -5490,6 +5518,20 @@ export const MapViewer: React.FC = () => {
       }
     } catch (e) {
       console.warn('[MapLibre] Failed to update hillshade illumination direction:', e);
+    }
+
+    // 4-B. [모드 2 GPU 네이티브 렌더러] MapLibre Native Light 지향성 음영 실시간 연동
+    try {
+      const azim = sunConfig.azimuthDeg || 210;
+      const polar = Math.max(15, Math.min(80, 90 - (sunConfig.altitudeDeg || 45)));
+      map.setLight({
+        anchor: 'map',
+        color: sunConfig.color || '#ffffff',
+        intensity: Math.max(0.3, Math.min(1.0, sunConfig.intensity || 0.6)),
+        position: [1.3, azim, polar],
+      });
+    } catch (lightErr) {
+      console.warn('[MapLibre] Failed to update native map light:', lightErr);
     }
 
     // 5. [PBR 3D 건축물] Threebox 및 Three.js Directional Light 위치, 그림자 및 심도 안개 실시간 연동
