@@ -1425,19 +1425,37 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         );
       }
 
-      // [2-1-3 강원 18개 시·군 실제 도시 비례 층고 산출]
-      if (isTrueHighRiseApt || areaSqm >= 2000.0) {
-        // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
-        height = Math.min(75.0, Math.max(45.0, height > 0 ? height : 45.0 + (diverseSeed % 31)));
-      } else if (areaSqm < 220 || minWidth < 7.5) {
-        // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
-        height = Math.min(10.0, Math.max(6.5, height > 0 ? height : 6.5 + (diverseSeed % 36) * 0.1));
-      } else if (areaSqm >= 220 && areaSqm < 600) {
-        // 시내 중심 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
-        height = Math.min(20.0, Math.max(12.0, height > 0 ? height : 12.0 + (diverseSeed % 9)));
+      // [2-1 강원 전역 실제 도시 비례 층고 산출]
+      const rawFlr = Number(
+        featProps.gro_flo_co ||
+        featProps.grnd_flr ||
+        featProps.levels ||
+        featProps.FLR_CNT ||
+        featProps['building:levels'] ||
+        0
+      );
+
+      if (rawFlr > 0) {
+        // [1순위] 브이월드 LT_C_SPBD 및 건축물대장의 실제 층수 우선 적용 (gro_flo_co * 3.1m)
+        height = Math.max(6.5, rawFlr * 3.1);
+      } else if (rawH >= 4.0) {
+        // [1순위 보조] 실제 높이 데이터 우선 반영
+        height = rawH;
       } else {
-        // 공공청사(혁신도시 심평원·건보공단·석탄공사 등)·시군청·학교·병원 (600㎡ <= area <= 3,800㎡ 비주거): 16.0m ~ 42.0m (4~13층)
-        height = Math.min(42.0, Math.max(16.0, height > 0 ? height : 16.0 + (diverseSeed % 27)));
+        // [2순위] 층수 미상 건물: 바닥 면적(area)별 강원 전역 도시 비례 층고 분리
+        if (isTrueHighRiseApt || areaSqm >= 2000.0) {
+          // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
+          height = Math.min(75.0, Math.max(45.0, 45.0 + (diverseSeed % 31) * 1.0));
+        } else if (areaSqm < 220 || minWidth < 7.5) {
+          // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
+          height = Math.min(10.0, Math.max(6.5, 6.5 + (diverseSeed % 36) * 0.1));
+        } else if (areaSqm >= 220 && areaSqm < 600) {
+          // 시·군 중심 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
+          height = Math.min(20.0, Math.max(12.0, 12.0 + (diverseSeed % 9) * 1.0));
+        } else {
+          // 도청·시청·군청·혁신도시 공공청사·학교·병원 (600㎡ <= area <= 3,800㎡ 비주거): 16.0m ~ 42.0m (4~13층)
+          height = Math.min(42.0, Math.max(16.0, 16.0 + (diverseSeed % 27) * 1.0));
+        }
       }
 
       // [요구사항 2] 측벽(창문 없는 벽) 처리는 오직 높이 25m 이상 고층 아파트에서 가장 짧은 양 끝단 2개의 변에만 적용!

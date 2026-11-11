@@ -156,25 +156,39 @@ export class PrecisionBuildingBuilder {
       ((pz - minZ) / spanZ) * uvScale,
     ];
 
-    let clampedHeight = Math.max(6.0, rawHeight);
+    const rawFlr = Number(
+      featProps.gro_flo_co ||
+      featProps.grnd_flr ||
+      featProps.levels ||
+      featProps.FLR_CNT ||
+      featProps['building:levels'] ||
+      0
+    );
+
     const isApartmentFeat =
       featProps.building === 'apartments' ||
       featProps.usageType === 'apartment' ||
       featProps.bld_category === 'apartment' ||
       String(featProps.buld_nm || featProps.name || '').includes('아파트');
 
-    if (areaSqm < 220 || minWidth < 7.5) {
+    let clampedHeight = Math.max(6.0, rawHeight);
+    if (rawFlr > 0) {
+      // [1순위] 브이월드 LT_C_SPBD 및 건축물대장의 실제 층수 우선 적용 (gro_flo_co * 3.1m)
+      clampedHeight = Math.max(6.5, rawFlr * 3.1);
+    } else if (rawHeight >= 4.0) {
+      clampedHeight = rawHeight;
+    } else if (areaSqm < 220 || minWidth < 7.5) {
       // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
-      clampedHeight = Math.min(10.0, Math.max(6.5, rawHeight > 0 ? rawHeight : 6.5 + (seed % 36) * 0.1));
+      clampedHeight = Math.min(10.0, Math.max(6.5, 6.5 + (seed % 36) * 0.1));
     } else if (isApartmentFeat || areaSqm >= 2000 || (maxEdgeLen && maxEdgeLen >= 35.0)) {
       // 아파트 단지 주거동: 45m ~ 75m (15층 ~ 25층)
-      clampedHeight = Math.min(75.0, Math.max(45.0, rawHeight > 0 ? rawHeight : 45.0 + (seed % 31)));
+      clampedHeight = Math.min(75.0, Math.max(45.0, 45.0 + (seed % 31) * 1.0));
     } else if (areaSqm >= 220 && areaSqm < 600) {
       // 시내 중심 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
-      clampedHeight = Math.min(20.0, Math.max(12.0, rawHeight > 0 ? rawHeight : 12.0 + (seed % 9)));
+      clampedHeight = Math.min(20.0, Math.max(12.0, 12.0 + (seed % 9) * 1.0));
     } else if (areaSqm >= 600) {
       // 공공청사·시군청·학교·병원 (600㎡ <= area <= 3,800㎡ 비주거): 16.0m ~ 42.0m (4~13층)
-      clampedHeight = Math.min(42.0, Math.max(16.0, rawHeight > 0 ? rawHeight : 16.0 + (seed % 27)));
+      clampedHeight = Math.min(42.0, Math.max(16.0, 16.0 + (seed % 27) * 1.0));
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
