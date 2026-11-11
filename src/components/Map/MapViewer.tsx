@@ -42,6 +42,7 @@ import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
 import { syncMaster3DRenderer, isPermittedBuildingPolygon, hideAllFillExtrusionLayers } from '@/utils/master3DRendererManager';
+import { astryxAdapter } from '@/lib/vendor/astryxAdapter';
 import {
   VWorldReaCoreEngine,
   getTerrainClampedMercator,
@@ -3388,6 +3389,9 @@ export const MapViewer: React.FC = () => {
           deck3DTilesManagerRef.current.attachToMap(map);
           deck3DTilesManagerRef.current.update(initTileState);
         }
+
+        // [Meta Astryx 포인터 이벤트 격리 & 마스터 가드 연결]
+        astryxAdapter.attachPointerIsolation(map);
       } catch (deckErr) {
         console.warn('[MapViewer] Universal3DTilesManager initialization warning:', deckErr);
       }
@@ -3674,6 +3678,7 @@ export const MapViewer: React.FC = () => {
         map.off('sourcedata', handleSourceData);
       } catch {}
       resizeObserver.disconnect();
+      astryxAdapter.destroy();
       map.remove();
       mapRef.current = null;
     };
@@ -4146,8 +4151,8 @@ export const MapViewer: React.FC = () => {
 
     const bldgVis = !!layers.buildings3D;
 
-    // [마스터 3D 렌더러 단일화 상태 머신]: 오직 단 하나의 마스터 엔진만 활성화하여 Z-Fighting 및 이중 겹침 영구 차단
-    syncMaster3DRenderer(map, {
+    // [Meta Astryx 마스터 3D 렌더러 가드]: 단일 마스터 엔진 활성화 및 건물 0동 증발 영구 차단
+    astryxAdapter.guardMaster3DRenderer(map, {
       renderMode3D,
       isBuildingsVisible: bldgVis,
       realisticKoreanCityLayer: realisticKoreanCityLayerRef.current,
@@ -6493,7 +6498,7 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
-    syncMaster3DRenderer(map, {
+    astryxAdapter.guardMaster3DRenderer(map, {
       renderMode3D,
       isBuildingsVisible: Boolean(layers.buildings3D ?? true),
       realisticKoreanCityLayer: realisticKoreanCityLayerRef.current,
