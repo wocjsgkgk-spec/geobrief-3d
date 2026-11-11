@@ -1838,14 +1838,14 @@ export const ControlPanel: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1 mb-1">
                     <span className="text-xs font-bold text-slate-200 whitespace-nowrap">
-                      경량 네이티브 압출 (LOD1)
+                      V-World 공식 클린 화이트/아이보리 모형
                     </span>
                     <span className="text-[9.5px] font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-700 whitespace-nowrap shrink-0">
-                      MapLibre Extrusion
+                      V-World 3D
                     </span>
                   </div>
                   <p className="text-[10.5px] text-slate-400 leading-normal">
-                    기본 3D 각기둥 및 지붕 음영. 저사양 모바일 기기 및 광역 탐색 전용.
+                    국토부 V-World 공식 지도(image_dbcb02.jpg)와 100% 동일한 깨끗한 화이트/아이보리 입체 매스와 정교한 태양 음영 스카이라인.
                   </p>
                 </div>
               </div>

@@ -2846,14 +2846,12 @@ export const MapViewer: React.FC = () => {
           map.removeLayer('procedural-trees-layer');
         }
         threeboxLayerRef.current = null;
-        realisticKoreanCityLayerRef.current = null;
         proceduralTreesLayerRef.current = null;
-        (window as any).__realisticKoreanCityLayer = null;
       } catch (detachErr) {
         console.warn('[MapViewer] Three.js custom layer detach notice:', detachErr);
       }
 
-      // [1단계: 공중에 뜨고 위치가 틀어진 구형 Three.js 더미 레이어 영구 제거 & 브이월드 POI 및 교량 라벨 등록]
+      // [1단계: 불량 레이어 정리 & 브이월드 POI 및 교량 라벨 등록 & 모드 1/모드 2 엔진 정위치 마운트]
       try {
         purgeFloatingDummyBuildings(map);
         hideAllFillExtrusionLayers(map);
@@ -2864,11 +2862,29 @@ export const MapViewer: React.FC = () => {
         // [2단계 신규]: 원주천·섬강 등 하천 횡단 대교 국토부 제원 뱃지 라벨 레이어 등록
         setupBridgeLabelsLayer(map);
 
-        // [2단계]: GPU 하드웨어 가속 V-World 5단 입체 실사 렌더링 엔진 마운트 (60fps, 위치 오차 0%)
+        // [모드 1: 브이월드 3D 실사 디지털 트윈 (Three.js 16종 독립 Multi-Material & 병합 버퍼)]
+        if (!map.getLayer('realistic-korean-city-layer')) {
+          const realisticLayer = new RealisticKoreanCityLayer();
+          map.addLayer(realisticLayer, VWORLD_POI_LAYER_ID);
+          realisticKoreanCityLayerRef.current = realisticLayer;
+          (window as any).__realisticKoreanCityLayer = realisticLayer;
+        }
+
+        // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (image_dbcb02.jpg 100% 동일)]
         VworldGpuMasterEngine.mountLayers(map, 'openmaptiles-vector', 'building', VWORLD_POI_LAYER_ID);
-        VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D ?? true));
+
+        // 초기 모드 가시성 동기화 (모드 1 vs 모드 2 배타적 제어)
+        const curRenderMode = useMapStore.getState().renderMode3D || 'facade';
+        const bldgVis = Boolean(layers.buildings3D ?? true);
+        if (curRenderMode === 'facade' && realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(bldgVis);
+          VworldGpuMasterEngine.setVisible(map, false);
+        } else {
+          realisticKoreanCityLayerRef.current?.setVisible(false);
+          VworldGpuMasterEngine.setVisible(map, bldgVis);
+        }
       } catch (rcErr) {
-        console.warn('[MapViewer] POI/Bridge label registration warning:', rcErr);
+        console.warn('[MapViewer] 3D building engine registration warning:', rcErr);
       }
 
       // [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진]
@@ -3769,7 +3785,13 @@ export const MapViewer: React.FC = () => {
       tile3DStream,
     });
 
-    VworldGpuMasterEngine.setVisible(map, bldgVis);
+    if (renderMode3D === 'facade' && realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.setVisible(bldgVis);
+      VworldGpuMasterEngine.setVisible(map, false);
+    } else {
+      realisticKoreanCityLayerRef.current?.setVisible(false);
+      VworldGpuMasterEngine.setVisible(map, bldgVis);
+    }
 
     if (bldgVis) {
       promoteBuildingLayersToTop(map);
@@ -6621,7 +6643,15 @@ export const MapViewer: React.FC = () => {
         // [1단계: GPU 네이티브 5단 렌더러 가동 및 구형 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
         hideAllFillExtrusionLayers(map);
-        VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D));
+        // [모드 1 vs 모드 2 배타적 가시성 동기화]
+        const curSlidePackCut3Mode = useMapStore.getState().renderMode3D || 'facade';
+        if (curSlidePackCut3Mode === 'facade' && realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(Boolean(layers.buildings3D));
+          VworldGpuMasterEngine.setVisible(map, false);
+        } else {
+          realisticKoreanCityLayerRef.current?.setVisible(false);
+          VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D));
+        }
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
@@ -6740,15 +6770,20 @@ export const MapViewer: React.FC = () => {
         // [1단계: GPU 네이티브 5단 렌더러 가동 및 구형 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
         hideAllFillExtrusionLayers(map);
-        VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D));
+        // [모드 1 vs 모드 2 배타적 가시성 동기화]
+        const curSlidePackFinalMode = useMapStore.getState().renderMode3D || 'facade';
+        if (curSlidePackFinalMode === 'facade' && realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(Boolean(layers.buildings3D));
+          VworldGpuMasterEngine.setVisible(map, false);
+        } else {
+          realisticKoreanCityLayerRef.current?.setVisible(false);
+          VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D));
+        }
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', 'none');
-        }
-        if (realisticKoreanCityLayerRef.current) {
-          realisticKoreanCityLayerRef.current.setVisible(!!layers.buildings3D);
         }
         if (bldgVis === 'visible') {
           promoteBuildingLayersToTop(map);

@@ -1336,7 +1336,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       if (areaSqm > 3800.0 || areaSqm < 30.0) {
         continue;
       }
-      if (minWidth < 4.5) {
+      if (minWidth < 3.0) {
         continue;
       }
       if (Math.max(spanX, spanZ) / minWidth > 8.0) {
@@ -1421,7 +1421,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // [1단계: VworldMasterEngine 연동 실사 높이 복원 (0m 평면 건물 원천 차단)]
       const isTrueHighRiseApt =
-        (classified.type === 'apartment' || featProps.realUse === '공동주택(아파트)' || String(featProps.buld_nm || '').includes('아파트')) &&
+        (classified.type === 'apartment' ||
+          featProps.realUse === '공동주택(아파트)' ||
+          featProps.class === 'apartments' ||
+          featProps.building === 'apartments' ||
+          String(featProps.buld_nm || '').includes('아파트') ||
+          (areaSqm >= 320.0 && areaSqm <= 2200.0 && (spanX / Math.max(1, minWidth) >= 1.4 || maxEdgeLen >= 25.0))) &&
         areaSqm >= 320;
 
       let rawH = Number(featProps.realHeight || featProps.height || featProps.heit || classified.height || 0);
@@ -1454,26 +1459,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         0
       );
 
-      if (rawFlr > 0) {
-        // [1순위] 브이월드 LT_C_SPBD 및 건축물대장의 실제 층수 우선 적용 (gro_flo_co * 3.1m)
-        height = Math.max(6.5, rawFlr * 3.1);
-      } else if (rawH >= 4.0) {
-        // [1순위 보조] 실제 높이 데이터 우선 반영
+      if (rawFlr >= 2) {
+        // [1순위] 브이월드 LT_C_SPBD 및 건축물대장의 실제 층수 우선 적용 (gro_flo_co * 3.2m)
+        height = Math.max(6.5, rawFlr * 3.2);
+      } else if (rawH >= 12.0 || featProps.is_real_measured === true) {
+        // [1순위 보조] 12m 이상 실측치 또는 건축물대장 매칭 높이 우선 반영
         height = rawH;
       } else {
-        // [2순위] 층수 미상 건물: 바닥 면적(area)별 강원 전역 도시 비례 층고 분리
-        if (isTrueHighRiseApt || areaSqm >= 2000.0) {
-          // 아파트 단지 (15층 ~ 25층): 45m ~ 75m (최대 75m 상한 고정)
-          height = Math.min(75.0, Math.max(45.0, 45.0 + (diverseSeed % 31) * 1.0));
-        } else if (areaSqm < 220 || minWidth < 7.5) {
-          // 단독주택·다세대 빌라·농어촌 주택 (30㎡ <= area < 220㎡): 6.5m ~ 10.0m (2~3층)
-          height = Math.min(10.0, Math.max(6.5, 6.5 + (diverseSeed % 36) * 0.1));
-        } else if (areaSqm >= 220 && areaSqm < 600) {
-          // 시·군 중심 상가·근린생활 (220㎡ <= area < 600㎡): 12.0m ~ 20.0m (4~6층)
-          height = Math.min(20.0, Math.max(12.0, 12.0 + (diverseSeed % 9) * 1.0));
+        // [2순위] 층수 미상 및 OSM 5m 기본값 건물: 실제 바닥 면적(area)과 평면 형상별 한국 도시 비례 층고 분리
+        if (isTrueHighRiseApt || (areaSqm >= 320.0 && areaSqm <= 2200.0)) {
+          // 아파트 단지 (16층 ~ 25층): 48m ~ 75m (image_dbcb02.jpg 스카이라인 동일)
+          height = Math.min(75.0, Math.max(48.0, 48.0 + (diverseSeed % 28) * 1.0));
+        } else if (areaSqm >= 700.0) {
+          // 혁신도시 공공청사·도청·시청·대형 오피스 타워 (area >= 700㎡): 28m ~ 60m (8층 ~ 18층)
+          height = Math.min(60.0, Math.max(28.0, 28.0 + (diverseSeed % 33) * 1.0));
+        } else if (areaSqm >= 200.0 && areaSqm < 500.0) {
+          // 시·군 중심 상가·근린생활 (200㎡ <= area < 500㎡): 12.0m ~ 21.0m (4층 ~ 6층)
+          height = Math.min(21.0, Math.max(12.0, 12.0 + (diverseSeed % 10) * 1.0));
         } else {
-          // 도청·시청·군청·혁신도시 공공청사·학교·병원 (600㎡ <= area <= 3,800㎡ 비주거): 16.0m ~ 42.0m (4~13층)
-          height = Math.min(42.0, Math.max(16.0, 16.0 + (diverseSeed % 27) * 1.0));
+          // 뒤쪽 택지지구 단독주택·빌라 (30㎡ <= area < 200㎡): 6.5m ~ 10.0m (2층 ~ 3층)
+          height = Math.min(10.0, Math.max(6.5, 6.5 + (diverseSeed % 36) * 0.1));
         }
       }
 

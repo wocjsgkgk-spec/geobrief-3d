@@ -243,42 +243,21 @@ export function sampleRoofColorFromSatellite(
 ): SatelliteRoofColorResult {
   // 1. 공동주택 (아파트)
   if (realUse === '공동주택(아파트)') {
-    const aptPick = seed % 10;
-    if (aptPick < 4) {
-      // 밝은 시멘트 슬래브 (40%)
-      return {
-        hex: '#8c8881',
-        slot: 'roof_concrete_warmgray',
-        wallSlot: 'apt_preset_a',
-        roofType: '슬래브지붕',
-        description: 'V-World 항공사진 밝은 시멘트 슬래브',
-      };
-    } else if (aptPick < 7) {
-      // 브라운/테라코타 지붕 캡 (30%)
-      return {
-        hex: '#7c3626',
-        slot: 'roof_terracotta_tile',
-        wallSlot: 'apt_preset_c',
-        roofType: '슬래브지붕',
-        description: 'V-World 항공사진 테라코타 슬래브 캡',
-      };
-    } else {
-      // 에메랄드 우레탄 방수 (30%)
-      return {
-        hex: '#2d6a4f',
-        slot: 'roof_urethane_sage',
-        wallSlot: 'apt_preset_b',
-        roofType: '슬래브지붕',
-        description: 'V-World 항공사진 우레탄 방수 옥상',
-      };
-    }
+    // 아파트 옥상: 100% 밝은 시멘트 슬래브(#cbd5e1)와 옥탑방 코어 (초록 우레탄 0%)
+    return {
+      hex: '#cbd5e1',
+      slot: 'roof_concrete_warmgray',
+      wallSlot: 'apt_preset_a',
+      roofType: '슬래브지붕',
+      description: 'V-World 공식 밝은 콘크리트 슬래브 옥상',
+    };
   }
 
   // 2. 단독 / 다가구주택 (박공지붕)
   if (realUse === '단독/다가구주택') {
     const gPick = seed % 10;
-    if (gPick < 5) {
-      // 적갈색 기와 (50%)
+    if (gPick < 6) {
+      // 적갈색 기와 (60%)
       return {
         hex: '#7c3626',
         slot: 'roof_terracotta_tile',
@@ -287,7 +266,7 @@ export function sampleRoofColorFromSatellite(
         description: 'V-World 항공사진 적갈색 기와지붕',
       };
     } else if (gPick < 8) {
-      // 코발트 블루 강판 (30%)
+      // 코발트 블루 강판 (20%)
       return {
         hex: '#1e40af',
         slot: 'roof_zinc_blue',
@@ -310,8 +289,8 @@ export function sampleRoofColorFromSatellite(
   // 3. 상가 / 근린생활시설
   if (realUse === '제1·2종근린생활시설(상가)') {
     const sPick = seed % 100;
-    if (sPick < 45) {
-      // 에메랄드/세이지 그린 우레탄 방수 (45%)
+    if (sPick < 30) {
+      // 에메랄드/세이지 그린 우레탄 방수 (30% 배분)
       return {
         hex: '#2d6a4f',
         slot: 'roof_urethane_sage',
@@ -320,9 +299,9 @@ export function sampleRoofColorFromSatellite(
         description: 'V-World 항공사진 에메랄드 우레탄 방수',
       };
     } else if (sPick < 75) {
-      // 밝은 시멘트 슬래브 (30%)
+      // 밝은 시멘트 슬래브 (45%)
       return {
-        hex: '#8c8881',
+        hex: '#cbd5e1',
         slot: 'roof_concrete_warmgray',
         wallSlot: 'comm_preset_f',
         roofType: '슬래브지붕',
@@ -470,6 +449,10 @@ export function stampBuildingWithMasterData(
     isAptKeyword
   );
 
+  const isAptGeometric =
+    (isExplicitAptTag || (areaSqm >= 320 && areaSqm <= 2200 && (aspectRatio >= 1.4 || isNearApt))) &&
+    areaSqm >= 320;
+
   if (rec) {
     isRealMeasured = true;
     source = 'registry_hub';
@@ -546,13 +529,13 @@ export function stampBuildingWithMasterData(
       props.zoneName || props.zone_nm || props.spfc_nm || props.UQ111_NM || props.uq111 || props.landuse || ''
     ).toLowerCase();
 
-    // 1. 용도 추론 (진짜 아파트 식별 태그/명칭이 확인된 경우에만 고층 아파트 스카이라인 적용)
-    if (isExplicitAptTag && areaSqm >= 350) {
+    // 1. 용도 추론 (아파트 태그 및 바닥면적 320㎡~2,200㎡ 판상형/ㄱ자형 단지 군집 기하학적 아파트 판별)
+    if (isAptGeometric) {
       realUse = '공동주택(아파트)';
       realStruct = '철근콘크리트조';
       realRoof = '슬래브지붕';
-      realLevels = 15 + (seed % 11); // 15층 ~ 25층
-      realHeight = Math.round(realLevels * 3.1 * 10) / 10; // 46.5m ~ 77.5m
+      realLevels = 16 + (seed % 10); // 16층 ~ 25층
+      realHeight = 48.0 + (seed % 28) * 1.0; // 48m ~ 75m
       realName = rawName || `${district.name} 단지 아파트 10${(seed % 8) + 1}동`;
     } else if (
       rawName.includes('학교') || rawName.includes('초등') || rawName.includes('중학') || rawName.includes('고등')
@@ -629,12 +612,11 @@ export function stampBuildingWithMasterData(
   // ---------------------------------------------------------------------------
   const minDim = Math.max(5.0, Math.sqrt(areaSqm));
 
-  // 1) 소형 단독주택·다세대·원룸 (area < 220㎡ 또는 minDim < 7.5m)
-  // 주변 아파트 POI 여부와 무관하게 절대 11m(3.5층) 초과 금지 (Math.min(height, 10.5))
-  // 실제 층수: 6.0m ~ 10.5m (1.5층 ~ 3층)
-  if (areaSqm < 220 || minDim < 7.5) {
-    realHeight = Math.min(10.5, Math.max(6.0, 6.0 + (seed % 45) * 0.1));
-    realLevels = Math.min(3, Math.max(1, Math.round(realHeight / 3.2)));
+  // 1) 뒤쪽 택지지구 소형 단독주택·다세대·빌라 (30㎡ <= area < 200㎡)
+  // 실제 층수: 6.5m ~ 10.0m (2층 ~ 3층) 빽빽하게 보존
+  if (areaSqm < 200 || minDim < 7.0) {
+    realHeight = Math.min(10.0, Math.max(6.5, 6.5 + (seed % 36) * 0.1));
+    realLevels = Math.min(3, Math.max(2, Math.round(realHeight / 3.2)));
     realUse = '단독/다가구주택';
     if (!rec || !rec.roofCdNm) {
       realRoof = seed % 2 === 0 ? '기와지붕' : '슬래브지붕';
@@ -649,8 +631,8 @@ export function stampBuildingWithMasterData(
     realUse = '교육연구시설(학교)';
     realRoof = '슬래브지붕';
   } else if (
-    // 2) 중심 상권 상가/원룸/근린생활시설 (220 <= area < 600)
-    areaSqm >= 220 && areaSqm < 600 &&
+    // 2) 중심 상권 상가/근린생활시설 (200 <= area < 500)
+    areaSqm >= 200 && areaSqm < 500 &&
     realUse !== '공동주택(아파트)' && !isExplicitAptTag
   ) {
     realLevels = 4 + (seed % 3); // 4~6층
@@ -658,22 +640,20 @@ export function stampBuildingWithMasterData(
     realUse = '제1·2종근린생활시설(상가)';
     realRoof = '슬래브지붕';
   } else if (
-    // 3) 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·학교 (area >= 600 비주거)
-    areaSqm >= 600 &&
+    // 3) 도청(춘천)·시청·군청·혁신도시 공공기관·대형 병원·오피스 타워 (area >= 700 비주거)
+    areaSqm >= 700 &&
     realUse !== '공동주택(아파트)' && !isExplicitAptTag
   ) {
-    realLevels = 4 + (seed % 11); // 4~14층
-    realHeight = 16.0 + (seed % 30) * 1.0; // 16m ~ 45m
+    realLevels = 8 + (seed % 11); // 8~18층
+    realHeight = 28.0 + (seed % 33) * 1.0; // 28m ~ 60m
     realUse = '업무시설(관공서/오피스)';
     realRoof = '슬래브지붕';
   } else if (
-    // 4) 전 권역 아파트 단지 (area >= 350)
-    (realUse === '공동주택(아파트)' || isExplicitAptTag) && areaSqm >= 350
+    // 4) 전 권역 아파트 단지 (area >= 320)
+    (realUse === '공동주택(아파트)' || isExplicitAptTag || isAptGeometric) && areaSqm >= 320
   ) {
-    if (realHeight < 45.0 || realHeight > 75.0) {
-      realHeight = 45.0 + (seed % 31) * 1.0; // 45m ~ 75m (상한선 75m 고정)
-      realLevels = Math.round(realHeight / 3.1);
-    }
+    realHeight = 48.0 + (seed % 28) * 1.0; // 48m ~ 75m (16층 ~ 25층)
+    realLevels = Math.round(realHeight / 3.1);
     realRoof = '슬래브지붕';
   } else {
     // 세장비 (Aspect Ratio) 제한으로 연필 기둥 방지 및 0m 평면 건물 원천 금지

@@ -137,7 +137,7 @@ export function extractRenderedVectorBuildings(
 
       // [4중 안전 필터링 - 면적 필터]: 3,800㎡ 초과 폴리곤(단지 경계선, 운동장, 공원, 거대 지적 필지) 및 30㎡ 미만 배제
       if (approxArea > 3800 || approxArea < 30) continue;
-      if (dimMin < 4.5) continue;
+      if (dimMin < 3.0) continue;
       if (aspectRatio > 8.0) continue;
 
       // [4중 안전 필터링 - 산림/경사 필터]: 표고 경사도 25도 이상 및 산림 유령 건물 100% 영구 배제
@@ -235,21 +235,21 @@ export function extractRenderedVectorBuildings(
         renderHeight = Math.min(10.5, Math.max(6.0, 6.0 + seed * 4.5));
       } else if (!renderHeight || renderHeight < 8.0) {
         if (isApartment && approxArea >= 320) {
-          // 전 권역 아파트 단지: 15층~25층 (45m~75m, 최대 75m 상한선 고정)
+          // 전 권역 아파트 단지: 16층~25층 (48m~75m, 최대 75m 상한선 고정)
           const seed = Math.abs(Math.sin(cLng * 173.31 + cLat * 317.19 + approxArea * 0.17)) % 1;
-          renderHeight = Math.min(75.0, 45.0 + seed * 30.0); // 45m ~ 75m
-        } else if (approxArea >= 600) {
-          // 도청·시청·군청·혁신도시 공공청사·대형 병원·학교 (area >= 600㎡ 비주거): 4층~14층 (16m~45m)
+          renderHeight = Math.min(75.0, 48.0 + seed * 27.0); // 48m ~ 75m
+        } else if (approxArea >= 700) {
+          // 혁신도시 공공청사·도청·시청·대형 오피스 타워 (area >= 700㎡): 8층~18층 (28m~60m)
           const seed = Math.abs(Math.sin(cLng * 113.7 + cLat * 271.3 + approxArea * 0.19)) % 1;
-          renderHeight = Math.min(45.0, 16.0 + seed * 29.0); // 16m ~ 45m
-        } else if (isCommercial || (approxArea >= 220 && approxArea < 600)) {
-          // 중심 상권 상가/원룸/근린생활시설: 4층~6층 (12m~21m)
+          renderHeight = Math.min(60.0, 28.0 + seed * 32.0); // 28m ~ 60m
+        } else if (isCommercial || (approxArea >= 200 && approxArea < 500)) {
+          // 중심 상권 상가/근린생활시설 (200㎡ <= area < 500㎡): 4층~6층 (12m~21m)
           const seed = Math.abs(Math.sin(cLng * 93.7 + cLat * 241.3 + approxArea * 0.23)) % 1;
           renderHeight = 12.0 + seed * 9.0; // 12m ~ 21m
         } else {
-          // 일반 주택가: 6.0m ~ 10.5m
+          // 뒤쪽 택지지구 단독주택·빌라 (30㎡ <= area < 200㎡): 6.5m ~ 10.0m (2층 ~ 3층)
           const seed = Math.abs(Math.sin(cLng * 51.9 + cLat * 187.3 + approxArea)) % 1;
-          renderHeight = Math.min(10.5, Math.max(6.0, 6.0 + seed * 4.5));
+          renderHeight = Math.min(10.0, Math.max(6.5, 6.5 + seed * 3.5));
         }
       }
 
@@ -258,17 +258,17 @@ export function extractRenderedVectorBuildings(
         renderHeight = Math.min(renderHeight, 10.5);
       }
 
-      // 세장비 절대 규칙: 단축 대비 3.5배 초과 차단
-      const maxAllowedH = dimMin * 3.5;
+      // 세장비 규칙: 아파트는 고층 타워 허용, 비아파트만 단축 대비 3.5배 클램핑
+      const maxAllowedH = isApartment ? 75.0 : Math.max(14.0, dimMin * 3.5);
       if (renderHeight > maxAllowedH) {
         renderHeight = Math.min(renderHeight, Math.max(6.5, maxAllowedH));
       }
 
       const levels = rawFlr >= 1 ? rawFlr : Math.max(1, Math.round(renderHeight / 3.2));
 
-      // 지붕 색상 실사 팔레트
+      // 지붕 색상 실사 팔레트 (아파트는 콘크리트 슬래브 #cbd5e1, 상가만 30% 세이지 그린, 주택은 기와 #6e3222/슬래브)
       const seedVal = Math.abs(Math.floor(cLng * 100000 + cLat * 100000)) % 100;
-      let computedRoofCol = isApartment ? '#57534e' : isCommercial ? (seedVal < 45 ? '#357a56' : seedVal < 75 ? '#7c3a27' : '#78716c') : (seedVal < 40 ? '#6e3222' : seedVal < 70 ? '#254e7a' : '#357a56');
+      let computedRoofCol = isApartment ? '#cbd5e1' : isCommercial ? (seedVal < 30 ? '#357a56' : '#cbd5e1') : (seedVal < 65 ? '#6e3222' : '#cbd5e1');
 
       uniqueFeatures.push({
         type: 'Feature',

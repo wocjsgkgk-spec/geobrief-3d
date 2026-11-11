@@ -1261,9 +1261,11 @@ export const Header: React.FC = () => {
               ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50'
               : 'bg-blue-500/25 text-blue-300 border-blue-500/50'
           }`}>
-            {detail3DMode === 'lod2'
-              ? (renderMode3D === 'tiles3d' ? '실측 트윈(C)' : '실사(LOD2+)')
-              : '경량(LOD1)'}
+            {renderMode3D === 'facade'
+              ? '실사 트윈'
+              : renderMode3D === 'tiles3d'
+              ? '3D 타일셋'
+              : '클린 화이트'}
           </span>
         </button>
 

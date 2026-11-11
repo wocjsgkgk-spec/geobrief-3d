@@ -758,7 +758,7 @@ export function classifyVWorldReaStyle(
     featProps.class === 'apartments' ||
     featProps.building === 'apartments' ||
     String(featProps.name || featProps.buld_nm || '').includes('아파트') ||
-    areaSqm >= 2000.0 ||
+    (areaSqm >= 320.0 && areaSqm <= 2500.0) ||
     height >= 38.0
   );
 
@@ -797,65 +797,72 @@ export function classifyVWorldReaStyle(
     !isPublic &&
     (rawUse.includes('commercial') ||
       rawUse.includes('retail') ||
-      (areaSqm >= 220 && areaSqm < 600));
+      (areaSqm >= 200 && areaSqm < 600));
 
   let slot = 0;
   let category: VWorldReaBuildingStyle['category'] = 'residential';
   let roofType: VWorldReaBuildingStyle['roofType'] = 'concrete';
   let roofMaterialIndex = 1; // 1: 시멘트 슬래브 (Mat 17)
+  let computedHeight = height;
 
   if (isApt) {
     category = 'apartment';
     slot = Math.abs(seed) % 5; // Mat 0~4: 아파트 단지 (5종)
-    // 아파트 옥상: 65% 밝은 시멘트 슬래브(Mat 17) + 35% 우레탄 방수 초록(Mat 16)
-    roofType = (Math.abs(seed) % 100) < 65 ? 'concrete' : 'urethane';
-    roofMaterialIndex = roofType === 'concrete' ? 1 : 0;
+    // 아파트 옥상: 100% 밝은 시멘트 슬래브(#cbd5e1)와 옥탑방 코어 (초록 우레탄 절대 금지!)
+    roofType = 'concrete';
+    roofMaterialIndex = 1;
+    if (computedHeight < 45.0) {
+      computedHeight = 48.0 + (Math.abs(seed) % 28) * 1.0; // 48m ~ 75m
+    }
   } else if (isPublic) {
     category = 'public';
     // 혁신도시 및 공공청사: Mat 5~8 (4종 에메랄드/스카이블루/시안 커튼월)
     slot = 5 + (Math.abs(seed) % 4); // Mat 5~8
-    // 공공기관: 75% 콘크리트 슬래브(Mat 17) + 25% 우레탄 초록(Mat 16)
-    roofType = (Math.abs(seed) % 100) < 75 ? 'concrete' : 'urethane';
-    roofMaterialIndex = roofType === 'concrete' ? 1 : 0;
+    // 공공기관: 100% 밝은 콘크리트 슬래브(Mat 17)
+    roofType = 'concrete';
+    roofMaterialIndex = 1;
+    if (computedHeight < 25.0) {
+      computedHeight = 28.0 + (Math.abs(seed) % 33) * 1.0; // 28m ~ 60m
+    }
   } else if (isCommercial) {
     category = 'commercial';
     // 시내 상가·근린생활: Mat 9~12 (4종 베이지 화강석, 적벽돌, 다크 차콜 메탈, 브라운 파벽돌)
     slot = 9 + (Math.abs(seed) % 4); // Mat 9~12
-    // 상가: 70% 우레탄 방수 초록(Mat 16) + 30% 콘크리트 슬래브(Mat 17)
-    roofType = (Math.abs(seed) % 100) < 70 ? 'urethane' : 'concrete';
+    // 상가: 오직 30% 비율로만 차분한 세이지 우레탄 방수 초록(Mat 16), 나머지 70%는 콘크리트 슬래브(Mat 17)
+    roofType = (Math.abs(seed) % 100) < 30 ? 'urethane' : 'concrete';
     roofMaterialIndex = roofType === 'urethane' ? 0 : 1;
+    if (computedHeight < 11.0 || computedHeight > 25.0) {
+      computedHeight = 12.0 + (Math.abs(seed) % 10) * 1.0; // 12m ~ 21m
+    }
   } else {
     category = 'residential';
-    // 단독주택·빌라·학교: Mat 13~15 (3종 적벽돌, 황토벽돌, 살구색/테라코타)
+    // 단독주택·빌라: Mat 13~15 (3종 적벽돌, 황토벽돌, 크림 스타코)
     slot = 13 + (Math.abs(seed) % 3); // Mat 13~15
-    // 단독주택·빌라: ① 우레탄 초록(Mat 16 45%), ③ 박공기와(Mat 18 35%), ② 콘크리트 슬래브(Mat 17 15%), ④ 코발트 강판(Mat 19 5%)
+    // 단독주택: 다크브라운/적갈색 기와(Mat 18 65%), 회백색 슬래브(Mat 17 35%) — 초록 우레탄 0%
     const pick = Math.abs(seed) % 100;
-    if (pick < 45) {
-      roofType = 'urethane';
-      roofMaterialIndex = 0; // Mat 16
-    } else if (pick < 80) {
+    if (pick < 65) {
       roofType = 'gabled';
-      roofMaterialIndex = 2; // Mat 18
-    } else if (pick < 95) {
-      roofType = 'concrete';
-      roofMaterialIndex = 1; // Mat 17
+      roofMaterialIndex = 2; // Mat 18 (기와)
     } else {
-      roofType = 'zinc';
-      roofMaterialIndex = 3; // Mat 19
+      roofType = 'concrete';
+      roofMaterialIndex = 1; // Mat 17 (슬래브)
+    }
+    if (computedHeight < 6.0 || computedHeight > 11.0) {
+      computedHeight = 6.5 + (Math.abs(seed) % 36) * 0.1; // 6.5m ~ 10.0m
     }
   }
 
   return {
     slot,
     category,
-    height,
-    levels: Math.max(1, Math.round(height / 3.1)),
+    height: computedHeight,
+    levels: Math.max(1, Math.round(computedHeight / 3.1)),
     roofType,
     roofMaterialIndex,
     isApartment: isApt,
     parapetHeight: 0.85,
     penthouseHeight: 3.0,
-    hasPenthouse: height >= 12.0 && roofType !== 'gabled',
+    hasPenthouse: computedHeight >= 14.0 && roofType !== 'gabled',
   };
 }
 

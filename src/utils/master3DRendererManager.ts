@@ -122,12 +122,31 @@ export function syncMaster3DRenderer(
     tile3DStream,
   } = opts;
 
-  // 1. [단일 통합 규칙]: GPU 하드웨어 가속 V-World 5단 입체 실사 렌더러 가시성 동기화
-  VworldGpuMasterEngine.setVisible(map, Boolean(isBuildingsVisible));
+  // 1. [모드별 배타적 3D 렌더러 전환 (모드 1: 실사 파사드 vs 모드 2: 클린 화이트)]
+  const bldgVisible = Boolean(isBuildingsVisible);
 
-  if (realisticKoreanCityLayer) {
-    realisticKoreanCityLayer.setVisible(false);
+  if (renderMode3D === 'facade') {
+    // [모드 1: 브이월드 3D 실사 디지털 트윈] Three.js 병합 버퍼 + 16종 PBR 파사드
+    if (realisticKoreanCityLayer) {
+      realisticKoreanCityLayer.setVisible(bldgVisible);
+      VworldGpuMasterEngine.setVisible(map, false);
+    } else {
+      VworldGpuMasterEngine.setVisible(map, bldgVisible);
+    }
+  } else if (renderMode3D === 'native') {
+    // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (image_dbcb02.jpg 100% 동일)]
+    VworldGpuMasterEngine.setVisible(map, bldgVisible);
+    if (realisticKoreanCityLayer) {
+      realisticKoreanCityLayer.setVisible(false);
+    }
+  } else {
+    // [모드 3: tiles3d 고정밀 3D 타일셋 스트리밍]
+    VworldGpuMasterEngine.setVisible(map, bldgVisible);
+    if (realisticKoreanCityLayer) {
+      realisticKoreanCityLayer.setVisible(false);
+    }
   }
+
   // 중복 구형 fill-extrusion 레이어는 항구적으로 차단(visibility: none)
   setGpuBuildingLayersVisibility(map, false);
   setTerrainClampedBuildingsVisible(map, false);
@@ -142,15 +161,6 @@ export function syncMaster3DRenderer(
     }
   } else if (deck3DTilesManager) {
     deck3DTilesManager.detachFromMap();
-  }
-
-  // 3. [단일 통합 V-World 실사 3D 마스터 렌더러 - 단일 마스터 파이프라인 배타적 확립]
-  // [원칙]: RealisticKoreanCityLayer (Three.js 16종 독립 머티리얼)가 활성화되어 있으면,
-  // 중복된 MapLibre 15개 fill-extrusion 레이어를 완전히 꺼서 2중/3중 벽체 겹침, 골목길 차단, 주황/초록 평면 뚜껑 현상을 원천 방지!
-  if (realisticKoreanCityLayer) {
-    realisticKoreanCityLayer.setVisible(true);
-    setGpuBuildingLayersVisibility(map, false);
-    setTerrainClampedBuildingsVisible(map, false);
   }
 
   if (lod2BuildingEngine) {
@@ -354,15 +364,15 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 4.5m, 세장비 > 8.0) 100% 차단]
+  // [5단계: 골목길, 도로, 연석, 옹벽, 담장 (짧은 변 폭 < 3.0m, 세장비 > 8.0) 차단, 소형 주택 30㎡~200㎡는 3.0m 이상 보존]
   const calculatedMinWidth = typeof minWidth === 'number' && minWidth > 0 ? minWidth : Math.min(spanX, spanZ);
   const maxSpan = Math.max(spanX, spanZ);
 
-  if (calculatedMinWidth < 4.5) {
+  if (calculatedMinWidth < 3.0) {
     return false;
   }
 
-  const aspectRatio = maxSpan / calculatedMinWidth;
+  const aspectRatio = maxSpan / Math.max(0.1, calculatedMinWidth);
   if (aspectRatio > 8.0) {
     return false;
   }

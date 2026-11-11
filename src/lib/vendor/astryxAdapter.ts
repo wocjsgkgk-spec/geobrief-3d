@@ -123,7 +123,7 @@ export class AstryxAdapter {
     try {
       syncMaster3DRenderer(map, opts);
       if (opts.realisticKoreanCityLayer) {
-        opts.realisticKoreanCityLayer.setVisible(true);
+        opts.realisticKoreanCityLayer.setVisible(opts.renderMode3D === 'facade' && Boolean(opts.isBuildingsVisible));
       }
     } catch (err) {
       console.warn('[AstryxAdapter] Master 3D Renderer Guard notice:', err);
