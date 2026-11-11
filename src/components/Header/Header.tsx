@@ -40,6 +40,7 @@ import {
   Printer,
   Camera,
   Waves,
+  Scale,
 } from 'lucide-react';
 import { useMapStore } from '@/store/useMapStore';
 import { ProjectManagerModal } from '@/components/Modal/ProjectManagerModal';
@@ -814,6 +815,35 @@ export const Header: React.FC = () => {
                     완료
                   </span>
                 )}
+              </button>
+
+              <button
+                onClick={() => {
+                  const map = (window as any).__geobrief_map || (window as any).map;
+                  const center = map ? map.getCenter() : { lng: 127.9358, lat: 37.3592 };
+                  window.dispatchEvent(
+                    new CustomEvent('gangwon-search-select', {
+                      detail: {
+                        coords: [center.lng, center.lat],
+                        title: '원주 1군지사 군 유휴부지 및 배후 필지',
+                        category: '군사시설 유휴부지 및 공공복합개발 대상지',
+                        levels: 15,
+                        height: 48,
+                        regionId: selectedRegionId || 'wonju',
+                      },
+                    })
+                  );
+                  setActiveDropdown(null);
+                }}
+                className="w-full px-2.5 py-2 text-xs rounded-lg hover:bg-[#223326] text-slate-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Scale className="w-3.5 h-3.5 text-amber-400" />
+                  <span>토지가격 & 맞춤형 보상방안 (3-Tier)</span>
+                </div>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                  원클릭 산정
+                </span>
               </button>
 
               {/* V-World 3D 건물 테마 스타일러 */}

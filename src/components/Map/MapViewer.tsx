@@ -992,15 +992,15 @@ export const MapViewer: React.FC = () => {
           } catch {}
         }
 
-        // 전체 활성 레이어 수를 적정 한도(15개 이하)로 엄격 제한 (GPU 과부하 방지)
-        if (activeCount > 15) {
-          activeCount = enforceMaxActiveLayers(currentMap, 15);
+        // 전체 활성 레이어 수를 적정 한도(20개 이하)로 엄격 제한 (GPU 과부하 방지)
+        if (activeCount > 20) {
+          activeCount = enforceMaxActiveLayers(currentMap, 20);
         }
 
         realtimeMetricsRef.current = { renderedBuildingCount: 0, activeLayersCount: activeCount };
         const badgeEl = document.getElementById('realtime-metrics-badge');
         if (badgeEl) {
-          badgeEl.textContent = `[60fps 최적화 클린 모드 | 활성 레이어: ${activeCount}개 | CPU 병목 루프 제거]`;
+          badgeEl.textContent = `[60fps 최적화 V-World 3D | 활성 레이어: ${activeCount}개 | GPU 네이티브 5단]`;
         }
       } catch {
         // ignore
