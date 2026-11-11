@@ -574,13 +574,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.moveEndTimer = null;
       if (!this.map) return;
       if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
-        this.moveEndTimer = setTimeout(checkAndComplete, 500);
+        this.moveEndTimer = setTimeout(checkAndComplete, 450);
         return;
       }
       this.isMoving = false;
       this.extractAndBuildFromMap();
     };
-    this.moveEndTimer = setTimeout(checkAndComplete, 500);
+    this.moveEndTimer = setTimeout(checkAndComplete, 450);
   };
 
   public setInteracting(interacting: boolean): void {

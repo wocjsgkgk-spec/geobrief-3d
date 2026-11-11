@@ -2536,7 +2536,7 @@ export const MapViewer: React.FC = () => {
       });
     };
 
-    // [1단계: 인터랙션 종료 - 500ms 디바운스 후 인터랙션 락 해제]
+    // [1단계: 인터랙션 종료 - 450ms 디바운스 후 인터랙션 락 해제]
     const handleInteractionEnd = () => {
       if (moveEndThrottleTimer) clearTimeout(moveEndThrottleTimer);
       moveEndThrottleTimer = setTimeout(() => {
@@ -2555,7 +2555,7 @@ export const MapViewer: React.FC = () => {
 
         // [GPU 다층 슬라이싱 엔진 가동으로 메인 스레드 JS 6,985동 루프 중단]
         updateRealtimeMetrics();
-      }, 500);
+      }, 450);
     };
 
     // [카메라 무결성 검증 래퍼] flyTo, easeTo, jumpTo의 좌표/고도/각도 NaN 및 범위 초과 붕괴 방지
@@ -2650,7 +2650,7 @@ export const MapViewer: React.FC = () => {
         });
         syncExternalSpatialBuildings(map);
         updateRealtimeMetrics();
-      }, 500); // [60fps 보장] 500ms 디바운스
+      }, 450); // [60fps 보장] 450ms 디바운스
     };
     map.on('moveend', handleViewportMoveEnd);
 
