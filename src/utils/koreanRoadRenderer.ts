@@ -144,7 +144,7 @@ export function getKoreanRoadLayerDefinitions(
       },
     },
 
-    // 0-2. [3단계: osmbuildings 벤더링] 원주천·섬강 등 강줄기 깊은 다크 에메랄드/틸 수면 폴리곤
+    // 0-2. [1단계: 위성사진 가림 방지] 원주천·섬강 등 수면 폴리곤은 위성 원본 노출을 위해 기본 none
     {
       id: 'korean-water-fill',
       type: 'fill',
@@ -153,19 +153,12 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 8,
       maxzoom: 24,
       paint: {
-        'fill-color': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          9, '#0f2942',  // 원경(호수/대하천): 깊은 다크 틸 (#0f2942)
-          13, '#163832', // 중경(본류 하천): 짙은 다크 에메랄드 (#163832)
-          16, '#112f27', // 근경(원주천 등): 맑고 깊은 딥 틸 (#112f27)
-        ],
-        'fill-opacity': 0.82, // 위성사진과 조화를 이루는 자연스러운 투명도
+        'fill-color': '#0f2942',
+        'fill-opacity': 0.0, // 위성사진 100% 원본 노출
         'fill-antialias': true,
       },
       layout: {
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 
@@ -178,14 +171,14 @@ export function getKoreanRoadLayerDefinitions(
       minzoom: 11,
       maxzoom: 24,
       paint: {
-        'line-color': '#2d6a4f', // 브이월드 레퍼런스 실사 에메랄드 물결 반사 테두리
+        'line-color': '#2d6a4f',
         'line-opacity': 0.45,
         'line-width': 1.5,
       },
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        visibility: 'visible',
+        visibility: 'none',
       },
     },
 

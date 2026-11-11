@@ -41,7 +41,7 @@ import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
-import { syncMaster3DRenderer, isPermittedBuildingPolygon } from '@/utils/master3DRendererManager';
+import { syncMaster3DRenderer, isPermittedBuildingPolygon, hideAllFillExtrusionLayers } from '@/utils/master3DRendererManager';
 import {
   VWorldReaCoreEngine,
   getTerrainClampedMercator,
@@ -53,14 +53,12 @@ import {
   GLOBAL_VWORLD_MATERIALS,
 } from '@/lib/vendor/vworldReaRenderer';
 import {
-  setupTerrainClampedBuildingLayers,
   setTerrainClampedBuildingsVisible,
   setTerrainClampedBuildingTheme,
   queryRenderedBuildingCount,
   purgeFloatingDummyBuildings,
 } from '@/lib/vendor/terrainClampedBuildingEngine';
 import {
-  createGpuBuildingStackLayers,
   ensureBuildingPatterns,
   setGpuBuildingLayersMode,
   setGpuBuildingLayersVisibility,
@@ -2156,6 +2154,7 @@ export const MapViewer: React.FC = () => {
               'fill-color': '#00f5ff',
               'fill-opacity': 0.22,
             },
+            layout: { visibility: 'none' },
           },
           // [선택된 필지 외곽 네온 글로우 (외곽 후광)]
           {
@@ -2168,6 +2167,7 @@ export const MapViewer: React.FC = () => {
               'line-blur': 4,
               'line-opacity': 0.65,
             },
+            layout: { visibility: 'none' },
           },
           // [선택된 필지 내곽 선명한 황금·하늘색 네온 경계선]
           {
@@ -2179,6 +2179,7 @@ export const MapViewer: React.FC = () => {
               'line-width': 2.5,
               'line-opacity': 1.0,
             },
+            layout: { visibility: 'none' },
           },
 
           // [Phase 2 고도화] 부지 회전축 연결선
@@ -2903,24 +2904,6 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        // 1-B) [3단계: 벡터 토지피복(Landuse/Landcover) 디테일 블렌딩 레이어 일괄 등록]
-        // [2단계: 위성사진 원본 선명 노출을 위해 인위적 녹색 필름 오버레이 기본 OFF]
-        const landuseLayerDefs = getKoreanLanduseLayerDefinitions('openmaptiles-vector');
-        const initialLanduseVis = 'none';
-
-        for (const luLayer of landuseLayerDefs) {
-          if (!map.getLayer(luLayer.id)) {
-            const configuredLayer: any = {
-              ...luLayer,
-              layout: {
-                ...(luLayer.layout || {}),
-                visibility: initialLanduseVis,
-              },
-            };
-            map.addLayer(configuredLayer, beforeRoads);
-          }
-        }
-
         // 2) 한국형 실측 폭 아스팔트 노면·차선·중앙선·연석 레이어 일괄 등록
         const roadLayerDefs = getKoreanRoadLayerDefinitions(
           'openmaptiles-vector',
@@ -2950,11 +2933,7 @@ export const MapViewer: React.FC = () => {
               ...rLayer,
               layout: {
                 ...(rLayer.layout || {}),
-                visibility: isWater
-                  ? 'visible'
-                  : isBridge
-                  ? 'none'
-                  : isRiverbank || isComplexHidden || isGroundBand
+                visibility: isWater || isBridge || isRiverbank || isComplexHidden || isGroundBand
                   ? 'none'
                   : initialRoadVis,
               },
@@ -2974,7 +2953,7 @@ export const MapViewer: React.FC = () => {
           }
         }
 
-        // [핵심] OpenFreeMap 벡터 타일 스트리밍 활성화용 100% 투명 캐리어 레이어
+        // [핵심] OpenFreeMap 벡터 타일 스트리밍 활성화용 100% 투명 캐리어 레이어 (오직 building 레이어 전용)
         if (!map.getLayer('building-vector-carrier')) {
           map.addLayer({
             id: 'building-vector-carrier',
@@ -2991,23 +2970,8 @@ export const MapViewer: React.FC = () => {
           });
         }
 
-        // [강제 집행 2] 베이스맵 원본 건물 폴리곤(25,719동) 100% 정위치 3D 솟아오름 등록
-        // openmaptiles-vector 'building' 소스 기반 GPU 4단 슬라이스 실사 건축 레이어 등록
-        ensureBuildingPatterns(map);
-        const gpuBuildingLayers = createGpuBuildingStackLayers('openmaptiles-vector', 'building');
-        gpuBuildingLayers.forEach((gl) => {
-          if (!map.getLayer(gl.id)) {
-            try {
-              map.addLayer(gl);
-            } catch (layerErr) {
-              console.warn('[MapViewer] gpu building layer add notice:', gl.id, layerErr);
-            }
-          }
-        });
-        // [1단계: 지형 밀착(Terrain-Clamped) 100% 정위치 3D 건물 활성화]
+        // [1단계: 단 1개의 마스터 렌더러(RealisticKoreanCityLayer)만 가동 & 구형 중복 3D 레이어 영구 제거]
         purgeFloatingDummyBuildings(map);
-        setupTerrainClampedBuildingLayers(map);
-        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
 
         // [전술·분석 GeoJSON 소스 및 오버레이 레이어 동적 안전 주입]
         if (fullMapStyle.sources) {
@@ -3273,11 +3237,10 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] RealisticKoreanCityLayer registration notice:', cityErr);
       }
 
-      // [1단계: 공중에 뜨고 위치가 틀어진 구형 Three.js 더미 레이어 영구 제거 & 지형 밀착 엔진 등록]
+      // [1단계: 공중에 뜨고 위치가 틀어진 구형 Three.js 더미 레이어 영구 제거 & 브이월드 POI 및 교량 라벨 등록]
       try {
         purgeFloatingDummyBuildings(map);
-        setupTerrainClampedBuildingLayers(map);
-        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
+        hideAllFillExtrusionLayers(map);
 
         // [3단계 신규]: 브이월드 스타일 노란 핀 + 한글 건물/지역 명칭(POI) 심볼 레이어 등록
         setupVworldPoiLayer(map);
@@ -3285,7 +3248,7 @@ export const MapViewer: React.FC = () => {
         // [2단계 신규]: 원주천·섬강 등 하천 횡단 대교 국토부 제원 뱃지 라벨 레이어 등록
         setupBridgeLabelsLayer(map);
       } catch (rcErr) {
-        console.warn('[TerrainClampedBuildingEngine] Registration warning:', rcErr);
+        console.warn('[MapViewer] POI/Bridge label registration warning:', rcErr);
       }
 
       // [2단계 신규: 강원 18개 시·군 군 유휴부지 3D 시각화 & 마스터플랜 엔진]
@@ -7019,10 +6982,12 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
         }
-        // [1단계: 지형 밀착(Terrain-Clamped) 100% 정위치 3D 건물 활성화]
+        // [1단계: 단일 마스터 렌더러(RealisticKoreanCityLayer) 가동 및 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
-        setupTerrainClampedBuildingLayers(map);
-        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
+        hideAllFillExtrusionLayers(map);
+        if (realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(Boolean(layers.buildings3D));
+        }
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
@@ -7138,10 +7103,12 @@ export const MapViewer: React.FC = () => {
         }
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
         // [강제 집행 2] 모드 무관하게 베이스맵 원본 건물 25,719동 100% 3D 렌더링 유지
-        // [1단계: 지형 밀착(Terrain-Clamped) 100% 정위치 3D 건물 활성화]
+        // [1단계: 단일 마스터 렌더러(RealisticKoreanCityLayer) 가동 및 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
-        setupTerrainClampedBuildingLayers(map);
-        setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
+        hideAllFillExtrusionLayers(map);
+        if (realisticKoreanCityLayerRef.current) {
+          realisticKoreanCityLayerRef.current.setVisible(Boolean(layers.buildings3D));
+        }
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }

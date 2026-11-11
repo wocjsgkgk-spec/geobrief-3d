@@ -586,12 +586,12 @@ export function createGpuBuildingStackLayers(
 // -----------------------------------------------------------------------------
 export function setGpuBuildingLayersVisibility(
   map: maplibregl.Map,
-  visible: boolean,
-  keepGroundAO: boolean = false
+  _visible: boolean,
+  _keepGroundAO: boolean = false
 ): void {
   if (!map) return;
-  const vis = visible ? 'visible' : 'none';
-  const aoVis = (visible || keepGroundAO) ? 'visible' : 'none';
+  const vis = 'none'; // RealisticKoreanCityLayer가 단일 마스터로 전담하므로 중복 fill-extrusion은 상시 숨김 유지
+  const aoVis = 'none';
 
   // 접지 음영(bldg-ground-ao)은 위성사진 가림 및 검은색 테두리 평면 버그를 방지하기 위해 완전 'none' 유지
   if (map.getLayer('bldg-ground-ao')) {

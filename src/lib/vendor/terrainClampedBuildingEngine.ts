@@ -170,10 +170,11 @@ export function setupTerrainClampedBuildingLayers(map: maplibregl.Map): void {
 
 /**
  * 3. 지형 밀착 3D 건물 레이어 가시성 통합 제어
+ * - RealisticKoreanCityLayer가 단일 마스터 3D 렌더러로 전담하므로 MapLibre fill-extrusion은 상시 숨김(none) 유지
  */
-export function setTerrainClampedBuildingsVisible(map: maplibregl.Map, visible: boolean): void {
+export function setTerrainClampedBuildingsVisible(map: maplibregl.Map, _visible: boolean): void {
   if (!map) return;
-  const vis = visible ? 'visible' : 'none';
+  const vis = 'none';
 
   for (const layerId of ALL_TERRAIN_CLAMPED_BUILDING_LAYERS) {
     if (map.getLayer(layerId)) {

@@ -7,35 +7,19 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-export const MAX_ACTIVE_LAYERS_LIMIT = 120;
+export const MAX_ACTIVE_LAYERS_LIMIT = 30;
 
 /**
- * 절대 숨기면 안 되는 핵심 필수 레이어 접두사 목록
+ * 절대 숨기면 안 되는 핵심 필수 레이어 접두사 목록 (오직 RealisticKoreanCityLayer 및 필수 베이스 레이어만 유지)
  */
 const ESSENTIAL_LAYER_PREFIXES = [
   'satellite-base',
-  'clean-layer',
-  'streetsgl-road',
-  'road-',
-  'korean-',
-  'complex-',
-  'bridge-',
+  'building-vector-carrier',
   'realistic-korean',
   'vworld-poi',
-  'vworld-zoning',
-  'local-cadastral',
+  'bridge-',
   'molit-bridge-tunnel',
-  'bldg-',
-  'building-',
-  'real-',
-  '3d-buildings',
-  'fusion-buildings',
-  'custom-water-level',
-  'tactical-defense',
-  'building-highlight',
   'selected-parcel',
-  'viewshed-',
-  'buffer-500m',
 ];
 
 /**

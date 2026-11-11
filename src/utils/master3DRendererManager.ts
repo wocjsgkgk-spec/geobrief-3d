@@ -125,14 +125,12 @@ export function syncMaster3DRenderer(
 
   // 1. [단일 통합 규칙]: 어떤 스위치(건축물 3D 돌출, 고정밀 3D 스트리밍, 모드 A/B/C, 3D 디테일)를 조작하더라도
   // 화면 내 기존 3D 건물이 0동으로 삭제되거나 증발하지 않도록 상시 마스터 렌더러 가동 유지
-  if (!isBuildingsVisible) {
-    // 건축물 3D 돌출 스위치가 OFF되더라도 화면 내 건물을 0동으로 날려버리지 않고,
-    // 안정적인 3D 메쉬를 유지하여 화면 붕괴 원천 차단
-    if (realisticKoreanCityLayer) realisticKoreanCityLayer.setVisible(true);
-    setGpuBuildingLayersVisibility(map, true);
-    setTerrainClampedBuildingsVisible(map, true);
-    setGpuBuildingLayersMode(map, 'native');
+  if (realisticKoreanCityLayer) {
+    realisticKoreanCityLayer.setVisible(true);
   }
+  // 중복 fill-extrusion 레이어는 항구적으로 차단(visibility: none)
+  setGpuBuildingLayersVisibility(map, false);
+  setTerrainClampedBuildingsVisible(map, false);
 
   // 2. 3D 타일셋 스트리밍(Tile3DLayer) 처리 (추가 보강 오버레이)
   // [절대 불변 규칙]: 고정밀 3D 타일셋 스위치를 켜든 끄든, 모드 A/B/C 무엇이든 기존 3D 실사 건물은 절대 끄면 안 됨!
@@ -151,14 +149,8 @@ export function syncMaster3DRenderer(
   // 중복된 MapLibre 15개 fill-extrusion 레이어를 완전히 꺼서 2중/3중 벽체 겹침, 골목길 차단, 주황/초록 평면 뚜껑 현상을 원천 방지!
   if (realisticKoreanCityLayer) {
     realisticKoreanCityLayer.setVisible(true);
-    // Three.js 마스터 메쉬 전담 렌더링 -> MapLibre 중복 압출 레이어 완전 비활성화
     setGpuBuildingLayersVisibility(map, false);
     setTerrainClampedBuildingsVisible(map, false);
-  } else {
-    // Three.js 레이어 부재 시에만 MapLibre 네이티브/파사드 단일 스택 가시화
-    setGpuBuildingLayersVisibility(map, true);
-    setTerrainClampedBuildingsVisible(map, true);
-    setGpuBuildingLayersMode(map, renderMode3D === 'native' ? 'native' : 'facade');
   }
 
   if (lod2BuildingEngine) {
@@ -174,8 +166,8 @@ export function syncMaster3DRenderer(
 /**
  * [강원 18개 시·군 산속/임야 유령 건물 원천 차단 필터]
  * 1) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
- * 2) 중앙 산림 한복판(1군지사 배후 야산) 및 우측 하단 숲속 유령 군집 좌표 마스크
- * 3) DEM 표고 및 경사도 15도 이상 급경사 사면
+ * 2) 중앙 산림 한복판(1군지사 배후 야산) 및 우측 산림·숲속 유령 군집 좌표 마스크
+ * 3) DEM 표고 및 경사도 25도 이상 급경사 사면 100% 영구 배제
  */
 export function isMountainGhostBuilding(
   lng: number,
@@ -190,25 +182,23 @@ export function isMountainGhostBuilding(
   const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
   if (landuse === 'forest' || landuse === 'wood' || landuse === 'mountain') return true;
 
-  // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 중앙 야산 & 우측 하단 숲속)
-  // 1. 중앙 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 배제)
-  if (lng >= 127.9340 && lng <= 127.9388 && lat >= 37.3560 && lat <= 37.3595) {
-    // 실제 도로명 주소나 건물 고유 명칭이 없는 순수 산림/야산 내 OSM 폐폴리곤 100% 차단
-    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.name) {
+  // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 중앙 야산 & 우측/우상단 숲속)
+  // 1. 중앙 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 100% 배제)
+  if (lng >= 127.9330 && lng <= 127.9400 && lat >= 37.3550 && lat <= 37.3610) {
+    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn) {
       return true;
     }
-    // 잔존 군부대 폐막사/야적장 오픈타일 폴리곤 차단
-    if (featProps.sourceLayer === 'building' && (!featProps.levels || Number(featProps.levels) <= 2)) {
+    if (featProps.sourceLayer === 'building' && (!featProps.levels || Number(featProps.levels) <= 2) && !featProps.bd_mgt_sn) {
       return true;
     }
   }
 
-  // 2. 우측 하단 숲속 녹지대 (30여 개 주황색 지붕 바둑판 작은 집 배제)
-  if (lng >= 127.9388 && lng <= 127.9435 && lat >= 37.3510 && lat <= 37.3552) {
-    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address) {
+  // 2. 우측/우상단 숲속 녹지대 (주황색 지붕 바둑판 작은 집 군집 100% 배제)
+  if (lng >= 127.9385 && lng <= 127.9455 && lat >= 37.3500 && lat <= 37.3565) {
+    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn) {
       return true;
     }
-    if (featProps.sourceLayer === 'building') {
+    if (featProps.sourceLayer === 'building' && !featProps.bd_mgt_sn) {
       return true;
     }
   }
@@ -217,7 +207,7 @@ export function isMountainGhostBuilding(
   if (map && typeof map.queryTerrainElevation === 'function') {
     try {
       const elev = map.queryTerrainElevation([lng, lat]);
-      if (elev !== null && elev !== undefined && elev >= 135) {
+      if (elev !== null && elev !== undefined) {
         const dDeg = 0.00025; // ~25m
         const eEast = map.queryTerrainElevation([lng + dDeg, lat]) ?? elev;
         const eNorth = map.queryTerrainElevation([lng, lat + dDeg]) ?? elev;
@@ -226,8 +216,13 @@ export function isMountainGhostBuilding(
         const maxGrade = Math.max(dzE, dzN);
         const slopeDeg = Math.atan(maxGrade) * (180 / Math.PI);
 
-        // 경사도 15도 이상의 산림 사면 건물은 100% 가짜/산속 유령 건물
-        if (slopeDeg >= 15.0 && !featProps.gro_flo_co && !featProps.buld_nm && !featProps.bld_nm) {
+        // [산림/경사 필터] 표고 경사도 25도 이상 급경사 사면 100% 영구 배제
+        if (slopeDeg >= 25.0) {
+          return true;
+        }
+
+        // 경사도 15도 이상의 고지대(135m+) 미등록 건물 배제
+        if (elev >= 135 && slopeDeg >= 15.0 && !featProps.gro_flo_co && !featProps.buld_nm && !featProps.bld_nm && !featProps.bd_mgt_sn) {
           return true;
         }
       }
@@ -272,7 +267,7 @@ export function isPermittedBuildingPolygon(
     featProps.jimok === '임' ||
     featProps.jimok === '임야' ||
     featProps.jimok_nm === '임야' ||
-    (typeof featProps.slope === 'number' && featProps.slope >= 30) ||
+    (typeof featProps.slope === 'number' && featProps.slope >= 25) ||
     featProps.amenity === 'parking' ||
     featProps.amenity === 'bicycle_parking' ||
     featProps.building === 'no' ||
@@ -328,9 +323,9 @@ export function isPermittedBuildingPolygon(
     return false;
   }
 
-  // [3단계: 거대 비건물 필지 area > 4,500㎡ 단독 폴리곤 100% 영구 차단 (학교 운동장 전체, 단지 외곽 필지선, 공원)]
-  const maxAreaLimit = 4500.0;
-  if (areaSqm > maxAreaLimit || areaSqm < 35.0) {
+  // [3단계: 거대 비건물 필지 area > 3,800㎡ 단독 폴리곤 100% 영구 차단 (학교 운동장 전체, 단지 외곽 필지선, 공원)]
+  const maxAreaLimit = 3800.0;
+  if (areaSqm > maxAreaLimit || areaSqm < 30.0) {
     return false;
   }
 

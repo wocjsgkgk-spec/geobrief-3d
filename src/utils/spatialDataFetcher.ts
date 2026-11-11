@@ -49,26 +49,12 @@ export function extractRenderedVectorBuildings(
 
   try {
     const targetLayers = [
-      'bldg-ground-ao',
-      'real-bldg-ground-ao',
-      'fusion-bldg-ground-ao',
-      'bldg-tier2-mainwall',
       'building-vector-carrier',
-      'bldg-tier2-facade',
-      'bldg-tier1-podium',
-      'bldg-tier3-roof',
-      'bldg-tier4-penthouse',
-      'building-body',
-      'building-roof-cap',
-      '3d-buildings',
-      '3d-buildings-roof',
-      'fusion-buildings-3d',
-      'fusion-buildings-roof',
     ].filter((l) => map.getLayer(l));
 
     const candidateFeatures: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = [];
 
-    // 1) 뷰포트 내 렌더링 피처 수집
+    // 1) 뷰포트 내 렌더링 피처 수집 (오직 building 레이어 전용 캐리어)
     if (targetLayers.length > 0) {
       try {
         const rendered = map.queryRenderedFeatures(undefined, { layers: targetLayers });
@@ -82,7 +68,7 @@ export function extractRenderedVectorBuildings(
       }
     }
 
-    // 2) 오픈 벡터 타일(openmaptiles-vector, openmaptiles, openfreemap) 전체 소스 피처 100% 수집
+    // 2) 오픈 벡터 타일(openmaptiles-vector, openmaptiles, openfreemap) 원본 building 소스 피처 100% 수집
     const vectorSources = ['openmaptiles-vector', 'openmaptiles', 'openfreemap'].filter((s) => map.getSource(s));
     for (const srcId of vectorSources) {
       try {
@@ -99,23 +85,8 @@ export function extractRenderedVectorBuildings(
       }
     }
 
-    // 3) 브이월드/국토부 융합 소스 피처 수집
-    for (const sId of ['fusion-buildings-source', 'real-buildings-source']) {
-      if (map.getSource(sId)) {
-        try {
-          const feats = map.querySourceFeatures(sId);
-          if (feats && feats.length > 0) {
-            for (let i = 0; i < feats.length; i++) {
-              candidateFeatures.push(feats[i]);
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
     const seen = new Set<string>();
+    const centroidDedupeGrid = new Map<string, [number, number][]>();
     const uniqueFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
 
     for (const feat of candidateFeatures) {
@@ -164,14 +135,42 @@ export function extractRenderedVectorBuildings(
       }
       const aspectRatio = dimMax / Math.max(1, dimMin);
 
-      // [1-3] 1) 비건물 거대 폴리곤 및 좁은 옹벽 제외:
-      // 바닥 면적 4,500㎡ 초과 단일 폴리곤(학교 운동장, 단지 외곽 필지선, 공원)이나 짧은 변 폭 5m 미만의 좁고 긴 도형(도로, 옹벽, 담장) 100% 제외
-      if (approxArea > 4500 || approxArea < 30) continue;
-      if (dimMin < 5.0) continue;
+      // [4중 안전 필터링 - 면적 필터]: 3,800㎡ 초과 폴리곤(단지 경계선, 운동장, 공원, 거대 지적 필지) 및 30㎡ 미만 배제
+      if (approxArea > 3800 || approxArea < 30) continue;
+      if (dimMin < 4.5) continue;
       if (aspectRatio > 8.0) continue;
 
-      // [산림/임야 유령 건물 100% 영구 배제]: 중앙 산림 및 우측 하단 숲속 유령 건물 원천 차단
+      // [4중 안전 필터링 - 산림/경사 필터]: 표고 경사도 25도 이상 및 산림 유령 건물 100% 영구 배제
       if (isMountainGhostBuilding(cLng, cLat, props, map)) continue;
+
+      // [4중 안전 필터링 - 중복 필터]: 반경 4m 이내 동일 위치 중복 중심점 1개만 유지
+      const gX = Math.round(cLng * 25000);
+      const gY = Math.round(cLat * 25000);
+      let isDuplicate = false;
+      for (let dx = -1; dx <= 1 && !isDuplicate; dx++) {
+        for (let dy = -1; dy <= 1 && !isDuplicate; dy++) {
+          const list = centroidDedupeGrid.get(`${gX + dx}_${gY + dy}`);
+          if (list) {
+            for (const pt of list) {
+              const dLng = (pt[0] - cLng) * 111320 * Math.cos((cLat * Math.PI) / 180);
+              const dLat = (pt[1] - cLat) * 111320;
+              if (Math.hypot(dLng, dLat) < 4.0) {
+                isDuplicate = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (isDuplicate) continue;
+
+      const cKey = `${gX}_${gY}`;
+      let cList = centroidDedupeGrid.get(cKey);
+      if (!cList) {
+        cList = [];
+        centroidDedupeGrid.set(cKey, cList);
+      }
+      cList.push([cLng, cLat]);
 
       // -----------------------------------------------------------------------
       // [2단계: 지역별·용도별 실제 건물 층수(Height) 정밀 복원]

@@ -180,6 +180,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   // [3단계 고성능 엔진] 3ms 타임슬라이싱 및 사전할당 Float32Array 버퍼
   private builtBuildingKeys: Set<string> = new Set();
+  // [4중 안전 필터링 - 중복 필터]: 반경 4m 이내 동일 위치 중복 중심점 1개만 유지하는 공간 그리드
+  private centroidSpatialGrid: Map<string, [number, number][]> = new Map();
   private activeBuildIdleId: any = null;
   private activeBuildTaskId: number = 0;
 
@@ -717,16 +719,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    // 3) [진실된 제2 데이터 소스]: 베이스맵에 없는 V-World WFS 실측 건물들(혁신도시, 신규 아파트 단지 등) 100% 융합
-    const unmatchedExtFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
-    for (let i = 0; i < extFeats.length; i++) {
-      if (matchedExtIndices.has(i)) continue;
-      const ef = extFeats[i];
-      if (!ef || !ef.geometry) continue;
-      unmatchedExtFeats.push(ef);
-    }
-
-    return unmatchedExtFeats.length > 0 ? [...vecFeats, ...unmatchedExtFeats] : vecFeats;
+    // [4중 안전 필터링 - 레이어 소스 필터]:
+    // 오직 베이스맵 벡터 타일의 building 레이어 원본 WGS84 폴리곤만 취득!
+    // 외부 실측 피처는 베이스맵 원본 건물의 속성(실측 층수, 명칭, 용도) 보강에만 1:1 사용하며,
+    // 원본에 없는 미매칭 외부 도형은 임의 생성하지 않아 가짜/유령 건물 생성을 원천 방지!
+    return vecFeats;
   }
 
   /**
@@ -872,6 +869,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private resetAccumulatedBuffers(): void {
     this.builtBuildingKeys.clear();
+    this.centroidSpatialGrid.clear();
     for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
       this.slotPosIdx[s] = 0;
       this.slotUvIdx[s] = 0;
@@ -1261,6 +1259,28 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
       const centerMx = sumMx / ptCount;
       const centerMz = sumMz / ptCount;
+
+      // [4중 안전 필터링 - 중복 필터]: 동일 위치 반경 4m 이내 중복 중심점(Centroid) 1개만 유지
+      const gridX = Math.floor(centerMx / 4.0);
+      const gridZ = Math.floor(centerMz / 4.0);
+      let isDuplicateCentroid = false;
+      for (let dx = -1; dx <= 1 && !isDuplicateCentroid; dx++) {
+        for (let dz = -1; dz <= 1 && !isDuplicateCentroid; dz++) {
+          const nList = this.centroidSpatialGrid.get(`${gridX + dx}_${gridZ + dz}`);
+          if (nList) {
+            for (let k = 0; k < nList.length; k++) {
+              if (Math.hypot(nList[k][0] - centerMx, nList[k][1] - centerMz) < 4.0) {
+                isDuplicateCentroid = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (isDuplicateCentroid) {
+        continue;
+      }
+
       const SHRINK_SCALE = 0.95;
       for (let i = 0; i < ptCount; i++) {
         pts2D[i].x = centerMx + (pts2D[i].x - centerMx) * SHRINK_SCALE;
@@ -1293,9 +1313,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const spanZ = Math.max(1, maxZ - minZ);
       const minWidth = Math.min(spanX, spanZ);
 
-      // [2-1: 비건물 폴리곤 엄격 필터링]
-      // 산림(임야), 하천, 공원, 운동장, 대형 필지 경계선(area > 4,500㎡) 및 도로/옹벽(폭 < 4.5m) 100% 제외
-      if (areaSqm > 4500.0 || areaSqm < 30.0) {
+      // [4중 안전 필터링 - 면적 필터]: 3,800㎡ 초과 폴리곤(단지 경계선, 운동장, 공원, 거대 지적 필지) 및 30㎡ 미만 배제
+      if (areaSqm > 3800.0 || areaSqm < 30.0) {
         continue;
       }
       if (minWidth < 4.5) {
@@ -1305,10 +1324,35 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
+      // [4중 안전 필터링 - 산림/경사 필터]: 표고 경사도 25도 이상 급경사 사면 100% 영구 배제
+      if (map && typeof map.queryTerrainElevation === 'function') {
+        const baseElev = map.queryTerrainElevation([cLng, cLat]);
+        if (baseElev !== null && baseElev !== undefined) {
+          const dDeg = 0.00025; // ~25m
+          const eEast = map.queryTerrainElevation([cLng + dDeg, cLat]) ?? baseElev;
+          const eNorth = map.queryTerrainElevation([cLng, cLat + dDeg]) ?? baseElev;
+          const dzE = Math.abs(eEast - baseElev) / 25;
+          const dzN = Math.abs(eNorth - baseElev) / 25;
+          const slopeDeg = Math.atan(Math.max(dzE, dzN)) * (180 / Math.PI);
+          if (slopeDeg >= 25.0) {
+            continue;
+          }
+        }
+      }
+
       const featProps = (feat.properties || {}) as Record<string, any>;
       if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth, [cLng, cLat], this.map)) {
         continue;
       }
+
+      // 통과된 건물 중심점 등록
+      const cellKey = `${gridX}_${gridZ}`;
+      let cellList = this.centroidSpatialGrid.get(cellKey);
+      if (!cellList) {
+        cellList = [];
+        this.centroidSpatialGrid.set(cellKey, cellList);
+      }
+      cellList.push([centerMx, centerMz]);
 
       // [1단계: 화면 삼각형 찢어짐(Polygon Tearing) 원천 차단]
       if (maxEdgeLen > 350 || spanX > 450 || spanZ > 450) {
