@@ -87,6 +87,10 @@ import {
   VWorldSiteDevelopmentEngine,
 } from '@/lib/vendor/vworldAnalysisSuite';
 import {
+  VworldGpuMasterEngine,
+  VWORLD_GPU_BUILDING_LAYER_IDS,
+} from '@/lib/vendor/vworldGpuMasterEngine';
+import {
   Ruler,
   ShieldAlert,
   X,
@@ -312,6 +316,11 @@ export interface SelectedBuildingInfo {
 function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
   const bldgLayerIds = [
     'building-vector-carrier',
+    'vworld-tier1-podium',
+    'vworld-tier2-body',
+    'vworld-tier3-accent',
+    'vworld-tier4-roof',
+    'vworld-tier5-penthouse',
     'bldg-tier1-podium',
     'bldg-tier2-mainwall',
     'bldg-tier3-pattern',
@@ -322,17 +331,21 @@ function promoteBuildingLayersToTop(mapInstance: maplibregl.Map) {
     'real-bldg-tier3-pattern',
     'real-bldg-tier4-roofcap',
     'real-bldg-tier5-roofdetail',
-    'threebox-building-layer',
-    'realistic-korean-city-layer',
-    'procedural-trees-3d-layer',
     'building-highlight-fill',
-    'flight-ceiling-slab',
   ];
+  const beforeSymbolId = mapInstance.getLayer('vworld-poi-symbols')
+    ? 'vworld-poi-symbols'
+    : (mapInstance.getLayer('bridge-labels-symbol') ? 'bridge-labels-symbol' : undefined);
+
   for (const id of bldgLayerIds) {
     if (mapInstance.getLayer(id)) {
       try {
         if (mapInstance.getLayoutProperty(id, 'visibility') !== 'none') {
-          mapInstance.moveLayer(id);
+          if (beforeSymbolId && mapInstance.getLayer(beforeSymbolId)) {
+            mapInstance.moveLayer(id, beforeSymbolId);
+          } else {
+            mapInstance.moveLayer(id);
+          }
         }
       } catch {}
     }
@@ -2850,6 +2863,10 @@ export const MapViewer: React.FC = () => {
 
         // [2단계 신규]: 원주천·섬강 등 하천 횡단 대교 국토부 제원 뱃지 라벨 레이어 등록
         setupBridgeLabelsLayer(map);
+
+        // [2단계]: GPU 하드웨어 가속 V-World 5단 입체 실사 렌더링 엔진 마운트 (60fps, 위치 오차 0%)
+        VworldGpuMasterEngine.mountLayers(map, 'openmaptiles-vector', 'building', VWORLD_POI_LAYER_ID);
+        VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D ?? true));
       } catch (rcErr) {
         console.warn('[MapViewer] POI/Bridge label registration warning:', rcErr);
       }
@@ -3751,6 +3768,8 @@ export const MapViewer: React.FC = () => {
       placedFacilitiesCount: placedFacilities.length,
       tile3DStream,
     });
+
+    VworldGpuMasterEngine.setVisible(map, bldgVis);
 
     if (bldgVis) {
       promoteBuildingLayersToTop(map);
@@ -6594,12 +6613,10 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('3d-buildings')) {
           map.setLayoutProperty('3d-buildings', 'visibility', 'none');
         }
-        // [1단계: 단일 마스터 렌더러(RealisticKoreanCityLayer) 가동 및 중복 fill-extrusion 차단]
+        // [1단계: GPU 네이티브 5단 렌더러 가동 및 구형 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
         hideAllFillExtrusionLayers(map);
-        if (realisticKoreanCityLayerRef.current) {
-          realisticKoreanCityLayerRef.current.setVisible(Boolean(layers.buildings3D));
-        }
+        VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D));
         if (map.getLayer('flight-ceiling-slab')) {
           const ceilingVis = showFlightCeiling3D ? 'visible' : 'none';
           map.setLayoutProperty('flight-ceiling-slab', 'visibility', ceilingVis);
@@ -6715,12 +6732,10 @@ export const MapViewer: React.FC = () => {
         }
         const bldgVis = layers.buildings3D ? 'visible' : 'none';
         // [강제 집행 2] 모드 무관하게 베이스맵 원본 건물 25,719동 100% 3D 렌더링 유지
-        // [1단계: 단일 마스터 렌더러(RealisticKoreanCityLayer) 가동 및 중복 fill-extrusion 차단]
+        // [1단계: GPU 네이티브 5단 렌더러 가동 및 구형 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
         hideAllFillExtrusionLayers(map);
-        if (realisticKoreanCityLayerRef.current) {
-          realisticKoreanCityLayerRef.current.setVisible(Boolean(layers.buildings3D));
-        }
+        VworldGpuMasterEngine.setVisible(map, Boolean(layers.buildings3D));
         if (lod2BuildingEngineRef.current) {
           lod2BuildingEngineRef.current.setVisible(false);
         }

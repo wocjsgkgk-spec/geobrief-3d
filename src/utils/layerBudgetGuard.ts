@@ -7,14 +7,15 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-export const MAX_ACTIVE_LAYERS_LIMIT = 15;
+export const MAX_ACTIVE_LAYERS_LIMIT = 20;
 
 /**
- * 절대 숨기면 안 되는 핵심 필수 레이어 접두사 목록 (오직 RealisticKoreanCityLayer 및 필수 베이스 레이어만 유지)
+ * 절대 숨기면 안 되는 핵심 필수 레이어 접두사 목록 (GPU 5단 실사 건물 및 필수 베이스 레이어 유지)
  */
 const ESSENTIAL_LAYER_PREFIXES = [
   'satellite-base',
   'building-vector-carrier',
+  'vworld-tier',
   'realistic-korean',
   'vworld-poi',
   'bridge-',

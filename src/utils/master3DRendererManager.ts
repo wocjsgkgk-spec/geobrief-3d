@@ -22,6 +22,7 @@ import type { RenderMode3D, Tile3DStreamState } from '@/types/map';
 import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
 import { setGpuBuildingLayersVisibility, setGpuBuildingLayersMode } from '@/utils/gpuRealisticBuildingStack';
 import { setTerrainClampedBuildingsVisible } from '@/lib/vendor/terrainClampedBuildingEngine';
+import { VworldGpuMasterEngine } from '@/lib/vendor/vworldGpuMasterEngine';
 
 export const ALL_FILL_EXTRUSION_LAYER_IDS = [
   'bldg-tier1-podium',
@@ -86,7 +87,8 @@ export function hideAllFillExtrusionLayers(map: maplibregl.Map): void {
       for (const l of styleLayers) {
         if (
           l.type === 'fill-extrusion' &&
-          l.id !== 'building-highlight-fill'
+          l.id !== 'building-highlight-fill' &&
+          !l.id.startsWith('vworld-tier')
         ) {
           if (map.getLayoutProperty(l.id, 'visibility') !== 'none') {
             map.setLayoutProperty(l.id, 'visibility', 'none');
@@ -120,12 +122,13 @@ export function syncMaster3DRenderer(
     tile3DStream,
   } = opts;
 
-  // 1. [단일 통합 규칙]: 어떤 스위치(건축물 3D 돌출, 고정밀 3D 스트리밍, 모드 A/B/C, 3D 디테일)를 조작하더라도
-  // 화면 내 기존 3D 건물이 0동으로 삭제되거나 증발하지 않도록 상시 마스터 렌더러 가동 유지
+  // 1. [단일 통합 규칙]: GPU 하드웨어 가속 V-World 5단 입체 실사 렌더러 가시성 동기화
+  VworldGpuMasterEngine.setVisible(map, Boolean(isBuildingsVisible));
+
   if (realisticKoreanCityLayer) {
-    realisticKoreanCityLayer.setVisible(true);
+    realisticKoreanCityLayer.setVisible(false);
   }
-  // 중복 fill-extrusion 레이어는 항구적으로 차단(visibility: none)
+  // 중복 구형 fill-extrusion 레이어는 항구적으로 차단(visibility: none)
   setGpuBuildingLayersVisibility(map, false);
   setTerrainClampedBuildingsVisible(map, false);
 
