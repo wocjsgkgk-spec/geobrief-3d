@@ -1067,7 +1067,14 @@ export const MapViewer: React.FC = () => {
   useEffect(() => {
     persistentBuildingCacheRef.current.clear();
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-      .then(() => {
+      .then((res) => {
+        if (res && res.features && res.features.length > 0 && realisticKoreanCityLayerRef.current) {
+          const center = mapRef.current?.getCenter();
+          realisticKoreanCityLayerRef.current.updateBuildings(
+            res.features,
+            center ? [center.lng, center.lat] : undefined
+          );
+        }
         if (mapRef.current) {
           syncExternalSpatialBuildings(mapRef.current);
         }
@@ -1114,9 +1121,9 @@ export const MapViewer: React.FC = () => {
           }
         }).length;
 
-        // 전체 활성 레이어 수를 적정 한도 이하로 유지 (GPU 과부하 방지)
-        if (activeCount > 85) {
-          activeCount = enforceMaxActiveLayers(currentMap, 85);
+        // 전체 활성 레이어 수를 적정 한도(15개 이하)로 엄격 제한 (GPU 과부하 방지)
+        if (activeCount > 15) {
+          activeCount = enforceMaxActiveLayers(currentMap, 15);
         }
 
         realtimeMetricsRef.current = { renderedBuildingCount: count, activeLayersCount: activeCount };
@@ -2686,7 +2693,14 @@ export const MapViewer: React.FC = () => {
       setIsMapLoaded(true);
       updateRealtimeMetrics();
       fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-        .then(() => {
+        .then((res) => {
+          if (res && res.features && res.features.length > 0 && realisticKoreanCityLayerRef.current) {
+            const center = map?.getCenter();
+            realisticKoreanCityLayerRef.current.updateBuildings(
+              res.features,
+              center ? [center.lng, center.lat] : undefined
+            );
+          }
           if (map) {
             syncExternalSpatialBuildings(map);
             updateRealtimeMetrics();
@@ -4362,7 +4376,14 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     fetchLocalVworldBuildings({ regionId: selectedRegionId || 'wonju', useCoreOnly: true })
-      .then(() => {
+      .then((res) => {
+        if (res && res.features && res.features.length > 0 && realisticKoreanCityLayerRef.current) {
+          const center = mapRef.current?.getCenter();
+          realisticKoreanCityLayerRef.current.updateBuildings(
+            res.features,
+            center ? [center.lng, center.lat] : undefined
+          );
+        }
         if (mapRef.current) {
           syncExternalSpatialBuildings(mapRef.current);
           updateRealtimeMetrics();
@@ -7020,9 +7041,9 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('cadastral-parcels-line')) {
           map.setLayoutProperty('cadastral-parcels-line', 'visibility', 'none');
         }
-        // 3D 건축물 및 비행안전 천장 표시 (베이스맵 원본 건물 100% 가시성 보장)
+        // 3D 건축물은 RealisticKoreanCityLayer 단일 전담 (구형 fill-extrusion 3d-buildings 완전 비활성화)
         if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
+          map.setLayoutProperty('3d-buildings', 'visibility', 'none');
         }
         // [1단계: 단일 마스터 렌더러(RealisticKoreanCityLayer) 가동 및 중복 fill-extrusion 차단]
         purgeFloatingDummyBuildings(map);
@@ -7155,7 +7176,7 @@ export const MapViewer: React.FC = () => {
           lod2BuildingEngineRef.current.setVisible(false);
         }
         if (map.getLayer('3d-buildings')) {
-          map.setLayoutProperty('3d-buildings', 'visibility', layers.buildings3D ? 'visible' : 'none');
+          map.setLayoutProperty('3d-buildings', 'visibility', 'none');
         }
         if (realisticKoreanCityLayerRef.current) {
           realisticKoreanCityLayerRef.current.setVisible(!!layers.buildings3D);

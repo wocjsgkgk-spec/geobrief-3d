@@ -86,10 +86,7 @@ export function hideAllFillExtrusionLayers(map: maplibregl.Map): void {
       for (const l of styleLayers) {
         if (
           l.type === 'fill-extrusion' &&
-          l.id !== 'flight-envelope-volume' &&
-          l.id !== 'flight-ceiling-slab' &&
-          l.id !== 'building-highlight-fill' &&
-          l.id !== 'building-mass-extrusion'
+          l.id !== 'building-highlight-fill'
         ) {
           if (map.getLayoutProperty(l.id, 'visibility') !== 'none') {
             map.setLayoutProperty(l.id, 'visibility', 'none');
@@ -175,6 +172,19 @@ export function isMountainGhostBuilding(
   featProps: Record<string, any> = {},
   map?: any
 ): boolean {
+  // [0] 가짜/더미/절차적 생성기 태그 전수 검출
+  const bldName = String(featProps.name || featProps.buld_nm || featProps.bld_nm || featProps.buildingName || '').toLowerCase();
+  if (
+    bldName.includes('dummy') ||
+    bldName.includes('mock') ||
+    bldName.includes('synthetic') ||
+    bldName.includes('procedural') ||
+    bldName.includes('임의') ||
+    bldName.includes('가짜')
+  ) {
+    return true;
+  }
+
   // [1] 지목 및 토지이용 태그 검사
   const jimok = String(featProps.jimok || featProps.jimok_nm || '').trim();
   if (jimok === '임' || jimok === '임야') return true;
@@ -182,9 +192,9 @@ export function isMountainGhostBuilding(
   const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
   if (landuse === 'forest' || landuse === 'wood' || landuse === 'mountain') return true;
 
-  // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 중앙 야산 & 우측/우상단 숲속)
-  // 1. 중앙 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 100% 배제)
-  if (lng >= 127.9330 && lng <= 127.9400 && lat >= 37.3550 && lat <= 37.3610) {
+  // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 1군지사 주변 3대 오염 지역 전수 제거)
+  // 1. 좌측 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 100% 영구 배제)
+  if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) {
     if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn) {
       return true;
     }
@@ -193,12 +203,19 @@ export function isMountainGhostBuilding(
     }
   }
 
-  // 2. 우측/우상단 숲속 녹지대 (주황색 지붕 바둑판 작은 집 군집 100% 배제)
-  if (lng >= 127.9385 && lng <= 127.9455 && lat >= 37.3500 && lat <= 37.3565) {
+  // 2. 우측/우상단 숲속 녹지대 (주황색 지붕 바둑판 작은 집 40여 채 군집 100% 영구 배제)
+  if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) {
     if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn) {
       return true;
     }
     if (featProps.sourceLayer === 'building' && !featProps.bd_mgt_sn) {
+      return true;
+    }
+  }
+
+  // 3. 중앙 하단 녹지대 (주황색/빨간색 작은 상자 무리 100% 영구 배제)
+  if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) {
+    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn && !featProps.pnu) {
       return true;
     }
   }
@@ -216,13 +233,13 @@ export function isMountainGhostBuilding(
         const maxGrade = Math.max(dzE, dzN);
         const slopeDeg = Math.atan(maxGrade) * (180 / Math.PI);
 
-        // [산림/경사 필터] 표고 경사도 25도 이상 급경사 사면 100% 영구 배제
-        if (slopeDeg >= 25.0) {
+        // [산림/경사 필터] 표고 경사도 20도 이상 급경사 사면 100% 영구 배제
+        if (slopeDeg >= 20.0) {
           return true;
         }
 
-        // 경사도 15도 이상의 고지대(135m+) 미등록 건물 배제
-        if (elev >= 135 && slopeDeg >= 15.0 && !featProps.gro_flo_co && !featProps.buld_nm && !featProps.bld_nm && !featProps.bd_mgt_sn) {
+        // 경사도 15도 이상의 고지대(125m+) 미등록 건물 배제
+        if (elev >= 125 && slopeDeg >= 14.0 && !featProps.gro_flo_co && !featProps.buld_nm && !featProps.bld_nm && !featProps.bd_mgt_sn) {
           return true;
         }
       }

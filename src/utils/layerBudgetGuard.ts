@@ -7,7 +7,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-export const MAX_ACTIVE_LAYERS_LIMIT = 30;
+export const MAX_ACTIVE_LAYERS_LIMIT = 15;
 
 /**
  * 절대 숨기면 안 되는 핵심 필수 레이어 접두사 목록 (오직 RealisticKoreanCityLayer 및 필수 베이스 레이어만 유지)

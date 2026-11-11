@@ -97,6 +97,7 @@ import {
 import {
   isPermittedBuildingPolygon,
   sanitizeBuildingHeight,
+  isMountainGhostBuilding,
 } from '@/utils/master3DRendererManager';
 import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
 import { DiverseBuildingGenerator } from '@/lib/vendor/diverseBuildingGenerator';
@@ -600,130 +601,149 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * 베이스맵 원본 벡터 타일 건물 피처(100% 실측 정위치)에 외부 실측(V-World / 건축HUB) 속성만 1:1 공간 매칭 주입
-   * - 외곽선 지오메트리는 100% 베이스맵 벡터 타일 원본 좌표만 사용하여 산속 유령 건물 원천 차단 (0%)
-   * - 외부 데이터(extFeats)는 좌표를 임의로 그리지 않고, Point-in-Polygon / Centroid 거리 매칭(<= 25m)으로 실제 층수 및 명칭만 보강
+   * 베이스맵 원본 벡터 타일과 국토부 브이월드(LT_C_SPBD / 로컬 converted) 실측 건물 1:1 정밀 결합
+   * - 브이월드 공식 실측 건물 외곽선 및 위치(extFeats)를 1순위 최우선 렌더링 대상으로 지정
+   * - 베이스맵 벡터 타일(vecFeats) 중 반경 20m 이내 V-World와 중복되는 형상은 V-World 실측본만 유지 (유령 건물 및 이중 벽체 원천 차단)
+   * - 비건물 구획(면적 > 3,800㎡, 대지, 하천, 공원, BBOX 평판), 폭 4.5m 미만 도로/옹벽, 산림/임야 유령 건물 완전 배제
    */
   private mergeBuildingFeatures(
     vecFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[],
     extFeats: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] {
-    if (!vecFeats || vecFeats.length === 0) {
-      return extFeats || [];
-    }
+    const resultList: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+    const seenCentroids = new Map<string, [number, number][]>();
 
-    if (!extFeats || extFeats.length === 0) {
-      return vecFeats;
-    }
-
-    // 1) 외부 실측 피처 공간 인덱스(Grid Map) 구축 (~20m 격자 해시)
-    const extGrid = new Map<string, GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]>();
-    for (let i = 0; i < extFeats.length; i++) {
-      const ef = extFeats[i];
-      if (!ef || !ef.geometry) continue;
-      const coords = ef.geometry.type === 'Polygon'
-        ? ef.geometry.coordinates[0]
-        : ef.geometry.coordinates[0]?.[0];
-      if (!coords || coords.length < 3) continue;
-
-      let sumX = 0, sumY = 0;
-      for (let j = 0; j < coords.length; j++) {
-        sumX += coords[j][0];
-        sumY += coords[j][1];
-      }
-      const cX = sumX / coords.length;
-      const cY = sumY / coords.length;
-
-      const gX = Math.round(cX * 5000);
-      const gY = Math.round(cY * 5000);
-      const gKey = `${gX}_${gY}`;
-      let list = extGrid.get(gKey);
-      if (!list) {
-        list = [];
-        extGrid.set(gKey, list);
-      }
-      (ef as any).__extIdx = i;
-      list.push(ef);
-    }
-
-    const matchedExtIndices = new Set<number>();
-
-    // 2) 베이스맵 벡터 건물 피처마다 가장 가까운 외부 실측 피처를 찾아 속성 주입 (지오메트리는 100% 벡터 타일 유지)
-    for (let i = 0; i < vecFeats.length; i++) {
-      const vf = vecFeats[i];
-      if (!vf || !vf.geometry) continue;
-      const coords = vf.geometry.type === 'Polygon'
-        ? vf.geometry.coordinates[0]
-        : vf.geometry.coordinates[0]?.[0];
-      if (!coords || coords.length < 3) continue;
-
-      let sumX = 0, sumY = 0;
-      for (let j = 0; j < coords.length; j++) {
-        sumX += coords[j][0];
-        sumY += coords[j][1];
-      }
-      const cX = sumX / coords.length;
-      const cY = sumY / coords.length;
-
-      const gX = Math.round(cX * 5000);
-      const gY = Math.round(cY * 5000);
-
-      let bestMatch: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = null;
-      let bestMatchIdx = -1;
-      let bestDist = 0.00025; // 최대 약 25m 이내
-
+    const checkCentroidDedupe = (cLng: number, cLat: number, radiusM = 4.0): boolean => {
+      const gX = Math.round(cLng * 25000);
+      const gY = Math.round(cLat * 25000);
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
-          const neighborList = extGrid.get(`${gX + dx}_${gY + dy}`);
-          if (!neighborList) continue;
-          for (let k = 0; k < neighborList.length; k++) {
-            const candidate = neighborList[k];
-            const cCoords = candidate.geometry.type === 'Polygon'
-              ? candidate.geometry.coordinates[0]
-              : candidate.geometry.coordinates[0]?.[0];
-            if (!cCoords || cCoords.length < 3) continue;
-            let cSumX = 0, cSumY = 0;
-            for (let m = 0; m < cCoords.length; m++) {
-              cSumX += cCoords[m][0];
-              cSumY += cCoords[m][1];
-            }
-            const candCX = cSumX / cCoords.length;
-            const candCY = cSumY / cCoords.length;
-            const dist = Math.hypot(candCX - cX, candCY - cY);
-            if (dist < bestDist) {
-              bestDist = dist;
-              bestMatch = candidate;
-              bestMatchIdx = (candidate as any).__extIdx ?? -1;
+          const list = seenCentroids.get(`${gX + dx}_${gY + dy}`);
+          if (list) {
+            for (let k = 0; k < list.length; k++) {
+              const pt = list[k];
+              const dLng = (pt[0] - cLng) * 111320 * Math.cos((cLat * Math.PI) / 180);
+              const dLat = (pt[1] - cLat) * 111320;
+              if (Math.hypot(dLng, dLat) < radiusM) {
+                return true;
+              }
             }
           }
         }
       }
+      return false;
+    };
 
-      if (bestMatch && bestMatch.properties) {
-        if (bestMatchIdx >= 0) matchedExtIndices.add(bestMatchIdx);
-        const bp = bestMatch.properties;
-        const vp = vf.properties || {};
-        vf.properties = {
-          ...vp,
-          realHeight: bp.realHeight || bp.height || bp.heit || vp.realHeight,
-          realLevels: bp.realLevels || bp.levels || bp.grnd_flr || bp.gro_flo_co || vp.realLevels,
-          height: bp.height || bp.realHeight || bp.heit || vp.height,
-          grnd_flr: bp.grnd_flr || bp.gro_flo_co || bp.levels || vp.grnd_flr,
-          levels: bp.levels || bp.grnd_flr || bp.gro_flo_co || vp.levels,
-          realUse: bp.realUse || bp.mainPurpsCdNm || bp.usageType || vp.realUse,
-          realName: bp.realName || bp.buld_nm || bp.bldNm || bp.name || vp.realName,
-          buld_nm: bp.buld_nm || bp.bldNm || bp.name || vp.buld_nm,
-          roofCdNm: bp.roofCdNm || bp.roofColour || vp.roofCdNm,
-          is_real_measured: true,
-        };
+    const addCentroid = (cLng: number, cLat: number) => {
+      const gX = Math.round(cLng * 25000);
+      const gY = Math.round(cLat * 25000);
+      const key = `${gX}_${gY}`;
+      let list = seenCentroids.get(key);
+      if (!list) {
+        list = [];
+        seenCentroids.set(key, list);
+      }
+      list.push([cLng, cLat]);
+    };
+
+    // 1단계: 국토교통부 브이월드 공식 실측 건물 1순위 최우선 수용 (1:1 V-World 정합)
+    if (extFeats && extFeats.length > 0) {
+      for (let i = 0; i < extFeats.length; i++) {
+        const ef = extFeats[i];
+        if (!ef || !ef.geometry) continue;
+        const coords = ef.geometry.type === 'Polygon'
+          ? ef.geometry.coordinates[0]
+          : ef.geometry.coordinates[0]?.[0];
+        if (!coords || coords.length < 3) continue;
+
+        let sumX = 0, sumY = 0;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let j = 0; j < coords.length; j++) {
+          const pt = coords[j];
+          sumX += pt[0];
+          sumY += pt[1];
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+        const cX = sumX / coords.length;
+        const cY = sumY / coords.length;
+
+        const cosLat = Math.cos((cY * Math.PI) / 180);
+        const wM = (maxX - minX) * 111320 * cosLat;
+        const hM = (maxY - minY) * 111320;
+        const approxArea = Math.max(10, wM * hM * 0.85);
+        const minW = Math.max(1, Math.min(wM, hM));
+
+        // 3,800㎡ 초과 비건물 구획/필지, 폭 4.5m 미만 비건물, 산림 유령건물 100% 배제
+        if (approxArea > 3800 || approxArea < 30) continue;
+        if (minW < 4.5) continue;
+        if (isMountainGhostBuilding(cX, cY, ef.properties || {}, this.map)) continue;
+
+        if (checkCentroidDedupe(cX, cY, 4.0)) continue;
+        addCentroid(cX, cY);
+
+        resultList.push(ef);
       }
     }
 
-    // [4중 안전 필터링 - 레이어 소스 필터]:
-    // 오직 베이스맵 벡터 타일의 building 레이어 원본 WGS84 폴리곤만 취득!
-    // 외부 실측 피처는 베이스맵 원본 건물의 속성(실측 층수, 명칭, 용도) 보강에만 1:1 사용하며,
-    // 원본에 없는 미매칭 외부 도형은 임의 생성하지 않아 가짜/유령 건물 생성을 원천 방지!
-    return vecFeats;
+    // 2단계: 베이스맵 벡터 타일 건물 중 V-World와 중복되지 않고 검증된 실측 건물만 보강
+    if (vecFeats && vecFeats.length > 0) {
+      for (let i = 0; i < vecFeats.length; i++) {
+        const vf = vecFeats[i];
+        if (!vf || !vf.geometry) continue;
+        const coords = vf.geometry.type === 'Polygon'
+          ? vf.geometry.coordinates[0]
+          : vf.geometry.coordinates[0]?.[0];
+        if (!coords || coords.length < 3) continue;
+
+        let sumX = 0, sumY = 0;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (let j = 0; j < coords.length; j++) {
+          const pt = coords[j];
+          sumX += pt[0];
+          sumY += pt[1];
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+        const cX = sumX / coords.length;
+        const cY = sumY / coords.length;
+
+        const cosLat = Math.cos((cY * Math.PI) / 180);
+        const wM = (maxX - minX) * 111320 * cosLat;
+        const hM = (maxY - minY) * 111320;
+        const approxArea = Math.max(10, wM * hM * 0.85);
+        const minW = Math.max(1, Math.min(wM, hM));
+        const maxW = Math.max(wM, hM);
+
+        if (approxArea > 3800 || approxArea < 30) continue;
+        if (minW < 4.5) continue;
+        if (maxW / minW > 8.0) continue;
+
+        const vp = (vf.properties || {}) as Record<string, any>;
+        // 산림 유령 건물 (우측 상단 숲속 주황집, 좌측 산림 회색집, 중앙 하단 주황박스 등) 100% 영구 배제
+        if (isMountainGhostBuilding(cX, cY, vp, this.map)) continue;
+
+        // V-World 실측 건물이 이미 존재하는 반경 20m 이내 형상은 스킵 (V-World 지오메트리 보존 및 2중 겹침 차단)
+        if (checkCentroidDedupe(cX, cY, 20.0)) continue;
+
+        // 시가지 외곽 미확인 박스 차단: 대장 관리번호/건물명/층수 등 공인 식별자가 전무한 미소 박스는 배제
+        const hasVerifiedIdentity = Boolean(
+          vp.bd_mgt_sn || vp.buld_nm || vp.bld_nm || vp.pnu || vp.levels || vp.height
+        );
+        if (!hasVerifiedIdentity && approxArea < 180) {
+          continue;
+        }
+
+        addCentroid(cX, cY);
+        resultList.push(vf);
+      }
+    }
+
+    return resultList.length > 0 ? resultList : (extFeats && extFeats.length > 0 ? extFeats : vecFeats);
   }
 
   /**
@@ -859,8 +879,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    // [강제 집행 2] 외부 오프셋 GeoJSON 직접 메쉬화 차단:
-    // 베이스맵 원본 벡터 타일(openmaptiles-vector) 피처만 100% 사용하여 3D 빌드 실행
+    // 국토부 브이월드 실측 지오메트리 최우선 반영 및 3D 빌드 즉각 실행
     if (this.map) {
       this.extractAndBuildFromMap();
       return;
