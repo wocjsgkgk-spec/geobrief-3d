@@ -1210,8 +1210,13 @@ export const Header: React.FC = () => {
         />
       </div>
 
-      {/* 3. 우측: [✨ 3D 디테일: 실사(LOD2+)] + [🖨️ 도면 저장] 버튼 */}
+      {/* 3. 우측: [UI Astro-Checked v2.0] + [✨ 3D 디테일: 실사(LOD2+)] + [🖨️ 도면 저장] 버튼 */}
       <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0 ml-auto">
+        {/* [UI Astro-Checked v2.0 배지] */}
+        <span className="hidden xl:inline-flex items-center px-2 py-1 rounded-lg text-[10.5px] font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-400 shadow-sm whitespace-nowrap ring-1 ring-cyan-400/30">
+          [UI Astro-Checked v2.0]
+        </span>
+
         {/* [✨ 3D 디테일: 상시 토글 버튼] */}
         <button
           type="button"

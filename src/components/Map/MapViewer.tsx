@@ -7235,6 +7235,9 @@ export const MapViewer: React.FC = () => {
                   <span id="realtime-metrics-badge" className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
                     [V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: {realtimeMetricsRef.current.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetricsRef.current.activeLayersCount}개]
                   </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-mono font-extrabold bg-gradient-to-r from-cyan-950 via-teal-950 to-emerald-950 text-cyan-300 border border-cyan-400 shadow-md ml-1.5 whitespace-nowrap ring-1 ring-cyan-400/50">
+                    [UI Astro-Checked v2.0]
+                  </span>
                 </span>
               )}
             </span>

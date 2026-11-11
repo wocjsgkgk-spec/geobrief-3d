@@ -194,8 +194,8 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-[720px] rounded-2xl border border-emerald-500/30 bg-slate-950 p-6 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-200">
+      <div className="w-[720px] max-w-[95vw] rounded-2xl bg-slate-900 border border-emerald-500/40 p-6 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* 헤더 */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -204,7 +204,7 @@ export const Custom3DTilesModal: React.FC<Custom3DTilesModalProps> = ({
               3D Tiles OGC 스트리밍 엔드포인트 설정
             </h2>
             <span className="text-[10px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-cyan-950/90 text-cyan-300 border border-cyan-700/80 whitespace-nowrap shrink-0">
-              모드 C 전용
+              와이드 모달 (Astro-Spec)
             </span>
           </div>
           <button

@@ -11,17 +11,18 @@ interface TitleBlockProps {
 export const TitleBlock: React.FC<TitleBlockProps> = ({ siteName }) => {
   const { metadata, showTitleBlock, toggleTitleBlock } = useMapStore();
   const [position, setPosition] = useState<'bottom-right' | 'top-right'>('bottom-right');
+  const [collapsed, setCollapsed] = useState<boolean>(false);
 
   if (!showTitleBlock) {
     return (
-      <div className="absolute bottom-16 right-6 z-20">
+      <div className="absolute bottom-4 right-[284px] z-20">
         <button
           onClick={toggleTitleBlock}
-          className="bg-[#0b1310]/90 backdrop-blur-md border border-emerald-500/60 hover:border-emerald-400 px-2.5 py-1.5 rounded-lg shadow-xl text-xs font-bold text-emerald-300 hover:text-white flex items-center gap-1.5 transition-all group"
-          title="도정·국방 표준 도면 표제관(Title Block) 열기"
+          className="bg-[#0b1310]/95 backdrop-blur-md border border-emerald-500/60 hover:border-emerald-400 px-3 py-2 rounded-xl shadow-xl text-xs font-bold text-emerald-300 hover:text-white flex items-center gap-1.5 transition-all group whitespace-nowrap ring-1 ring-emerald-500/30"
+          title="도정·국방 표준 도면 표제란(Title Block) 열기"
         >
-          <FileCheck className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
-          <span>도면 표제관 표시</span>
+          <FileCheck className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+          <span>도면 표제란 표시</span>
         </button>
       </div>
     );
@@ -42,30 +43,41 @@ export const TitleBlock: React.FC<TitleBlockProps> = ({ siteName }) => {
   const positionClasses =
     position === 'top-right'
       ? 'top-16 right-6'
-      : 'bottom-8 right-6';
+      : 'bottom-4 right-[284px]';
 
   return (
     <div className={`absolute ${positionClasses} z-20 select-none animate-fade-in pointer-events-auto transition-all duration-200`}>
-      <div className="w-[320px] sm:w-[360px] bg-[#070d0a]/95 backdrop-blur-md border border-emerald-500/80 rounded-lg shadow-2xl overflow-hidden ring-1 ring-emerald-500/40 text-[11px] font-sans">
+      <div className="w-[320px] sm:w-[360px] bg-[#070d0a]/95 backdrop-blur-md border border-emerald-500/80 rounded-xl shadow-2xl overflow-hidden ring-1 ring-emerald-500/40 text-[11px] font-sans">
         {/* 상단 헤더 바 */}
         <div className="bg-[#0f1d16] border-b border-emerald-700/60 px-3 py-1.5 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
+          <div
+            className="flex items-center gap-1.5 cursor-pointer flex-1"
+            onClick={() => setCollapsed(!collapsed)}
+            title="클릭하여 표제란 본문 접기/펼치기"
+          >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono font-extrabold text-[10px] text-emerald-300 tracking-wider">
-              표준 도면 표제관 (CAD TITLE BLOCK)
+            <span className="font-mono font-extrabold text-[10px] text-emerald-300 tracking-wider whitespace-nowrap">
+              표준 도면 표제란 (CAD TITLE BLOCK)
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="text-slate-400 hover:text-emerald-300 text-[10px] px-1 py-0.5 rounded hover:bg-slate-800 transition-colors whitespace-nowrap"
+              title="접기/펼치기"
+            >
+              {collapsed ? '펼치기' : '접기'}
+            </button>
+            <button
               onClick={() => setPosition((p) => (p === 'bottom-right' ? 'top-right' : 'bottom-right'))}
-              className="text-slate-400 hover:text-emerald-300 text-[10px] px-1 py-0.5 rounded hover:bg-slate-800 transition-colors flex items-center gap-0.5"
+              className="text-slate-400 hover:text-emerald-300 text-[10px] px-1 py-0.5 rounded hover:bg-slate-800 transition-colors flex items-center gap-0.5 whitespace-nowrap"
               title="표제관 위치 전환 (우측 상단 ↔ 우측 하단)"
             >
               <ArrowUpDown className="w-2.5 h-2.5" />
               <span>{position === 'bottom-right' ? '상단으로' : '하단으로'}</span>
             </button>
             <span
-              className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border ${
+              className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold border whitespace-nowrap ${
                 isClassified
                   ? 'bg-rose-950/80 border-rose-600 text-rose-300'
                   : 'bg-emerald-950/80 border-emerald-600/80 text-emerald-300'
@@ -83,7 +95,10 @@ export const TitleBlock: React.FC<TitleBlockProps> = ({ siteName }) => {
           </div>
         </div>
 
-        {/* 도면명 본문 */}
+        {/* 본문 (접기/펼치기 지원) */}
+        {!collapsed && (
+          <>
+            {/* 도면명 본문 */}
         <div className="p-2.5 bg-[#09130e] border-b border-emerald-900/60">
           <span className="text-[9.5px] text-slate-400 block font-semibold mb-0.5">
             문서명 / 도면명 (DRAWING TITLE)
@@ -132,6 +147,8 @@ export const TitleBlock: React.FC<TitleBlockProps> = ({ siteName }) => {
           <span>GeoBrief 3D Geospatial Engine</span>
           <span className="text-emerald-400 font-semibold">정부공공표준양식 (CAD BLOCK)</span>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

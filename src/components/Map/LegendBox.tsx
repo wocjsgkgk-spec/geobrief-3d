@@ -18,8 +18,8 @@ export const LegendBox: React.FC = () => {
   } = useMapStore();
 
   return (
-    <div className="absolute bottom-4 right-4 z-10 select-none">
-      <div className="bg-[#121814]/92 backdrop-blur-md border border-[#2b3a2e] rounded-xl shadow-2xl overflow-hidden w-64 transition-all">
+    <div className="absolute bottom-4 right-4 z-20 select-none">
+      <div className="bg-[#121814]/95 backdrop-blur-md border border-[#2b3a2e] rounded-xl shadow-2xl overflow-hidden w-64 transition-all ring-1 ring-emerald-500/20">
         {/* Header */}
         <div
           className="px-3.5 py-2.5 bg-[#17211b] border-b border-[#2b3a2e] flex items-center justify-between cursor-pointer text-slate-200 hover:bg-[#1c2921] transition-colors"
