@@ -4669,6 +4669,11 @@ export const MapViewer: React.FC = () => {
     if (!map || !isMapLoaded) return;
 
     const buildingLayers = [
+      'vworld-tier2-body',
+      'vworld-tier1-podium',
+      'vworld-tier3-accent',
+      'vworld-tier4-roof',
+      'vworld-tier5-penthouse',
       'real-bldg-tier2-mainwall',
       'real-bldg-tier1-podium',
       'real-bldg-tier3-pattern',
