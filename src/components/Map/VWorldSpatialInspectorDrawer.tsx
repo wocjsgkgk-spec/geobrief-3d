@@ -455,10 +455,10 @@ export const VWorldSpatialInspectorDrawer: React.FC<VWorldInspectorProps> = ({
           </div>
         </div>
 
-        {/* 3. 섹션 탭 필터 (전체 / 토지가격·보상 / 복합 인허가 / 건축물 / 지적 / 토목) */}
+        {/* 3. 섹션 탭 필터 (전체 / 토지가격 & 보상방안 / 복합 인허가 / 건축물 / 지적 / 토목) */}
         <div className="px-2 pt-2 bg-[#091510] border-b border-[#1b3425] flex items-center gap-1 overflow-x-auto flex-shrink-0 no-scrollbar">
           {[
-            { id: 'compensation', label: '💰 토지가격·보상' },
+            { id: 'compensation', label: '💰 토지가격 & 보상방안' },
             { id: 'all', label: '전체' },
             { id: 'ontology', label: '⚖️ 복합 인허가' },
             { id: 'bld', label: '건축물대장' },

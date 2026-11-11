@@ -5210,6 +5210,43 @@ export const MapViewer: React.FC = () => {
           return;
         }
 
+        // [신규 1-B] 강원 18개 시·군 군 유휴부지(군사시설 이전부지) 클릭 처리
+        const militaryLayers = ['selected-military-site-fill', 'military-site-fill'].filter((l) => map.getLayer(l));
+        const militaryFeatures = militaryLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: militaryLayers }) : [];
+        if (militaryFeatures.length > 0) {
+          const mFeat = militaryFeatures[0];
+          const mp = (mFeat.properties || {}) as Record<string, any>;
+          const siteId = mp.id || 'wj-1st-logistics';
+          useMapStore.getState().selectIdleSite(siteId);
+          const clickCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+          const projected = map.project(clickCoords);
+          const fullSite = getGangwon18MilitarySiteById(siteId);
+          const siteName = fullSite?.name || mp.name || '국방부 군 유휴부지';
+          setSelectedBuilding({
+            name: siteName,
+            category: '국방부 군 유휴부지',
+            levels: 1,
+            height: 10,
+            center: clickCoords,
+            screenPos: { x: projected.x, y: projected.y },
+            rawProperties: {
+              '군 유휴부지명': siteName,
+              '관리기관': fullSite?.managingAgency || mp.managingAgency || '국방부',
+              '공부상 면적': `${Number(fullSite?.areaSqm || mp.areaSqm || 125000).toLocaleString()} ㎡ (${Number(fullSite?.areaPyeong || mp.areaPyeong || 37812).toLocaleString()} 평)`,
+              '현재 상태': fullSite?.currentStatus || mp.currentStatus || mp.currentUsage || '군사시설 이전부지',
+              '계획 용도': fullSite?.targetUse || mp.targetUse || mp.plannedUsage || '민군 첨단 복합단지 개발',
+              '용도지역': fullSite?.zoning || mp.zoning || '자연녹지지역·군사시설보호구역',
+              '소재지': fullSite?.district || mp.address || '강원특별자치도',
+            },
+          });
+          fetchCadastralAnalysis(e.lngLat.lat, e.lngLat.lng, selectedRegionId, {
+            bldNm: siteName,
+            usage: '국방부 군 유휴부지',
+            address: fullSite?.district || mp.address,
+          });
+          return;
+        }
+
         // [신규 2] 용도지역지구 또는 연속지적도 필지 클릭 처리
         const landLayers = ['vworld-zoning-fill', 'local-cadastral-fill'].filter((l) => map.getLayer(l));
         const landFeatures = landLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: landLayers }) : [];
