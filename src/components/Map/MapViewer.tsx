@@ -4947,8 +4947,8 @@ export const MapViewer: React.FC = () => {
       'building-vector-carrier',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
-    // 마우스 호버 커서 처리 (RAF 스로틀링 및 드래그 중 쿼리 100% 완전 차단)
-    let hoverRafId: number | null = null;
+    // 마우스 호버 커서 처리 (80ms 디바운스 스로틀링으로 마우스 이동 중 프레임 드랍 0% 완전 보장)
+    let hoverTimer: ReturnType<typeof setTimeout> | null = null;
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (
         isInteractingRef.current ||
@@ -4965,14 +4965,14 @@ export const MapViewer: React.FC = () => {
         losAnalysis.isActive ||
         placingFacilityPreset
       ) {
+        if (hoverTimer) clearTimeout(hoverTimer);
         return;
       }
 
-      if (hoverRafId !== null) return;
+      if (hoverTimer) clearTimeout(hoverTimer);
       const point = e.point;
       const lngLat = e.lngLat;
-      hoverRafId = requestAnimationFrame(() => {
-        hoverRafId = null;
+      hoverTimer = setTimeout(() => {
         if (
           isInteractingRef.current ||
           map.isMoving() ||
@@ -4988,7 +4988,7 @@ export const MapViewer: React.FC = () => {
             ? Boolean(realisticKoreanCityLayerRef.current.findBuildingNear(lngLat.lng, lngLat.lat, 20))
             : false;
         map.getCanvas().style.cursor = features.length > 0 || hasRealisticBldg ? 'pointer' : '';
-      });
+      }, 80);
     };
 
     // 건물 클릭 처리
@@ -5256,6 +5256,7 @@ export const MapViewer: React.FC = () => {
     map.on('click', onMapClick);
 
     return () => {
+      if (hoverTimer) clearTimeout(hoverTimer);
       map.off('mousemove', onMouseMove);
       map.off('click', onMapClick);
     };

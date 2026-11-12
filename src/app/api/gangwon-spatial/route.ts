@@ -624,6 +624,11 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // [60fps 최적화]: 브라우저 11MB JSON 대량 파싱 프리즈 방지를 위해 카테고리별 최대 피처 수 클램핑
+  const allBuildings = Array.from(buildingsMap.values());
+  const finalBuildings = allBuildings.length > 1500 ? allBuildings.slice(0, 1500) : allBuildings;
+  const finalParcels = parsedParcels.length > 1000 ? parsedParcels.slice(0, 1000) : parsedParcels;
+
   const responsePayload = {
     success: true,
     status: 'connected',
@@ -638,8 +643,8 @@ export async function GET(req: NextRequest) {
       militarySites: currentRegion.militarySites,
     },
     counts: {
-      buildings: buildingsMap.size,
-      parcels: parsedParcels.length,
+      buildings: finalBuildings.length,
+      parcels: finalParcels.length,
       zoning: parsedZoning.length,
       roads: overpassData.roads.length,
       bridges: overpassData.bridges.length,
@@ -650,11 +655,11 @@ export async function GET(req: NextRequest) {
     data: {
       buildings: {
         type: 'FeatureCollection',
-        features: Array.from(buildingsMap.values()),
+        features: finalBuildings,
       },
       parcels: {
         type: 'FeatureCollection',
-        features: parsedParcels,
+        features: finalParcels,
       },
       zoning: {
         type: 'FeatureCollection',

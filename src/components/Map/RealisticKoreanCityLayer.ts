@@ -1366,23 +1366,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      // [4중 안전 필터링 - 산림/경사 필터]: 표고 경사도 25도 이상 급경사 사면 100% 영구 배제
-      if (map && typeof map.queryTerrainElevation === 'function') {
-        const baseElev = map.queryTerrainElevation([cLng, cLat]);
-        if (baseElev !== null && baseElev !== undefined) {
-          const dDeg = 0.00025; // ~25m
-          const eEast = map.queryTerrainElevation([cLng + dDeg, cLat]) ?? baseElev;
-          const eNorth = map.queryTerrainElevation([cLng, cLat + dDeg]) ?? baseElev;
-          const dzE = Math.abs(eEast - baseElev) / 25;
-          const dzN = Math.abs(eNorth - baseElev) / 25;
-          const slopeDeg = Math.atan(Math.max(dzE, dzN)) * (180 / Math.PI);
-          if (slopeDeg >= 25.0) {
-            continue;
-          }
-        }
+      // [4중 안전 필터링 - 산림/경사 필터]: isMountainGhostBuilding을 통해 산림 및 비건물 유령 건물 고속 배제 (4500회 동기식 DEM 쿼리 프리즈 소멸)
+      const featProps = (feat.properties || {}) as Record<string, any>;
+      if (isMountainGhostBuilding(cLng, cLat, featProps, this.map)) {
+        continue;
       }
 
-      const featProps = (feat.properties || {}) as Record<string, any>;
       if (!isPermittedBuildingPolygon(featProps, areaSqm, spanX, spanZ, maxEdgeLen, minWidth, [cLng, cLat], this.map)) {
         continue;
       }
@@ -1714,7 +1703,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 22.0; // 프레임당 약 22ms 타임버짓으로 화면 내 건물 초고속 일괄 렌더링
+      const FRAME_BUDGET_MS = 12.0; // 60fps(16.6ms) 디스플레이 주사율을 철저히 준수하는 12ms 타임버짓
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1735,7 +1724,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         let sliceCount = 0;
 
         while (featureIdx < features.length) {
-          if (sliceCount > 0 && sliceCount % 350 === 0) {
+          if (sliceCount > 0 && sliceCount % 40 === 0) {
             const elapsed = performance.now() - sliceStartTime;
             if (elapsed >= FRAME_BUDGET_MS) {
               break;

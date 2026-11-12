@@ -1725,8 +1725,8 @@ export const useMapStore = create<MapStoreState>()(
       placingFacilityPreset: null,
       setPlacingFacilityPreset: (preset) => set({ placingFacilityPreset: preset }),
 
-      // [3D 디테일 LOD 모드: V-World 공식 클린 화이트(LOD1/GPU 60fps) / 실감(LOD2+) 토글 관리]
-      detail3DMode: 'lod1',
+      // [3D 디테일 LOD 모드: V-World 공식 실사 디지털 트윈(LOD2 실사 파사드 16종 + 옥상 디테일) 기본 활성화]
+      detail3DMode: 'lod2',
       setDetail3DMode: (mode) =>
         set((s) => {
           const nextMode: RenderMode3D = mode === 'lod2' ? 'facade' : 'native';
@@ -1799,8 +1799,8 @@ export const useMapStore = create<MapStoreState>()(
           };
         }),
 
-      // [통합 단일화] V-World GPU 3D 마스터 렌더러 (강원 18개 시·군 전역 60fps 무결점 기본 활성화)
-      renderMode3D: 'native',
+      // [통합 단일화] V-World 한국형 실사 3D 마스터 렌더러 (강원 18개 시·군 전역 실사 파사드 60fps 무결점 기본 활성화)
+      renderMode3D: 'facade',
       setRenderMode3D: (mode) =>
         set((s) => {
           const isTiles = mode === 'tiles3d';

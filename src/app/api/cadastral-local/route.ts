@@ -121,16 +121,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // [60fps 최적화]: 브라우저 28MB JSON 파싱 프리즈 방지를 위해 최대 반환 건수 클램핑
+  const limitParam = searchParams.get('limit');
+  const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10) || 1000), 2500) : 1000;
+  const clampedFeatures = filtered.length > limit ? filtered.slice(0, limit) : filtered;
+
   return NextResponse.json({
     success: true,
     source: 'cadastral_local',
     regionId,
     totalCount: allParcels.length,
-    returnedCount: filtered.length,
+    returnedCount: clampedFeatures.length,
     bbox,
     features: {
       type: 'FeatureCollection',
-      features: filtered,
+      features: clampedFeatures,
     },
     timestamp: Date.now(),
   }, {
