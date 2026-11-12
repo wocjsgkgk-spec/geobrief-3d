@@ -123,15 +123,15 @@ export const TerrainProfileModal: React.FC<TerrainProfileModalProps> = ({
     <div
       className={
         isMinimized
-          ? 'fixed bottom-12 right-6 z-40 transition-all duration-300 font-sans select-none w-auto'
-          : 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 font-sans select-none'
+          ? 'fixed bottom-6 right-6 z-40 transition-all duration-300 font-sans select-none pointer-events-auto'
+          : 'fixed bottom-8 right-8 z-40 w-[92vw] max-w-[560px] transition-all duration-200 font-sans select-none pointer-events-auto animate-in fade-in slide-in-from-bottom-4 shadow-2xl'
       }
     >
       <div
         className={
           isMinimized
             ? 'bg-[#0e1611]/95 backdrop-blur-md border border-[#223828] rounded-xl shadow-2xl overflow-hidden text-slate-200'
-            : 'w-full max-w-[560px] bg-[#0e1611]/95 backdrop-blur-md border border-emerald-500/30 rounded-2xl shadow-2xl overflow-hidden text-slate-200 ring-1 ring-emerald-500/20'
+            : 'w-full bg-[#0e1611]/95 backdrop-blur-md border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden text-slate-200 ring-1 ring-emerald-500/20'
         }
       >
         {/* 헤더 */}

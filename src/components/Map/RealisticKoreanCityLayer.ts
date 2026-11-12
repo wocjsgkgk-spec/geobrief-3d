@@ -459,23 +459,23 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
-      // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션: EgisCorp/XDWorld 표준 210° SW, 45°]
-      this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.20);
-      const sunDir = getXDWorldSunDirection(210, 45);
+      // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션: EgisCorp/XDWorld 표준 215° SW, 45°]
+      this.sunLight = new THREE.DirectionalLight(0xfffdf0, 1.75);
+      const sunDir = getXDWorldSunDirection(215, 45);
       this.sunLight.position.set(sunDir[0] * 200, sunDir[1] * 200, sunDir[2] * 200).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xffffff, 0.65);
+      this.fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.35);
       this.fillLight.position.set(130, 120, -100).normalize();
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 강도 1.35로 설정하여 그림자가 진 벽면도 절대 시커멓게 죽지 않고 창문 격자와 벽돌·화강석 색감이 환하게 보이도록 교정
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
+      // - AmbientLight(환경광): 강도 0.45로 설정하여 양지와 음지의 2.8:1 고대비 선명한 입체감 형성 (플랫 워시아웃 영구 소멸)
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 하늘 #ffffff, 지면 #e2e8f0, 강도 1.0으로 반사광 제공
-      this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 1.0);
+      // - HemisphereLight: 하늘 #e0f2fe, 지면 #94a3b8, 강도 0.25로 반사광 제공
+      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0x94a3b8, 0.25);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 2단계] V-World 22종(외벽 16종 + 지붕 4종 + 난간 + 옥탑) 독립 Material 싱글톤 엔진
@@ -881,11 +881,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.color.set(colorOrAz);
     }
     this.sunLight.intensity = Math.max(0.2, intensity);
-    if (this.ambientLight) this.ambientLight.intensity = 1.35;
+    if (this.ambientLight) this.ambientLight.intensity = 0.45;
     if (this.hemisphereLight) {
-      this.hemisphereLight.intensity = 1.0;
-      this.hemisphereLight.color.set(0xffffff);
-      this.hemisphereLight.groundColor.set(0xe2e8f0);
+      this.hemisphereLight.intensity = 0.25;
+      this.hemisphereLight.color.set(0xe0f2fe);
+      this.hemisphereLight.groundColor.set(0x94a3b8);
     }
 
     // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
@@ -1002,10 +1002,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const relH1 = Math.max(0, p1[1] - baseElev);
     const relH2 = Math.max(0, p2[1] - baseElev);
 
-    // [3단계: 건물 하단 0m ~ 2.5m 접지 앰비언트 오클루전 그라데이션 0.78 -> 1.0 적용]
-    const ao0 = relH0 < 2.5 ? 0.78 + 0.22 * (relH0 / 2.5) : 1.0;
-    const ao1 = relH1 < 2.5 ? 0.78 + 0.22 * (relH1 / 2.5) : 1.0;
-    const ao2 = relH2 < 2.5 ? 0.78 + 0.22 * (relH2 / 2.5) : 1.0;
+    // [3단계: 건물 하단 0m ~ 3.2m 접지 앰비언트 오클루전 그라데이션 0.65 -> 1.0 적용으로 지면 밀착감 강화]
+    const ao0 = relH0 < 3.2 ? 0.65 + 0.35 * (relH0 / 3.2) : 1.0;
+    const ao1 = relH1 < 3.2 ? 0.65 + 0.35 * (relH1 / 3.2) : 1.0;
+    const ao2 = relH2 < 3.2 ? 0.65 + 0.35 * (relH2 / 3.2) : 1.0;
 
     pos[p] = p0[0]; pos[p + 1] = p0[1]; pos[p + 2] = p0[2];
     nrm[p] = norm[0]; nrm[p + 1] = norm[1]; nrm[p + 2] = norm[2];

@@ -126,241 +126,220 @@ function createProceduralCanvasTexture(
 // -----------------------------------------------------------------------------
 
 function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // Base Wall Colors: 순백색(#f8fafc), 크림 아이보리(#f4f1ea), 실버 그레이(#e2e8f0), 모던 쿨그레이(#f1f5f9), 소프트 웜그레이(#e7e5e4)
-  const baseColors = ['#f8fafc', '#f4f1ea', '#e2e8f0', '#f1f5f9', '#e7e5e4'];
+  // 1-Bay (3.2m) × 1-Floor (3.0m) Korean Apartment Veranda Unit at 1024×1024
+  const baseColors = ['#f8fafc', '#f5f5f0', '#e2e8f0', '#f1f5f9', '#eceae6'];
   const baseColor = baseColors[variant % baseColors.length];
 
   ctx.fillStyle = baseColor;
   ctx.fillRect(0, 0, w, h);
 
-  // 전면/배면 메인 창호 영역 (0 ~ w - 80px)
-  const mainW = w - 80;
+  // 1) Upper floor slab dividing band (0 ~ 110px) with dark concrete coping groove
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(0, 0, w, 90);
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.40)';
+  ctx.fillRect(0, 85, w, 12); // horizontal shadow groove
 
-  // 하단 3개 층 (0 ~ 3.8m, 캔버스 하단 260px) 화강석/브라운 기단부 투톤 도색
-  const podiumColors = ['#44403c', '#57534e', '#3f3f46', '#475569', '#78350f'];
-  ctx.fillStyle = podiumColors[variant % podiumColors.length];
-  ctx.fillRect(0, h - 260, mainW, 260);
+  // 2) Lower floor slab dividing band (920 ~ 1024px)
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(0, 930, w, 94);
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.30)';
+  ctx.fillRect(0, 925, w, 8);
 
-  // 기단부 상단 띠선
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(0, h - 268, mainW, 8);
+  // 3) Left and Right Concrete Structural Pier Columns
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
+  ctx.fillRect(0, 0, 90, h);
+  ctx.fillRect(w - 90, 0, 90, h);
 
-  // 촘촘한 다크 차콜(#1e293b) 발코니 유리창 격자 + 백색 창틀
-  const cols = 7;
-  const rows = 12;
-  const cellW = mainW / cols;
-  const cellH = (h - 280) / rows;
+  // 4) Balcony Veranda Window Outer Frame (x: 100 to 924, y: 115 to 915)
+  const winX = 100;
+  const winY = 115;
+  const winW = w - 200; // 824px wide (2.57m actual glass width)
+  const winH = 800; // 800px high (2.34m actual glass height)
 
-  for (let r = 0; r < rows; r++) {
-    const y = r * cellH + 15;
-    for (let c = 0; c < cols; c++) {
-      const x = c * cellW + 10;
-      const winW = cellW - 20;
-      const winH = cellH - 20;
+  const sashColors = ['#ffffff', '#ffffff', '#1e293b', '#334155', '#475569'];
+  ctx.fillStyle = sashColors[variant % sashColors.length];
+  ctx.fillRect(winX - 12, winY - 12, winW + 24, winH + 24);
 
-      // 순백색 외부 창틀
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x - 2, y - 2, winW + 4, winH + 4);
+  // 5) High-Performance Tinted Double-Glazed Glass with Sky Reflection
+  const glassGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+  glassGrad.addColorStop(0, '#7dd3fc'); // bright sky reflection
+  glassGrad.addColorStop(0.35, '#38bdf8'); // sky blue
+  glassGrad.addColorStop(0.70, '#1e3a8a'); // deep indigo glass
+  glassGrad.addColorStop(1.0, '#0f172a'); // dark floor shadow
+  ctx.fillStyle = glassGrad;
+  ctx.fillRect(winX, winY, winW, winH);
 
-      // 다크 차콜 발코니 유리창
-      const grad = ctx.createLinearGradient(x, y, x, y + winH);
-      grad.addColorStop(0, '#0f172a');
-      grad.addColorStop(0.5, '#1e293b');
-      grad.addColorStop(1, '#334155');
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, y, winW, winH);
+  // 6) Diagonal Glass Sheen Reflection
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.beginPath();
+  ctx.moveTo(winX + 40, winY);
+  ctx.lineTo(winX + 260, winY);
+  ctx.lineTo(winX + 160, winY + winH);
+  ctx.lineTo(winX, winY + winH);
+  ctx.closePath();
+  ctx.fill();
 
-      // 발코니 하단 안전 난간 살 (Silver White)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-      ctx.lineWidth = 1.5;
-      const railY = y + winH * 0.55;
-      ctx.beginPath();
-      ctx.moveTo(x, railY);
-      ctx.lineTo(x + winW, railY);
-      ctx.stroke();
+  // 7) Central Sliding Sash Divider (Mullion, x = 502~522)
+  ctx.fillStyle = sashColors[variant % sashColors.length];
+  ctx.fillRect(winX + winW * 0.5 - 10, winY, 20, winH);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(winX + winW * 0.5 - 10, winY, 20, winH);
 
-      for (let s = x + 8; s < x + winW; s += 10) {
-        ctx.beginPath();
-        ctx.moveTo(s, railY);
-        ctx.lineTo(s, y + winH);
-        ctx.stroke();
-      }
-    }
-  }
+  // 8) Balcony Lower Safety Guardrail (하단 1.1m 안전 난간, y: 520 to 890)
+  const railTopY = winY + winH * 0.52;
+  const railH = winY + winH - railTopY;
 
-  // 아파트 양옆 좁은 측벽(Side Wall) 무창 영역 (w - 80 ~ w):
-  // 창문 없는 순백색/아이보리 콘크리트 외벽 + 청록/블루/브라운 수직 브랜드 라인
-  const sideStartX = w - 80;
-  ctx.fillStyle = baseColor;
-  ctx.fillRect(sideStartX, 0, 80, h);
+  // Railing glass semi-transparent tinted backdrop
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.25)';
+  ctx.fillRect(winX, railTopY, winW, railH);
 
-  // 미세한 콘크리트 패널 줄눈
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 1.5;
-  for (let y = 0; y < h; y += 64) {
+  // Top Stainless Handrail
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillRect(winX, railTopY - 6, winW, 14);
+  ctx.fillStyle = 'rgba(100, 116, 139, 0.7)';
+  ctx.fillRect(winX, railTopY + 8, winW, 3); // shadow under handrail
+
+  // 8 Vertical Balustrade Bars
+  const numBars = 8;
+  const barSpacing = winW / (numBars + 1);
+  ctx.lineWidth = 5;
+  for (let b = 1; b <= numBars; b++) {
+    const bx = winX + b * barSpacing;
+    ctx.strokeStyle = '#f8fafc';
     ctx.beginPath();
-    ctx.moveTo(sideStartX, y);
-    ctx.lineTo(w, y);
+    ctx.moveTo(bx, railTopY + 8);
+    ctx.lineTo(bx, winY + winH - 6);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
+    ctx.beginPath();
+    ctx.moveTo(bx + 2, railTopY + 8);
+    ctx.lineTo(bx + 2, winY + winH - 6);
     ctx.stroke();
   }
 
-  // 수직 브랜드 악센트 컬러 띠
-  const brandColors = ['#0284c7', '#10b981', '#78350f', '#0f766e', '#1e3a5f'];
-  ctx.fillStyle = brandColors[variant % brandColors.length];
-  ctx.fillRect(sideStartX + 24, 0, 32, h);
-
-  // 브랜드 엠블럼 백색 사각 포인트
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(sideStartX + 28, 80, 24, 160);
-  ctx.fillStyle = brandColors[variant % brandColors.length];
-  ctx.fillRect(sideStartX + 34, 110, 12, 100);
+  // 9) Air conditioner outdoor unit louver grille (실외기실 루버)
+  const acW = 220;
+  const acH = 150;
+  const acX = winX + winW - acW - 20;
+  const acY = winY + winH - acH - 18;
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(acX, acY, acW, acH);
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(acX, acY, acW, acH);
+  ctx.fillStyle = '#64748b';
+  for (let ly = acY + 12; ly < acY + acH - 8; ly += 16) {
+    ctx.fillRect(acX + 6, ly, acW - 12, 6);
+  }
 }
 
 function drawPublicHQFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // [Mat 5~8]: 혁신도시 공공청사·관공서·학교·오피스 (4종)
-  // 밝은 화강석 포디움(1~2층) + 은청색/스카이블루(#38bdf8 ~ #0284c7) 및 에메랄드 반사 유리 커튼월 + 은백색 알루미늄 멀리언 격자 프레임
+  // 1-Bay (3.2m) × 1-Floor (3.0m) High-Grade Curtain Wall Module at 1024×1024
   const glassThemes = [
-    { start: '#042f2e', mid: '#0f766e', end: '#14b8a6' }, // 0: Emerald Reflective Glass
-    { start: '#082f49', mid: '#0284c7', end: '#38bdf8' }, // 1: Sky Blue Reflective Glass
-    { start: '#0c4a6e', mid: '#0369a1', end: '#7dd3fc' }, // 2: Cyan / Silver Blue Glass
-    { start: '#064e3b', mid: '#059669', end: '#34d399' }, // 3: Vivid Emerald Glass
+    { start: '#042f2e', mid: '#0f766e', end: '#14b8a6', mullion: '#e2e8f0' }, // 0: Emerald Reflective Glass
+    { start: '#082f49', mid: '#0284c7', end: '#38bdf8', mullion: '#f8fafc' }, // 1: Sky Blue Reflective Glass
+    { start: '#0f172a', mid: '#0369a1', end: '#7dd3fc', mullion: '#cbd5e1' }, // 2: Cyan Silver Mirror
+    { start: '#1c1917', mid: '#44403c', end: '#78716c', mullion: '#94a3b8' }, // 3: Vivid Emerald Glass
   ];
-  const glassTheme = glassThemes[variant % glassThemes.length];
+  const theme = glassThemes[variant % glassThemes.length];
 
-  const curtainH = h * 0.78;
-  const grad = ctx.createLinearGradient(0, 0, w, curtainH);
-  grad.addColorStop(0, glassTheme.start);
-  grad.addColorStop(0.5, glassTheme.mid);
-  grad.addColorStop(1, glassTheme.end);
+  // Base Reflective Glass
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, theme.start);
+  grad.addColorStop(0.4, theme.mid);
+  grad.addColorStop(1, theme.end);
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, curtainH);
+  ctx.fillRect(0, 0, w, h);
 
-  // 은백색 알루미늄 멀리언 수직/수평 격자 프레임
-  ctx.strokeStyle = 'rgba(241, 245, 249, 0.95)';
-  ctx.lineWidth = 2.5;
-
-  const mullionSpacing = w / 16;
-  for (let x = 0; x <= w; x += mullionSpacing) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, curtainH);
-    ctx.stroke();
+  // Interior venetian blind simulation (top 35% of vision glass)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  for (let by = 30; by < 320; by += 18) {
+    ctx.fillRect(15, by, w - 30, 8);
   }
 
-  const transomSpacing = curtainH / 14;
-  for (let y = 0; y <= curtainH; y += transomSpacing) {
+  // Aluminum Mullion & Transom Architecture (Silver profile)
+  ctx.fillStyle = theme.mullion;
+  // Outer perimeter frames
+  ctx.fillRect(0, 0, 16, h); // left mullion
+  ctx.fillRect(w - 16, 0, 16, h); // right mullion
+  ctx.fillRect(0, 0, w, 22); // top transom
+  ctx.fillRect(0, h - 22, w, 22); // bottom transom
+
+  // Center vertical mullion (dividing 3.2m bay into two 1.6m panes)
+  ctx.fillRect(w * 0.5 - 12, 0, 24, h);
+
+  // Horizontal mid-transom (vision vs spandrel)
+  ctx.fillRect(0, 320, w, 18);
+
+  // Bevel shadow on mullions
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.fillRect(16, 0, 4, h);
+  ctx.fillRect(w * 0.5 + 12, 0, 4, h);
+  ctx.fillRect(0, 22, w, 4);
+  ctx.fillRect(0, 338, w, 4);
+}
+
+function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
+  // 1-Bay (3.2m) × 1-Floor (3.0m) Commercial/Office Module at 1024×1024
+  const wallThemes = [
+    { base: '#d6cfc2', stone: '#cbd5e1', frame: '#475569' }, // 0: Beige Granite
+    { base: '#7f1d1d', stone: '#991b1b', frame: '#1e293b' }, // 1: Architectural Red Brick
+    { base: '#334155', stone: '#1e293b', frame: '#0f172a' }, // 2: Charcoal Metal Panel
+    { base: '#78350f', stone: '#92400e', frame: '#451a03' }, // 3: Brown Travertine
+  ];
+  const theme = wallThemes[variant % wallThemes.length];
+
+  ctx.fillStyle = theme.base;
+  ctx.fillRect(0, 0, w, h);
+
+  // Stone cladding joints (줄눈)
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.lineWidth = 3;
+  for (let y = 0; y < h; y += 256) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(w, y);
     ctx.stroke();
   }
-
-  // 1~2층 (하단 22%) 밝은 화강석 포디움 (시커먼 흑색 완전 배제!)
-  const podiumStone = ['#cbd5e1', '#e2e8f0', '#d6cfc2', '#f1f5f9'][variant % 4];
-  ctx.fillStyle = podiumStone;
-  ctx.fillRect(0, curtainH, w, h - curtainH);
-
-  // 포디움 상단 분리 턱
-  ctx.fillStyle = '#64748b';
-  ctx.fillRect(0, curtainH - 6, w, 8);
-
-  // 포디움 대형 유리 로비 창문
-  const lobbies = 6;
-  const lobbyW = w / lobbies;
-  for (let b = 0; b < lobbies; b++) {
-    const lx = b * lobbyW + 14;
-    const lw = lobbyW - 28;
-    const ly = curtainH + 24;
-    const lh = (h - curtainH) - 40;
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(lx, ly, lw, lh);
-
-    // 로비 온백색 내부 조명 반사
-    ctx.fillStyle = 'rgba(254, 240, 138, 0.45)';
-    ctx.fillRect(lx + 4, ly + 4, lw - 8, lh * 0.45);
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(lx, ly, lw, lh);
-  }
-}
-
-function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // [Mat 9~12]: 시내 상가·근린생활 (4종)
-  // Base: 차분한 베이지 화강석(#d6cfc2), 짙은 적벽돌(#7f1d1d), 차콜 메탈(#334155), 브라운 파벽돌(#78350f)
-  const wallColors = ['#d6cfc2', '#7f1d1d', '#334155', '#78350f'];
-  ctx.fillStyle = wallColors[variant % wallColors.length];
-  ctx.fillRect(0, 0, w, h);
-
-  // 1층 (0 ~ 3.8m, 캔버스 하단 300px) 화강석 쇼윈도 기단부
-  ctx.fillStyle = '#475569';
-  ctx.fillRect(0, h - 300, w, 300);
-
-  // 1층 매장 통유리 쇼윈도 & 내부 온백색 조명 반사
-  const shops = 4;
-  const shopW = w / shops;
-  for (let s = 0; s < shops; s++) {
-    const sx = s * shopW + 16;
-    const sy = h - 250;
-    const sw = shopW - 32;
-    const sh = 220;
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(sx, sy, sw, sh);
-
-    ctx.fillStyle = 'rgba(254, 240, 138, 0.55)';
-    ctx.fillRect(sx + 4, sy + 4, sw - 8, sh * 0.4);
-
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(sx, sy, sw, sh);
+  for (let x = 0; x < w; x += 340) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
   }
 
-  // 1~3층 창문 아래 한국형 가로 간판 패치 (빨강, 파랑, 노랑, 초록, 흰색)
-  const signboardColors = ['#dc2626', '#2563eb', '#eab308', '#16a34a', '#f8fafc'];
-  const signboardH = 50;
-  const signY = h - 300;
+  // Commercial Office/Clinic Window (x: 120px to 904px, y: 160px to 860px)
+  const wx = 120;
+  const wy = 160;
+  const ww = w - 240;
+  const wh = 700;
 
-  for (let s = 0; s < shops; s++) {
-    const sx = s * shopW + 16;
-    const sw = shopW - 32;
-    const colorIdx = (s + variant) % signboardColors.length;
-    ctx.fillStyle = signboardColors[colorIdx];
-    ctx.fillRect(sx, signY, sw, signboardH);
+  ctx.fillStyle = theme.frame;
+  ctx.fillRect(wx - 14, wy - 14, ww + 28, wh + 28);
 
-    // 간판 백색 텍스트 엠블럼 바
-    ctx.fillStyle = colorIdx === 2 ? '#0f172a' : '#ffffff';
-    ctx.fillRect(sx + 20, signY + 16, sw - 40, 16);
-  }
+  const glassGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+  glassGrad.addColorStop(0, '#0284c7');
+  glassGrad.addColorStop(0.5, '#0369a1');
+  glassGrad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = glassGrad;
+  ctx.fillRect(wx, wy, ww, wh);
 
-  // 2층 이상 기준층 오피스 창문 격자
-  const cols = 6;
-  const rows = 7;
-  const cellW = w / cols;
-  const cellH = (h - 330) / rows;
-
-  for (let r = 0; r < rows; r++) {
-    const y = r * cellH + 20;
-    for (let c = 0; c < cols; c++) {
-      const x = c * cellW + 16;
-      const winW = cellW - 32;
-      const winH = cellH - 24;
-
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(x, y, winW, winH);
-
-      // 알루미늄 샤시
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(x, y, winW, winH);
-    }
-  }
+  // Aluminum sash profile
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(wx, wy, ww, wh);
+  ctx.beginPath();
+  ctx.moveTo(wx + ww * 0.5, wy);
+  ctx.lineTo(wx + ww * 0.5, wy + wh);
+  ctx.moveTo(wx, wy + 200);
+  ctx.lineTo(wx + ww, wy + 200);
+  ctx.stroke();
 }
 
 function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // [Mat 13~15]: 단독주택·빌라·학교 (3종)
-  // 13: 적벽돌(#7c2d12), 14: 황토벽돌(#854d0e), 15: 살구색/테라코타 학교 교사동(#d97742)
+  // 1-Bay (3.2m) × 1-Floor (3.0m) Residential Villa/School Module at 1024×1024
   const brickThemes = [
     { base: '#7c2d12', mortar: '#d6d3d1' },
     { base: '#854d0e', mortar: '#e7e5e4' },
@@ -372,44 +351,37 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
   ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = theme.base;
-  const bW = 42;
-  const bH = 19;
-  for (let y = 0; y < h; y += bH + 2) {
+  const bW = 68;
+  const bH = 26;
+  for (let y = 0; y < h; y += bH + 4) {
     const offset = (Math.floor(y / bH) % 2) * (bW / 2);
-    for (let x = -offset; x < w; x += bW + 2) {
+    for (let x = -offset; x < w; x += bW + 4) {
       ctx.fillRect(x, y, bW, bH);
     }
   }
 
-  // 백색 창틀 + 다크 차콜 창문
-  const cols = 5;
-  const rows = 4;
-  const cellW = w / cols;
-  const cellH = h / rows;
+  // Residential Casement Window (x: 200 to 824, y: 180 to 820)
+  const wx = 200;
+  const wy = 180;
+  const ww = w - 400;
+  const wh = 640;
 
-  for (let r = 0; r < rows; r++) {
-    const y = r * cellH + 30;
-    for (let c = 0; c < cols; c++) {
-      const x = c * cellW + 25;
-      const winW = cellW - 50;
-      const winH = cellH - 60;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(wx - 16, wy - 16, ww + 32, wh + 32);
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(wx - 16, wy - 16, ww + 32, wh + 32);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x - 5, y - 5, winW + 10, winH + 10);
+  const gGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+  gGrad.addColorStop(0, '#38bdf8');
+  gGrad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = gGrad;
+  ctx.fillRect(wx, wy, ww, wh);
 
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(x, y, winW, winH);
-
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x + winW / 2, y);
-      ctx.lineTo(x + winW / 2, y + winH);
-      ctx.moveTo(x, y + winH / 2);
-      ctx.lineTo(x + winW, y + winH / 2);
-      ctx.stroke();
-    }
-  }
+  // White window sash division
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(wx + ww * 0.5 - 8, wy, 16, wh);
+  ctx.fillRect(wx, wy + wh * 0.5 - 8, ww, 16);
 }
 
 // -----------------------------------------------------------------------------
@@ -417,11 +389,11 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
 // -----------------------------------------------------------------------------
 
 function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ① 차분한 세이지 / 다크 우레탄 그린 (#2d6a4f, #3a5a40)
+  // ① Korean Authentic Emerald Urethane Roof (#2d6a4f, #357a5b)
   ctx.fillStyle = '#2d6a4f';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = '#3a5a40';
+  ctx.fillStyle = '#357a5b';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {
@@ -430,9 +402,9 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
     }
   }
 
-  // 우레탄 줄눈(방수 팽창 줄눈)
-  ctx.strokeStyle = '#1e4835';
-  ctx.lineWidth = 4;
+  // Expansion control joints
+  ctx.strokeStyle = '#1b4332';
+  ctx.lineWidth = 6;
   for (let x = 0; x <= w; x += 256) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -445,10 +417,19 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
     ctx.lineTo(w, y);
     ctx.stroke();
   }
+
+  // Rooftop Drain (배수구)
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 5;
+  ctx.stroke();
 }
 
 function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ② 밝은 시멘트/콘크리트 회색 슬래브 (#94a3b8, #cbd5e1)
+  // ② Light Concrete Slab (#94a3b8, #cbd5e1)
   ctx.fillStyle = '#94a3b8';
   ctx.fillRect(0, 0, w, h);
 
@@ -461,9 +442,8 @@ function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: numbe
     }
   }
 
-  // 콘크리트 슬래브 줄눈
   ctx.strokeStyle = '#64748b';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 4;
   for (let x = 0; x <= w; x += 256) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -479,72 +459,81 @@ function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: numbe
 }
 
 function drawTerracottaTileRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ③ 차분한 적갈색 / 다크브라운 기와 (#6c3428, #5c2c20)
+  // ③ Terracotta Spanish Clay Tile (#6c3428, #5c2c20)
   ctx.fillStyle = '#6c3428';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = '#5c2c20';
-  ctx.lineWidth = 6;
-  const tileSpacing = 48;
+  const tileSpacing = 42;
   for (let y = 0; y < h; y += tileSpacing) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.fillRect(0, y, w, 8);
+    ctx.fillStyle = '#854234';
+    ctx.fillRect(0, y + 8, w, 12);
   }
 }
 
 function drawCobaltSteelRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ④ 코발트 블루 강판 (#1e40af, #1d4ed8)
+  // ④ Industrial Cobalt Blue Corrugated Steel (#1d4ed8)
   ctx.fillStyle = '#1d4ed8';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = '#1e40af';
-  const seamW = 32;
-  for (let x = 0; x < w; x += seamW * 2) {
-    ctx.fillRect(x, 0, seamW, h);
-  }
-
-  ctx.strokeStyle = '#172554';
-  ctx.lineWidth = 3;
-  for (let x = 0; x <= w; x += seamW) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
+  const ribW = 32;
+  for (let x = 0; x < w; x += ribW * 2) {
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(x, 0, ribW, h);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(x + ribW - 4, 0, 4, h);
   }
 }
 
 function drawParapetConcrete(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // 0.85m 회백색 콘크리트 테두리 난간 (#cbd5e1, #94a3b8)
+  // 0.85m Parapet Coping Rim with Light Concrete Cap & Inner Drop Shadow
   ctx.fillStyle = '#cbd5e1';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 4;
-  for (let y = 0; y < h; y += 128) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
+  // Top coping edge
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillRect(0, 0, w, 160);
+
+  // Coping drip edge line
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(0, 160, w, 24);
+
+  // Inner vertical drop shadow gradient
+  const shadowGrad = ctx.createLinearGradient(0, 184, 0, h);
+  shadowGrad.addColorStop(0, 'rgba(30, 41, 59, 0.45)');
+  shadowGrad.addColorStop(1, 'rgba(30, 41, 59, 0.05)');
+  ctx.fillStyle = shadowGrad;
+  ctx.fillRect(0, 184, w, h - 184);
 }
 
 function drawPenthouseLouver(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // 3m 엘리베이터 옥탑방 권상기실 외벽 및 루버 (#94a3b8)
+  // 3.0m Elevator Traction Machine Room Penthouse
   ctx.fillStyle = '#94a3b8';
   ctx.fillRect(0, 0, w, h);
 
+  // Aluminum acoustic ventilation louvers
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(80, 80, w - 160, h - 160);
+  ctx.fillRect(80, 80, w - 160, 480);
 
   ctx.fillStyle = '#cbd5e1';
-  for (let y = 100; y < h - 100; y += 24) {
-    ctx.fillRect(100, y, w - 200, 10);
+  for (let y = 100; y < 540; y += 22) {
+    ctx.fillRect(95, y, w - 190, 8);
   }
+
+  // Steel machine room door (bottom center)
+  const dw = 240;
+  const dh = 360;
+  const dx = (w - dw) / 2;
+  const dy = h - dh - 20;
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(dx, dy, dw, dh);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(dx, dy, dw, dh);
+  // Door handle
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(dx + 28, dy + dh * 0.5 - 6, 12, 32);
 }
 
 // =============================================================================

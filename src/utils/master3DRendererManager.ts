@@ -176,11 +176,47 @@ export function syncMaster3DRenderer(
 // [고속 지형 표고 메모이제이션 캐시]: 동기식 queryTerrainElevation (gl.readPixels GPU 스톨) 100% 방지
 const elevationCache = new Map<string, number>();
 
+const GANGWON_REGIONAL_BASE_ELEVATION: { [key: string]: { name: string; center: [number, number]; maxMountainElev: number } } = {
+  wonju: { name: '원주', center: [127.9351, 37.3592], maxMountainElev: 180 },
+  chuncheon: { name: '춘천', center: [127.7298, 37.8813], maxMountainElev: 125 },
+  gangneung: { name: '강릉', center: [128.8761, 37.7519], maxMountainElev: 65 },
+  sokcho: { name: '속초', center: [128.5918, 38.2070], maxMountainElev: 50 },
+  donghae: { name: '동해', center: [129.1143, 37.5247], maxMountainElev: 65 },
+  samcheok: { name: '삼척', center: [129.1658, 37.4498], maxMountainElev: 65 },
+  taebaek: { name: '태백', center: [128.9889, 37.1641], maxMountainElev: 840 },
+  pyeongchang: { name: '평창', center: [128.3904, 37.3705], maxMountainElev: 720 },
+  jeongseon: { name: '정선', center: [128.6608, 37.3806], maxMountainElev: 460 },
+  yeongwol: { name: '영월', center: [128.4620, 37.1837], maxMountainElev: 295 },
+  hongcheon: { name: '홍천', center: [127.8887, 37.6970], maxMountainElev: 170 },
+  hoengseong: { name: '횡성', center: [127.9850, 37.4916], maxMountainElev: 190 },
+  cheorwon: { name: '철원', center: [127.3134, 38.1468], maxMountainElev: 240 },
+  hwacheon: { name: '화천', center: [127.7082, 38.1062], maxMountainElev: 180 },
+  yanggu: { name: '양구', center: [127.9897, 38.1095], maxMountainElev: 250 },
+  inje: { name: '인제', center: [128.1704, 38.0697], maxMountainElev: 285 },
+  goseong: { name: '고성', center: [128.4678, 38.3806], maxMountainElev: 75 },
+  yangyang: { name: '양양', center: [128.6285, 38.0754], maxMountainElev: 65 },
+};
+
+function getGangwonMaxMountainElev(lng: number, lat: number): number {
+  let closestDist = Infinity;
+  let maxElev = 220;
+  for (const reg of Object.values(GANGWON_REGIONAL_BASE_ELEVATION)) {
+    const dLng = (reg.center[0] - lng) * 88.0;
+    const dLat = (reg.center[1] - lat) * 111.0;
+    const dist = Math.hypot(dLng, dLat);
+    if (dist < closestDist) {
+      closestDist = dist;
+      maxElev = reg.maxMountainElev;
+    }
+  }
+  return maxElev;
+}
+
 /**
  * [강원 18개 시·군 산속/임야 유령 건물 원천 차단 필터]
  * 1) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
  * 2) 치악산, 설악산, 오대산 등 강원 산악 능선 좌표 마스킹
- * 3) DEM 표고 분석 (그리드 캐시 기반 무스톨 초고속 판별)
+ * 3) DEM 표고 분석 및 경사도 14° 필터링 (그리드 캐시 기반 무스톨 초고속 판별)
  */
 export function isMountainGhostBuilding(
   lng: number,
@@ -201,11 +237,13 @@ export function isMountainGhostBuilding(
     return true;
   }
 
-  // 공식 공인 건축물 식별자 보유 여부
+  // 공식 공인 건축물 식별자 보유 여부 (국토교통부 전자약도 / 건축물대장)
   const hasOfficialRegistration = Boolean(
     featProps.bd_mgt_sn ||
     featProps.source === 'vworld_local' ||
     featProps.source === 'LT_C_SPBD' ||
+    featProps.mgmBldrgstPk ||
+    featProps.is_real_measured === true ||
     (featProps.pnu && featProps.buld_nm)
   );
 
@@ -233,7 +271,6 @@ export function isMountainGhostBuilding(
   }
 
   // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹
-  // - 대한민국 국토교통부 건축물대장에 등재되지 않은 오픈 스트리트맵(OSM) 산림 다각형 전수 차단
   const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
   if (isGangwonZone && !hasOfficialRegistration) {
     // 1. 치악산 국립공원 및 원주 외곽 산림 능선
@@ -249,18 +286,24 @@ export function isMountainGhostBuilding(
     // 6. 춘천 구봉산·봉의산·용화산 배후 산림 능선
     if (lng >= 127.68 && lng <= 127.88 && lat >= 37.82 && lat <= 38.05) return true;
 
-    // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 오염 구역
+    // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역
     if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) return true;
     if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) return true;
     if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) return true;
 
     // 8. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
-    if (featProps.sourceLayer === 'building' || featProps.sources?.ofm) {
-      return true;
+    if (featProps.sourceLayer === 'building' || featProps.layerId === 'building-vector-carrier' || featProps.sources?.ofm) {
+      const dynamicMaxElev = getGangwonMaxMountainElev(lng, lat);
+      if (map && typeof map.queryTerrainElevation === 'function') {
+        const e = map.queryTerrainElevation([lng, lat]);
+        if (typeof e === 'number' && e >= dynamicMaxElev - 15) {
+          return true;
+        }
+      }
     }
   }
 
-  // [3] DEM 표고 캐시 기반 고속 분석 (동기식 queryTerrainElevation GPU 스톨 영구 방지)
+  // [3] DEM 표고 캐시 및 경사도(Slope 14°+) 기반 고속 분석
   if (map && typeof map.queryTerrainElevation === 'function') {
     try {
       const gridKey = `${Math.round(lng * 500)}_${Math.round(lat * 500)}`;
@@ -274,9 +317,21 @@ export function isMountainGhostBuilding(
         elevationCache.set(gridKey, elev);
       }
 
-      // 고지대 170m 이상 능선/산꼭대기 미등록 건물 100% 배제
-      if (elev >= 170 && !hasOfficialRegistration) {
-        return true;
+      // 경사도 14° 초과 산악 사면 미등록 다각형 100% 영구 배제
+      if (elev > 0 && !hasOfficialRegistration) {
+        const deltaDeg = 0.0003;
+        const eNorth = map.queryTerrainElevation([lng, lat + deltaDeg]) || elev;
+        const eSouth = map.queryTerrainElevation([lng, lat - deltaDeg]) || elev;
+        const dElev = Math.abs(eNorth - eSouth);
+        const slopeDeg = Math.atan(dElev / 66.0) * (180 / Math.PI);
+        if (slopeDeg >= 14.0) {
+          return true;
+        }
+
+        const dynamicMaxElev = getGangwonMaxMountainElev(lng, lat);
+        if (elev >= dynamicMaxElev) {
+          return true;
+        }
       }
     } catch {
       // ignore

@@ -102,7 +102,11 @@ export function extractRenderedVectorBuildings(
       if (seen.has(key)) continue;
       seen.add(key);
 
-      const props = feat.properties || {};
+      const props: Record<string, any> = {
+        ...(feat.properties || {}),
+        sourceLayer: (feat as any).sourceLayer || (feat as any).layer?.['source-layer'] || 'building',
+        layerId: (feat as any).layer?.id || '',
+      };
       const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || '');
       const usageType = String(props.type || props.class || props.building || props.usageType || props.bld_category || 'general').toLowerCase();
 
