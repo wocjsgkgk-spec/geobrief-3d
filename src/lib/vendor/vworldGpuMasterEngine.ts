@@ -25,10 +25,11 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
   'let',
   'declH',
   [
-    'coalesce',
+    'max',
     ['to-number', ['get', 'realHeight'], 0],
     ['to-number', ['get', 'render_height'], 0],
     ['to-number', ['get', 'height'], 0],
+    ['to-number', ['get', 'hei'], 0],
     ['to-number', ['get', 'bld_hgt'], 0],
     ['*', ['to-number', ['get', 'gro_flo_co'], 0], 3.2],
     ['*', ['to-number', ['get', 'grnd_flr'], 0], 3.2],
@@ -57,15 +58,15 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
     ],
     0,
 
-    // 1. 실측 및 검증된 높이 (declH >= 12.0m 또는 is_real_measured)
+    // 1. 실측 및 검증된 높이 (declH >= 4.0m 또는 is_real_measured: gro_flo_co * 3.2m 포함)
     [
       'any',
-      ['>=', ['var', 'declH'], 12.0],
+      ['>=', ['var', 'declH'], 4.0],
       ['==', ['get', 'is_real_measured'], true],
     ],
-    ['max', 6.5, ['min', 75.0, ['var', 'declH']]],
+    ['max', 6.0, ['min', 75.0, ['var', 'declH']]],
 
-    // 2. 아파트 단지 (apartments 태그 또는 320㎡ ~ 2,200㎡ 아파트 동): 48.0m ~ 75.0m (16~25층)
+    // 2. 아파트 단지 (apartments 태그 또는 350㎡ ~ 2,200㎡ 아파트 동): 48.0m ~ 75.0m (16~25층)
     [
       'any',
       ['==', ['get', 'class'], 'apartments'],
@@ -73,7 +74,7 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
       ['==', ['get', 'type'], 'apartments'],
       ['==', ['get', 'usageType'], 'apartment'],
       ['==', ['get', 'bld_category'], 'apartment'],
-      ['all', ['>=', ['var', 'areaVal'], 320], ['<=', ['var', 'areaVal'], 2200]],
+      ['all', ['>=', ['var', 'areaVal'], 350], ['<=', ['var', 'areaVal'], 2200]],
     ],
     ['+', 48.0, ['%', ['var', 'idHash'], 28]],
 
@@ -104,24 +105,19 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
     ],
     ['+', 12.0, ['%', ['var', 'idHash'], 10]],
 
-    // 5. 뒤쪽 택지지구 단독주택·빌라 수백 채 (30㎡ <= area < 200㎡): 6.5m ~ 10.0m (2~3층)
+    // 5. 뒤쪽 택지지구 단독주택·빌라 (25㎡ <= area < 200㎡ 또는 residential): 6.5m ~ 10.0m (2~3층)
     [
-      'all',
-      ['>=', ['var', 'areaVal'], 25],
-      ['<', ['var', 'areaVal'], 200],
+      'any',
+      ['all', ['>=', ['var', 'areaVal'], 25], ['<', ['var', 'areaVal'], 200]],
+      ['==', ['get', 'class'], 'residential'],
+      ['==', ['get', 'building'], 'residential'],
+      ['==', ['get', 'usageType'], 'residential'],
+      ['==', ['get', 'bld_category'], 'residential'],
     ],
     ['+', 6.5, ['*', ['%', ['var', 'idHash'], 36], 0.1]],
 
-    // 6. 폴백 일반 시가지 건물 (OSM 5m 기본값 들어온 한국 건물들의 자동 도시 비례 스카이라인 분배)
-    // 40% 아파트형 48m ~ 75m, 40% 상가/오피스 13m ~ 21m, 20% 단독주택 6.5m ~ 10.0m
-    [
-      'case',
-      ['<', ['%', ['var', 'idHash'], 100], 40],
-      ['+', 48.0, ['%', ['var', 'idHash'], 28]],
-      ['<', ['%', ['var', 'idHash'], 100], 80],
-      ['+', 13.0, ['%', ['var', 'idHash'], 9]],
-      ['+', 6.5, ['*', ['%', ['var', 'idHash'], 36], 0.1]],
-    ],
+    // 6. 폴백 일반 시가지 건물: 표준 한국형 2~4층 중저층 건물 (7.0m ~ 13.0m)
+    ['+', 7.0, ['*', ['%', ['var', 'idHash'], 30], 0.2]],
   ],
 ];
 
@@ -223,7 +219,6 @@ export const VWORLD_GPU_BUILDING_LAYER_IDS = [
   'vworld-tier1-podium',
   'vworld-tier2-body',
   'vworld-tier4-roof',
-  'vworld-tier5-penthouse',
 ] as const;
 
 /** 순수 건물(Building) 필터: 비건물, 부지/필지 경계, 용도지역 및 3,800㎡ 초과 구역 영구 제외 */
@@ -323,32 +318,7 @@ export function createVworldGpuLayers(
     },
   };
 
-  // 4. Tier 5: 고층 옥탑 엘리베이터 권상기실 코어 (H ~ H + 2.8m, 높이 >= 15m 고층 건물 전용)
-  const tier5Penthouse: maplibregl.LayerSpecification = {
-    id: 'vworld-tier5-penthouse',
-    type: 'fill-extrusion',
-    source: sourceId,
-    ...srcLayerObj,
-    filter: [
-      'all',
-      VWORLD_PURE_BUILDING_FILTER,
-      ['>=', VWORLD_GPU_TOTAL_HEIGHT_EXPR, 15.0],
-    ],
-    minzoom: 13.0,
-    maxzoom: 24.0,
-    paint: {
-      'fill-extrusion-color': VWORLD_TIER5_PENTHOUSE_COLOR_EXPR,
-      'fill-extrusion-base': VWORLD_GPU_TOTAL_HEIGHT_EXPR,
-      'fill-extrusion-height': ['+', VWORLD_GPU_TOTAL_HEIGHT_EXPR, 2.8],
-      'fill-extrusion-opacity': 0.98,
-      'fill-extrusion-vertical-gradient': true,
-    },
-    layout: {
-      visibility: 'visible',
-    },
-  };
-
-  return [tier1Podium, tier2Body, tier4Roof, tier5Penthouse];
+  return [tier1Podium, tier2Body, tier4Roof];
 }
 
 // -----------------------------------------------------------------------------

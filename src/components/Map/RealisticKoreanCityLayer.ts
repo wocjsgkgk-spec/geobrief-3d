@@ -247,12 +247,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.setOrigin(this.originLngLat);
   }
 
-  private setOrigin(lngLat: [number, number]): void {
+  private setOrigin(lngLat: [number, number], clearState = false): void {
     this.originLngLat = [lngLat[0], lngLat[1]];
     const oCoord = maplibregl.MercatorCoordinate.fromLngLat(this.originLngLat, 0);
     this.originMercator.x = oCoord.x;
     this.originMercator.y = oCoord.y;
     this.originMeterScale = oCoord.meterInMercatorCoordinateUnits();
+
+    if (clearState) {
+      this.persistentBuildingMap.clear();
+      this.builtBuildingKeys.clear();
+      this.centroidSpatialGrid.clear();
+      this.resetAccumulatedBuffers();
+      if (this.masterMesh && this.scene) {
+        this.scene.remove(this.masterMesh);
+        this.masterMesh.geometry.dispose();
+        this.masterMesh = null;
+      }
+      if (this.rooftopMesh && this.scene) {
+        this.scene.remove(this.rooftopMesh);
+        this.rooftopMesh.geometry.dispose();
+        this.rooftopMesh = null;
+      }
+    }
   }
 
   public setVisible(visible: boolean): void {
@@ -770,6 +787,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.vectorTileFeatures = candidateFeatures;
     }
 
+    // [신규] 국토교통부 브이월드 실측 소스(vworld-buildings-source) 피처 자동 동기화
+    try {
+      const vworldSrc = this.map.getSource('vworld-buildings-source') as any;
+      if (vworldSrc && vworldSrc._data?.features && vworldSrc._data.features.length > 0) {
+        this.externalFeatures = vworldSrc._data.features;
+      }
+    } catch {}
+
     // 2) 외부 실측 피처와 벡터 피처 스마트 결합 (건물 탈락 0%)
     const combined = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);
 
@@ -869,13 +894,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const dLng = Math.abs(newOriginLngLat[0] - this.originLngLat[0]);
       const dLat = Math.abs(newOriginLngLat[1] - this.originLngLat[1]);
       if (dLng > 0.05 || dLat > 0.05 || !this.fixedOriginInitialized) {
-        this.setOrigin([newOriginLngLat[0], newOriginLngLat[1]]);
+        this.setOrigin([newOriginLngLat[0], newOriginLngLat[1]], true);
         this.fixedOriginInitialized = true;
-        // 다른 시·군으로 원거리 이동 시(5.5km+) 이전 지역 캐시 정리하여 새 지역 건물로 전면 갱신
-        if (dLng > 0.06 || dLat > 0.06) {
-          this.persistentBuildingMap.clear();
-        }
-        this.resetAccumulatedBuffers();
       }
     }
 
@@ -1648,17 +1668,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       // 고정 원점 유지: 시·군 내 이동 시 고정(지터링 방지 및 캐시 유지), 시·군간 원거리 이동(8km+) 시 원점 재동기화
       if (!this.fixedOriginInitialized) {
-        this.setOrigin([center.lng, center.lat]);
+        this.setOrigin([center.lng, center.lat], false);
         this.fixedOriginInitialized = true;
       } else {
         const dLng = Math.abs(center.lng - this.originLngLat[0]);
         const dLat = Math.abs(center.lat - this.originLngLat[1]);
         if (dLng > 0.05 || dLat > 0.05) {
-          this.setOrigin([center.lng, center.lat]);
-          if (dLng > 0.06 || dLat > 0.06) {
-            this.persistentBuildingMap.clear();
-          }
-          this.resetAccumulatedBuffers();
+          this.setOrigin([center.lng, center.lat], true);
         }
       }
 

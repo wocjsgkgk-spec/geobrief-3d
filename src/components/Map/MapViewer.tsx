@@ -950,6 +950,86 @@ export const MapViewer: React.FC = () => {
     []
   );
 
+  // [국토교통부 브이월드 실측 3D 데이터 동기화 파이프라인]
+  const isSyncingVworldRef = useRef(false);
+  const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const syncVworldBuildingData = useCallback(
+    async (targetMap: maplibregl.Map) => {
+      if (!targetMap) return;
+      const zoom = targetMap.getZoom();
+      if (zoom < 12.0) return;
+
+      if (isSyncingVworldRef.current) return;
+      isSyncingVworldRef.current = true;
+
+      try {
+        const bounds = targetMap.getBounds();
+        const pad = 0.012;
+        const bbox: [number, number, number, number] = [
+          bounds.getWest() - pad,
+          bounds.getSouth() - pad,
+          bounds.getEast() + pad,
+          bounds.getNorth() + pad,
+        ];
+        const center = targetMap.getCenter();
+        const currentRegion = selectedRegionId || 'wonju';
+
+        let features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
+
+        // 1. 국토부 공식 로컬 변환 데이터(wonju_core.geojson 30,037동) 최우선 로드
+        try {
+          const localRes = await fetchLocalVworldBuildings({ bbox, regionId: currentRegion, useCoreOnly: true });
+          if (localRes && localRes.hasLocalData && localRes.features && localRes.features.length > 0) {
+            features = localRes.features;
+          }
+        } catch (locErr) {
+          console.warn('[V-World 3D Sync] Local load notice:', locErr);
+        }
+
+        // 2. 타 시·군 및 로컬 미보유 지역: 실시간 국토교통부 브이월드 WFS(LT_C_SPBD) 호출
+        if (features.length === 0) {
+          try {
+            const wfsRes = await fetchVworldBuildings(bbox);
+            if (wfsRes && wfsRes.success && wfsRes.features?.features) {
+              features = wfsRes.features.features as any;
+            }
+          } catch (wfsErr) {
+            console.warn('[V-World 3D Sync] Live WFS notice:', wfsErr);
+          }
+        }
+
+        if (features.length > 0 && targetMap) {
+          // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
+          const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
+          if (vworldSrc && typeof vworldSrc.setData === 'function') {
+            vworldSrc.setData({
+              type: 'FeatureCollection',
+              features,
+            });
+          }
+
+          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입
+          if (realisticKoreanCityLayerRef.current) {
+            realisticKoreanCityLayerRef.current.updateBuildings(features, [center.lng, center.lat]);
+          }
+
+          // [C] 브이월드 POI 심볼 레이어에 실제 건물명 주입
+          try {
+            updateVworldPoisWithBuildings(targetMap, features);
+          } catch {}
+
+          targetMap.triggerRepaint();
+        }
+      } catch (syncErr) {
+        console.warn('[V-World 3D Sync] error:', syncErr);
+      } finally {
+        isSyncingVworldRef.current = false;
+      }
+    },
+    [selectedRegionId]
+  );
+
   // [1-2 동적 바인딩] 시·군 및 유휴부지 전환 시 이전 지역 캐시 정리
   useEffect(() => {
     persistentBuildingCacheRef.current.clear();
@@ -2871,7 +2951,7 @@ export const MapViewer: React.FC = () => {
         }
 
         // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (image_dbcb02.jpg 100% 동일)]
-        VworldGpuMasterEngine.mountLayers(map, 'openmaptiles-vector', 'building', VWORLD_POI_LAYER_ID);
+        VworldGpuMasterEngine.mountLayers(map, 'vworld-buildings-source', '', VWORLD_POI_LAYER_ID);
 
         // [3D 시설물 인터랙티브 배치 및 TransformControls 기즈모 레이어]
         if (!map.getLayer('threebox-building-layer')) {
@@ -3028,6 +3108,9 @@ export const MapViewer: React.FC = () => {
 
         // [Meta Astryx 포인터 이벤트 격리 & 마스터 가드 연결]
         astryxAdapter.attachPointerIsolation(map);
+
+        // [국토부 브이월드 실측 3D 건물 데이터 즉시 동기화]
+        syncVworldBuildingData(map);
       } catch (deckErr) {
         console.warn('[MapViewer] Universal3DTilesManager initialization warning:', deckErr);
       }
@@ -3123,6 +3206,13 @@ export const MapViewer: React.FC = () => {
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setPostProcessingEnabled(false);
       }
+      // [60fps 최적화]: 드래그 멈춘 후 350ms 디바운스로 실측 건물 및 지형 표고 동기화
+      if (syncDebounceTimerRef.current) {
+        clearTimeout(syncDebounceTimerRef.current);
+      }
+      syncDebounceTimerRef.current = setTimeout(() => {
+        syncVworldBuildingData(map);
+      }, 350);
     };
 
     map.on('movestart', handleMoveStart);
@@ -4014,10 +4104,14 @@ export const MapViewer: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedFacilityId, setTransformGizmoMode, selectFacility, removePlacedFacility]);
 
-  // 8-1. [조치 1: 메인 스레드 무거운 건물 지오메트리 업데이트 루프 비활성화]
+  // 8-1. [V-World 3D 실측 데이터 시·군 동적 로드]
   useEffect(() => {
-    // no-op
-  }, [isMapLoaded, layers.buildings3D, selectedRegionId]);
+    const map = mapRef.current;
+    if (!map || !isMapLoaded) return;
+    if (layers.buildings3D) {
+      syncVworldBuildingData(map);
+    }
+  }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncVworldBuildingData]);
 
   // 9. 베이스맵 전환 (4종 원클릭: 국토부 V-World 항공실사, Google 위성, V-World 클린, Google 로드맵)
   useEffect(() => {

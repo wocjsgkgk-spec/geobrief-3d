@@ -85,6 +85,18 @@ export function extractRenderedVectorBuildings(
       }
     }
 
+    // 3) 국토교통부 브이월드 실측 소스(vworld-buildings-source) 수집 (1순위 정위치 피처)
+    try {
+      const vworldSrc = map.getSource('vworld-buildings-source') as any;
+      if (vworldSrc && vworldSrc._data?.features && Array.isArray(vworldSrc._data.features)) {
+        for (const vf of vworldSrc._data.features) {
+          candidateFeatures.push(vf);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const seen = new Set<string>();
     const centroidDedupeGrid = new Map<string, [number, number][]>();
     const uniqueFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
