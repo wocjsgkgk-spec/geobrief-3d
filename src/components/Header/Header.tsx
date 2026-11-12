@@ -210,7 +210,7 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="h-14 bg-[#121714] border-b border-[#242f27] px-3 sm:px-4 flex items-center justify-between z-20 select-none overflow-x-auto no-scrollbar">
+    <header className="h-14 bg-[#121714] border-b border-[#242f27] px-3 sm:px-4 flex items-center justify-between z-50 select-none relative overflow-visible">
       {/* 1. 좌측 브랜드 타이틀 & 프로젝트 정보 */}
       <div className="flex items-center space-x-2.5 sm:space-x-3 flex-shrink-0">
         <button

@@ -42,7 +42,7 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
   ['abs', ['to-number', ['coalesce', ['id'], ['get', 'osm_id'], ['get', 'bd_mgt_sn'], 45678], 45678]],
   [
     'case',
-    // 0. 비건물 (지적도 필지선, 용도지역 경계선, 면적 3,800㎡ 초과 운동장/산림, 면적 25㎡ 미만) 0m 차단
+    // 0. 비건물 (지적도 필지선, 용도지역 경계선, 면적 3,800㎡ 초과 운동장/산림, 면적 20㎡ 미만, 지목 임/전/답/천/산) 0m 완전 차단
     [
       'any',
       ['==', ['get', 'is_non_building'], true],
@@ -53,18 +53,26 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
       ['==', ['get', 'building'], 'no'],
       ['==', ['get', 'jimok'], '임'],
       ['==', ['get', 'jimok_nm'], '임야'],
+      ['==', ['get', 'jimok'], '전'],
+      ['==', ['get', 'jimok'], '답'],
+      ['==', ['get', 'jimok'], '천'],
+      ['==', ['get', 'natural'], 'wood'],
+      ['==', ['get', 'natural'], 'scrub'],
+      ['==', ['get', 'landuse'], 'forest'],
+      ['==', ['get', 'landuse'], 'farmland'],
+      ['==', ['get', 'waterway'], 'river'],
       ['>', ['var', 'areaVal'], 3800],
-      ['all', ['>', ['var', 'areaVal'], 0], ['<', ['var', 'areaVal'], 25]],
+      ['all', ['>', ['var', 'areaVal'], 0], ['<', ['var', 'areaVal'], 20]],
     ],
     0,
 
-    // 1. 실측 및 검증된 높이 (declH >= 4.0m 또는 is_real_measured: gro_flo_co * 3.2m 포함)
+    // 1. 실측 및 검증된 높이 (declH >= 3.0m 또는 is_real_measured: gro_flo_co * 3.2m 포함)
     [
       'any',
-      ['>=', ['var', 'declH'], 4.0],
+      ['>=', ['var', 'declH'], 3.0],
       ['==', ['get', 'is_real_measured'], true],
     ],
-    ['max', 6.0, ['min', 75.0, ['var', 'declH']]],
+    ['max', 4.0, ['min', 85.0, ['var', 'declH']]],
 
     // 2. 아파트 단지 (apartments 태그 또는 350㎡ ~ 2,200㎡ 아파트 동): 48.0m ~ 75.0m (16~25층)
     [
@@ -74,14 +82,12 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
       ['==', ['get', 'type'], 'apartments'],
       ['==', ['get', 'usageType'], 'apartment'],
       ['==', ['get', 'bld_category'], 'apartment'],
-      ['all', ['>=', ['var', 'areaVal'], 350], ['<=', ['var', 'areaVal'], 2200]],
     ],
     ['+', 48.0, ['%', ['var', 'idHash'], 28]],
 
     // 3. 혁신도시 공공청사·도청·시청·대형 오피스 타워 (area >= 700㎡ 또는 office/public): 28.0m ~ 60.0m (8~18층)
     [
       'any',
-      ['>=', ['var', 'areaVal'], 700],
       ['==', ['get', 'class'], 'office'],
       ['==', ['get', 'class'], 'public'],
       ['==', ['get', 'class'], 'government'],
@@ -96,7 +102,6 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
     // 4. 일반 시내 상가·근린생활 (200㎡ <= area < 500㎡ 또는 commercial/retail): 12.0m ~ 21.0m (4~6층)
     [
       'any',
-      ['all', ['>=', ['var', 'areaVal'], 200], ['<', ['var', 'areaVal'], 500]],
       ['==', ['get', 'class'], 'commercial'],
       ['==', ['get', 'class'], 'retail'],
       ['==', ['get', 'building'], 'commercial'],
@@ -108,7 +113,6 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
     // 5. 뒤쪽 택지지구 단독주택·빌라 (25㎡ <= area < 200㎡ 또는 residential): 6.5m ~ 10.0m (2~3층)
     [
       'any',
-      ['all', ['>=', ['var', 'areaVal'], 25], ['<', ['var', 'areaVal'], 200]],
       ['==', ['get', 'class'], 'residential'],
       ['==', ['get', 'building'], 'residential'],
       ['==', ['get', 'usageType'], 'residential'],
@@ -116,8 +120,17 @@ export const VWORLD_GPU_TOTAL_HEIGHT_EXPR: any = [
     ],
     ['+', 6.5, ['*', ['%', ['var', 'idHash'], 36], 0.1]],
 
-    // 6. 폴백 일반 시가지 건물: 표준 한국형 2~4층 중저층 건물 (7.0m ~ 13.0m)
-    ['+', 7.0, ['*', ['%', ['var', 'idHash'], 30], 0.2]],
+    // 6. 명시적 건물 식별자(bd_mgt_sn / buld_nm / building === 'yes')를 가진 소형 건축물
+    [
+      'any',
+      ['has', 'bd_mgt_sn'],
+      ['has', 'buld_nm'],
+      ['==', ['get', 'building'], 'yes'],
+    ],
+    ['+', 6.0, ['*', ['%', ['var', 'idHash'], 20], 0.2]],
+
+    // 7. 그 외 미확인 형상 / 임야 / 산림 경계: 0m 차단 (유령 건물 원천 차단)
+    0,
   ],
 ];
 
@@ -219,6 +232,9 @@ export const VWORLD_GPU_BUILDING_LAYER_IDS = [
   'vworld-tier1-podium',
   'vworld-tier2-body',
   'vworld-tier4-roof',
+  'vworld-vec-tier1-podium',
+  'vworld-vec-tier2-body',
+  'vworld-vec-tier4-roof',
 ] as const;
 
 /** 순수 건물(Building) 필터: 비건물, 부지/필지 경계, 용도지역 및 3,800㎡ 초과 구역 영구 제외 */
@@ -230,6 +246,11 @@ export const VWORLD_PURE_BUILDING_FILTER: any = [
   ['!=', ['get', 'layer_type'], 'zoning'],
   ['!=', ['get', 'layer_type'], 'landuse'],
   ['!=', ['get', 'building'], 'no'],
+  ['!=', ['get', 'jimok'], '임'],
+  ['!=', ['get', 'jimok_nm'], '임야'],
+  ['!=', ['get', 'jimok'], '전'],
+  ['!=', ['get', 'jimok'], '답'],
+  ['!=', ['get', 'jimok'], '천'],
   ['<=', ['to-number', ['coalesce', ['get', 'areaSqm'], ['get', 'area'], 0], 0], 3800],
   ['!', ['has', 'UQ111']],
   ['!', ['has', 'UQ111_NM']],
@@ -245,20 +266,25 @@ export const VWORLD_PURE_BUILDING_FILTER: any = [
  * V-World 공식 클린 화이트/아이보리 입체 3D 레이어 생성기
  */
 export function createVworldGpuLayers(
-  sourceId: string = 'openmaptiles-vector',
-  sourceLayer: string = 'building'
+  sourceId: string = 'vworld-buildings-source',
+  sourceLayer: string = '',
+  idPrefix: string = 'vworld-tier'
 ): maplibregl.LayerSpecification[] {
   const isGeojson = sourceId.endsWith('-source') || sourceId.includes('geojson') || !sourceLayer || sourceLayer === 'none';
   const srcLayerObj = isGeojson ? {} : { 'source-layer': sourceLayer };
 
+  const tier1Id = `${idPrefix}1-podium`;
+  const tier2Id = `${idPrefix}2-body`;
+  const tier4Id = `${idPrefix}4-roof`;
+
   // 1. Tier 1: 하단 기단부 (0m ~ min(3.2m, H))
   const tier1Podium: maplibregl.LayerSpecification = {
-    id: 'vworld-tier1-podium',
+    id: tier1Id,
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
     filter: VWORLD_PURE_BUILDING_FILTER,
-    minzoom: 10.5,
+    minzoom: 10.0,
     maxzoom: 24.0,
     paint: {
       'fill-extrusion-color': VWORLD_TIER1_PODIUM_COLOR_EXPR,
@@ -274,12 +300,12 @@ export function createVworldGpuLayers(
 
   // 2. Tier 2: 기준층 본동 (min(3.2m, H) ~ max(min(3.2m, H), H - 0.5m)) - 클린 화이트/아이보리 메인 매스
   const tier2Body: maplibregl.LayerSpecification = {
-    id: 'vworld-tier2-body',
+    id: tier2Id,
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
     filter: VWORLD_PURE_BUILDING_FILTER,
-    minzoom: 10.5,
+    minzoom: 10.0,
     maxzoom: 24.0,
     paint: {
       'fill-extrusion-color': VWORLD_TIER2_BODY_COLOR_EXPR,
@@ -299,12 +325,12 @@ export function createVworldGpuLayers(
 
   // 3. Tier 4: 지붕 상단 슬래브 (max(0, H - 0.5m) ~ H) - 깨끗한 시멘트 슬래브 톤
   const tier4Roof: maplibregl.LayerSpecification = {
-    id: 'vworld-tier4-roof',
+    id: tier4Id,
     type: 'fill-extrusion',
     source: sourceId,
     ...srcLayerObj,
     filter: VWORLD_PURE_BUILDING_FILTER,
-    minzoom: 10.5,
+    minzoom: 10.0,
     maxzoom: 24.0,
     paint: {
       'fill-extrusion-color': VWORLD_TIER4_ROOF_COLOR_EXPR,
@@ -348,17 +374,18 @@ export class VworldGpuMasterEngine {
    */
   public static mountLayers(
     map: maplibregl.Map,
-    sourceId: string = 'openmaptiles-vector',
-    sourceLayer: string = 'building',
+    sourceId: string = 'vworld-buildings-source',
+    sourceLayer: string = '',
     beforeId?: string
   ): void {
     if (!map) return;
 
     this.setupLighting(map);
 
-    const layers = createVworldGpuLayers(sourceId, sourceLayer);
+    // [1순위: 국토부 브이월드 실측 소스 레이어]
+    const realLayers = createVworldGpuLayers(sourceId, sourceLayer, 'vworld-tier');
 
-    for (const layerDef of layers) {
+    for (const layerDef of realLayers) {
       if (map.getLayer(layerDef.id)) {
         try {
           map.removeLayer(layerDef.id);
@@ -373,6 +400,25 @@ export class VworldGpuMasterEngine {
         }
       } catch (addErr) {
         console.warn(`[VworldGpuMasterEngine] addLayer notice (${layerDef.id}):`, addErr);
+      }
+    }
+
+    // [2순위: 오픈 벡터 타일 보조 레이어 (실측 데이터 미로드 영역 보강)]
+    if (map.getSource('openmaptiles-vector')) {
+      const vecLayers = createVworldGpuLayers('openmaptiles-vector', 'building', 'vworld-vec-tier');
+      for (const layerDef of vecLayers) {
+        if (map.getLayer(layerDef.id)) {
+          try {
+            map.removeLayer(layerDef.id);
+          } catch {}
+        }
+        try {
+          if (beforeId && map.getLayer(beforeId)) {
+            map.addLayer(layerDef, beforeId);
+          } else {
+            map.addLayer(layerDef);
+          }
+        } catch {}
       }
     }
   }

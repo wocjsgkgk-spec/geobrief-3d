@@ -88,7 +88,7 @@ export function hideAllFillExtrusionLayers(map: maplibregl.Map): void {
         if (
           l.type === 'fill-extrusion' &&
           l.id !== 'building-highlight-fill' &&
-          !l.id.startsWith('vworld-tier')
+          !l.id.startsWith('vworld-')
         ) {
           if (map.getLayoutProperty(l.id, 'visibility') !== 'none') {
             map.setLayoutProperty(l.id, 'visibility', 'none');
@@ -200,10 +200,24 @@ export function isMountainGhostBuilding(
 
   // [1] 지목 및 토지이용 태그 검사
   const jimok = String(featProps.jimok || featProps.jimok_nm || '').trim();
-  if (jimok === '임' || jimok === '임야') return true;
+  if (jimok === '임' || jimok === '임야' || jimok === '전' || jimok === '답' || jimok === '천' || jimok === '구') {
+    if (!featProps.bd_mgt_sn && !featProps.buld_nm) return true;
+  }
 
   const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
-  if (landuse === 'forest' || landuse === 'wood' || landuse === 'mountain') return true;
+  if (
+    landuse === 'forest' ||
+    landuse === 'wood' ||
+    landuse === 'mountain' ||
+    landuse === 'scrub' ||
+    landuse === 'farmland' ||
+    landuse === 'orchard' ||
+    landuse === 'meadow' ||
+    landuse === 'water' ||
+    landuse === 'river'
+  ) {
+    if (!featProps.bd_mgt_sn && !featProps.buld_nm) return true;
+  }
 
   // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 1군지사 주변 3대 오염 지역 전수 제거)
   // 1. 좌측 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 100% 영구 배제)

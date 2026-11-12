@@ -389,6 +389,34 @@ export const ControlPanel: React.FC = () => {
         </button>
       </div>
 
+      {/* [상시 접근] 강원 18개 시·군 퀵 셀렉터 상단 바 (어느 탭에서나 원클릭 이동) */}
+      <div className="bg-[#0e1511] border-b border-[#202e23] px-3 py-2 flex items-center justify-between gap-2 shadow-sm">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="text-xs font-bold text-slate-300 whitespace-nowrap">권역:</span>
+        </div>
+        <select
+          value={selectedRegionId}
+          onChange={(e) => selectRegion(e.target.value)}
+          className="bg-[#16221a] border border-[#2d4233] focus:border-emerald-400 rounded-lg px-2.5 py-1 text-xs text-emerald-200 font-bold focus:outline-none transition-colors cursor-pointer flex-1 min-w-0 shadow-inner"
+        >
+          <optgroup label="── 강원 7개 시 ──" className="bg-[#101712] text-emerald-300 font-bold">
+            {GANGWON_REGIONS.filter((r) => r.type === '시').map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} ({r.subregion})
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="── 강원 11개 군 ──" className="bg-[#101712] text-amber-300 font-bold">
+            {GANGWON_REGIONS.filter((r) => r.type === '군').map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} ({r.subregion})
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
+
       {/* 1. [신규] 동적 주소/지번 검색창 (부지/접근성 탭) */}
       {currentTab === 'site_access' && (
         <section className="p-4 border-b border-[#242f27] space-y-2 bg-[#101712]">

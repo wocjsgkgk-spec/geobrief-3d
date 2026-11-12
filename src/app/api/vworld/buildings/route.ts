@@ -255,18 +255,21 @@ export async function GET(request: NextRequest) {
   try {
     const cellFetches = subCells.map(async (cell) => {
       const [cMinLng, cMinLat, cMaxLng, cMaxLat] = cell;
-      const wfsBbox = `${cMinLat},${cMinLng},${cMaxLat},${cMaxLng},EPSG:4326`;
-      const wfsUrl = assertSafeUpstreamUrl(
-        `https://api.vworld.kr/req/wfs?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=lt_c_spbd&SRSNAME=EPSG:4326&BBOX=${wfsBbox}&OUTPUT=application/json&KEY=${encodeURIComponent(
+
+      // 1순위: V-World Data API 2.0 (LT_C_SPBD 정밀 공간 쿼리)
+      const dataApiUrl = assertSafeUpstreamUrl(
+        `https://api.vworld.kr/req/data?service=data&request=GetFeature&data=LT_C_SPBD&key=${encodeURIComponent(
           cleanKey
-        )}&DOMAIN=${encodeURIComponent(preferredDomain)}&MAXFEATURES=1000`
+        )}&domain=${encodeURIComponent(preferredDomain)}&geomFilter=${encodeURIComponent(
+          `BOX(${cMinLng},${cMinLat},${cMaxLng},${cMaxLat})`
+        )}&crs=EPSG:4326&size=1000&geometry=true&attribute=true`
       );
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       try {
-        const res = await fetch(wfsUrl, {
+        const res = await fetch(dataApiUrl, {
           signal: controller.signal,
           headers: { Accept: 'application/json' },
           cache: 'no-store',
@@ -275,18 +278,31 @@ export async function GET(request: NextRequest) {
 
         const text = await res.text();
         if (text.startsWith('<') || text.includes('ServiceException')) {
-          console.error('[V-World WFS Auth/Quota Error]', text.slice(0, 300));
+          console.error('[V-World Data API Auth/Quota Error]', text.slice(0, 300));
           hasAuthOrQuotaError = true;
           authErrorMessage = text.slice(0, 300);
           return [];
         }
 
-        const data = JSON.parse(text);
-        const items = data.features || [];
-        return items;
+        try {
+          const data = JSON.parse(text);
+          if (data?.response?.status === 'ERROR') {
+            console.warn('[V-World Data API Error Response]', data.response?.error);
+            hasAuthOrQuotaError = true;
+            authErrorMessage = JSON.stringify(data.response?.error || 'V-World Error');
+            return [];
+          }
+          const items =
+            data?.response?.result?.featureCollection?.features ||
+            data?.features ||
+            [];
+          return items;
+        } catch {
+          return [];
+        }
       } catch (err: any) {
         clearTimeout(timeoutId);
-        console.warn('[V-World WFS] Cell fetch notice:', err?.message || err);
+        console.warn('[V-World Data API] Cell fetch notice:', err?.message || err);
         return [];
       }
     });
@@ -410,12 +426,14 @@ export async function GET(request: NextRequest) {
             und_flo_co: undFlo,
             hei: height,
             height,
+            realHeight: height,
             levels,
             min_height: 0,
             bld_category,
             bld_category_label,
             color,
-            source: 'vworld',
+            source: 'LT_C_SPBD',
+            is_real_measured: true,
           },
           geometry: {
             ...item.geometry,

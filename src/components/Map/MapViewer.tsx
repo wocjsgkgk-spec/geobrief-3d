@@ -958,7 +958,7 @@ export const MapViewer: React.FC = () => {
     async (targetMap: maplibregl.Map) => {
       if (!targetMap) return;
       const zoom = targetMap.getZoom();
-      if (zoom < 12.0) return;
+      if (zoom < 10.5) return;
 
       if (isSyncingVworldRef.current) return;
       isSyncingVworldRef.current = true;
@@ -1042,6 +1042,14 @@ export const MapViewer: React.FC = () => {
           try {
             updateVworldPoisWithBuildings(targetMap, viewportFeatures);
           } catch {}
+
+          // [D] 공간정보 실시간 진단 상태 동기화
+          setVworldDiagnostic({
+            status: 'connected',
+            featureCount: viewportFeatures.length,
+            lastChecked: Date.now(),
+            message: `정상 연동 (실시간 건축물 ${viewportFeatures.length}동 표출 중)`,
+          });
 
           targetMap.triggerRepaint();
         }
@@ -2974,8 +2982,8 @@ export const MapViewer: React.FC = () => {
           (window as any).__realisticKoreanCityLayer = realisticLayer;
         }
 
-        // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (강원 18개 시·군 전역 GPU 하드웨어 가속 60fps)]
-        VworldGpuMasterEngine.mountLayers(map, 'openmaptiles-vector', 'building', VWORLD_POI_LAYER_ID);
+        // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (강원 18개 시·군 전역 실측 GeoJSON + GPU 60fps)]
+        VworldGpuMasterEngine.mountLayers(map, 'vworld-buildings-source', '', VWORLD_POI_LAYER_ID);
 
         // [3D 시설물 인터랙티브 배치 및 TransformControls 기즈모 레이어]
         if (!map.getLayer('threebox-building-layer')) {
