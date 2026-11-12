@@ -6,6 +6,12 @@ node_modules
 *.jpg
 scratch
 tmp
-public/data/vworld/*.zip
-public/data/vworld/*.DXF*
-public/data/vworld/*.dxf*
+*.zip
+*.tsbuildinfo
+public/data/*
+!public/data/vworld/
+public/data/vworld/*
+!public/data/vworld/converted/
+public/data/vworld/converted/*
+!public/data/vworld/converted/manifest.json
+!public/data/vworld/converted/wonju_core.geojson
