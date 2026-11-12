@@ -82,11 +82,11 @@ export interface BuildVWorldReaMeshOptions {
 // [1] 전역 싱글톤 16종 독립 Material & 4종 지붕 & 난간 & 옥탑방 캐시
 // =============================================================================
 
-export let GLOBAL_VWORLD_MATERIALS: THREE.MeshLambertMaterial[] | null = null;
-export let GLOBAL_VWORLD_ROOF_MATERIALS: THREE.MeshLambertMaterial[] | null = null;
-export let GLOBAL_VWORLD_PARAPET_MATERIAL: THREE.MeshLambertMaterial | null = null;
-export let GLOBAL_VWORLD_PENTHOUSE_MATERIAL: THREE.MeshLambertMaterial | null = null;
-export let GLOBAL_ALL_VWORLD_REA_MATERIALS: THREE.MeshLambertMaterial[] | null = null;
+export let GLOBAL_VWORLD_MATERIALS: THREE.MeshStandardMaterial[] | null = null;
+export let GLOBAL_VWORLD_ROOF_MATERIALS: THREE.MeshStandardMaterial[] | null = null;
+export let GLOBAL_VWORLD_PARAPET_MATERIAL: THREE.MeshStandardMaterial | null = null;
+export let GLOBAL_VWORLD_PENTHOUSE_MATERIAL: THREE.MeshStandardMaterial | null = null;
+export let GLOBAL_ALL_VWORLD_REA_MATERIALS: THREE.MeshStandardMaterial[] | null = null;
 
 /**
  * 1024x1024 고해상도 CanvasTexture 생성 헬퍼
@@ -551,68 +551,100 @@ function drawPenthouseLouver(ctx: CanvasRenderingContext2D, w: number, h: number
 // [2] 16종 독립 Material 싱글톤 캐시 초기화 함수
 // =============================================================================
 
-export function getGlobalVWorldMaterials(): THREE.MeshLambertMaterial[] {
+export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
   if (GLOBAL_VWORLD_MATERIALS && GLOBAL_VWORLD_MATERIALS.length === 16) {
     return GLOBAL_VWORLD_MATERIALS;
   }
 
-  const materials: THREE.MeshLambertMaterial[] = [];
+  const materials: THREE.MeshStandardMaterial[] = [];
 
   // Mat 0~4: 아파트 단지 (5종) - 밝은 순백색(#f8fafc), 크림 아이보리(#f4f1ea), 라이트 웜그레이(#e2e8f0) + 촘촘한 다크 차콜 발코니 유리창 격자와 백색 창틀 + 하단 3개 층 화강석 기단부 투톤 + 측벽 무창 브랜드 라인
   for (let i = 0; i < 5; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentFacade(ctx, w, h, i));
-    materials.push(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, color: 0xffffff }));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.65,
+      metalness: 0.12,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+    }));
   }
 
   // Mat 5~8: 공공청사·관공서·오피스 (4종) - 화강석 포디움(1~2층) + 밝은 스카이블루(#38bdf8 ~ #0284c7)/에메랄드 반사 유리 커튼월과 은백색 알루미늄 멀리언 프레임
   for (let i = 0; i < 4; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i));
-    materials.push(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, color: 0xffffff }));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.45,
+      metalness: 0.28,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+    }));
   }
 
   // Mat 9~12: 시내 상가·근린생활 (4종) - 1층 통유리 쇼윈도 + 1~3층 한국형 가로 간판 패치(빨강, 파랑, 노랑, 초록, 흰색) + 베이지 화강석(#d6cfc2), 적벽돌(#7f1d1d), 차콜 메탈(#334155) 외벽
   for (let i = 0; i < 4; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i));
-    materials.push(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, color: 0xffffff }));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.70,
+      metalness: 0.10,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+    }));
   }
 
   // Mat 13~15: 단독주택·빌라·학교 (3종) - 차분한 적벽돌(#7c2d12), 황토벽돌(#854d0e), 살구색/테라코타 학교 교사동(#d97742)
   for (let i = 0; i < 3; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawVillaResidentialFacade(ctx, w, h, i));
-    materials.push(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, color: 0xffffff }));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.78,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+    }));
   }
 
   GLOBAL_VWORLD_MATERIALS = materials;
   return GLOBAL_VWORLD_MATERIALS;
 }
 
-export function getGlobalVWorldRoofMaterials(): THREE.MeshLambertMaterial[] {
+export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
   if (GLOBAL_VWORLD_ROOF_MATERIALS && GLOBAL_VWORLD_ROOF_MATERIALS.length === 4) {
     return GLOBAL_VWORLD_ROOF_MATERIALS;
   }
 
   GLOBAL_VWORLD_ROOF_MATERIALS = [
     // 0: 한국형 초록색 우레탄 방수 옥상 (#2d6a4f, #3b7a57 — 상가·빌라 45%) (Mat 16)
-    new THREE.MeshLambertMaterial({
+    new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawUrethaneGreenRoof(ctx, w, h)),
+      roughness: 0.52,
+      metalness: 0.08,
       side: THREE.DoubleSide,
       color: 0xffffff,
     }),
     // 1: 밝은 시멘트 회색 슬래브 (#94a3b8 + 중앙 3m 엘리베이터 옥탑방 — 아파트·청사 35%) (Mat 17)
-    new THREE.MeshLambertMaterial({
+    new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawConcreteSlabRoof(ctx, w, h)),
+      roughness: 0.85,
+      metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
     }),
     // 2: 3D 경사 박공지붕 + 적갈색 기와 (#6c3428 — 주택·학교 15%) (Mat 18)
-    new THREE.MeshLambertMaterial({
+    new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawTerracottaTileRoof(ctx, w, h)),
+      roughness: 0.75,
+      metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
     }),
     // 3: 코발트 블루 강판 (#1d4ed8 — 5%) (Mat 19)
-    new THREE.MeshLambertMaterial({
+    new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawCobaltSteelRoof(ctx, w, h)),
+      roughness: 0.38,
+      metalness: 0.45,
       side: THREE.DoubleSide,
       color: 0xffffff,
     }),
@@ -621,10 +653,12 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshLambertMaterial[] {
   return GLOBAL_VWORLD_ROOF_MATERIALS;
 }
 
-export function getGlobalParapetMaterial(): THREE.MeshLambertMaterial {
+export function getGlobalParapetMaterial(): THREE.MeshStandardMaterial {
   if (!GLOBAL_VWORLD_PARAPET_MATERIAL) {
-    GLOBAL_VWORLD_PARAPET_MATERIAL = new THREE.MeshLambertMaterial({
+    GLOBAL_VWORLD_PARAPET_MATERIAL = new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawParapetConcrete(ctx, w, h)),
+      roughness: 0.80,
+      metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
     });
@@ -632,10 +666,12 @@ export function getGlobalParapetMaterial(): THREE.MeshLambertMaterial {
   return GLOBAL_VWORLD_PARAPET_MATERIAL;
 }
 
-export function getGlobalPenthouseMaterial(): THREE.MeshLambertMaterial {
+export function getGlobalPenthouseMaterial(): THREE.MeshStandardMaterial {
   if (!GLOBAL_VWORLD_PENTHOUSE_MATERIAL) {
-    GLOBAL_VWORLD_PENTHOUSE_MATERIAL = new THREE.MeshLambertMaterial({
+    GLOBAL_VWORLD_PENTHOUSE_MATERIAL = new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawPenthouseLouver(ctx, w, h)),
+      roughness: 0.60,
+      metalness: 0.20,
       side: THREE.DoubleSide,
       color: 0xffffff,
     });
@@ -650,7 +686,7 @@ export function getGlobalPenthouseMaterial(): THREE.MeshLambertMaterial {
  * - 20: 0.85m 테두리 난간(Parapet)
  * - 21: 3.0m 옥탑 권상기실(Penthouse)
  */
-export function getGlobalAllMaterialsArray(): THREE.MeshLambertMaterial[] {
+export function getGlobalAllMaterialsArray(): THREE.MeshStandardMaterial[] {
   if (GLOBAL_ALL_VWORLD_REA_MATERIALS && GLOBAL_ALL_VWORLD_REA_MATERIALS.length === 22) {
     return GLOBAL_ALL_VWORLD_REA_MATERIALS;
   }
@@ -1265,15 +1301,15 @@ export function ensureVWorldReaPatterns(map: maplibregl.Map): void {
 // =============================================================================
 
 export class VWorldReaRenderer {
-  public static getMaterials(): THREE.MeshLambertMaterial[] {
+  public static getMaterials(): THREE.MeshStandardMaterial[] {
     return getGlobalVWorldMaterials();
   }
 
-  public static getRoofMaterials(): THREE.MeshLambertMaterial[] {
+  public static getRoofMaterials(): THREE.MeshStandardMaterial[] {
     return getGlobalVWorldRoofMaterials();
   }
 
-  public static getAllMaterials(): THREE.MeshLambertMaterial[] {
+  public static getAllMaterials(): THREE.MeshStandardMaterial[] {
     return getGlobalAllMaterialsArray();
   }
 

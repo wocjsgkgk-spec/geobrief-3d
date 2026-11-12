@@ -198,10 +198,18 @@ export function isMountainGhostBuilding(
     return true;
   }
 
-  // [1] 지목 및 토지이용 태그 검사
+  // 공식 공인 건축물 식별자 보유 여부
+  const hasOfficialRegistration = Boolean(
+    featProps.bd_mgt_sn ||
+    featProps.source === 'vworld_local' ||
+    featProps.source === 'LT_C_SPBD' ||
+    (featProps.pnu && featProps.buld_nm)
+  );
+
+  // [1] 지목 및 토지이용 태그 검사 (산림, 임야, 전답, 하천 등 비건물 구역)
   const jimok = String(featProps.jimok || featProps.jimok_nm || '').trim();
-  if (jimok === '임' || jimok === '임야' || jimok === '전' || jimok === '답' || jimok === '천' || jimok === '구') {
-    if (!featProps.bd_mgt_sn && !featProps.buld_nm) return true;
+  if (jimok === '임' || jimok === '임야' || jimok === '전' || jimok === '답' || jimok === '천' || jimok === '구' || jimok === '유') {
+    if (!hasOfficialRegistration) return true;
   }
 
   const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
@@ -214,35 +222,35 @@ export function isMountainGhostBuilding(
     landuse === 'orchard' ||
     landuse === 'meadow' ||
     landuse === 'water' ||
-    landuse === 'river'
+    landuse === 'river' ||
+    landuse === 'grass' ||
+    landuse === 'bare_rock'
   ) {
-    if (!featProps.bd_mgt_sn && !featProps.buld_nm) return true;
+    if (!hasOfficialRegistration) return true;
   }
 
-  // [2] 특정 산림 유령 건물 좌표 구역 마스킹 (원주 1군지사 주변 3대 오염 지역 전수 제거)
-  // 1. 좌측 산림 한복판 (1군지사 배후 산림 능선 - 30여 개 회색 가짜 건물 100% 영구 배제)
-  if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) {
-    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn) {
-      return true;
-    }
-    if (featProps.sourceLayer === 'building' && (!featProps.levels || Number(featProps.levels) <= 2) && !featProps.bd_mgt_sn) {
-      return true;
-    }
-  }
+  // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹
+  // - 대한민국 국토교통부 건축물대장에 등재되지 않은 오픈 스트리트맵(OSM) 산림 다각형 전수 차단
+  const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
+  if (isGangwonZone && !hasOfficialRegistration) {
+    // 1. 치악산 국립공원 및 원주 외곽 산림 능선
+    if (lng >= 127.98 && lng <= 128.15 && lat >= 37.28 && lat <= 37.45) return true;
+    // 2. 설악산 국립공원 및 인제·속초 산악 능선
+    if (lng >= 128.30 && lng <= 128.55 && lat >= 38.05 && lat <= 38.25) return true;
+    // 3. 오대산 및 평창·대관령 고산 능선
+    if (lng >= 128.45 && lng <= 128.85 && lat >= 37.60 && lat <= 37.88) return true;
+    // 4. 태백산맥 및 정선·태백 산악 능선
+    if (lng >= 128.80 && lng <= 129.15 && lat >= 37.05 && lat <= 37.40) return true;
+    // 5. 춘천 구봉산·봉의산·용화산 배후 산림 능선
+    if (lng >= 127.70 && lng <= 127.85 && lat >= 37.85 && lat <= 38.00) return true;
 
-  // 2. 우측/우상단 숲속 녹지대 (주황색 지붕 바둑판 작은 집 40여 채 군집 100% 영구 배제)
-  if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) {
-    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn) {
-      return true;
-    }
-    if (featProps.sourceLayer === 'building' && !featProps.bd_mgt_sn) {
-      return true;
-    }
-  }
+    // 6. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 오염 구역
+    if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) return true;
+    if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) return true;
+    if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) return true;
 
-  // 3. 중앙 하단 녹지대 (주황색/빨간색 작은 상자 무리 100% 영구 배제)
-  if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) {
-    if (!featProps.buld_nm && !featProps.bld_nm && !featProps.address && !featProps.bd_mgt_sn && !featProps.pnu) {
+    // 7. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
+    if (featProps.sourceLayer === 'building' || featProps.sources?.ofm) {
       return true;
     }
   }
@@ -260,13 +268,18 @@ export function isMountainGhostBuilding(
         const maxGrade = Math.max(dzE, dzN);
         const slopeDeg = Math.atan(maxGrade) * (180 / Math.PI);
 
-        // [산림/경사 필터] 표고 경사도 20도 이상 급경사 사면 100% 영구 배제
-        if (slopeDeg >= 20.0) {
+        // [산림/경사 필터] 표고 경사도 15도 이상 사면 100% 영구 배제
+        if (slopeDeg >= 15.0 && !hasOfficialRegistration) {
           return true;
         }
 
-        // 경사도 15도 이상의 고지대(125m+) 미등록 건물 배제
-        if (elev >= 125 && slopeDeg >= 14.0 && !featProps.gro_flo_co && !featProps.buld_nm && !featProps.bld_nm && !featProps.bd_mgt_sn) {
+        // 경사도 6도 이상의 고지대(140m+) 미등록 건물 배제 (산비탈 유령건물 박멸)
+        if (elev >= 140 && slopeDeg >= 6.0 && !hasOfficialRegistration) {
+          return true;
+        }
+
+        // 고지대 200m 이상 능선/산꼭대기 미등록 건물 100% 배제
+        if (elev >= 200 && !hasOfficialRegistration) {
           return true;
         }
       }

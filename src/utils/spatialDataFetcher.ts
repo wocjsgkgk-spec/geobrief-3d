@@ -68,24 +68,8 @@ export function extractRenderedVectorBuildings(
       }
     }
 
-    // 2) 오픈 벡터 타일(openmaptiles-vector, openmaptiles, openfreemap) 원본 building 소스 피처 100% 수집
-    const vectorSources = ['openmaptiles-vector', 'openmaptiles', 'openfreemap'].filter((s) => map.getSource(s));
-    for (const srcId of vectorSources) {
-      try {
-        const srcFeats = map.querySourceFeatures(srcId, {
-          sourceLayer: 'building',
-        });
-        if (srcFeats && srcFeats.length > 0) {
-          for (let i = 0; i < srcFeats.length; i++) {
-            candidateFeatures.push(srcFeats[i]);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // 3) 국토교통부 브이월드 실측 소스(vworld-buildings-source) 수집 (1순위 정위치 피처)
+    // [유령 건물 영구 박멸]: OpenMapTiles/OpenStreetMap(산림, 비건물 구역 미검증 다각형) 수집 100% 완전 차단
+    // 오직 국토교통부 공인 건축물대장 실측 소스(vworld-buildings-source)만 1:1 수집합니다.
     try {
       const vworldSrc = map.getSource('vworld-buildings-source') as any;
       if (vworldSrc && vworldSrc._data?.features && Array.isArray(vworldSrc._data.features)) {

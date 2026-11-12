@@ -704,7 +704,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    // 2단계: 베이스맵 벡터 타일 건물 중 V-World와 중복되지 않고 검증된 실측 건물만 보강
+    // 2단계: 베이스맵 벡터 타일 건물 중 공인 건축물대장 식별자가 검증된 실측 건물만 보강
+    // [강원 전역 산림 유령건물 영구 박멸]:
+    // - OpenMapTiles/OSM의 미검증 산림 다각형 및 임야 폴리곤은 100% 원천 배제
+    // - 국토부 공식 식별자(대장관리번호 bd_mgt_sn, 건물명 buld_nm/bld_nm, 필지 PNU)가 없는 미확인 박스 전면 탈락
     if (vecFeats && vecFeats.length > 0) {
       for (let i = 0; i < vecFeats.length; i++) {
         const vf = vecFeats[i];
@@ -740,26 +743,33 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         if (maxW / minW > 8.0) continue;
 
         const vp = (vf.properties || {}) as Record<string, any>;
-        // 산림 유령 건물 (우측 상단 숲속 주황집, 좌측 산림 회색집, 중앙 하단 주황박스 등) 100% 영구 배제
+
+        // 국토부 공식 건축물 식별자 보유 여부 엄격 판별 (미확인 OSM 박스 차단)
+        const hasVerifiedIdentity = Boolean(
+          vp.bd_mgt_sn ||
+          vp.buld_nm ||
+          vp.bld_nm ||
+          vp.pnu ||
+          vp.source === 'vworld_local' ||
+          vp.source === 'LT_C_SPBD'
+        );
+        if (!hasVerifiedIdentity) {
+          continue; // 공인 식별자가 없는 임의 다각형은 무조건 탈락
+        }
+
+        // 산림/임야 유령 건물 (강원 전역 산악 사면 및 능선) 100% 영구 배제
         if (isMountainGhostBuilding(cX, cY, vp, this.map)) continue;
 
         // V-World 실측 건물이 이미 존재하는 반경 20m 이내 형상은 스킵 (V-World 지오메트리 보존 및 2중 겹침 차단)
         if (checkCentroidDedupe(cX, cY, 20.0)) continue;
-
-        // 시가지 외곽 미확인 박스 차단: 대장 관리번호/건물명/층수 등 공인 식별자가 전무한 미소 박스는 배제
-        const hasVerifiedIdentity = Boolean(
-          vp.bd_mgt_sn || vp.buld_nm || vp.bld_nm || vp.pnu || vp.levels || vp.height
-        );
-        if (!hasVerifiedIdentity && approxArea < 180) {
-          continue;
-        }
 
         addCentroid(cX, cY);
         resultList.push(vf);
       }
     }
 
-    return resultList.length > 0 ? resultList : (extFeats && extFeats.length > 0 ? extFeats : vecFeats);
+    // 미검증 vecFeats로의 무조건 폴백을 영구 폐지하여 산악 유령건물 침투를 100% 방지
+    return resultList;
   }
 
   /**

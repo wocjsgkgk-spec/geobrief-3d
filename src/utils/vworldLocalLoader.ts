@@ -234,8 +234,32 @@ export async function fetchLocalVworldBuildings(options: {
     }
   }
 
-  // 3) 클라이언트 사이드 fetch 로드
+  // 3) 클라이언트 사이드 스트리밍 로드
+  // [무지연 렌더링 혁신]: 23MB(30,466동) 파일 전체를 브라우저에 다운로드하여 메인 스레드를 3초간 프리즈시키는 방식을 폐기하고,
+  // 서버 사이드 BBOX 공간 인덱싱 API(/api/gangwon-spatial)를 통해 현재 뷰포트 내 건물(~150KB)만 초고속 수신합니다.
   try {
+    if (bbox && Array.isArray(bbox) && bbox.length === 4) {
+      const bboxStr = bbox.map((v) => Number(v).toFixed(5)).join(',');
+      const apiUrl = resolveFullUrl(`/api/gangwon-spatial?bbox=${bboxStr}&regionId=${rId}&layers=buildings`);
+      const apiRes = await fetch(apiUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      if (apiRes.ok) {
+        const apiJson = await apiRes.json();
+        const features = (apiJson.data?.buildings?.features || []) as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[];
+        if (features.length > 0) {
+          registerFeaturesToRealStore(features);
+          return {
+            success: true,
+            hasLocalData: true,
+            regionId: rId,
+            featureCount: features.length,
+            message: `브이월드 로컬 뷰포트 스트리밍 (${features.length.toLocaleString()}동 초고속 로드)`,
+            features,
+          };
+        }
+      }
+    }
+
+    // BBOX 미지정 시에만 정적 파일 로드 (최소 필요 시)
     const fileUrl = resolveFullUrl(`/data/vworld/converted/${fileName}`);
     const res = await fetch(fileUrl);
     if (!res.ok) {
