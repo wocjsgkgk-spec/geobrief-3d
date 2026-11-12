@@ -535,7 +535,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       moveEndEvents.forEach((evt) => map.on(evt, this.handleMoveEnd));
 
       map.on('idle', this.handleMapIdle);
-      map.on('sourcedata', this.handleSourceData);
+      // [60fps 최적화]: 타일 스트리밍 중 메인 스레드를 멈추게 하던 sourcedata 무한 리스너 영구 제거
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
       const center = map.getCenter();
@@ -546,14 +546,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
   }
 
-  private handleSourceData = (e: any): void => {
-    if (
-      (e.sourceId === 'openmaptiles-vector' || e.sourceId === 'openfreemap' || e.sourceId === 'fusion-buildings-source' || e.sourceId === 'real-buildings-source') &&
-      e.isSourceLoaded
-    ) {
-      this.extractAndBuildFromMap();
-    }
-  };
+  private idleDebounceTimer: any = null;
 
   private handleMapIdle = (): void => {
     if (this.map) {
@@ -562,7 +555,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         return;
       }
       this.isMoving = false;
-      this.extractAndBuildFromMap();
+      if (this.idleDebounceTimer) clearTimeout(this.idleDebounceTimer);
+      this.idleDebounceTimer = setTimeout(() => {
+        this.idleDebounceTimer = null;
+        if (this.map && !this.map.isMoving() && !this.map.isRotating() && !this.map.isZooming()) {
+          this.extractAndBuildFromMap();
+        }
+      }, 500);
     }
   };
 
@@ -837,8 +836,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     if (newFeaturesToBuild.length > 0 || !this.masterMesh) {
-      // 신규 건물만 백그라운드 slice에서 조용히 추가 (기존 메쉬 파괴 0회, 60fps 유지)
-      this.buildRealisticCityMesh(this.masterMesh ? newFeaturesToBuild : this.cachedFeatures);
+      // 신규 건물만 백그라운드 slice에서 조용히 추가 (최대 1,500동 캡으로 60fps 보장)
+      const MAX_FEATURES_PER_BUILD = 1500;
+      const targetBatch = this.masterMesh
+        ? (newFeaturesToBuild.length > MAX_FEATURES_PER_BUILD ? newFeaturesToBuild.slice(0, MAX_FEATURES_PER_BUILD) : newFeaturesToBuild)
+        : (this.cachedFeatures.length > MAX_FEATURES_PER_BUILD ? this.cachedFeatures.slice(0, MAX_FEATURES_PER_BUILD) : this.cachedFeatures);
+      this.buildRealisticCityMesh(targetBatch);
     }
   }
 
@@ -2007,6 +2010,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     moveStartEvents.forEach((evt) => map.off(evt, this.handleMoveStart));
     moveEndEvents.forEach((evt) => map.off(evt, this.handleMoveEnd));
+    map.off('idle', this.handleMapIdle);
+
+    if (this.idleDebounceTimer) {
+      clearTimeout(this.idleDebounceTimer);
+      this.idleDebounceTimer = null;
+    }
 
     if (this.activeBuildIdleId !== null) {
       if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {

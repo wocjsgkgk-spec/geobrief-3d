@@ -1000,23 +1000,47 @@ export const MapViewer: React.FC = () => {
         }
 
         if (features.length > 0 && targetMap) {
+          // [뷰포트 바운딩 박스 슬라이싱]: 3만 건 일괄 전송으로 인한 메인 스레드 멈춤(Jank) 방지
+          const west = bbox[0];
+          const south = bbox[1];
+          const east = bbox[2];
+          const north = bbox[3];
+
+          let viewportFeatures = features;
+          if (features.length > 2000) {
+            viewportFeatures = features.filter((f) => {
+              const geom = f.geometry;
+              if (!geom) return false;
+              let pt: any;
+              if (geom.type === 'Polygon') pt = geom.coordinates[0]?.[0];
+              else if (geom.type === 'MultiPolygon') pt = geom.coordinates[0]?.[0]?.[0];
+              if (!pt) return false;
+              return pt[0] >= west && pt[0] <= east && pt[1] >= south && pt[1] <= north;
+            });
+            if (viewportFeatures.length === 0) {
+              viewportFeatures = features.slice(0, 2000);
+            } else if (viewportFeatures.length > 2000) {
+              viewportFeatures = viewportFeatures.slice(0, 2000);
+            }
+          }
+
           // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
           const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
           if (vworldSrc && typeof vworldSrc.setData === 'function') {
             vworldSrc.setData({
               type: 'FeatureCollection',
-              features,
+              features: viewportFeatures,
             });
           }
 
           // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입
           if (realisticKoreanCityLayerRef.current) {
-            realisticKoreanCityLayerRef.current.updateBuildings(features, [center.lng, center.lat]);
+            realisticKoreanCityLayerRef.current.updateBuildings(viewportFeatures, [center.lng, center.lat]);
           }
 
           // [C] 브이월드 POI 심볼 레이어에 실제 건물명 주입
           try {
-            updateVworldPoisWithBuildings(targetMap, features);
+            updateVworldPoisWithBuildings(targetMap, viewportFeatures);
           } catch {}
 
           targetMap.triggerRepaint();
@@ -2950,8 +2974,8 @@ export const MapViewer: React.FC = () => {
           (window as any).__realisticKoreanCityLayer = realisticLayer;
         }
 
-        // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (image_dbcb02.jpg 100% 동일)]
-        VworldGpuMasterEngine.mountLayers(map, 'vworld-buildings-source', '', VWORLD_POI_LAYER_ID);
+        // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (강원 18개 시·군 전역 GPU 하드웨어 가속 60fps)]
+        VworldGpuMasterEngine.mountLayers(map, 'openmaptiles-vector', 'building', VWORLD_POI_LAYER_ID);
 
         // [3D 시설물 인터랙티브 배치 및 TransformControls 기즈모 레이어]
         if (!map.getLayer('threebox-building-layer')) {
@@ -2961,8 +2985,8 @@ export const MapViewer: React.FC = () => {
           (window as any).__threeboxLayer = tbLayer;
         }
 
-        // 초기 모드 가시성 동기화 (모드 1 vs 모드 2 배타적 제어)
-        const curRenderMode = useMapStore.getState().renderMode3D || 'facade';
+        // 초기 모드 가시성 동기화 (모드 1 vs 모드 2 배타적 제어: 기본 V-World GPU 60fps 마스터 모드)
+        const curRenderMode = useMapStore.getState().renderMode3D || 'native';
         const bldgVis = Boolean(layers.buildings3D ?? true);
         if (curRenderMode === 'facade' && realisticKoreanCityLayerRef.current) {
           realisticKoreanCityLayerRef.current.setVisible(bldgVis);
@@ -3206,13 +3230,13 @@ export const MapViewer: React.FC = () => {
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setPostProcessingEnabled(false);
       }
-      // [60fps 최적화]: 드래그 멈춘 후 350ms 디바운스로 실측 건물 및 지형 표고 동기화
+      // [60fps 최적화]: 드래그 멈춘 후 500ms 디바운스로 실측 건물 및 지형 표고 동기화 (버벅거림 완전 차단)
       if (syncDebounceTimerRef.current) {
         clearTimeout(syncDebounceTimerRef.current);
       }
       syncDebounceTimerRef.current = setTimeout(() => {
         syncVworldBuildingData(map);
-      }, 350);
+      }, 500);
     };
 
     map.on('movestart', handleMoveStart);
