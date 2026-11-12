@@ -229,24 +229,24 @@ export const Header: React.FC = () => {
             <span className="font-bold text-sm sm:text-base tracking-wider text-slate-100 whitespace-nowrap">
               GeoBrief <span className="text-emerald-400">3D</span>
             </span>
-            <span className="hidden sm:inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-950/80 border border-blue-700/60 text-blue-300 whitespace-nowrap">
+            <span className="hidden 2xl:inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-950/80 border border-blue-700/60 text-blue-300 whitespace-nowrap">
               3D Briefing Builder
             </span>
-            <span className="hidden md:inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 items-center gap-1 whitespace-nowrap">
+            <span className="hidden xl:inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 items-center gap-1 whitespace-nowrap">
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              자동저장 활성
+              자동저장
             </span>
           </div>
-          <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[140px] sm:max-w-xs md:max-w-md">
+          <p className="hidden md:block text-[10px] sm:text-[11px] text-slate-400 font-medium truncate max-w-[120px] lg:max-w-xs">
             {metadata.title}
           </p>
         </div>
       </div>
 
       {/* 2. 중앙: 통합 검색창 & 풀옵션 드롭다운 메뉴바 */}
-      <div ref={toolbarRef} className="flex items-center space-x-1.5 sm:space-x-2.5 flex-shrink-0 mx-2 relative">
+      <div ref={toolbarRef} className="flex items-center space-x-1 sm:space-x-1.5 md:space-x-2 flex-shrink min-w-0 mx-1 sm:mx-2 relative">
         {/* [🔍 강원 전 지역 주소·지번·부지 검색] 입력창 */}
-        <div className="w-48 sm:w-60 md:w-72 lg:w-80 flex-shrink-0">
+        <div className="w-28 sm:w-36 md:w-44 lg:w-56 xl:w-64 flex-shrink">
           <GangwonUnifiedSearch />
         </div>
 
@@ -254,19 +254,19 @@ export const Header: React.FC = () => {
         <div className="relative">
           <button
             onClick={() => handleDropdownToggle('site')}
-            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
               activeDropdown === 'site'
                 ? 'bg-amber-600/35 border-amber-400/90 text-amber-200 shadow-md ring-1 ring-amber-500/50'
                 : 'bg-[#18261c] border-[#2e4735] text-emerald-300 hover:text-white hover:bg-[#203325]'
             }`}
             title="강원도 18개 시·군 전역 4대 권역 및 군 유휴부지 거점 선택"
           >
-            <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+            <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="text-slate-300 hidden lg:inline">대상지:</span>
-            <span className="font-bold text-emerald-300">
+            <span className="font-bold text-emerald-300 truncate max-w-[80px] sm:max-w-[120px]">
               {currentDisplayName}
             </span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'site' ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${activeDropdown === 'site' ? 'rotate-180' : ''}`} />
           </button>
 
           {activeDropdown === 'site' && (
@@ -428,16 +428,16 @@ export const Header: React.FC = () => {
         <div className="relative">
           <button
             onClick={() => handleDropdownToggle('view')}
-            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
               activeDropdown === 'view' || isOrbiting || cinematicFlight.isPlaying || cinematicFlight.isRecording
                 ? 'bg-blue-600/30 border-blue-400/80 text-blue-200 shadow-md ring-1 ring-blue-500/40'
                 : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
             }`}
             title="3D 뷰 전환, 360도 투어, 시네마틱 경로 및 브리핑 녹화"
           >
-            <Video className="w-3.5 h-3.5 text-blue-400" />
-            <span>뷰 & 시네마틱</span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'view' ? 'rotate-180' : ''}`} />
+            <Video className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span>뷰</span><span className="hidden xl:inline"> & 시네마틱</span>
+            <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${activeDropdown === 'view' ? 'rotate-180' : ''}`} />
           </button>
 
           {activeDropdown === 'view' && (
@@ -690,16 +690,16 @@ export const Header: React.FC = () => {
         <div className="relative">
           <button
             onClick={() => handleDropdownToggle('analysis')}
-            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
               activeDropdown === 'analysis' || isViewshedMode || isMeasureMode || cutFill.enabled || showSlopeAnalysis || waterLevel.enabled
                 ? 'bg-emerald-600/30 border-emerald-400/80 text-emerald-200 shadow-md ring-1 ring-emerald-500/40'
                 : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
             }`}
             title="지형 횡단 고도 프로파일, 3단 경사도, 토공량, 수위 침수, 거리 측정"
           >
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
-            <span>공간 & 토목분석</span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'analysis' ? 'rotate-180' : ''}`} />
+            <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>공간분석</span><span className="hidden xl:inline"> & 토목</span>
+            <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${activeDropdown === 'analysis' ? 'rotate-180' : ''}`} />
           </button>
 
           {activeDropdown === 'analysis' && (
@@ -910,16 +910,16 @@ export const Header: React.FC = () => {
         <div className="relative">
           <button
             onClick={() => handleDropdownToggle('tactical')}
-            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
               activeDropdown === 'tactical' || isViewshedMode || bufferRings.r500m || bufferRings.r1km || bufferRings.r2km || isPinMode || isArrowMode || uavFlight.isActive || isSensorPlacementMode
                 ? 'bg-cyan-600/30 border-cyan-400/80 text-cyan-200 shadow-md ring-1 ring-cyan-500/40'
                 : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
             }`}
             title="360도 가시권, 반경 버퍼링, 군사분계선, 시설물 배치, 전술 주석"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-            <span>전술 & 주석작도</span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'tactical' ? 'rotate-180' : ''}`} />
+            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>전술</span><span className="hidden xl:inline"> & 작도</span>
+            <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${activeDropdown === 'tactical' ? 'rotate-180' : ''}`} />
           </button>
 
           {activeDropdown === 'tactical' && (
@@ -1115,16 +1115,16 @@ export const Header: React.FC = () => {
         <div className="relative">
           <button
             onClick={() => handleDropdownToggle('export')}
-            className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            className={`px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 sm:gap-1.5 whitespace-nowrap cursor-pointer ${
               activeDropdown === 'export' || showTitleBlock || slidePackProgress.isExporting
                 ? 'bg-amber-600/30 border-amber-400/80 text-amber-200 shadow-md ring-1 ring-amber-500/40'
                 : 'bg-[#1b221e] border-[#2f3b33] text-slate-300 hover:text-white hover:bg-[#253029]'
             }`}
             title="도면 표제란, PPTX 슬라이드 팩 저장, .geobrief 프로젝트 백업"
           >
-            <FileDown className="w-3.5 h-3.5 text-amber-400" />
-            <span>도면 & 내보내기</span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${activeDropdown === 'export' ? 'rotate-180' : ''}`} />
+            <FileDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>내보내기</span><span className="hidden xl:inline"> & 도면</span>
+            <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${activeDropdown === 'export' ? 'rotate-180' : ''}`} />
           </button>
 
           {activeDropdown === 'export' && (
@@ -1241,9 +1241,9 @@ export const Header: React.FC = () => {
       </div>
 
       {/* 3. 우측: [UI Astro-Checked v2.0] + [✨ 3D 디테일: 실사(LOD2+)] + [🖨️ 도면 저장] 버튼 */}
-      <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0 ml-auto">
-        {/* [UI Astro-Checked v2.0 배지] */}
-        <span className="hidden xl:inline-flex items-center px-2 py-1 rounded-lg text-[10.5px] font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-400 shadow-sm whitespace-nowrap ring-1 ring-cyan-400/30">
+      <div className="flex items-center space-x-1 sm:space-x-1.5 flex-shrink-0 ml-auto">
+        {/* [UI Astro-Checked v2.0 배지] - 초광폭 화면에서만 표시 */}
+        <span className="hidden 2xl:inline-flex items-center px-2 py-1 rounded-lg text-[10.5px] font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-400 shadow-sm whitespace-nowrap ring-1 ring-cyan-400/30">
           [UI Astro-Checked v2.0]
         </span>
 
@@ -1251,11 +1251,11 @@ export const Header: React.FC = () => {
         <button
           type="button"
           onClick={toggleDetail3DMode}
-          className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/80 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-200 shadow-emerald-950/40 ring-1 ring-emerald-500/50 flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm transition-all cursor-pointer group"
+          className="px-2 sm:px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/80 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-200 shadow-emerald-950/40 ring-1 ring-emerald-500/50 flex items-center space-x-1 sm:space-x-1.5 whitespace-nowrap shadow-sm transition-all cursor-pointer group"
           title="클릭하여 3D 디테일 모드(경량 네이티브 / 실감 LOD2+)를 원클릭 전환합니다"
         >
-          <Sparkles className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
-          <span className="hidden sm:inline text-slate-300 font-medium">3D 디테일:</span>
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+          <span className="hidden md:inline text-slate-300 font-medium">3D:</span>
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
             detail3DMode === 'lod2'
               ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50'
@@ -1272,11 +1272,11 @@ export const Header: React.FC = () => {
         {/* [🖨️ 도면 저장]: 프로젝트 보관함 및 클라우드/로컬 저장 */}
         <button
           onClick={() => setIsProjectModalOpen(true)}
-          className="px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/60 shadow-md shadow-emerald-950/60 flex items-center space-x-1.5 transition-all whitespace-nowrap ring-1 ring-emerald-400/30"
+          className="px-2 sm:px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/60 shadow-md shadow-emerald-950/60 flex items-center space-x-1 sm:space-x-1.5 transition-all whitespace-nowrap ring-1 ring-emerald-400/30 cursor-pointer"
           title="클라우드 및 로컬 프로젝트 보관함 열기 및 도면 저장"
         >
-          <Save className="w-3.5 h-3.5 text-emerald-200" />
-          <span>도면 저장</span>
+          <Save className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+          <span className="hidden sm:inline">도면 </span><span>저장</span>
         </button>
       </div>
 

@@ -342,7 +342,7 @@ export const ControlPanel: React.FC = () => {
       <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
         <button
           onClick={() => handleTabChange('terrain_infra')}
-          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
             localActiveTab === 'terrain_infra'
               ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
@@ -358,7 +358,7 @@ export const ControlPanel: React.FC = () => {
 
         <button
           onClick={() => handleTabChange('buildings_complex')}
-          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
             localActiveTab === 'buildings_complex'
               ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
@@ -374,7 +374,7 @@ export const ControlPanel: React.FC = () => {
 
         <button
           onClick={() => handleTabChange('site_access')}
-          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
+          className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
             localActiveTab === 'site_access'
               ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'

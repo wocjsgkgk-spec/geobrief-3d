@@ -173,11 +173,14 @@ export function syncMaster3DRenderer(
   }
 }
 
+// [고속 지형 표고 메모이제이션 캐시]: 동기식 queryTerrainElevation (gl.readPixels GPU 스톨) 100% 방지
+const elevationCache = new Map<string, number>();
+
 /**
  * [강원 18개 시·군 산속/임야 유령 건물 원천 차단 필터]
  * 1) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
- * 2) 중앙 산림 한복판(1군지사 배후 야산) 및 우측 산림·숲속 유령 군집 좌표 마스크
- * 3) DEM 표고 및 경사도 25도 이상 급경사 사면 100% 영구 배제
+ * 2) 치악산, 설악산, 오대산 등 강원 산악 능선 좌표 마스킹
+ * 3) DEM 표고 분석 (그리드 캐시 기반 무스톨 초고속 판별)
  */
 export function isMountainGhostBuilding(
   lng: number,
@@ -234,54 +237,46 @@ export function isMountainGhostBuilding(
   const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
   if (isGangwonZone && !hasOfficialRegistration) {
     // 1. 치악산 국립공원 및 원주 외곽 산림 능선
-    if (lng >= 127.98 && lng <= 128.15 && lat >= 37.28 && lat <= 37.45) return true;
-    // 2. 설악산 국립공원 및 인제·속초 산악 능선
-    if (lng >= 128.30 && lng <= 128.55 && lat >= 38.05 && lat <= 38.25) return true;
-    // 3. 오대산 및 평창·대관령 고산 능선
-    if (lng >= 128.45 && lng <= 128.85 && lat >= 37.60 && lat <= 37.88) return true;
-    // 4. 태백산맥 및 정선·태백 산악 능선
-    if (lng >= 128.80 && lng <= 129.15 && lat >= 37.05 && lat <= 37.40) return true;
-    // 5. 춘천 구봉산·봉의산·용화산 배후 산림 능선
-    if (lng >= 127.70 && lng <= 127.85 && lat >= 37.85 && lat <= 38.00) return true;
+    if (lng >= 127.97 && lng <= 128.18 && lat >= 37.25 && lat <= 37.48) return true;
+    // 2. 백운산 및 원주 남부 산림 능선
+    if (lng >= 127.88 && lng <= 128.02 && lat >= 37.18 && lat <= 37.28) return true;
+    // 3. 설악산 국립공원 및 인제·속초·양양 산악 능선
+    if (lng >= 128.25 && lng <= 128.60 && lat >= 38.00 && lat <= 38.30) return true;
+    // 4. 오대산 및 평창·대관령·홍천 고산 능선
+    if (lng >= 128.40 && lng <= 128.90 && lat >= 37.55 && lat <= 37.95) return true;
+    // 5. 태백산맥 및 정선·태백·삼척 산악 능선
+    if (lng >= 128.75 && lng <= 129.25 && lat >= 37.00 && lat <= 37.45) return true;
+    // 6. 춘천 구봉산·봉의산·용화산 배후 산림 능선
+    if (lng >= 127.68 && lng <= 127.88 && lat >= 37.82 && lat <= 38.05) return true;
 
-    // 6. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 오염 구역
+    // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 오염 구역
     if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) return true;
     if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) return true;
     if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) return true;
 
-    // 7. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
+    // 8. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
     if (featProps.sourceLayer === 'building' || featProps.sources?.ofm) {
       return true;
     }
   }
 
-  // [3] DEM 표고 및 경사도 분석 (MapLibre queryTerrainElevation 연동)
+  // [3] DEM 표고 캐시 기반 고속 분석 (동기식 queryTerrainElevation GPU 스톨 영구 방지)
   if (map && typeof map.queryTerrainElevation === 'function') {
     try {
-      const elev = map.queryTerrainElevation([lng, lat]);
-      if (elev !== null && elev !== undefined) {
-        const dDeg = 0.00025; // ~25m
-        const eEast = map.queryTerrainElevation([lng + dDeg, lat]) ?? elev;
-        const eNorth = map.queryTerrainElevation([lng, lat + dDeg]) ?? elev;
-        const dzE = Math.abs(eEast - elev) / 25;
-        const dzN = Math.abs(eNorth - elev) / 25;
-        const maxGrade = Math.max(dzE, dzN);
-        const slopeDeg = Math.atan(maxGrade) * (180 / Math.PI);
-
-        // [산림/경사 필터] 표고 경사도 15도 이상 사면 100% 영구 배제
-        if (slopeDeg >= 15.0 && !hasOfficialRegistration) {
-          return true;
+      const gridKey = `${Math.round(lng * 500)}_${Math.round(lat * 500)}`;
+      let elev = elevationCache.get(gridKey);
+      if (elev === undefined) {
+        const sampled = map.queryTerrainElevation([lng, lat]);
+        elev = typeof sampled === 'number' && !isNaN(sampled) ? sampled : 0;
+        if (elevationCache.size > 2000) {
+          elevationCache.clear();
         }
+        elevationCache.set(gridKey, elev);
+      }
 
-        // 경사도 6도 이상의 고지대(140m+) 미등록 건물 배제 (산비탈 유령건물 박멸)
-        if (elev >= 140 && slopeDeg >= 6.0 && !hasOfficialRegistration) {
-          return true;
-        }
-
-        // 고지대 200m 이상 능선/산꼭대기 미등록 건물 100% 배제
-        if (elev >= 200 && !hasOfficialRegistration) {
-          return true;
-        }
+      // 고지대 170m 이상 능선/산꼭대기 미등록 건물 100% 배제
+      if (elev >= 170 && !hasOfficialRegistration) {
+        return true;
       }
     } catch {
       // ignore

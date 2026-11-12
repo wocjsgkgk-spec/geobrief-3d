@@ -30,6 +30,8 @@ import maplibregl from 'maplibre-gl';
 import * as THREE from 'three';
 import earcut from 'earcut';
 import { extractCustomLayerMatrix } from '@/utils/customLayerMatrix';
+import { MapLibreThreeMatrixAdapter } from '@/lib/vendor/maplibreThreePluginAdapter';
+import { getXDWorldSunDirection } from '@/lib/vendor/xdworldEngineAdapter';
 import { elevationCache } from '@/utils/elevationCache';
 import {
   getDiverseKoreanFacadeAtlasTexture,
@@ -457,10 +459,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
-      // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션]
-      // - DirectionalLight: 강도 1.2로 자연스러운 입체감 부여
+      // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션: EgisCorp/XDWorld 표준 210° SW, 45°]
       this.sunLight = new THREE.DirectionalLight(0xfffbeb, 1.20);
-      this.sunLight.position.set(-130, 160, 100).normalize();
+      const sunDir = getXDWorldSunDirection(210, 45);
+      this.sunLight.position.set(sunDir[0] * 200, sunDir[1] * 200, sunDir[2] * 200).normalize();
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
@@ -1962,7 +1964,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         this.rooftopMesh.visible = this.isVisible;
       }
 
-      const rawMatrix = extractCustomLayerMatrix(options, this.map);
+      const rawMatrix = extractCustomLayerMatrix(options, this.map) || MapLibreThreeMatrixAdapter.extractProjectionMatrix(options, this.map || undefined);
       if (!rawMatrix) return;
 
       this.renderMatrix.fromArray(rawMatrix as any);
