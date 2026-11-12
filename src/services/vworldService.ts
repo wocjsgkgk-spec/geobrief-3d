@@ -218,6 +218,10 @@ export function classifyVworldBuilding(
   };
 }
 
+// [클라이언트 사이드 인메모리 BBOX 공간 캐시 - 왕복 패닝 시 지연(Lag) 0ms 즉시 제거]
+const clientBuildingsCache = new Map<string, { timestamp: number; data: VworldFetchResult }>();
+const CLIENT_CACHE_TTL_MS = 10 * 60 * 1000; // 10분
+
 /**
  * 현재 지도 뷰포트의 BBOX 영역 내 실제 건물 공간정보를 Next.js 프록시 라우트를 통해 페칭합니다.
  * @param bbox [minLng, minLat, maxLng, maxLat]
@@ -238,7 +242,14 @@ export async function fetchVworldBuildings(
     };
   }
 
+  // 2) 클라이언트 인메모리 캐시 선확인
   const [minLng, minLat, maxLng, maxLat] = bbox;
+  const cacheKey = `${minLng.toFixed(3)}_${minLat.toFixed(3)}_${maxLng.toFixed(3)}_${maxLat.toFixed(3)}`;
+  const cached = clientBuildingsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CLIENT_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const proxyUrl = resolveFullUrl(
     `/api/vworld/buildings?bbox=${minLng},${minLat},${maxLng},${maxLat}&maxFeatures=25000&customKey=${encodeURIComponent(
       activeKey
@@ -274,8 +285,7 @@ export async function fetchVworldBuildings(
 
     const data = await res.json();
 
-    // 프록시 내부 응답 상태 반환
-    return {
+    const result: VworldFetchResult = {
       success: data.success,
       status: data.status,
       featureCount: data.featureCount || 0,
@@ -284,6 +294,12 @@ export async function fetchVworldBuildings(
       errorCode: data.errorCode,
       errorDetail: data.errorDetail,
     };
+
+    if (data.success) {
+      clientBuildingsCache.set(cacheKey, { timestamp: Date.now(), data: result });
+    }
+
+    return result;
   } catch (err: any) {
     clearTimeout(timeoutId);
     const isTimeout = err.name === 'AbortError';

@@ -232,9 +232,6 @@ export const VWORLD_GPU_BUILDING_LAYER_IDS = [
   'vworld-tier1-podium',
   'vworld-tier2-body',
   'vworld-tier4-roof',
-  'vworld-vec-tier1-podium',
-  'vworld-vec-tier2-body',
-  'vworld-vec-tier4-roof',
 ] as const;
 
 /** 순수 건물(Building) 필터: 비건물, 부지/필지 경계, 용도지역 및 3,800㎡ 초과 구역 영구 제외 */
@@ -361,8 +358,8 @@ export class VworldGpuMasterEngine {
       map.setLight({
         anchor: 'map',
         color: '#ffffff',
-        intensity: 0.55,
-        position: [1.3, 210, 45],
+        intensity: 0.65,
+        position: [1.2, 210, 40],
       });
     } catch (err) {
       console.warn('[VworldGpuMasterEngine] setLight notice:', err);
@@ -371,6 +368,7 @@ export class VworldGpuMasterEngine {
 
   /**
    * V-World 클린 3D 레이어를 맵에 등록 (도로망 위, 라벨 아래에 안착)
+   * 국토교통부 공인 실측 소스('vworld-buildings-source')에만 100% 바인딩하여 산림/비건물 구역 유령 건물을 영구 차단합니다.
    */
   public static mountLayers(
     map: maplibregl.Map,
@@ -382,7 +380,14 @@ export class VworldGpuMasterEngine {
 
     this.setupLighting(map);
 
-    // [1순위: 국토부 브이월드 실측 소스 레이어]
+    // [유령 건물 영구 제거]: 혹시 잔존하는 오픈 벡터 압출 레이어(vworld-vec-tier) 완전 제거
+    ['vworld-vec-tier1-podium', 'vworld-vec-tier2-body', 'vworld-vec-tier4-roof'].forEach((id) => {
+      if (map.getLayer(id)) {
+        try { map.removeLayer(id); } catch {}
+      }
+    });
+
+    // [국토교통부 공인 실측 건축물 전용 레이어 1:1 바인딩]
     const realLayers = createVworldGpuLayers(sourceId, sourceLayer, 'vworld-tier');
 
     for (const layerDef of realLayers) {
@@ -400,25 +405,6 @@ export class VworldGpuMasterEngine {
         }
       } catch (addErr) {
         console.warn(`[VworldGpuMasterEngine] addLayer notice (${layerDef.id}):`, addErr);
-      }
-    }
-
-    // [2순위: 오픈 벡터 타일 보조 레이어 (실측 데이터 미로드 영역 보강)]
-    if (map.getSource('openmaptiles-vector')) {
-      const vecLayers = createVworldGpuLayers('openmaptiles-vector', 'building', 'vworld-vec-tier');
-      for (const layerDef of vecLayers) {
-        if (map.getLayer(layerDef.id)) {
-          try {
-            map.removeLayer(layerDef.id);
-          } catch {}
-        }
-        try {
-          if (beforeId && map.getLayer(beforeId)) {
-            map.addLayer(layerDef, beforeId);
-          } else {
-            map.addLayer(layerDef);
-          }
-        } catch {}
       }
     }
   }

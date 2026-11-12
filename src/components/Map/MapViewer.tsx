@@ -41,7 +41,7 @@ import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
-import { syncMaster3DRenderer, isPermittedBuildingPolygon, hideAllFillExtrusionLayers } from '@/utils/master3DRendererManager';
+import { syncMaster3DRenderer, isPermittedBuildingPolygon, hideAllFillExtrusionLayers, isMountainGhostBuilding } from '@/utils/master3DRendererManager';
 import { astryxAdapter } from '@/lib/vendor/astryxAdapter';
 import {
   VWorldReaCoreEngine,
@@ -443,6 +443,15 @@ const baseStyle: maplibregl.StyleSpecification = {
       maxzoom: 19,
       attribution: '국토교통부 브이월드(V-World) 항공영상',
     },
+    'vworld-hybrid-tiles': {
+      type: 'raster',
+      tiles: [
+        'https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '국토교통부 브이월드(V-World) 도로망/하이브리드',
+    },
     'openmaptiles-vector': {
       type: 'vector',
       url: 'https://tiles.openfreemap.org/planet',
@@ -479,6 +488,16 @@ const baseStyle: maplibregl.StyleSpecification = {
         'raster-contrast': 0.0,
         'raster-brightness-min': 0.0,
         'raster-brightness-max': 1.0,
+        'raster-fade-duration': 0,
+      },
+    },
+    // [V-World 공식 도로망·지명·행정구역 하이브리드 투명 오버레이]
+    {
+      id: 'vworld-hybrid-layer',
+      type: 'raster',
+      source: 'vworld-hybrid-tiles',
+      paint: {
+        'raster-opacity': 1.0,
         'raster-fade-duration': 0,
       },
     },
@@ -953,12 +972,27 @@ export const MapViewer: React.FC = () => {
   // [국토교통부 브이월드 실측 3D 데이터 동기화 파이프라인]
   const isSyncingVworldRef = useRef(false);
   const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncedStateRef = useRef<{ lng: number; lat: number; zoom: number; regionId: string } | null>(null);
 
   const syncVworldBuildingData = useCallback(
     async (targetMap: maplibregl.Map) => {
       if (!targetMap) return;
       const zoom = targetMap.getZoom();
       if (zoom < 10.5) return;
+
+      const center = targetMap.getCenter();
+      const currentRegion = selectedRegionId || 'wonju';
+
+      // [공간 델타 임계값 스로틀링]: 350m 이내 미세 이동이나 0.7 이내 줌 변경 시 무거운 GeoJSON 재연산/setData 스킵
+      if (lastSyncedStateRef.current && lastSyncedStateRef.current.regionId === currentRegion) {
+        const dLng = (center.lng - lastSyncedStateRef.current.lng) * 111320 * Math.cos((center.lat * Math.PI) / 180);
+        const dLat = (center.lat - lastSyncedStateRef.current.lat) * 111320;
+        const distM = Math.hypot(dLng, dLat);
+        const zoomDiff = Math.abs(zoom - lastSyncedStateRef.current.zoom);
+        if (distM < 350 && zoomDiff < 0.7) {
+          return;
+        }
+      }
 
       if (isSyncingVworldRef.current) return;
       isSyncingVworldRef.current = true;
@@ -972,8 +1006,6 @@ export const MapViewer: React.FC = () => {
           bounds.getEast() + pad,
           bounds.getNorth() + pad,
         ];
-        const center = targetMap.getCenter();
-        const currentRegion = selectedRegionId || 'wonju';
 
         let features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
 
@@ -1000,29 +1032,36 @@ export const MapViewer: React.FC = () => {
         }
 
         if (features.length > 0 && targetMap) {
-          // [뷰포트 바운딩 박스 슬라이싱]: 3만 건 일괄 전송으로 인한 메인 스레드 멈춤(Jank) 방지
+          // [뷰포트 바운딩 박스 슬라이싱 및 산림/비건물 유령 건물 엄격 배제]
           const west = bbox[0];
           const south = bbox[1];
           const east = bbox[2];
           const north = bbox[3];
 
-          let viewportFeatures = features;
-          if (features.length > 2000) {
-            viewportFeatures = features.filter((f) => {
-              const geom = f.geometry;
-              if (!geom) return false;
-              let pt: any;
-              if (geom.type === 'Polygon') pt = geom.coordinates[0]?.[0];
-              else if (geom.type === 'MultiPolygon') pt = geom.coordinates[0]?.[0]?.[0];
-              if (!pt) return false;
-              return pt[0] >= west && pt[0] <= east && pt[1] >= south && pt[1] <= north;
-            });
-            if (viewportFeatures.length === 0) {
-              viewportFeatures = features.slice(0, 2000);
-            } else if (viewportFeatures.length > 2000) {
-              viewportFeatures = viewportFeatures.slice(0, 2000);
+          // 1차 필터링: 바운딩 박스 내 존재 & 산악 유령 건물 검사 (경사면, 임야, 비건물 구역)
+          const filteredFeatures = features.filter((f) => {
+            const geom = f.geometry;
+            if (!geom) return false;
+            let pt: any;
+            if (geom.type === 'Polygon') pt = geom.coordinates[0]?.[0];
+            else if (geom.type === 'MultiPolygon') pt = geom.coordinates[0]?.[0]?.[0];
+            if (!pt) return false;
+
+            // 뷰포트 내 좌표 확인
+            if (pt[0] < west || pt[0] > east || pt[1] < south || pt[1] > north) {
+              return false;
             }
-          }
+
+            // 산악 유령 건물 검사 (경사면, 임야, 비건물 구역 영구 배제)
+            if (isMountainGhostBuilding(pt[0], pt[1], f.properties || {}, targetMap)) {
+              return false;
+            }
+
+            return true;
+          });
+
+          // 2차 제한: 60fps 보장을 위해 최대 1,500동으로 클램핑 (MapLibre Earcut 테셀레이션 지연 방지)
+          const viewportFeatures = filteredFeatures.length > 1500 ? filteredFeatures.slice(0, 1500) : filteredFeatures;
 
           // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
           const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
@@ -1033,8 +1072,8 @@ export const MapViewer: React.FC = () => {
             });
           }
 
-          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입
-          if (realisticKoreanCityLayerRef.current) {
+          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입 (facade 모드일 때만 실행하여 native GPU 모드 시 Three.js 연산 배제)
+          if (renderMode3D === 'facade' && realisticKoreanCityLayerRef.current) {
             realisticKoreanCityLayerRef.current.updateBuildings(viewportFeatures, [center.lng, center.lat]);
           }
 
@@ -1051,6 +1090,14 @@ export const MapViewer: React.FC = () => {
             message: `정상 연동 (실시간 건축물 ${viewportFeatures.length}동 표출 중)`,
           });
 
+          // 동기화 상태 갱신
+          lastSyncedStateRef.current = {
+            lng: center.lng,
+            lat: center.lat,
+            zoom,
+            regionId: currentRegion,
+          };
+
           targetMap.triggerRepaint();
         }
       } catch (syncErr) {
@@ -1059,12 +1106,13 @@ export const MapViewer: React.FC = () => {
         isSyncingVworldRef.current = false;
       }
     },
-    [selectedRegionId]
+    [selectedRegionId, renderMode3D]
   );
 
-  // [1-2 동적 바인딩] 시·군 및 유휴부지 전환 시 이전 지역 캐시 정리
+  // [1-2 동적 바인딩] 시·군 및 유휴부지 전환 시 이전 지역 캐시 정리 및 동기화 상태 리셋
   useEffect(() => {
     persistentBuildingCacheRef.current.clear();
+    lastSyncedStateRef.current = null;
   }, [selectedRegionId, selectedIdleSiteId]);
 
   // [신규] WebGL 컨텍스트 유실(Crash 방지) 자동 2D 폴백 알림 배너 상태
@@ -1405,6 +1453,15 @@ export const MapViewer: React.FC = () => {
             attribution: '국토교통부 브이월드(V-World) 항공영상',
             maxzoom: 19,
           },
+          'vworld-hybrid-tiles': {
+            type: 'raster',
+            tiles: [
+              'https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png',
+            ],
+            tileSize: 256,
+            attribution: '국토교통부 브이월드(V-World) 도로망/하이브리드',
+            maxzoom: 19,
+          },
           'satellite-source': {
             type: 'raster',
             tiles: [
@@ -1611,6 +1668,17 @@ export const MapViewer: React.FC = () => {
               'raster-contrast': 0.0,
               'raster-brightness-min': 0.0,
               'raster-brightness-max': 1.0,
+              'raster-fade-duration': 0,
+            },
+            layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
+          },
+          // [V-World 공식 도로망·지명·행정구역 하이브리드 투명 오버레이]
+          {
+            id: 'vworld-hybrid-layer',
+            type: 'raster',
+            source: 'vworld-hybrid-tiles',
+            paint: {
+              'raster-opacity': 1.0,
               'raster-fade-duration': 0,
             },
             layout: { visibility: baseMap === 'satellite' ? 'visible' : 'none' },
@@ -3238,13 +3306,13 @@ export const MapViewer: React.FC = () => {
       if (threeboxLayerRef.current) {
         threeboxLayerRef.current.setPostProcessingEnabled(false);
       }
-      // [60fps 최적화]: 드래그 멈춘 후 500ms 디바운스로 실측 건물 및 지형 표고 동기화 (버벅거림 완전 차단)
+      // [60fps 최적화]: 드래그 멈춘 후 650ms 디바운스로 실측 건물 및 지형 표고 동기화 (버벅거림 완전 차단)
       if (syncDebounceTimerRef.current) {
         clearTimeout(syncDebounceTimerRef.current);
       }
       syncDebounceTimerRef.current = setTimeout(() => {
         syncVworldBuildingData(map);
-      }, 500);
+      }, 650);
     };
 
     map.on('movestart', handleMoveStart);
@@ -4211,6 +4279,13 @@ export const MapViewer: React.FC = () => {
       map.setPaintProperty('satellite-base-layer', 'raster-brightness-min', 0.0);
       map.setPaintProperty('satellite-base-layer', 'raster-brightness-max', 1.0);
       map.setPaintProperty('satellite-base-layer', 'raster-fade-duration', 0);
+    }
+    if (map.getLayer('vworld-hybrid-layer')) {
+      map.setLayoutProperty(
+        'vworld-hybrid-layer',
+        'visibility',
+        isVworldSatellite ? 'visible' : 'none'
+      );
     }
     if (map.getLayer('satellite-layer')) {
       map.setLayoutProperty(
