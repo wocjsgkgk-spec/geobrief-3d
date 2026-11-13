@@ -192,6 +192,7 @@ export class PrecisionBuildingBuilder {
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
+    const groundElev = Math.max(0, baseElev - 0.8); // 지형 경사면 바닥 들림 방지 기초 스커트 (-0.8m)
 
     // 16종 독립 스타일 배분
     const style: BuildingStyleAssignment = classifyBuildingStyle(
@@ -245,8 +246,8 @@ export class PrecisionBuildingBuilder {
         const nx = -dz / normLen;
         const nz = dx / normLen;
 
-        const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
-        const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
+        const pBL: [number, number, number] = [p0.x, groundElev, p0.z];
+        const pBR: [number, number, number] = [p1.x, groundElev, p1.z];
         const pTR: [number, number, number] = [p1.x, topElev, p1.z];
         const pTL: [number, number, number] = [p0.x, topElev, p0.z];
 
@@ -365,8 +366,8 @@ export class PrecisionBuildingBuilder {
         const nx = -dz / normLen;
         const nz = dx / normLen;
 
-        const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
-        const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
+        const pBL: [number, number, number] = [p0.x, groundElev, p0.z];
+        const pBR: [number, number, number] = [p1.x, groundElev, p1.z];
         const pTR: [number, number, number] = [p1.x, podiumElev, p1.z];
         const pTL: [number, number, number] = [p0.x, podiumElev, p0.z];
 
@@ -690,8 +691,8 @@ export class PrecisionBuildingBuilder {
         }
       } else {
         // 아파트 및 일반 저층: 1층 기단부 기본 외벽
-        const pBL: [number, number, number] = [p0.x, baseElev, p0.z];
-        const pBR: [number, number, number] = [p1.x, baseElev, p1.z];
+        const pBL: [number, number, number] = [p0.x, groundElev, p0.z];
+        const pBR: [number, number, number] = [p1.x, groundElev, p1.z];
         const pTR: [number, number, number] = [p1.x, podiumElev, p1.z];
         const pTL: [number, number, number] = [p0.x, podiumElev, p0.z];
 

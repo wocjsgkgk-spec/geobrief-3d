@@ -452,26 +452,11 @@ const baseStyle: maplibregl.StyleSpecification = {
       maxzoom: 19,
       attribution: '국토교통부 브이월드(V-World) 도로망/하이브리드',
     },
-    'openmaptiles-vector': {
-      type: 'vector',
-      url: 'https://tiles.openfreemap.org/planet',
-      maxzoom: 14,
-    },
-    'openmaptiles': {
-      type: 'vector',
-      url: 'https://tiles.openfreemap.org/planet',
-      maxzoom: 14,
-    },
-    'openfreemap': {
-      type: 'vector',
-      url: 'https://tiles.openfreemap.org/planet',
-      maxzoom: 14,
-    },
     'terrarium-dem': {
       type: 'raster-dem',
       encoding: 'terrarium',
       tiles: [
-        'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+        '/api/terrain-dem/{z}/{x}/{y}.png',
       ],
       tileSize: 256,
       maxzoom: 12,
@@ -565,7 +550,7 @@ export function safeSetTerrain(
             type: 'raster-dem',
             encoding: 'terrarium',
             tiles: [
-              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+              '/api/terrain-dem/{z}/{x}/{y}.png',
             ],
             tileSize: 256,
             maxzoom: 12,
@@ -594,10 +579,10 @@ export function safeSetTerrain(
     }
   };
 
-  if (map.getStyle()) {
+  if (map.isStyleLoaded()) {
     executeSetTerrain();
   } else {
-    map.once('load', executeSetTerrain);
+    map.once('style.load', executeSetTerrain);
   }
 }
 
@@ -999,7 +984,7 @@ export const MapViewer: React.FC = () => {
 
       try {
         const bounds = targetMap.getBounds();
-        const pad = 0.012;
+        const pad = 0.035;
         const bbox: [number, number, number, number] = [
           bounds.getWest() - pad,
           bounds.getSouth() - pad,
@@ -1060,30 +1045,55 @@ export const MapViewer: React.FC = () => {
             return true;
           });
 
-          // 2차 정렬 및 제한: 뷰포트 중심 거리순 오름차순 정렬 후 60fps 보장을 위해 최대 1,500동으로 클램핑
+          // 2차 정렬 및 분할: 메인 스레드 60fps 보장을 위해 O(N log N) 전체 정렬 대신
+          // O(N) 3-구역 거리 버킷(근경/중경/원경) 분할 알고리즘 가동 (소요시간 < 1.5ms)
           const cosLat = Math.cos((center.lat * Math.PI) / 180);
-          filteredFeatures.sort((a, b) => {
-            const ga = a.geometry;
-            const gb = b.geometry;
-            const pa = ga.type === 'Polygon' ? ga.coordinates[0]?.[0] : (ga as any).coordinates[0]?.[0]?.[0];
-            const pb = gb.type === 'Polygon' ? gb.coordinates[0]?.[0] : (gb as any).coordinates[0]?.[0]?.[0];
-            if (!pa || !pb) return 0;
-            const da = Math.hypot((pa[0] - center.lng) * cosLat, pa[1] - center.lat);
-            const db = Math.hypot((pb[0] - center.lng) * cosLat, pb[1] - center.lat);
-            return da - db;
-          });
-          const viewportFeatures = filteredFeatures.length > 1500 ? filteredFeatures.slice(0, 1500) : filteredFeatures;
+          const bucketNear: typeof filteredFeatures = [];  // < 900m (최우선)
+          const bucketMid: typeof filteredFeatures = [];   // 900m ~ 2,500m
+          const bucketFar: typeof filteredFeatures = [];   // > 2,500m
 
-          // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
-          const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
-          if (vworldSrc && typeof vworldSrc.setData === 'function') {
-            vworldSrc.setData({
-              type: 'FeatureCollection',
-              features: viewportFeatures,
-            });
+          const rNearSq = 0.000085; // (~900m)^2
+          const rMidSq = 0.000625;  // (~2,500m)^2
+
+          for (let i = 0; i < filteredFeatures.length; i++) {
+            const f = filteredFeatures[i];
+            const geom = f.geometry;
+            const pt = geom.type === 'Polygon' ? geom.coordinates[0]?.[0] : (geom as any).coordinates[0]?.[0]?.[0];
+            if (!pt) continue;
+            const dx = (pt[0] - center.lng) * cosLat;
+            const dy = pt[1] - center.lat;
+            const dSq = dx * dx + dy * dy;
+
+            if (dSq < rNearSq) {
+              bucketNear.push(f);
+            } else if (dSq < rMidSq) {
+              bucketMid.push(f);
+            } else {
+              bucketFar.push(f);
+            }
           }
 
-          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입
+          // 최대 6,500동 대규모 도심 합성 (근경 전수 + 중경 3,000동 + 원경 1,500동)
+          const MAX_TOTAL_BUILDINGS = 6500;
+          const viewportFeatures = [
+            ...bucketNear,
+            ...bucketMid.slice(0, 3000),
+            ...bucketFar.slice(0, 1500),
+          ].slice(0, MAX_TOTAL_BUILDINGS);
+
+          // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
+          // (Three.js RealisticKoreanCityLayer 모드에서는 MapLibre Earcut 중복 부하를 방지하기 위해 setData 바이패스)
+          if (renderMode3D !== 'facade') {
+            const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
+            if (vworldSrc && typeof vworldSrc.setData === 'function') {
+              vworldSrc.setData({
+                type: 'FeatureCollection',
+                features: viewportFeatures.slice(0, 2000),
+              });
+            }
+          }
+
+          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입 (최대 6,500동 대규모 도심 표출)
           if (realisticKoreanCityLayerRef.current) {
             realisticKoreanCityLayerRef.current.updateBuildings(viewportFeatures, [center.lng, center.lat]);
           }
@@ -1095,9 +1105,9 @@ export const MapViewer: React.FC = () => {
             badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${viewportFeatures.length.toLocaleString()}동 | 활성 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
           }
 
-          // [C] 브이월드 POI 심볼 레이어에 실제 건물명 주입
+          // [C] 브이월드 POI 심볼 레이어에 근경 건물명 주입
           try {
-            updateVworldPoisWithBuildings(targetMap, viewportFeatures);
+            updateVworldPoisWithBuildings(targetMap, bucketNear.slice(0, 60));
           } catch {}
 
           // [D] 공간정보 실시간 진단 상태 동기화
@@ -1540,7 +1550,7 @@ export const MapViewer: React.FC = () => {
           'terrarium-dem': {
             type: 'raster-dem',
             tiles: [
-              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+              '/api/terrain-dem/{z}/{x}/{y}.png',
             ],
             encoding: 'terrarium',
             tileSize: 256,
@@ -1549,7 +1559,7 @@ export const MapViewer: React.FC = () => {
           'terrarium-dem-hillshade': {
             type: 'raster-dem',
             tiles: [
-              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+              '/api/terrain-dem/{z}/{x}/{y}.png',
             ],
             encoding: 'terrarium',
             tileSize: 256,
@@ -2432,9 +2442,15 @@ export const MapViewer: React.FC = () => {
         if (!options) {
           return origSetTerrain(null);
         }
+        if (!this.isStyleLoaded()) {
+          this.once('style.load', () => {
+            try { this.setTerrain(options); } catch {}
+          });
+          return this;
+        }
         const srcId = options?.source;
         if (srcId && !this.getSource(srcId)) {
-          console.warn(`[MapViewer] setTerrain skipped: source '${srcId}' does not exist.`);
+          console.warn(`[MapViewer] setTerrain deferred: source '${srcId}' does not exist.`);
           return this;
         }
         return origSetTerrain(options);

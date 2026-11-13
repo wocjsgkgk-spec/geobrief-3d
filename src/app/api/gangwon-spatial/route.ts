@@ -624,7 +624,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  // [60fps 최적화 및 뷰포트 중심 100% 밀착]: 화면 중심으로부터의 거리순 정렬 후 2,000동 클램핑
+  // [60fps 최적화 및 뷰포트 중심 100% 밀착]: 화면 중심으로부터의 거리순 정렬 후 7,500동 대규모 클램핑
   const allBuildings = Array.from(buildingsMap.values());
   const centerLng = (bbox[0] + bbox[2]) * 0.5;
   const centerLat = (bbox[1] + bbox[3]) * 0.5;
@@ -638,7 +638,7 @@ export async function GET(req: NextRequest) {
     const dB = Math.hypot((ptB[0] - centerLng) * 111320 * cosLat, (ptB[1] - centerLat) * 111320);
     return dA - dB;
   });
-  const finalBuildings = allBuildings.length > 2000 ? allBuildings.slice(0, 2000) : allBuildings;
+  const finalBuildings = allBuildings.length > 7500 ? allBuildings.slice(0, 7500) : allBuildings;
   const finalParcels = parsedParcels.length > 1000 ? parsedParcels.slice(0, 1000) : parsedParcels;
 
   const responsePayload = {

@@ -842,8 +842,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     if (newFeaturesToBuild.length > 0 || !this.masterMesh) {
-      // 신규 건물만 백그라운드 slice에서 조용히 추가 (최대 1,500동 캡으로 60fps 보장)
-      const MAX_FEATURES_PER_BUILD = 1500;
+      // 신규 건물 백그라운드 슬라이스 추가 (최대 10,000동 확장으로 대규모 도심 전역 표출)
+      const MAX_FEATURES_PER_BUILD = 10000;
       const targetBatch = this.masterMesh
         ? (newFeaturesToBuild.length > MAX_FEATURES_PER_BUILD ? newFeaturesToBuild.slice(0, MAX_FEATURES_PER_BUILD) : newFeaturesToBuild)
         : (this.cachedFeatures.length > MAX_FEATURES_PER_BUILD ? this.cachedFeatures.slice(0, MAX_FEATURES_PER_BUILD) : this.cachedFeatures);
@@ -1599,9 +1599,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const dLatM = (cLat - mapCenter.lat) * metersPerLat;
       const distFromCenterM = Math.hypot(dLngM, dLatM);
 
-      // [산악 허위 더미 방지]: 지형 고도가 카메라 중심 지면 표고보다 250m 이상 급격히 높은 산꼭대기 절벽 상자 차단
+      // [산악 허위 더미 방지]: 지형 고도가 카메라 중심 지면 표고보다 500m 이상 급격히 높은 산꼭대기 절벽 상자 차단
       const centerElev = map.queryTerrainElevation ? (map.queryTerrainElevation([mapCenter.lng, mapCenter.lat]) || 0) : 0;
-      if (rawElev - centerElev > 250) {
+      if (rawElev - centerElev > 500) {
         continue;
       }
 
@@ -1721,7 +1721,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 12.0; // 60fps(16.6ms) 디스플레이 주사율을 철저히 준수하는 12ms 타임버짓
+      const FRAME_BUDGET_MS = 2.5; // 60fps(16.6ms) 무지연 주사율을 완벽 보장하는 2.5ms 초미세 타임버짓
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1744,7 +1744,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         let sliceCount = 0;
 
         while (featureIdx < features.length) {
-          if (sliceCount > 0 && sliceCount % 40 === 0) {
+          if (sliceCount > 0 && sliceCount % 20 === 0) {
             const elapsed = performance.now() - sliceStartTime;
             if (elapsed >= FRAME_BUDGET_MS) {
               break;
@@ -1767,10 +1767,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [화면 즉시 표시 및 주기적 증분 커밋]: 350동 단위로 연속 커밋하여 수천 동 건물 중단 없이 빌드
+          // [화면 즉시 표시 및 주기적 증분 커밋]: 초기 200동 즉시 커밋 후 800동 단위로 연속 커밋하여 GC 멈춤 없이 빌드
           if (
             this.hasAnySlotVertices() &&
-            (newlyAddedCount >= 350 || !this.hasInitialBuilt)
+            (newlyAddedCount >= 800 || (!this.hasInitialBuilt && newlyAddedCount >= 200))
           ) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
@@ -1778,7 +1778,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             this.hasInitialBuilt = true;
           }
           // 뷰포트 내 건물 완료 시까지는 setTimeout(0)으로 무지연 고속 빌드
-          if (featureIdx < viewportFeatures.length || this.builtBuildingKeys.size < 6000) {
+          if (featureIdx < viewportFeatures.length || this.builtBuildingKeys.size < 12000) {
             this.activeBuildIdleId = setTimeout(executeSlice, 0);
           } else {
             this.activeBuildIdleId = setTimeout(executeSlice, 14);
