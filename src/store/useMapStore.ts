@@ -1234,7 +1234,6 @@ export const useMapStore = create<MapStoreState>()(
           viewMode: '3D',
           layers: {
             ...state.layers,
-            firstLogisticsSmartCity: false,
           },
           placedFacilities: state.placedFacilities,
           selectedFacilityId: state.selectedFacilityId,

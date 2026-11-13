@@ -1060,7 +1060,18 @@ export const MapViewer: React.FC = () => {
             return true;
           });
 
-          // 2차 제한: 60fps 보장을 위해 최대 1,500동으로 클램핑 (MapLibre Earcut 테셀레이션 지연 방지)
+          // 2차 정렬 및 제한: 뷰포트 중심 거리순 오름차순 정렬 후 60fps 보장을 위해 최대 1,500동으로 클램핑
+          const cosLat = Math.cos((center.lat * Math.PI) / 180);
+          filteredFeatures.sort((a, b) => {
+            const ga = a.geometry;
+            const gb = b.geometry;
+            const pa = ga.type === 'Polygon' ? ga.coordinates[0]?.[0] : (ga as any).coordinates[0]?.[0]?.[0];
+            const pb = gb.type === 'Polygon' ? gb.coordinates[0]?.[0] : (gb as any).coordinates[0]?.[0]?.[0];
+            if (!pa || !pb) return 0;
+            const da = Math.hypot((pa[0] - center.lng) * cosLat, pa[1] - center.lat);
+            const db = Math.hypot((pb[0] - center.lng) * cosLat, pb[1] - center.lat);
+            return da - db;
+          });
           const viewportFeatures = filteredFeatures.length > 1500 ? filteredFeatures.slice(0, 1500) : filteredFeatures;
 
           // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
@@ -1164,8 +1175,10 @@ export const MapViewer: React.FC = () => {
           activeCount = enforceMaxActiveLayers(currentMap, 20);
         }
 
+        const vworldSrc = currentMap.getSource('vworld-buildings-source') as any;
+        const srcFeatLen = (vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features)?.length;
         const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() ||
-          ((currentMap.getSource('vworld-buildings-source') as any)?._data?.features?.length) ||
+          srcFeatLen ||
           (realtimeMetricsRef.current.renderedBuildingCount > 0 ? realtimeMetricsRef.current.renderedBuildingCount : 1500);
 
         realtimeMetricsRef.current = { renderedBuildingCount: bldgCount, activeLayersCount: activeCount };

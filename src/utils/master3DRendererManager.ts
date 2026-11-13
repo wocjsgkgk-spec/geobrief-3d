@@ -242,7 +242,10 @@ export function isMountainGhostBuilding(
     featProps.source === 'LT_C_SPBD' ||
     featProps.mgmBldrgstPk ||
     featProps.is_real_measured === true ||
-    (featProps.pnu && featProps.buld_nm)
+    featProps.name ||
+    featProps.buildingName ||
+    featProps.buld_nm ||
+    (featProps.pnu && (featProps.buld_nm || featProps.name || featProps.buildingName))
   );
 
   // [1] 지목 및 토지이용 태그 검사 (산림, 임야, 전답, 하천 등 비건물 구역)
@@ -284,18 +287,21 @@ export function isMountainGhostBuilding(
     // 6. 춘천 구봉산·용화산 배후 산림 능선
     if (lng >= 127.70 && lng <= 127.88 && lat >= 37.88 && lat <= 38.05) return true;
 
-    // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역
+    // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역 (실측 공인 건물은 영구 보존)
     if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) {
       const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
-      if (jimokVal === '임' || jimokVal === '임야' || !featProps.buld_nm) return true;
+      const hasName = Boolean(featProps.name || featProps.buildingName || featProps.buld_nm);
+      if ((jimokVal === '임' || jimokVal === '임야') && !hasName && !hasOfficialRegistration) return true;
     }
     if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) {
       const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
-      if (jimokVal === '임' || jimokVal === '임야' || !featProps.buld_nm) return true;
+      const hasName = Boolean(featProps.name || featProps.buildingName || featProps.buld_nm);
+      if ((jimokVal === '임' || jimokVal === '임야') && !hasName && !hasOfficialRegistration) return true;
     }
     if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) {
       const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
-      if (jimokVal === '임' || jimokVal === '임야' || !featProps.buld_nm) return true;
+      const hasName = Boolean(featProps.name || featProps.buildingName || featProps.buld_nm);
+      if ((jimokVal === '임' || jimokVal === '임야') && !hasName && !hasOfficialRegistration) return true;
     }
 
     // 8. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제

@@ -791,11 +791,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.vectorTileFeatures = candidateFeatures;
     }
 
-    // [신규] 국토교통부 브이월드 실측 소스(vworld-buildings-source) 피처 자동 동기화
+    // [신규] 국토교통부 브이월드 실측 소스(vworld-buildings-source) 피처 자동 동기화 (MapLibre v3/v4/v5 완벽 호환)
     try {
       const vworldSrc = this.map.getSource('vworld-buildings-source') as any;
-      if (vworldSrc && vworldSrc._data?.features && vworldSrc._data.features.length > 0) {
-        this.externalFeatures = vworldSrc._data.features;
+      const srcFeatures = vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features;
+      if (Array.isArray(srcFeatures) && srcFeatures.length > 0) {
+        this.externalFeatures = srcFeatures;
       }
     } catch {}
 

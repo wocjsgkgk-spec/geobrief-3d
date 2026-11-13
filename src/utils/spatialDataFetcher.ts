@@ -72,8 +72,9 @@ export function extractRenderedVectorBuildings(
     // 오직 국토교통부 공인 건축물대장 실측 소스(vworld-buildings-source)만 1:1 수집합니다.
     try {
       const vworldSrc = map.getSource('vworld-buildings-source') as any;
-      if (vworldSrc && vworldSrc._data?.features && Array.isArray(vworldSrc._data.features)) {
-        for (const vf of vworldSrc._data.features) {
+      const vFeatures = vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features;
+      if (Array.isArray(vFeatures) && vFeatures.length > 0) {
+        for (const vf of vFeatures) {
           candidateFeatures.push(vf);
         }
       }
