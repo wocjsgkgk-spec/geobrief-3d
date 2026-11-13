@@ -14,35 +14,39 @@ export async function GET(
 ) {
   const { path } = await context.params;
   const rawFileName = path[path.length - 1] || '';
-  // 경로 순회(Path Traversal) 공격 방어: 알파벳, 숫자, 점, 대시, 언더스코어 외 문자 제거
-  const fileName = rawFileName.replace(/[^a-zA-Z0-9._-]/g, '');
+  // 경로 순회(Path Traversal) 공격 방어: 알파벳, 숫자, 점, 대시, 언더스코어, 달러 외 문자 제거
+  const fileName = rawFileName.replace(/[^a-zA-Z0-9._$-]/g, '');
 
-  // 1. OGC tileset.json 하위 요청인 경우 리디렉션 없이 즉시 타일셋 JSON 응답 반환
-  if (fileName === 'tileset.json') {
+  // 1. 루트 tileset.json 단독 요청인 경우 기본 타일셋 엔드포인트 호출
+  if (path.length === 1 && fileName === 'tileset.json') {
     return getTileset(request);
   }
 
-  // 2. 바이너리 타일 소스 확인 (미등록 또는 더미 타일 차단)
-  const allowedTiles: Record<string, string> = {
-    // 실제 등록된 바이너리 타일셋이 있을 경우 매핑
-  };
+  // 2. 경로 정규화 및 상류 원천 URL 매핑
+  const cleanSegments = path.map((seg) => seg.replace(/[^a-zA-Z0-9._$-]/g, ''));
+  const joinedPath = cleanSegments.join('/');
 
-  const remoteTileUrl = allowedTiles[fileName];
-  if (!remoteTileUrl) {
-    return new NextResponse('Tile not found', { status: 404 });
+  let remoteTileUrl = '';
+  if (joinedPath.startsWith('TG9ENA/')) {
+    remoteTileUrl = `https://cdn.vworld.kr/TDServer/services/map4/${joinedPath}`;
+  } else if (joinedPath.startsWith('Gangwon-do/')) {
+    remoteTileUrl = `https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/${joinedPath}`;
+  } else {
+    // 상대 경로 파일 (.b3dm, sub-tileset.json 등) -> 기본 강원 원주권 타일 매핑
+    remoteTileUrl = `https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si/${joinedPath}`;
   }
 
   try {
     const response = await fetch(remoteTileUrl, {
       headers: {
         'User-Agent': 'GeoBrief-3D/1.0',
-        Accept: 'application/octet-stream, model/gltf-binary, */*',
+        Accept: 'application/octet-stream, model/gltf-binary, application/json, */*',
       },
       next: { revalidate: 86400 }, // 24시간 캐시
     });
 
     if (!response.ok) {
-      return new NextResponse('Tile not found', { status: 404 });
+      return new NextResponse(`Tile not found on upstream: ${remoteTileUrl}`, { status: response.status });
     }
 
     const data = await response.arrayBuffer();
@@ -50,7 +54,7 @@ export async function GET(
     const contentType = fileName.endsWith('.glb')
       ? 'model/gltf-binary'
       : fileName.endsWith('.json')
-      ? 'application/json'
+      ? 'application/json;charset=utf-8'
       : 'application/octet-stream';
 
     return new NextResponse(data, {
@@ -59,6 +63,7 @@ export async function GET(
         'Content-Type': contentType,
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': '*',
         'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
       },
     });

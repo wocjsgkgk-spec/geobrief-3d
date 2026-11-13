@@ -223,23 +223,56 @@ export function getCesiumIon3DTilesConfig(
 /**
  * 3. 국토교통부 브이월드 디지털 트윈 3D Tiles 설정 생성
  */
-export function getVworld3DTilesConfig(customKey?: string): External3DTilesConfig {
+export function getVworld3DTilesConfig(region: string = 'wonju', customKey?: string): External3DTilesConfig {
+  const REGION_TILES_MAP: Record<string, { name: string; url: string; desc: string }> = {
+    wonju: {
+      name: '브이월드 OGC 실사 3D (원주시 도심)',
+      url: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si/tileset.json',
+      desc: '국토부 공식 디지털 트윈 항공사진 텍스처 b3dm 메쉬 (원주시 전역)',
+    },
+    'wonju-bridge': {
+      name: '브이월드 OGC 실사 3D (원주 교량)',
+      url: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si-bridge/tileset.json',
+      desc: '국토부 공식 디지털 트윈 원주시 주요 교량 및 입체 시설물',
+    },
+    chuncheon: {
+      name: '브이월드 OGC 실사 3D (춘천시)',
+      url: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Chuncheon-si/tileset.json',
+      desc: '국토부 공식 디지털 트윈 춘천 도심 b3dm 메쉬',
+    },
+    gangneung: {
+      name: '브이월드 OGC 실사 3D (강릉시)',
+      url: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Gangneung-si/tileset.json',
+      desc: '국토부 공식 디지털 트윈 강릉 도심 b3dm 메쉬',
+    },
+    sokcho: {
+      name: '브이월드 OGC 실사 3D (속초시)',
+      url: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Sokcho-si/tileset.json',
+      desc: '국토부 공식 디지털 트윈 속초 도심 b3dm 메쉬',
+    },
+    proxy: {
+      name: '브이월드 OGC 실사 3D (프록시)',
+      url: '/api/vworld/3dtiles/tileset.json',
+      desc: '자체 Next.js 캐싱 프록시 엔드포인트',
+    },
+  };
+
+  const selected = REGION_TILES_MAP[region.toLowerCase()] || REGION_TILES_MAP.wonju;
   const key = customKey || getEffectiveVworldKey();
-  const isAvailable = Boolean(key);
 
   return {
     provider: 'vworld',
-    url: '/api/vworld/3dtiles/tileset.json',
+    url: selected.url,
     headers: {},
     loadOptions: {
       '3d-tiles': {
         isTileset: true,
       },
     },
-    displayName: '브이월드 OGC 실사 3D (국토교통부)',
-    description: '국토부 공식 디지털 트윈 항공사진 텍스처 b3dm 메쉬',
+    displayName: selected.name,
+    description: selected.desc,
     attribution: '국토교통부 브이월드 (V-World)',
-    isAvailable,
+    isAvailable: true,
     requiresKeyOrToken: false,
     maskedAuth: maskToken(key),
   };
@@ -287,10 +320,12 @@ export function resolve3DTilesUrlAndOptions(
   // 3) 브이월드 프리셋 또는 브이월드 도메인 감지
   if (
     input === 'vworld_3d_buildings' ||
+    input.startsWith('vworld_3d_') ||
     input.includes('/api/vworld/3dtiles') ||
     input.includes('vworld.kr')
   ) {
-    return getVworld3DTilesConfig(customAuth);
+    const regionKey = input.startsWith('vworld_3d_') ? input.replace('vworld_3d_', '') : 'wonju';
+    return getVworld3DTilesConfig(regionKey, customAuth);
   }
 
   // 4) 오픈 샘플 프리셋

@@ -143,12 +143,16 @@ export const Header: React.FC = () => {
     getGangwonMilitarySiteById(selectedIdleSiteId || '');
   const currentDisplayName = currentMilitarySite?.shortName || currentRegion?.name || '원주시';
 
-  // 외부 클릭 시 열린 드롭다운 자동 닫힘
+  // 외부 클릭 시 열린 드롭다운 자동 닫힘 (SVG 아이콘 언마운트 버블링 이슈 완벽 방어)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
-        setActiveDropdown(null);
+      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+      if (toolbarRef.current) {
+        if (toolbarRef.current.contains(e.target as Node) || (path.length > 0 && path.includes(toolbarRef.current))) {
+          return;
+        }
       }
+      setActiveDropdown(null);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);

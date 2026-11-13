@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // 허용 도메인 화이트리스트 (SSRF 방어)
 const ALLOWED_3DTILES_DOMAINS = [
+  'cdn.vworld.kr',
+  'xdworld.vworld.kr',
   'api.vworld.kr',
   'map.vworld.kr',
   '2d.vworld.kr',
@@ -108,11 +110,48 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. 브이월드 실사 3D Tiles OGC 1.0 표준 타일셋 메타데이터 반환 (강원특별자치도 전역 포괄)
+  // 2. 브이월드 실사 3D Tiles OGC 1.0 표준 타일셋 프록시 (원주권 및 강원 거점)
+  const regionParam = (searchParams.get('region') || 'wonju').toLowerCase();
+  const REGION_TILES_MAP: Record<string, string> = {
+    wonju: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si/tileset.json',
+    'wonju-bridge': 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si-bridge/tileset.json',
+    chuncheon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Chuncheon-si/tileset.json',
+    gangneung: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Gangneung-si/tileset.json',
+    sokcho: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Sokcho-si/tileset.json',
+    root: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA.json',
+  };
+
+  const targetUpstreamUrl = REGION_TILES_MAP[regionParam] || REGION_TILES_MAP.wonju;
+
+  try {
+    const upstreamRes = await fetch(targetUpstreamUrl, {
+      headers: {
+        Accept: 'application/json, application/octet-stream, */*',
+        'User-Agent': 'GeoBrief-3D/1.0',
+      },
+      next: { revalidate: 86400 },
+    });
+
+    if (upstreamRes.ok) {
+      const data = await upstreamRes.arrayBuffer();
+      return new NextResponse(data, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json;charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        },
+      });
+    }
+  } catch (upstreamErr) {
+    console.warn('[V-World 3D Tiles] Upstream regional tileset fetch fallback:', upstreamErr);
+  }
+
+  // 3. 상류 서버 연결 실패 시 메타데이터 폴백 (강원특별자치도 전역 포괄)
   // Region [west, south, east, north, minHeight, maxHeight] (단위: 라디안 및 미터)
   const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-  // 강원특별자치도 18개 시·군 전역 바운딩 볼륨 (경도 127.0~129.5, 위도 37.0~38.6, 고도 0~1800m)
   const westRad = toRad(127.0);
   const southRad = toRad(37.0);
   const eastRad = toRad(129.5);

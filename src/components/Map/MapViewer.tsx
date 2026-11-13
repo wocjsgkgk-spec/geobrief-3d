@@ -7080,10 +7080,10 @@ export const MapViewer: React.FC = () => {
           }}
         />
 
-        {/* [1. 브라우저 화면 내 긴급 에러 오버레이 & WebGL 3D 엔진 정상 표시줄] */}
+        {/* [1. 브라우저 화면 내 긴급 에러 오버레이 & WebGL 3D 엔진 정상 표시줄 - UI 포인터 간섭 0% 보장] */}
         <div
           id="map-debug-overlay"
-          className={`absolute top-2 left-2 z-[9999] pointer-events-auto transition-all text-xs font-mono rounded-lg shadow-xl backdrop-blur-md border ${
+          className={`absolute bottom-8 left-4 z-20 pointer-events-none transition-all text-xs font-mono rounded-lg shadow-xl backdrop-blur-md border ${
             debugErrors.length > 0
               ? 'bg-red-950/95 border-red-500 text-red-200 p-3 max-h-56 overflow-y-auto max-w-xl'
               : 'bg-black/80 border-emerald-500/60 text-emerald-300 px-3 py-1.5'
@@ -7113,14 +7113,14 @@ export const MapViewer: React.FC = () => {
             {debugErrors.length > 0 ? (
               <button
                 onClick={() => setDebugErrors([])}
-                className="text-[10px] bg-red-800 hover:bg-red-700 px-2 py-0.5 rounded text-white font-sans ml-auto"
+                className="text-[10px] bg-red-800 hover:bg-red-700 px-2 py-0.5 rounded text-white font-sans ml-auto pointer-events-auto cursor-pointer"
               >
                 로그 초기화
               </button>
             ) : (
               <button
                 onClick={() => setIsDebugCollapsed(!isDebugCollapsed)}
-                className="text-[10px] text-emerald-400/70 hover:text-emerald-200 underline ml-2 cursor-pointer"
+                className="text-[10px] text-emerald-400/70 hover:text-emerald-200 underline ml-2 cursor-pointer pointer-events-auto"
               >
                 {isDebugCollapsed ? '상세보기' : '접기'}
               </button>

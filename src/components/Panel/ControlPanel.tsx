@@ -273,27 +273,15 @@ export const ControlPanel: React.FC = () => {
     }
   };
 
-  // [1단계: 상태 <-> 맵 리스너 직결] 탭/메뉴 버튼은 즉시 반응하고 이벤트 디스패치로 지도 동기화
-  const [localActiveTab, setLocalActiveTab] = useState(activeSidebarTab);
-  const [localRenderMode3D, setLocalRenderMode3D] = useState(renderMode3D);
-  const currentTab = localActiveTab || activeSidebarTab;
-  const currentRenderMode = localRenderMode3D || renderMode3D;
-
-  useEffect(() => {
-    setLocalActiveTab(activeSidebarTab);
-  }, [activeSidebarTab]);
-
-  useEffect(() => {
-    setLocalRenderMode3D(renderMode3D);
-  }, [renderMode3D]);
+  // [상태 <-> 맵 리스너 직결] Zustand 스토어 단일 진실 공급원(SSOT) 사용으로 0.00초 즉각 반응
+  const currentTab = activeSidebarTab;
+  const currentRenderMode = renderMode3D;
 
   const handleTabChange = (tab: typeof activeSidebarTab) => {
-    setLocalActiveTab(tab);
     setActiveSidebarTab(tab);
   };
 
   const handleSelectRenderMode3D = (mode: typeof renderMode3D) => {
-    setLocalRenderMode3D(mode);
     setRenderMode3D(mode);
     if (typeof window !== 'undefined') {
       try {
@@ -338,12 +326,12 @@ export const ControlPanel: React.FC = () => {
 
   return (
     <aside className="w-full min-w-0 h-full md:h-[calc(100vh-3.5rem)] bg-slate-950/80 backdrop-blur-md border-r border-slate-800/80 flex flex-col text-slate-200 overflow-y-auto">
-      {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 - 0.01초 즉시 반응형 UI */}
+      {/* [신규] 좌측 분석 패널 3단 탭 아코디언 헤더 - 0.00초 즉시 반응형 UI */}
       <div className="sticky top-0 z-20 grid grid-cols-3 bg-[#111713] border-b border-[#242f27] p-1.5 gap-1 shadow-lg backdrop-blur-md">
         <button
           onClick={() => handleTabChange('terrain_infra')}
           className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
-            localActiveTab === 'terrain_infra'
+            currentTab === 'terrain_infra'
               ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
@@ -359,7 +347,7 @@ export const ControlPanel: React.FC = () => {
         <button
           onClick={() => handleTabChange('buildings_complex')}
           className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
-            localActiveTab === 'buildings_complex'
+            currentTab === 'buildings_complex'
               ? 'bg-amber-600/30 text-amber-300 border border-amber-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
@@ -375,7 +363,7 @@ export const ControlPanel: React.FC = () => {
         <button
           onClick={() => handleTabChange('site_access')}
           className={`py-2 px-1 text-center rounded-lg transition-all flex flex-col items-center justify-center gap-0.5 whitespace-nowrap shrink-0 cursor-pointer active:scale-95 ${
-            localActiveTab === 'site_access'
+            currentTab === 'site_access'
               ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/60 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#18241c] border border-transparent'
           }`}
