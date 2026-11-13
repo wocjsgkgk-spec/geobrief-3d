@@ -2433,24 +2433,23 @@ export const ControlPanel: React.FC = () => {
 
             {/* 2) 3D 가상 비행안전 제한고도면(Ceiling) 제어 카드 */}
             <div className="p-3 rounded-lg bg-[#18201b] border border-[#29352c] space-y-2.5">
-              <div
-                onClick={toggleFlightCeiling3D}
+              <label
                 className="flex items-center justify-between p-1 rounded hover:bg-[#202c24] cursor-pointer select-none transition-colors"
               >
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
                   <Plane className="w-3.5 h-3.5 text-amber-400" />
                   <span>3D 비행안전 고도제한면 (Ceiling)</span>
                 </div>
-                <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+                <div className="relative inline-flex items-center shrink-0">
                   <input
                     type="checkbox"
                     checked={showFlightCeiling3D}
-                    readOnly
+                    onChange={toggleFlightCeiling3D}
                     className="sr-only peer"
                   />
                   <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-rose-600"></div>
                 </div>
-              </div>
+              </label>
 
               {defenseAnalysisResult.hasFlightSafetyZone ? (
                 <div className="space-y-2 text-xs">
@@ -2664,8 +2663,7 @@ export const ControlPanel: React.FC = () => {
 
         {/* 2) 정찰 드론(UAV) 3D 순찰 비행선 제어 카드 */}
         <div className="p-3 rounded-xl bg-[#12231b] border border-emerald-500/40 space-y-2.5">
-          <div
-            onClick={toggleUavFlight}
+          <label
             className="flex items-center justify-between p-1 rounded hover:bg-[#1a3327] cursor-pointer select-none transition-colors"
           >
             <div className="flex items-center gap-1.5">
@@ -2681,16 +2679,16 @@ export const ControlPanel: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={uavFlight.isActive}
-                readOnly
+                onChange={toggleUavFlight}
                 className="sr-only peer"
               />
               <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
             </div>
-          </div>
+          </label>
 
           {uavFlight.isActive && (
             <div className="space-y-2 pt-1 border-t border-emerald-900/50 animate-fade-in text-xs">
@@ -3152,8 +3150,7 @@ export const ControlPanel: React.FC = () => {
         </div>
 
         <div className="space-y-2 text-xs">
-          <div
-            onClick={() => toggleBufferRing('r500m')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2">
@@ -3163,19 +3160,18 @@ export const ControlPanel: React.FC = () => {
                 <span className="text-[10px] text-slate-400 ml-1.5">(도보권)</span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={bufferRings.r500m}
-                readOnly
+                onChange={() => toggleBufferRing('r500m')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
             </div>
-          </div>
+          </label>
 
-          <div
-            onClick={() => toggleBufferRing('r1km')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2">
@@ -3185,19 +3181,18 @@ export const ControlPanel: React.FC = () => {
                 <span className="text-[10px] text-slate-400 ml-1.5">(기본 생활권)</span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={bufferRings.r1km}
-                readOnly
+                onChange={() => toggleBufferRing('r1km')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
             </div>
-          </div>
+          </label>
 
-          <div
-            onClick={() => toggleBufferRing('r2km')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2">
@@ -3207,16 +3202,16 @@ export const ControlPanel: React.FC = () => {
                 <span className="text-[10px] text-slate-400 ml-1.5">(차량 접근권)</span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={bufferRings.r2km}
-                readOnly
+                onChange={() => toggleBufferRing('r2km')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
             </div>
-          </div>
+          </label>
         </div>
       </section>
         </>
@@ -3232,8 +3227,7 @@ export const ControlPanel: React.FC = () => {
               3D 지형 (DEM) 및 베이스맵
             </h2>
 
-        <div
-          onClick={() => handleSetTerrainEnabled(!terrainEnabled)}
+        <label
           className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
         >
           <div className="flex items-center space-x-2">
@@ -3242,20 +3236,19 @@ export const ControlPanel: React.FC = () => {
               Terrarium 3D 지형 활성화
             </span>
           </div>
-          <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+          <div className="relative inline-flex items-center shrink-0">
             <input
               type="checkbox"
               checked={terrainEnabled}
-              readOnly
+              onChange={() => handleSetTerrainEnabled(!terrainEnabled)}
               className="sr-only peer"
             />
             <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
           </div>
-        </div>
+        </label>
 
         {/* [2단계 신규] 국토지리정보원 수치지형도 1:5,000 정밀 등고선 레이어 토글 */}
-        <div
-          onClick={() => handleToggleLayer('demContours')}
+        <label
           className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
         >
           <div className="flex items-center space-x-2">
@@ -3269,16 +3262,16 @@ export const ControlPanel: React.FC = () => {
               </span>
             </div>
           </div>
-          <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+          <div className="relative inline-flex items-center shrink-0">
             <input
               type="checkbox"
               checked={layers.demContours}
-              readOnly
+              onChange={() => handleToggleLayer('demContours')}
               className="sr-only peer"
             />
             <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
           </div>
-        </div>
+        </label>
 
         <div className="p-2.5 rounded bg-[#18201b] border border-[#29352c] space-y-1.5">
           <div className="flex justify-between items-center text-xs">
@@ -4147,24 +4140,23 @@ export const ControlPanel: React.FC = () => {
             </div>
           </div>
 
-          <div
-            onClick={() => handleToggleLayer('buildings3D')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <span className="flex items-center gap-2 text-slate-300 font-medium whitespace-nowrap">
               <Building className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               <span className="whitespace-nowrap">건축물 3D 돌출 (Extrusion)</span>
             </span>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={layers.buildings3D}
-                readOnly
+                onChange={() => handleToggleLayer('buildings3D')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
             </div>
-          </div>
+          </label>
 
           {/* [3단계: V-World 3D 건물 표현 테마 스타일러] */}
           {layers.buildings3D && (
@@ -4450,28 +4442,26 @@ export const ControlPanel: React.FC = () => {
             </p>
           </div>
 
-          <div
-            onClick={() => handleToggleLayer('roads')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <span className="flex items-center gap-2 text-slate-300 font-medium">
               <Route className="w-3.5 h-3.5 text-amber-400" />
               도로망 위계화 (주간선/보조)
             </span>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={layers.roads}
-                readOnly
+                onChange={() => handleToggleLayer('roads')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
             </div>
-          </div>
+          </label>
 
           {/* [공공데이터포털] 전국 교량 및 터널 현황정보 3D 마커 토글 */}
-          <div
-            onClick={() => handleToggleLayer('bridgeTunnel')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2">
@@ -4483,20 +4473,19 @@ export const ControlPanel: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={layers.bridgeTunnel}
-                readOnly
+                onChange={() => handleToggleLayer('bridgeTunnel')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
             </div>
-          </div>
+          </label>
 
           {/* [Phase 2 고도화] 브이월드 연속지적도(필지선) 토글 */}
-          <div
-            onClick={() => handleToggleLayer('cadastral')}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2">
@@ -4508,21 +4497,20 @@ export const ControlPanel: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={layers.cadastral}
-                readOnly
+                onChange={() => handleToggleLayer('cadastral')}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
             </div>
-          </div>
+          </label>
 
           {/* [Phase 2 신규] 브이월드 국토계획법 용도지역지구 토글 */}
           <div className="space-y-1.5 p-2 rounded bg-[#18201b] border border-[#29352c]">
-            <div
-              onClick={() => handleToggleLayer('zoning')}
+            <label
               className="flex items-center justify-between cursor-pointer select-none hover:bg-[#202c24] p-1 rounded transition-colors"
             >
               <div className="flex items-center space-x-2">
@@ -4534,16 +4522,16 @@ export const ControlPanel: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+              <div className="relative inline-flex items-center shrink-0">
                 <input
                   type="checkbox"
                   checked={layers.zoning}
-                  readOnly
+                  onChange={() => handleToggleLayer('zoning')}
                   className="sr-only peer"
                 />
                 <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
               </div>
-            </div>
+            </label>
             {layers.zoning && (
               <div className="grid grid-cols-4 gap-1 pt-1 border-t border-[#29352c] text-[9px] text-center font-bold">
                 <div className="p-1 rounded bg-[#fbbf24]/20 border border-[#fbbf24]/50 text-[#fbbf24]">
@@ -4563,8 +4551,7 @@ export const ControlPanel: React.FC = () => {
           </div>
 
           {/* [접경 안보 관제] 군사분계선/민통선 표시 수동 토글 */}
-          <div
-            onClick={() => setBorderSecurityVisible(!borderSecurityVisible)}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2">
@@ -4576,20 +4563,19 @@ export const ControlPanel: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={borderSecurityVisible}
-                readOnly
+                onChange={() => setBorderSecurityVisible(!borderSecurityVisible)}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-rose-600"></div>
             </div>
-          </div>
+          </label>
 
           {/* [교통 접근성 분석] 16:9 정량 분석표 표시 토글 */}
-          <div
-            onClick={toggleAccessibilityTable}
+          <label
             className="flex items-center justify-between p-2 rounded bg-[#18201b] hover:bg-[#202c24] cursor-pointer select-none transition-colors border border-[#29352c]"
           >
             <div className="flex items-center space-x-2 min-w-0">
@@ -4601,16 +4587,16 @@ export const ControlPanel: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="relative inline-flex items-center shrink-0 pointer-events-none">
+            <div className="relative inline-flex items-center shrink-0">
               <input
                 type="checkbox"
                 checked={showAccessibilityTable}
-                readOnly
+                onChange={toggleAccessibilityTable}
                 className="sr-only peer"
               />
               <div className="w-8 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
             </div>
-          </div>
+          </label>
 
           {/* [V-World 실사 3D 마스터 렌더러 파이프라인 상태] */}
           <div className="p-3 rounded-xl bg-gradient-to-b from-[#0f231a] to-[#0a1711] border border-emerald-500/50 space-y-2">

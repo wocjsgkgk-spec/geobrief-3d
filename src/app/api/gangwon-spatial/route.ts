@@ -624,9 +624,21 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  // [60fps 최적화]: 브라우저 11MB JSON 대량 파싱 프리즈 방지를 위해 카테고리별 최대 피처 수 클램핑
+  // [60fps 최적화 및 뷰포트 중심 100% 밀착]: 화면 중심으로부터의 거리순 정렬 후 2,000동 클램핑
   const allBuildings = Array.from(buildingsMap.values());
-  const finalBuildings = allBuildings.length > 1500 ? allBuildings.slice(0, 1500) : allBuildings;
+  const centerLng = (bbox[0] + bbox[2]) * 0.5;
+  const centerLat = (bbox[1] + bbox[3]) * 0.5;
+  const cosLat = Math.cos((centerLat * Math.PI) / 180);
+  allBuildings.sort((a, b) => {
+    const ptA = a.geometry?.type === 'Polygon' ? a.geometry.coordinates[0]?.[0] : a.geometry?.coordinates[0]?.[0]?.[0];
+    const ptB = b.geometry?.type === 'Polygon' ? b.geometry.coordinates[0]?.[0] : b.geometry?.coordinates[0]?.[0]?.[0];
+    if (!ptA) return 1;
+    if (!ptB) return -1;
+    const dA = Math.hypot((ptA[0] - centerLng) * 111320 * cosLat, (ptA[1] - centerLat) * 111320);
+    const dB = Math.hypot((ptB[0] - centerLng) * 111320 * cosLat, (ptB[1] - centerLat) * 111320);
+    return dA - dB;
+  });
+  const finalBuildings = allBuildings.length > 2000 ? allBuildings.slice(0, 2000) : allBuildings;
   const finalParcels = parsedParcels.length > 1000 ? parsedParcels.slice(0, 1000) : parsedParcels;
 
   const responsePayload = {

@@ -345,6 +345,22 @@ function filterFeaturesByBbox(
       })
     : features;
 
+  // [화면 중심 밀착 정렬]: 요청 뷰포트 중심점과 가장 가까운 건물 순으로 우선 정렬하여 클라이언트 슬라이싱 시 누락 0% 보장
+  if (bbox && filtered.length > 0) {
+    const cLng = (minLng + maxLng) * 0.5;
+    const cLat = (minLat + maxLat) * 0.5;
+    const cosLat = Math.cos((cLat * Math.PI) / 180);
+    filtered.sort((a, b) => {
+      const ptA = a.geometry?.type === 'Polygon' ? a.geometry.coordinates[0]?.[0] : a.geometry?.coordinates[0]?.[0]?.[0];
+      const ptB = b.geometry?.type === 'Polygon' ? b.geometry.coordinates[0]?.[0] : b.geometry?.coordinates[0]?.[0]?.[0];
+      if (!ptA) return 1;
+      if (!ptB) return -1;
+      const dA = Math.hypot((ptA[0] - cLng) * 111320 * cosLat, (ptA[1] - cLat) * 111320);
+      const dB = Math.hypot((ptB[0] - cLng) * 111320 * cosLat, (ptB[1] - cLat) * 111320);
+      return dA - dB;
+    });
+  }
+
   // [MapLibre varint 10-byte overflow 방지] 순수 숫자 ID에 'bld_' 강제 접두
   return filtered.map((f, idx) => {
     let fid = f.id !== undefined && f.id !== null ? String(f.id) : `bld_local_${idx}`;

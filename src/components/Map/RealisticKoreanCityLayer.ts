@@ -573,16 +573,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
     }
-    // [인터랙션 잠금: 카메라 이동/회전/줌 중 연산 100% 완전 중단]
-    if (this.activeBuildIdleId !== null) {
-      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(this.activeBuildIdleId);
-      } else {
-        clearTimeout(this.activeBuildIdleId);
-      }
-      this.activeBuildIdleId = null;
-      this.isBuildingGeometry = false;
-    }
+    // [인터랙션 보호]: 카메라 이동 중 빌드 타이머를 파괴하지 않고 자연스럽게 스로틀링 대기 유지
   };
 
   private handleMoveEnd = (): void => {
@@ -780,8 +771,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   public extractAndBuildFromMap(): void {
     if (!this.map) return;
     if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
-      this.isMoving = true;
-      return;
+      if (this.masterMesh) {
+        this.isMoving = true;
+        return;
+      }
     }
     this.isMoving = false;
 
@@ -1546,9 +1539,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
         } catch {}
 
-        // 지형 타일 로드 대기 중 또는 평탄지: 지면에 칼같이 밀착
+        // 지형 타일 로드 대기 중 또는 평탄지: 화면 중심 표고 또는 원주 기본 표고(142m)로 땅속 매몰 원천 방지
         if (rawElev <= 0) {
-          rawElev = 0;
+          try {
+            const mapCenter = map.getCenter();
+            const cElev = map.queryTerrainElevation ? map.queryTerrainElevation([mapCenter.lng, mapCenter.lat]) : null;
+            if (typeof cElev === 'number' && Number.isFinite(cElev) && cElev > 0) {
+              rawElev = cElev;
+            } else {
+              rawElev = 142.0;
+            }
+          } catch {
+            rawElev = 142.0;
+          }
         }
       } else {
         // 지형 비활성화 시 해수면 0m 평면에 칼같이 밀착
@@ -1649,8 +1652,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   ): void {
     if (!this.map) return;
     if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
-      this.pendingFeatures = rawFeatures;
-      return;
+      if (this.masterMesh) {
+        this.pendingFeatures = rawFeatures;
+        return;
+      }
     }
     this.isMoving = false;
 
@@ -1726,9 +1731,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         // [인터랙션 잠금: 카메라 이동/회전/줌 중에는 가벼운 대기 후 재시도 (60fps 유지)]
         if (this.map && (this.map.isMoving() || this.map.isRotating() || this.map.isZooming())) {
-          this.isMoving = true;
-          this.activeBuildIdleId = setTimeout(executeSlice, 180);
-          return;
+          if (this.masterMesh) {
+            this.isMoving = true;
+            this.activeBuildIdleId = setTimeout(executeSlice, 180);
+            return;
+          }
         }
         this.isMoving = false;
 

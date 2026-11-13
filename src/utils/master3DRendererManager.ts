@@ -126,12 +126,10 @@ export function syncMaster3DRenderer(
   const bldgVisible = Boolean(isBuildingsVisible);
 
   if (renderMode3D === 'facade') {
-    // [모드 1: 브이월드 3D 실사 디지털 트윈] Three.js 병합 버퍼 + 16종 PBR 파사드
+    // [모드 1: 브이월드 3D 실사 디지털 트윈] GPU 하드웨어 가속 5단 기하학 + Three.js 실사 결합
+    VworldGpuMasterEngine.setVisible(map, bldgVisible);
     if (realisticKoreanCityLayer) {
       realisticKoreanCityLayer.setVisible(bldgVisible);
-      VworldGpuMasterEngine.setVisible(map, false);
-    } else {
-      VworldGpuMasterEngine.setVisible(map, bldgVisible);
     }
   } else if (renderMode3D === 'native') {
     // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (image_dbcb02.jpg 100% 동일)]
@@ -270,26 +268,35 @@ export function isMountainGhostBuilding(
     if (!hasOfficialRegistration) return true;
   }
 
-  // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹
+  // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹 (절대 제약 조건)
   const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
-  if (isGangwonZone && !hasOfficialRegistration) {
-    // 1. 치악산 국립공원 및 원주 외곽 산림 능선
-    if (lng >= 127.97 && lng <= 128.18 && lat >= 37.25 && lat <= 37.48) return true;
-    // 2. 백운산 및 원주 남부 산림 능선
-    if (lng >= 127.88 && lng <= 128.02 && lat >= 37.18 && lat <= 37.28) return true;
+  if (isGangwonZone) {
+    // 1. 치악산 국립공원 핵심 산림 능선 (표고 높거나 산악 지정지)
+    if (lng >= 127.985 && lng <= 128.18 && lat >= 37.26 && lat <= 37.48) return true;
+    // 2. 백운산 남부 산림 능선
+    if (lng >= 127.88 && lng <= 128.02 && lat >= 37.18 && lat <= 37.26) return true;
     // 3. 설악산 국립공원 및 인제·속초·양양 산악 능선
     if (lng >= 128.25 && lng <= 128.60 && lat >= 38.00 && lat <= 38.30) return true;
     // 4. 오대산 및 평창·대관령·홍천 고산 능선
     if (lng >= 128.40 && lng <= 128.90 && lat >= 37.55 && lat <= 37.95) return true;
     // 5. 태백산맥 및 정선·태백·삼척 산악 능선
     if (lng >= 128.75 && lng <= 129.25 && lat >= 37.00 && lat <= 37.45) return true;
-    // 6. 춘천 구봉산·봉의산·용화산 배후 산림 능선
-    if (lng >= 127.68 && lng <= 127.88 && lat >= 37.82 && lat <= 38.05) return true;
+    // 6. 춘천 구봉산·용화산 배후 산림 능선
+    if (lng >= 127.70 && lng <= 127.88 && lat >= 37.88 && lat <= 38.05) return true;
 
     // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역
-    if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) return true;
-    if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) return true;
-    if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) return true;
+    if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) {
+      const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
+      if (jimokVal === '임' || jimokVal === '임야' || !featProps.buld_nm) return true;
+    }
+    if (lng >= 127.9380 && lng <= 127.9475 && lat >= 37.3480 && lat <= 37.3580) {
+      const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
+      if (jimokVal === '임' || jimokVal === '임야' || !featProps.buld_nm) return true;
+    }
+    if (lng >= 127.9300 && lng <= 127.9390 && lat >= 37.3440 && lat <= 37.3520) {
+      const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
+      if (jimokVal === '임' || jimokVal === '임야' || !featProps.buld_nm) return true;
+    }
 
     // 8. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
     if (featProps.sourceLayer === 'building' || featProps.layerId === 'building-vector-carrier' || featProps.sources?.ofm) {
@@ -303,7 +310,7 @@ export function isMountainGhostBuilding(
     }
   }
 
-  // [3] DEM 표고 캐시 및 경사도(Slope 14°+) 기반 고속 분석
+  // [3] DEM 표고 캐시 및 경사도(Slope 16°+) 기반 고속 분석 (절대 지형 제약 조건)
   if (map && typeof map.queryTerrainElevation === 'function') {
     try {
       const gridKey = `${Math.round(lng * 500)}_${Math.round(lat * 500)}`;
@@ -317,14 +324,14 @@ export function isMountainGhostBuilding(
         elevationCache.set(gridKey, elev);
       }
 
-      // 경사도 14° 초과 산악 사면 미등록 다각형 100% 영구 배제
-      if (elev > 0 && !hasOfficialRegistration) {
+      // 경사도 16° 초과 산악 사면 및 고산 능선 100% 영구 배제
+      if (elev > 0) {
         const deltaDeg = 0.0003;
         const eNorth = map.queryTerrainElevation([lng, lat + deltaDeg]) || elev;
         const eSouth = map.queryTerrainElevation([lng, lat - deltaDeg]) || elev;
         const dElev = Math.abs(eNorth - eSouth);
         const slopeDeg = Math.atan(dElev / 66.0) * (180 / Math.PI);
-        if (slopeDeg >= 14.0) {
+        if (slopeDeg >= 16.0) {
           return true;
         }
 

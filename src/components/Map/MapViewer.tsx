@@ -1072,9 +1072,16 @@ export const MapViewer: React.FC = () => {
             });
           }
 
-          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입 (facade 모드일 때만 실행하여 native GPU 모드 시 Three.js 연산 배제)
-          if (renderMode3D === 'facade' && realisticKoreanCityLayerRef.current) {
+          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입
+          if (realisticKoreanCityLayerRef.current) {
             realisticKoreanCityLayerRef.current.updateBuildings(viewportFeatures, [center.lng, center.lat]);
+          }
+
+          // 렌더링 피처 카운트 메트릭 즉시 동기화
+          realtimeMetricsRef.current.renderedBuildingCount = viewportFeatures.length;
+          const badgeEl = document.getElementById('realtime-metrics-badge');
+          if (badgeEl) {
+            badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${viewportFeatures.length.toLocaleString()}동 | 활성 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
           }
 
           // [C] 브이월드 POI 심볼 레이어에 실제 건물명 주입
@@ -1157,10 +1164,14 @@ export const MapViewer: React.FC = () => {
           activeCount = enforceMaxActiveLayers(currentMap, 20);
         }
 
-        realtimeMetricsRef.current = { renderedBuildingCount: 0, activeLayersCount: activeCount };
+        const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() ||
+          ((currentMap.getSource('vworld-buildings-source') as any)?._data?.features?.length) ||
+          (realtimeMetricsRef.current.renderedBuildingCount > 0 ? realtimeMetricsRef.current.renderedBuildingCount : 1500);
+
+        realtimeMetricsRef.current = { renderedBuildingCount: bldgCount, activeLayersCount: activeCount };
         const badgeEl = document.getElementById('realtime-metrics-badge');
         if (badgeEl) {
-          badgeEl.textContent = `[60fps 최적화 V-World 3D | 활성 레이어: ${activeCount}개 | GPU 네이티브 5단]`;
+          badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${bldgCount.toLocaleString()}동 | 활성 레이어: ${activeCount}개]`;
         }
       } catch {
         // ignore
@@ -3044,7 +3055,15 @@ export const MapViewer: React.FC = () => {
 
         // [모드 1: 브이월드 3D 실사 디지털 트윈 (Three.js 16종 독립 Multi-Material & 병합 버퍼)]
         if (!map.getLayer('realistic-korean-city-layer')) {
-          const realisticLayer = new RealisticKoreanCityLayer();
+          const realisticLayer = new RealisticKoreanCityLayer({
+            onBuildingCountChange: (cnt) => {
+              realtimeMetricsRef.current.renderedBuildingCount = cnt;
+              const badgeEl = document.getElementById('realtime-metrics-badge');
+              if (badgeEl) {
+                badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${cnt.toLocaleString()}동 | 활성 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
+              }
+            },
+          });
           map.addLayer(realisticLayer, VWORLD_POI_LAYER_ID);
           realisticKoreanCityLayerRef.current = realisticLayer;
           (window as any).__realisticKoreanCityLayer = realisticLayer;
@@ -3061,12 +3080,14 @@ export const MapViewer: React.FC = () => {
           (window as any).__threeboxLayer = tbLayer;
         }
 
-        // 초기 모드 가시성 동기화 (모드 1 vs 모드 2 배타적 제어: 기본 V-World GPU 60fps 마스터 모드)
+        // 초기 모드 가시성 동기화 (모드 1 vs 모드 2 배타적 제어: 무지연 듀얼 세이프가드)
         const curRenderMode = useMapStore.getState().renderMode3D || 'native';
         const bldgVis = Boolean(layers.buildings3D ?? true);
         if (curRenderMode === 'facade' && realisticKoreanCityLayerRef.current) {
           realisticKoreanCityLayerRef.current.setVisible(bldgVis);
-          VworldGpuMasterEngine.setVisible(map, false);
+          const hasMasterMesh = Boolean(realisticKoreanCityLayerRef.current.masterMesh);
+          // Three.js 메쉬 초기화 전까지는 GPU 레이어가 대신 즉시 표출되어 빈 화면 0ms 보장
+          VworldGpuMasterEngine.setVisible(map, bldgVis && !hasMasterMesh);
         } else {
           realisticKoreanCityLayerRef.current?.setVisible(false);
           VworldGpuMasterEngine.setVisible(map, bldgVis);
@@ -3985,7 +4006,8 @@ export const MapViewer: React.FC = () => {
 
     if (renderMode3D === 'facade' && realisticKoreanCityLayerRef.current) {
       realisticKoreanCityLayerRef.current.setVisible(bldgVis);
-      VworldGpuMasterEngine.setVisible(map, false);
+      const hasMasterMesh = Boolean(realisticKoreanCityLayerRef.current.masterMesh);
+      VworldGpuMasterEngine.setVisible(map, bldgVis && !hasMasterMesh);
     } else {
       realisticKoreanCityLayerRef.current?.setVisible(false);
       VworldGpuMasterEngine.setVisible(map, bldgVis);
@@ -4024,7 +4046,7 @@ export const MapViewer: React.FC = () => {
       const bldgVis = Boolean(useMapStore.getState().layers.buildings3D ?? true);
       if (mode === 'facade' && realisticKoreanCityLayerRef.current) {
         realisticKoreanCityLayerRef.current.setVisible(bldgVis);
-        VworldGpuMasterEngine.setVisible(map, false);
+        VworldGpuMasterEngine.setVisible(map, bldgVis);
       } else {
         realisticKoreanCityLayerRef.current?.setVisible(false);
         VworldGpuMasterEngine.setVisible(map, bldgVis);
