@@ -360,6 +360,7 @@ export function buildGovernmentMultipartMesh(options: LandmarkBuildOptions): voi
 
   const podiumElev = baseElev + podiumH;
   const towerElev = baseElev + totalH;
+  const groundElev = Math.max(0, baseElev - 1.8);
 
   const uvPodium = getDiverseFacadeSlotUV('gov_podium');
   const uvTower = getDiverseFacadeSlotUV('gov_tower');
@@ -402,8 +403,8 @@ export function buildGovernmentMultipartMesh(options: LandmarkBuildOptions): voi
     const nz = dx / elen;
 
     addQuad(
-      [p1.x, baseElev, p1.z],
-      [p2.x, baseElev, p2.z],
+      [p1.x, groundElev, p1.z],
+      [p2.x, groundElev, p2.z],
       [p2.x, podiumElev, p2.z],
       [p1.x, podiumElev, p1.z],
       [nx, 0, nz],
@@ -438,8 +439,8 @@ export function buildGovernmentMultipartMesh(options: LandmarkBuildOptions): voi
     addQuad(c00, c10, c11, c01, [0, 1, 0], uvCanopy);
     // 캐노피 전면
     addQuad(
-      [c01[0], baseElev, c01[2]],
-      [c11[0], baseElev, c11[2]],
+      [c01[0], groundElev, c01[2]],
+      [c11[0], groundElev, c11[2]],
       c11,
       c01,
       [nx, 0, nz],
@@ -633,6 +634,7 @@ export function buildSchoolMultipartMesh(options: LandmarkBuildOptions): void {
 
   const height = Math.max(14.0, Math.min(18.0, options.landmark.targetHeight || options.height || 16.0));
   const topElev = baseElev + height;
+  const groundElev = Math.max(0, baseElev - 1.8);
 
   const uvSchool = getDiverseFacadeSlotUV('school_facade');
   const uvRoofGreen = getDiverseFacadeSlotUV('roof_school_green');
@@ -658,8 +660,8 @@ export function buildSchoolMultipartMesh(options: LandmarkBuildOptions): void {
     const nz = dx / elen;
 
     addQuad(
-      [p1.x, baseElev, p1.z],
-      [p2.x, baseElev, p2.z],
+      [p1.x, groundElev, p1.z],
+      [p2.x, groundElev, p2.z],
       [p2.x, topElev, p2.z],
       [p1.x, topElev, p1.z],
       [nx, 0, nz],
@@ -686,10 +688,10 @@ export function buildSchoolMultipartMesh(options: LandmarkBuildOptions): void {
     const twH = height + 3.8;
     const twTopY = baseElev + twH;
 
-    const t00: [number, number, number] = [midX - ux * (twW / 2), baseElev, midZ - uz * (twW / 2)];
-    const t10: [number, number, number] = [midX + ux * (twW / 2), baseElev, midZ + uz * (twW / 2)];
-    const t11: [number, number, number] = [t10[0] + nx * twD, baseElev, t10[2] + nz * twD];
-    const t01: [number, number, number] = [t00[0] + nx * twD, baseElev, t00[2] + nz * twD];
+    const t00: [number, number, number] = [midX - ux * (twW / 2), groundElev, midZ - uz * (twW / 2)];
+    const t10: [number, number, number] = [midX + ux * (twW / 2), groundElev, midZ + uz * (twW / 2)];
+    const t11: [number, number, number] = [t10[0] + nx * twD, groundElev, t10[2] + nz * twD];
+    const t01: [number, number, number] = [t00[0] + nx * twD, groundElev, t00[2] + nz * twD];
 
     const t00Top: [number, number, number] = [t00[0], twTopY, t00[2]];
     const t10Top: [number, number, number] = [t10[0], twTopY, t10[2]];
@@ -697,7 +699,7 @@ export function buildSchoolMultipartMesh(options: LandmarkBuildOptions): void {
     const t01Top: [number, number, number] = [t01[0], twTopY, t01[2]];
 
     // 시계탑 전면
-    addQuad([t01[0], baseElev, t01[2]], [t11[0], baseElev, t11[2]], t11Top, t01Top, [nx, 0, nz], uvSchool);
+    addQuad([t01[0], groundElev, t01[2]], [t11[0], groundElev, t11[2]], t11Top, t01Top, [nx, 0, nz], uvSchool);
     // 시계탑 좌/우측면
     addQuad(t00, t01, t01Top, t00Top, [-ux, 0, -uz], uvSchool);
     addQuad(t11, t10, t10Top, t11Top, [ux, 0, uz], uvSchool);
@@ -769,6 +771,7 @@ export function buildHospitalMultipartMesh(options: LandmarkBuildOptions): void 
 
   const height = Math.max(22.0, landmark.targetHeight || options.height || 36.0);
   const topElev = baseElev + height;
+  const groundElev = Math.max(0, baseElev - 1.8);
 
   const uvHospital = getDiverseFacadeSlotUV('hospital_facade');
   const uvHelipad = getDiverseFacadeSlotUV('helipad_h');
@@ -804,8 +807,8 @@ export function buildHospitalMultipartMesh(options: LandmarkBuildOptions): void 
     const nz = dx / elen;
 
     addQuad(
-      [p1.x, baseElev, p1.z],
-      [p2.x, baseElev, p2.z],
+      [p1.x, groundElev, p1.z],
+      [p2.x, groundElev, p2.z],
       [p2.x, topElev, p2.z],
       [p1.x, topElev, p1.z],
       [nx, 0, nz],
@@ -838,8 +841,8 @@ export function buildHospitalMultipartMesh(options: LandmarkBuildOptions): void 
 
     addQuad(c00, c10, c11, c01, [0, 1, 0], uvCanopy);
     addQuad(
-      [c01[0], baseElev, c01[2]],
-      [c11[0], baseElev, c11[2]],
+      [c01[0], groundElev, c01[2]],
+      [c11[0], groundElev, c11[2]],
       c11,
       c01,
       [nx, 0, nz],
@@ -936,6 +939,7 @@ export function buildKtxStationMesh(options: LandmarkBuildOptions): void {
   const lobbyH = 6.0;
   const archH = totalH - lobbyH;
   const lobbyTopElev = baseElev + lobbyH;
+  const groundElev = Math.max(0, baseElev - 1.8);
 
   const uvCurtain = getDiverseFacadeSlotUV('comm_sky_curtain');
   const uvKtxArch = getDiverseFacadeSlotUV('ktx_station');
@@ -954,8 +958,8 @@ export function buildKtxStationMesh(options: LandmarkBuildOptions): void {
     const nz = dx / elen;
 
     addQuad(
-      [p1.x, baseElev, p1.z],
-      [p2.x, baseElev, p2.z],
+      [p1.x, groundElev, p1.z],
+      [p2.x, groundElev, p2.z],
       [p2.x, lobbyTopElev, p2.z],
       [p1.x, lobbyTopElev, p1.z],
       [nx, 0, nz],
@@ -1039,6 +1043,7 @@ export function buildPoliceFireMesh(options: LandmarkBuildOptions): void {
 
   const height = Math.max(14.0, options.landmark.targetHeight || options.height || 16.5);
   const topElev = baseElev + height;
+  const groundElev = Math.max(0, baseElev - 1.8);
 
   const uvPoliceFire = getDiverseFacadeSlotUV('police_fire_facade');
   const uvRoofConcrete = getDiverseFacadeSlotUV('roof_concrete_warmgray');
@@ -1057,8 +1062,8 @@ export function buildPoliceFireMesh(options: LandmarkBuildOptions): void {
     const nz = dx / elen;
 
     addQuad(
-      [p1.x, baseElev, p1.z],
-      [p2.x, baseElev, p2.z],
+      [p1.x, groundElev, p1.z],
+      [p2.x, groundElev, p2.z],
       [p2.x, topElev, p2.z],
       [p1.x, topElev, p1.z],
       [nx, 0, nz],

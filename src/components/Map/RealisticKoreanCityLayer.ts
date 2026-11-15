@@ -565,7 +565,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }, 250);
   };
 
+
+
   private idleDebounceTimer: any = null;
+  private lastKnownCenterElev: number = 0;
 
   private handleMapIdle = (): void => {
     if (this.map) {
@@ -578,9 +581,18 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.idleDebounceTimer = setTimeout(() => {
         this.idleDebounceTimer = null;
         if (this.map && !this.map.isMoving() && !this.map.isRotating() && !this.map.isZooming()) {
+          const center = this.map.getCenter();
+          const curElev = this.map.queryTerrainElevation ? (this.map.queryTerrainElevation(center) || 0) : 0;
+          if (curElev > 0 && Math.abs(curElev - this.lastKnownCenterElev) > 1.0) {
+            this.lastKnownCenterElev = curElev;
+            // DEM 타일 로드 완료로 지형 높이가 확정되었을 때 정점 버퍼 재정합
+            this.builtBuildingKeys.clear();
+            this.centroidSpatialGrid.clear();
+            this.resetAccumulatedBuffers();
+          }
           this.extractAndBuildFromMap();
         }
-      }, 500);
+      }, 350);
     }
   };
 
@@ -1532,10 +1544,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // 지형 표고: 실제 지형 고도(m) 직접 안착 (지형 아래 매몰 및 0m 누락 완전 해결)
-      // MapLibre map.getTerrain() 및 useMapStore 지형 활성화 상태 안전 검사
-      const isTerrainActive =
-        Boolean(map.getTerrain()) ||
-        (typeof window !== 'undefined' && Boolean((window as any).__mapStore?.getState?.()?.terrainEnabled ?? true));
+      // MapLibre map.getTerrain() 활성화 상태 안전 검사 (지형 미적용 시 0m 평면 밀착)
+      const isTerrainActive = Boolean(map.getTerrain());
       let rawElev = 0;
 
       if (isTerrainActive) {
@@ -1741,7 +1751,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = 2.5; // 60fps(16.6ms) 무지연 주사율을 완벽 보장하는 2.5ms 초미세 타임버짓
+      const FRAME_BUDGET_MS = this.isMoving ? 3.0 : 12.0; // 카메라 정지 시 12ms 버짓으로 고속 빌드, 이동 시 3ms
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1787,10 +1797,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [화면 즉시 표시 및 주기적 증분 커밋]: 초기 200동 즉시 커밋 후 800동 단위로 연속 커밋하여 GC 멈춤 없이 빌드
+          // [화면 즉시 표시 및 주기적 증분 커밋]: 초기 30동 즉시 커밋 후 500동 단위로 연속 커밋
+          const commitThreshold = !this.hasInitialBuilt ? 30 : 500;
           if (
             this.hasAnySlotVertices() &&
-            (newlyAddedCount >= 800 || (!this.hasInitialBuilt && newlyAddedCount >= 200))
+            (newlyAddedCount >= commitThreshold || (!this.masterMesh && newlyAddedCount > 0 && performance.now() - sliceStartTime > 15))
           ) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);

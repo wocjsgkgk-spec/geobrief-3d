@@ -192,7 +192,7 @@ export class PrecisionBuildingBuilder {
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
-    const groundElev = Math.max(0, baseElev - 0.8); // 지형 경사면 바닥 들림 방지 기초 스커트 (-0.8m)
+    const groundElev = Math.max(0, baseElev - 1.8); // 지형 경사면 바닥 들림 방지 기초 스커트 (-1.8m 전면 적용)
 
     // 16종 독립 스타일 배분
     const style: BuildingStyleAssignment = classifyBuildingStyle(
@@ -600,9 +600,9 @@ export class PrecisionBuildingBuilder {
       const nz = dx / normLen;
 
       if (!isApartment && podiumH >= 2.5) {
-        // 상가·오피스·관공서 0.2m 돌출 화강석 기단부 외벽
-        const pBL: [number, number, number] = [p0.x + nx * outsetM, baseElev, p0.z + nz * outsetM];
-        const pBR: [number, number, number] = [p1.x + nx * outsetM, baseElev, p1.z + nz * outsetM];
+        // 상가·오피스·관공서 0.2m 돌출 화강석 기단부 외벽 (기초 스커트 groundElev 적용)
+        const pBL: [number, number, number] = [p0.x + nx * outsetM, groundElev, p0.z + nz * outsetM];
+        const pBR: [number, number, number] = [p1.x + nx * outsetM, groundElev, p1.z + nz * outsetM];
         const pTR: [number, number, number] = [p1.x + nx * outsetM, podiumElev, p1.z + nz * outsetM];
         const pTL: [number, number, number] = [p0.x + nx * outsetM, podiumElev, p0.z + nz * outsetM];
 
@@ -758,8 +758,8 @@ export class PrecisionBuildingBuilder {
         const depth = 1.8;
         const porchTop = baseElev + 3.2;
 
-        const cL: [number, number, number] = [mx - ux * halfW + nx * depth, baseElev, mz - uz * halfW + nz * depth];
-        const cR: [number, number, number] = [mx + ux * halfW + nx * depth, baseElev, mz + uz * halfW + nz * depth];
+        const cL: [number, number, number] = [mx - ux * halfW + nx * depth, groundElev, mz - uz * halfW + nz * depth];
+        const cR: [number, number, number] = [mx + ux * halfW + nx * depth, groundElev, mz + uz * halfW + nz * depth];
         const cTR: [number, number, number] = [mx + ux * halfW + nx * depth, porchTop, mz + uz * halfW + nz * depth];
         const cTL: [number, number, number] = [mx - ux * halfW + nx * depth, porchTop, mz - uz * halfW + nz * depth];
 

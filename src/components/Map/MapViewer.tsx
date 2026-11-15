@@ -487,6 +487,10 @@ const baseStyle: maplibregl.StyleSpecification = {
       },
     },
   ],
+  terrain: {
+    source: 'terrarium-dem',
+    exaggeration: 1.0,
+  },
 };
 const PURE_SATELLITE_STYLE: maplibregl.StyleSpecification = baseStyle;
 
@@ -579,7 +583,7 @@ export function safeSetTerrain(
     }
   };
 
-  if (map.isStyleLoaded()) {
+  if (map.style && ((map.style as any)._loaded || map.isStyleLoaded())) {
     executeSetTerrain();
   } else {
     map.once('style.load', executeSetTerrain);
@@ -1082,15 +1086,12 @@ export const MapViewer: React.FC = () => {
           ].slice(0, MAX_TOTAL_BUILDINGS);
 
           // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
-          // (Three.js RealisticKoreanCityLayer 모드에서는 MapLibre Earcut 중복 부하를 방지하기 위해 setData 바이패스)
-          if (renderMode3D !== 'facade') {
-            const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
-            if (vworldSrc && typeof vworldSrc.setData === 'function') {
-              vworldSrc.setData({
-                type: 'FeatureCollection',
-                features: viewportFeatures.slice(0, 2000),
-              });
-            }
+          const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
+          if (vworldSrc && typeof vworldSrc.setData === 'function') {
+            vworldSrc.setData({
+              type: 'FeatureCollection',
+              features: viewportFeatures.slice(0, 3000),
+            });
           }
 
           // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입 (최대 6,500동 대규모 도심 표출)
@@ -2442,7 +2443,7 @@ export const MapViewer: React.FC = () => {
         if (!options) {
           return origSetTerrain(null);
         }
-        if (!this.isStyleLoaded()) {
+        if (!this.style || !(this.style as any)._loaded) {
           this.once('style.load', () => {
             try { this.setTerrain(options); } catch {}
           });
@@ -3096,6 +3097,7 @@ export const MapViewer: React.FC = () => {
           map.addLayer(realisticLayer, VWORLD_POI_LAYER_ID);
           realisticKoreanCityLayerRef.current = realisticLayer;
           (window as any).__realisticKoreanCityLayer = realisticLayer;
+          syncVworldBuildingData(map);
         }
 
         // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (강원 18개 시·군 전역 실측 GeoJSON + GPU 60fps)]
