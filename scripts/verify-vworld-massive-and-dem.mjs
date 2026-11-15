@@ -129,8 +129,9 @@ async function main() {
   // Check DEM source and query elevation
   const demDiag = await evaluate(`
     (() => {
-      const map = window.__map || window.mapInstance || window._map;
-      if (!map) return { error: 'Map not found' };
+      try {
+        const map = window.__map || window.mapInstance || window._map;
+        if (!map) return { error: 'Map not found' };
 
       const terrain = map.getTerrain();
       const hasDem = Boolean(map.getSource('terrarium-dem'));
@@ -145,11 +146,57 @@ async function main() {
 
       const layer = window.__realisticKoreanCityLayer;
       const mesh = layer ? layer.masterMesh : null;
-      const vertCount = mesh && mesh.geometry && mesh.geometry.attributes.position ? mesh.geometry.attributes.position.count : 0;
+      const posAttr = mesh && mesh.geometry ? mesh.geometry.attributes.position : null;
+      const vertCount = posAttr ? posAttr.count : 0;
       const builtCount = layer && layer.builtBuildingKeys ? layer.builtBuildingKeys.size : 0;
 
       const badge = document.getElementById('realtime-metrics-badge');
       const badgeText = badge ? badge.textContent : '';
+
+      // Analyze vertices and projection without window.THREE
+      const sampleNdc = [];
+      if (layer && mesh && posAttr && vertCount > 0 && layer.camera) {
+        const m = layer.camera.projectionMatrix.elements;
+        for (let i = 0; i < Math.min(5, vertCount); i++) {
+          const x = posAttr.array[i * 3];
+          const y = posAttr.array[i * 3 + 1];
+          const z = posAttr.array[i * 3 + 2];
+          const w = 1.0;
+          const cx = m[0]*x + m[4]*y + m[8]*z + m[12]*w;
+          const cy = m[1]*x + m[5]*y + m[9]*z + m[13]*w;
+          const cz = m[2]*x + m[6]*y + m[10]*z + m[14]*w;
+          const cw = m[3]*x + m[7]*y + m[11]*z + m[15]*w;
+          sampleNdc.push({
+            pos: [x, y, z],
+            clip: [cx, cy, cz, cw],
+            ndc: [cx / cw, cy / cw, cz / cw],
+            inView: Math.abs(cx / cw) <= 1 && Math.abs(cy / cw) <= 1 && Math.abs(cz / cw) <= 1 && cw > 0
+          });
+        }
+      }
+
+      // Check materials
+      const matInfo = [];
+      if (layer && layer.buildingMaterials) {
+        for (let m = 0; m < Math.min(5, layer.buildingMaterials.length); m++) {
+          const mat = layer.buildingMaterials[m];
+          matInfo.push({
+            idx: m,
+            type: mat.type,
+            color: mat.color ? mat.color.getHexString() : null,
+            visible: mat.visible,
+            opacity: mat.opacity,
+            transparent: mat.transparent,
+            depthTest: mat.depthTest,
+            depthWrite: mat.depthWrite,
+            wireframe: mat.wireframe,
+            hasMap: Boolean(mat.map),
+          });
+        }
+      }
+
+      const allLayers = map.getStyle().layers.map(l => ({ id: l.id, type: l.type }));
+      const customLayerIndex = allLayers.findIndex(l => l.id === 'realistic-korean-city-layer');
 
       return {
         hasTerrain: Boolean(terrain),
@@ -162,9 +209,19 @@ async function main() {
         hasMasterMesh: Boolean(mesh),
         vertCount,
         builtCount,
+        isLayerVisible: layer?.isVisible,
+        isMeshVisible: mesh?.visible,
+        sampleNdc,
+        matInfo,
+        totalLayers: allLayers.length,
+        customLayerIndex,
+        surroundingLayers: allLayers.slice(Math.max(0, customLayerIndex - 3), customLayerIndex + 4),
         badgeText,
       };
-    })()
+    } catch (e) {
+      return { error: String(e && e.stack || e) };
+    }
+  })()
   `);
   console.log('[Verify] DEM and 3D City Diagnostics:', JSON.stringify(demDiag, null, 2));
 

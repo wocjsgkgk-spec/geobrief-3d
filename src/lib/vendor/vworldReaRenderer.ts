@@ -552,10 +552,12 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.65,
+      roughness: 0.50,
       metalness: 0.12,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }));
   }
 
@@ -564,10 +566,12 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.45,
-      metalness: 0.28,
+      roughness: 0.40,
+      metalness: 0.25,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }));
   }
 
@@ -576,10 +580,12 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.70,
+      roughness: 0.55,
       metalness: 0.10,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }));
   }
 
@@ -588,10 +594,12 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawVillaResidentialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.78,
+      roughness: 0.60,
       metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }));
   }
 
@@ -608,34 +616,42 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
     // 0: 한국형 초록색 우레탄 방수 옥상 (#2d6a4f, #3b7a57 — 상가·빌라 45%) (Mat 16)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawUrethaneGreenRoof(ctx, w, h)),
-      roughness: 0.52,
+      roughness: 0.48,
       metalness: 0.08,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }),
     // 1: 밝은 시멘트 회색 슬래브 (#94a3b8 + 중앙 3m 엘리베이터 옥탑방 — 아파트·청사 35%) (Mat 17)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawConcreteSlabRoof(ctx, w, h)),
-      roughness: 0.85,
+      roughness: 0.65,
       metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }),
     // 2: 3D 경사 박공지붕 + 적갈색 기와 (#6c3428 — 주택·학교 15%) (Mat 18)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawTerracottaTileRoof(ctx, w, h)),
-      roughness: 0.75,
+      roughness: 0.60,
       metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }),
     // 3: 코발트 블루 강판 (#1d4ed8 — 5%) (Mat 19)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawCobaltSteelRoof(ctx, w, h)),
-      roughness: 0.38,
-      metalness: 0.45,
+      roughness: 0.35,
+      metalness: 0.35,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     }),
   ];
 
@@ -646,10 +662,12 @@ export function getGlobalParapetMaterial(): THREE.MeshStandardMaterial {
   if (!GLOBAL_VWORLD_PARAPET_MATERIAL) {
     GLOBAL_VWORLD_PARAPET_MATERIAL = new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawParapetConcrete(ctx, w, h)),
-      roughness: 0.80,
+      roughness: 0.65,
       metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     });
   }
   return GLOBAL_VWORLD_PARAPET_MATERIAL;
@@ -659,10 +677,12 @@ export function getGlobalPenthouseMaterial(): THREE.MeshStandardMaterial {
   if (!GLOBAL_VWORLD_PENTHOUSE_MATERIAL) {
     GLOBAL_VWORLD_PENTHOUSE_MATERIAL = new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawPenthouseLouver(ctx, w, h)),
-      roughness: 0.60,
-      metalness: 0.20,
+      roughness: 0.50,
+      metalness: 0.15,
       side: THREE.DoubleSide,
       color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
     });
   }
   return GLOBAL_VWORLD_PENTHOUSE_MATERIAL;

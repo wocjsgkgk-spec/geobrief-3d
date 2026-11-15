@@ -460,22 +460,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     try {
       // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션: EgisCorp/XDWorld 표준 215° SW, 45°]
-      this.sunLight = new THREE.DirectionalLight(0xfffdf0, 1.75);
+      this.sunLight = new THREE.DirectionalLight(0xfffdf0, 2.2);
       const sunDir = getXDWorldSunDirection(215, 45);
-      this.sunLight.position.set(sunDir[0] * 200, sunDir[1] * 200, sunDir[2] * 200).normalize();
+      this.sunLight.position.set(sunDir[0] * 300, sunDir[1] * 300, sunDir[2] * 300);
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.35);
-      this.fillLight.position.set(130, 120, -100).normalize();
+      this.fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.6);
+      this.fillLight.position.set(130, 120, -100);
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 강도 0.45로 설정하여 양지와 음지의 2.8:1 고대비 선명한 입체감 형성 (플랫 워시아웃 영구 소멸)
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+      // - AmbientLight(환경광): 강도 1.1로 설정하여 양지와 음지 모두 선명하고 화사한 V-World 3D 뷰 구현
+      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 하늘 #e0f2fe, 지면 #94a3b8, 강도 0.25로 반사광 제공
-      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0x94a3b8, 0.25);
+      // - HemisphereLight: 하늘 #e0f2fe, 지면 #94a3b8, 강도 0.40로 반사광 제공
+      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0x94a3b8, 0.40);
       this.scene.add(this.hemisphereLight);
 
       // 2. [GeoBrief 3D 2단계] V-World 22종(외벽 16종 + 지붕 4종 + 난간 + 옥탑) 독립 Material 싱글톤 엔진
@@ -537,6 +537,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       moveEndEvents.forEach((evt) => map.on(evt, this.handleMoveEnd));
 
       map.on('idle', this.handleMapIdle);
+      map.on('terrain', this.handleTerrainChange);
       // [60fps 최적화]: 타일 스트리밍 중 메인 스레드를 멈추게 하던 sourcedata 무한 리스너 영구 제거
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
@@ -547,6 +548,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       console.warn('[RealisticKoreanCityLayer] onAdd error:', err);
     }
   }
+
+  private terrainDebounceTimer: any = null;
+
+  private handleTerrainChange = (): void => {
+    if (!this.map) return;
+    if (this.terrainDebounceTimer) clearTimeout(this.terrainDebounceTimer);
+    this.terrainDebounceTimer = setTimeout(() => {
+      this.terrainDebounceTimer = null;
+      if (!this.map) return;
+      // 3D 지형 로드 또는 배율 변경 시 건물 기초 표고를 실제 지형 높이에 1:1 재정합
+      this.builtBuildingKeys.clear();
+      this.centroidSpatialGrid.clear();
+      this.resetAccumulatedBuffers();
+      this.extractAndBuildFromMap();
+    }, 250);
+  };
 
   private idleDebounceTimer: any = null;
 
@@ -1515,10 +1532,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       // 지형 표고: 실제 지형 고도(m) 직접 안착 (지형 아래 매몰 및 0m 누락 완전 해결)
-      const hasTerrain = Boolean(map.getTerrain());
+      // MapLibre map.getTerrain() 및 useMapStore 지형 활성화 상태 안전 검사
+      const isTerrainActive =
+        Boolean(map.getTerrain()) ||
+        (typeof window !== 'undefined' && Boolean((window as any).__mapStore?.getState?.()?.terrainEnabled ?? true));
       let rawElev = 0;
 
-      if (hasTerrain) {
+      if (isTerrainActive) {
         try {
           if (typeof map.queryTerrainElevation === 'function') {
             const q = map.queryTerrainElevation([cLng, cLat]);
@@ -2020,6 +2040,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     moveStartEvents.forEach((evt) => map.off(evt, this.handleMoveStart));
     moveEndEvents.forEach((evt) => map.off(evt, this.handleMoveEnd));
     map.off('idle', this.handleMapIdle);
+    map.off('terrain', this.handleTerrainChange);
+
+    if (this.terrainDebounceTimer) {
+      clearTimeout(this.terrainDebounceTimer);
+      this.terrainDebounceTimer = null;
+    }
 
     if (this.idleDebounceTimer) {
       clearTimeout(this.idleDebounceTimer);
