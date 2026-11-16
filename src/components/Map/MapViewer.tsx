@@ -86,6 +86,7 @@ import {
   VWorldCutFillEngine,
   VWorldSiteDevelopmentEngine,
 } from '@/lib/vendor/vworldAnalysisSuite';
+import { MilitarySiteUtilizationEngine } from '@/lib/vendor/militarySiteUtilizationEngine';
 import {
   VworldGpuMasterEngine,
   VWORLD_GPU_BUILDING_LAYER_IDS,
@@ -5027,6 +5028,15 @@ export const MapViewer: React.FC = () => {
       }
 
       if (hoverTimer) clearTimeout(hoverTimer);
+      // [60fps 최적화]: 카메라 이동/회전/줌 중에는 마우스 피킹 및 쿼리 완전 정지 (Jank 원천 차단)
+      if (
+        isInteractingRef.current ||
+        map.isMoving() ||
+        map.isRotating() ||
+        map.isZooming()
+      ) {
+        return;
+      }
       const point = e.point;
       const lngLat = e.lngLat;
       hoverTimer = setTimeout(() => {
@@ -6055,18 +6065,24 @@ export const MapViewer: React.FC = () => {
     useMapStore.getState().setContinuousDaylightResult(daylight.daylightResult);
   }, [sunHour, polygonCenter, selectedBuilding?.height]);
 
-  // 21-2. [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션 동기화]
+  // 21-2. [군 유휴부지 다각적 활용방안 & 종합 타당성/경제성/적합도 시뮬레이션 동기화]
+  const idleSiteScenario = useMapStore((s) => s.idleSiteScenario);
+  const cutFillState = useMapStore((s) => s.cutFill);
+
   useEffect(() => {
     const site = getGangwon18MilitarySiteById(selectedIdleSiteId || '');
     const siteArea = site?.areaSqm || polygonArea?.sqm || 310000;
     const zoningName = site?.zoning || '제2종일반주거지역';
-    const feasibility = VWorldSiteDevelopmentEngine.calculateFeasibility(
-      siteArea,
-      zoningName,
-      placedFacilities
-    );
+    const feasibility = MilitarySiteUtilizationEngine.calculate({
+      siteId: selectedIdleSiteId,
+      siteAreaSqm: siteArea,
+      legalZoningName: zoningName,
+      placedFacilities,
+      scenario: idleSiteScenario,
+      cutFillState,
+    });
     useMapStore.getState().setSiteFeasibilityResult(feasibility);
-  }, [placedFacilities, selectedIdleSiteId, polygonArea?.sqm]);
+  }, [placedFacilities, selectedIdleSiteId, polygonArea?.sqm, idleSiteScenario, cutFillState]);
 
   // 22. [ESC 키 단축키로 사계 분석 또는 3D 줄자 해제]
   useEffect(() => {

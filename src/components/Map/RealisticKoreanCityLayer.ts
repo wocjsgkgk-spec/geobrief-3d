@@ -1759,7 +1759,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = this.isMoving ? 2.5 : 16.0; // 카메라 정지 시 16ms 버짓으로 고속 빌드, 이동 시 2.5ms
+      const FRAME_BUDGET_MS = this.isMoving ? 2.0 : 16.0; // 카메라 정지 시 16ms 버짓으로 고속 빌드, 이동 시 2.0ms
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;

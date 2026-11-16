@@ -298,7 +298,9 @@ export interface ContinuousDaylightResult {
   legalVerdict: string;
 }
 
-// [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션 결과]
+// [군 유휴부지 사업성 및 다각적 활용방안 타당성 시뮬레이션 결과]
+export type IdleSiteScenarioType = 'defense_valley' | 'smart_town' | 'eco_logistics';
+
 export interface SiteFeasibilityResult {
   siteAreaSqm: number;
   siteAreaPyeong: number;
@@ -312,6 +314,22 @@ export interface SiteFeasibilityResult {
   employmentPop: number; // 고용 유발 인원 (인)
   compliance: 'PASS' | 'EXCEEDED';
   summary: string;
+
+  // 군 유휴지 다각적 활용방안 신규 고도화 필드
+  selectedScenario?: IdleSiteScenarioType;
+  scenarios?: Record<string, any>;
+  activeScenarioData?: any;
+  suitabilityScorecard?: {
+    totalScore: number;
+    grade: 'S' | 'A' | 'B';
+    accessibilityScore: number;
+    terrainScore: number;
+    regulatoryScore: number;
+    infraScore: number;
+    highlights: string[];
+  };
+  earthworkCostKrw?: number; // 토공량(Cut & Fill) 연동 부지정지 개략 공사비 (억원)
+  briefingStatement?: string; // 지자체/도정 보고서 요약문
 }
 
 // [3D 공간 주석 핀 (Billboard Pin)]

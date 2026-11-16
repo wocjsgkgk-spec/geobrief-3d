@@ -195,6 +195,9 @@ export const ControlPanel: React.FC = () => {
     setSunSeason,
     continuousDaylightResult,
     siteFeasibilityResult,
+    idleSiteScenario,
+    setIdleSiteScenario,
+    triggerSlidePackExport,
     // [신규] 강원 지형 특화 저류·침수 수위 시뮬레이터
     waterLevel,
     setWaterLevel,
@@ -257,6 +260,7 @@ export const ControlPanel: React.FC = () => {
   const [isCoordModalOpen, setIsCoordModalOpen] = useState(false);
   const [boundaryTab, setBoundaryTab] = useState<'draw' | 'stamp' | 'coord'>('draw');
   const [copiedDraft, setCopiedDraft] = useState(false);
+  const [copiedBriefing, setCopiedBriefing] = useState(false);
   const [gltfInput, setGltfInput] = useState('');
   const [showGltfDrawer, setShowGltfDrawer] = useState(false);
   const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null);
@@ -270,6 +274,17 @@ export const ControlPanel: React.FC = () => {
       setTimeout(() => setCopiedDraft(false), 2000);
     } catch (err) {
       console.error('Failed to copy draft:', err);
+    }
+  };
+
+  const handleCopyBriefingStatement = async () => {
+    if (!siteFeasibilityResult?.briefingStatement) return;
+    try {
+      await navigator.clipboard.writeText(siteFeasibilityResult.briefingStatement);
+      setCopiedBriefing(true);
+      setTimeout(() => setCopiedBriefing(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy briefing:', err);
     }
   };
 
@@ -2199,38 +2214,265 @@ export const ControlPanel: React.FC = () => {
           </div>
         )}
 
-        {/* [7. 군 유휴부지 개발 시뮬레이션 기즈모 & 용적률·사업성 자동 계산기] */}
-        <div className="p-3 rounded-xl bg-gradient-to-b from-[#132219] to-[#0c1611] border border-cyan-500/50 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="p-1 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-400">
-                <Building2 className="w-3.5 h-3.5" />
+        {/* [7. 군 유휴부지 다각적 활용방안 & 종합 타당성 분석기 (Military Idle Land Utilization & Feasibility Engine)] */}
+        <div className="p-3 rounded-xl bg-gradient-to-b from-[#132219] via-[#0d1c14] to-[#09130e] border border-cyan-500/60 shadow-lg shadow-cyan-950/30 space-y-3">
+          {/* 헤더: 타이틀 & 등급/적합성 뱃지 */}
+          <div className="flex items-center justify-between border-b border-cyan-900/50 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-cyan-400 shadow-sm shadow-cyan-900/50">
+                <Building2 className="w-4 h-4" />
               </span>
               <div>
-                <span className="text-xs font-bold text-slate-100 block">
-                  용적률·건폐율 & 사업성 자동 계산기
-                </span>
-                <span className="text-[10px] text-cyan-300/80 block">
-                  실시간 법정 한도 판정 & 수용/고용 인구 집계
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-100 tracking-tight">
+                    군 유휴부지 다각적 활용방안 & 타당성 분석
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-cyan-900/60 text-cyan-300 border border-cyan-700/60">
+                    신설
+                  </span>
+                </div>
+                <span className="text-[9.5px] text-cyan-300/80 block">
+                  3대 전략 모델 시뮬레이션 · 입지 적합도(100점) · B/C 경제성 & 토공비 연동
                 </span>
               </div>
             </div>
-            {siteFeasibilityResult && (
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
-                  siteFeasibilityResult.compliance === 'PASS'
-                    ? 'bg-emerald-950 text-emerald-300 border-emerald-600'
-                    : 'bg-rose-950 text-rose-300 border-rose-600'
-                }`}
-              >
-                {siteFeasibilityResult.compliance === 'PASS' ? '✅ 법정 규제 적합' : '⚠️ 법정 한도 초과'}
-              </span>
+            {siteFeasibilityResult?.suitabilityScorecard && (
+              <div className="text-right">
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-[10px] font-black tracking-wider border shadow-sm ${
+                    siteFeasibilityResult.suitabilityScorecard.grade === 'S'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/80'
+                      : siteFeasibilityResult.suitabilityScorecard.grade === 'A'
+                      ? 'bg-cyan-950 text-cyan-300 border-cyan-500/80'
+                      : 'bg-amber-950 text-amber-300 border-amber-500/80'
+                  }`}
+                >
+                  {siteFeasibilityResult.suitabilityScorecard.grade}등급 ({siteFeasibilityResult.suitabilityScorecard.totalScore}점)
+                </span>
+                <span className="block text-[8.5px] text-slate-400 font-medium">
+                  {siteFeasibilityResult.compliance === 'PASS' ? '✅ 법정규제 적합' : '⚠️ 한도 초과'}
+                </span>
+              </div>
             )}
           </div>
 
+          {/* 3대 개발 시나리오 선택 탭 */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-slate-300 font-semibold flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" /> 개발 전략 시나리오 선택
+              </span>
+              <span className="text-[9px] text-slate-400 font-mono">
+                {idleSiteScenario === 'defense_valley' ? '국방 첨단산업' : idleSiteScenario === 'smart_town' ? '복합 정주타운' : '녹색 물류거점'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 p-0.5 bg-[#08120c] rounded-lg border border-cyan-900/40">
+              <button
+                type="button"
+                onClick={() => setIdleSiteScenario('defense_valley')}
+                className={`py-1.5 px-1 rounded text-center transition-all flex flex-col items-center gap-0.5 ${
+                  idleSiteScenario === 'defense_valley'
+                    ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-md shadow-cyan-900/60 border border-cyan-300/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+              >
+                <span className="text-xs">🛡️</span>
+                <span className="text-[9.5px] leading-tight">첨단 국방벤처</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIdleSiteScenario('smart_town')}
+                className={`py-1.5 px-1 rounded text-center transition-all flex flex-col items-center gap-0.5 ${
+                  idleSiteScenario === 'smart_town'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold shadow-md shadow-emerald-900/60 border border-emerald-300/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+              >
+                <span className="text-xs">🏙️</span>
+                <span className="text-[9.5px] leading-tight">스마트타운</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIdleSiteScenario('eco_logistics')}
+                className={`py-1.5 px-1 rounded text-center transition-all flex flex-col items-center gap-0.5 ${
+                  idleSiteScenario === 'eco_logistics'
+                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold shadow-md shadow-amber-900/60 border border-amber-300/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+              >
+                <span className="text-xs">⚡</span>
+                <span className="text-[9.5px] leading-tight">친환경 스마트물류</span>
+              </button>
+            </div>
+          </div>
+
           {siteFeasibilityResult && (
-            <div className="space-y-2 text-[10.5px]">
-              {/* 대지면적 & 건축/연면적 */}
+            <div className="space-y-2.5 text-[10.5px]">
+              {/* 선택된 시나리오 세부 브리프 카드 */}
+              {siteFeasibilityResult.activeScenarioData && (
+                <div className="p-2 rounded-lg bg-[#07130c]/90 border border-[#1b3b27] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100 flex items-center gap-1.5 text-[11px]">
+                      <span className="text-cyan-400 font-extrabold">{siteFeasibilityResult.activeScenarioData.name}</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 font-normal border border-cyan-900">
+                        {siteFeasibilityResult.activeScenarioData.tag}
+                      </span>
+                    </span>
+                    <span className="text-[9px] font-mono text-emerald-300">
+                      권장 FAR {siteFeasibilityResult.activeScenarioData.plannedFar}% / BCR {siteFeasibilityResult.activeScenarioData.plannedBcr}%
+                    </span>
+                  </div>
+                  <p className="text-[9.5px] text-slate-300 leading-snug">
+                    {siteFeasibilityResult.activeScenarioData.description}
+                  </p>
+                  {/* 주요 도입 권장 시설 칩 */}
+                  {siteFeasibilityResult.activeScenarioData.keyFacilities && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {siteFeasibilityResult.activeScenarioData.keyFacilities.map((fac: string, idx: number) => (
+                        <span key={idx} className="px-1.5 py-0.5 rounded bg-[#0b2416] border border-[#1d4d2e] text-[8.5px] text-emerald-300 font-medium">
+                          • {fac}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4대 입지 적합도 종합 스코어카드 (100점 만점) */}
+              {siteFeasibilityResult.suitabilityScorecard && (
+                <div className="p-2.5 rounded-lg bg-[#08150e] border border-cyan-800/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200 flex items-center gap-1 text-[10.5px]">
+                      <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                      4대 입지 적합도 스코어카드
+                    </span>
+                    <div className="flex items-center gap-1 font-mono text-[10px]">
+                      <span className="text-slate-400">종합</span>
+                      <span className="font-extrabold text-cyan-300 text-sm">
+                        {siteFeasibilityResult.suitabilityScorecard.totalScore}
+                      </span>
+                      <span className="text-slate-400">/ 100점</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[9.5px]">
+                    {/* 교통 접근성 */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-300">
+                        <span>🚗 교통 접근성</span>
+                        <span className="font-mono font-bold text-cyan-300">{siteFeasibilityResult.suitabilityScorecard.accessibilityScore}/25</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${(siteFeasibilityResult.suitabilityScorecard.accessibilityScore / 25) * 100}%` }} />
+                      </div>
+                    </div>
+                    {/* 지형 및 토공 */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-300">
+                        <span>⛰️ 지형·토공성</span>
+                        <span className="font-mono font-bold text-emerald-300">{siteFeasibilityResult.suitabilityScorecard.terrainScore}/25</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${(siteFeasibilityResult.suitabilityScorecard.terrainScore / 25) * 100}%` }} />
+                      </div>
+                    </div>
+                    {/* 국방 규제 완화도 */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-300">
+                        <span>🛡️ 국방규제 완화</span>
+                        <span className="font-mono font-bold text-teal-300">{siteFeasibilityResult.suitabilityScorecard.regulatoryScore}/25</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-teal-400 rounded-full" style={{ width: `${(siteFeasibilityResult.suitabilityScorecard.regulatoryScore / 25) * 100}%` }} />
+                      </div>
+                    </div>
+                    {/* 기반 인프라 */}
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between text-slate-300">
+                        <span>⚡ 기반 인프라</span>
+                        <span className="font-mono font-bold text-blue-300">{siteFeasibilityResult.suitabilityScorecard.infraScore}/25</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(siteFeasibilityResult.suitabilityScorecard.infraScore / 25) * 100}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 입지 하이라이트 요약 태그 */}
+                  {siteFeasibilityResult.suitabilityScorecard.highlights && (
+                    <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-800/60">
+                      {siteFeasibilityResult.suitabilityScorecard.highlights.map((item: string, idx: number) => (
+                        <span key={idx} className="text-[8.5px] px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-200/90 border border-cyan-800/30">
+                          ✓ {item}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 핵심 경제성 & 파급효과 지표 (B/C, CAPEX, 일자리, 토공비 연동) */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-2 rounded-lg bg-[#0a1711] border border-[#1b3a26] space-y-0.5">
+                  <span className="text-slate-400 block text-[9px] flex items-center justify-between">
+                    <span>편익비용비 (B/C Ratio)</span>
+                    <span className="text-[8.5px] font-bold text-emerald-400">
+                      {(siteFeasibilityResult.activeScenarioData?.bcRatio || 1.35) >= 1.0 ? '타당성 우수' : '보통'}
+                    </span>
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-mono font-extrabold text-base text-emerald-300">
+                      {siteFeasibilityResult.activeScenarioData?.bcRatio || 1.35}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">
+                      (IRR {siteFeasibilityResult.activeScenarioData?.irrPercent || 8.4}%)
+                    </span>
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 block font-mono">
+                    기준선 1.00 대비 +{Math.round(((siteFeasibilityResult.activeScenarioData?.bcRatio || 1.35) - 1.0) * 100)}%
+                  </span>
+                </div>
+
+                <div className="p-2 rounded-lg bg-[#0a1711] border border-[#1b3a26] space-y-0.5">
+                  <span className="text-slate-400 block text-[9px] flex items-center justify-between">
+                    <span>추정 총사업비 (CAPEX)</span>
+                    <span className="text-[8.5px] text-cyan-400 font-mono">민자·재정 복합</span>
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-mono font-extrabold text-base text-cyan-300">
+                      {siteFeasibilityResult.activeScenarioData?.estimatedCapexKrw?.toLocaleString() || '1,850'}
+                    </span>
+                    <span className="text-[9.5px] text-slate-300">억원</span>
+                  </div>
+                  <span className="text-[8.5px] text-amber-300/90 block font-mono">
+                    토공비 연동: {siteFeasibilityResult.earthworkCostKrw ? `${siteFeasibilityResult.earthworkCostKrw.toLocaleString()}억원` : '산출중'}
+                  </span>
+                </div>
+
+                <div className="p-2 rounded-lg bg-[#0a1711] border border-[#1b3a26] space-y-0.5">
+                  <span className="text-slate-400 block text-[9px]">고용 유발 효과</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-mono font-extrabold text-base text-cyan-200">
+                      {siteFeasibilityResult.activeScenarioData?.jobCreation?.toLocaleString() || siteFeasibilityResult.employmentPop.toLocaleString()}
+                    </span>
+                    <span className="text-[9.5px] text-slate-300">명</span>
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 block">직접·간접 고용 합산</span>
+                </div>
+
+                <div className="p-2 rounded-lg bg-[#0a1711] border border-[#1b3a26] space-y-0.5">
+                  <span className="text-slate-400 block text-[9px]">연간 경제파급효과</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-mono font-extrabold text-base text-emerald-200">
+                      {siteFeasibilityResult.activeScenarioData?.annualEconomicOutputKrw?.toLocaleString() || '1,280'}
+                    </span>
+                    <span className="text-[9.5px] text-slate-300">억원/년</span>
+                  </div>
+                  <span className="text-[8.5px] text-slate-400 block font-mono">탄소저감 {siteFeasibilityResult.activeScenarioData?.carbonReductionTonsYear?.toLocaleString() || 850}t/yr</span>
+                </div>
+              </div>
+
+              {/* 대지면적 & 건축/연면적 현황 */}
               <div className="grid grid-cols-2 gap-1.5">
                 <div className="p-1.5 rounded bg-[#0b1610] border border-[#1f3525]">
                   <span className="text-slate-400 block text-[9px]">부지 총면적</span>
@@ -2242,7 +2484,7 @@ export const ControlPanel: React.FC = () => {
                   </span>
                 </div>
                 <div className="p-1.5 rounded bg-[#0b1610] border border-[#1f3525]">
-                  <span className="text-slate-400 block text-[9px]">계획 건축면적 / 연면적</span>
+                  <span className="text-slate-400 block text-[9px]">배치 건축 / 연면적</span>
                   <span className="font-mono font-bold text-cyan-300">
                     {siteFeasibilityResult.totalFootprintSqm.toLocaleString()} ㎡
                   </span>
@@ -2256,7 +2498,7 @@ export const ControlPanel: React.FC = () => {
               <div className="grid grid-cols-2 gap-1.5">
                 <div className="p-2 rounded bg-[#0b1610] border border-[#1f3525] space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[9.5px]">달성 건폐율(BCR)</span>
+                    <span className="text-slate-400 text-[9.5px]">계획 건폐율(BCR)</span>
                     <span className="font-mono font-bold text-emerald-400">
                       {siteFeasibilityResult.achievedBcr}%
                     </span>
@@ -2268,14 +2510,14 @@ export const ControlPanel: React.FC = () => {
                     />
                   </div>
                   <div className="flex justify-between text-[8.5px] text-slate-400 font-mono">
-                    <span>계획 {siteFeasibilityResult.achievedBcr}%</span>
-                    <span>법정 {siteFeasibilityResult.legalMaxBcr}%</span>
+                    <span>배치 {siteFeasibilityResult.achievedBcr}%</span>
+                    <span>법정한도 {siteFeasibilityResult.legalMaxBcr}%</span>
                   </div>
                 </div>
 
                 <div className="p-2 rounded bg-[#0b1610] border border-[#1f3525] space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-[9.5px]">달성 용적률(FAR)</span>
+                    <span className="text-slate-400 text-[9.5px]">계획 용적률(FAR)</span>
                     <span className="font-mono font-bold text-cyan-400">
                       {siteFeasibilityResult.achievedFar}%
                     </span>
@@ -2287,33 +2529,45 @@ export const ControlPanel: React.FC = () => {
                     />
                   </div>
                   <div className="flex justify-between text-[8.5px] text-slate-400 font-mono">
-                    <span>계획 {siteFeasibilityResult.achievedFar}%</span>
-                    <span>법정 {siteFeasibilityResult.legalMaxFar}%</span>
+                    <span>배치 {siteFeasibilityResult.achievedFar}%</span>
+                    <span>법정한도 {siteFeasibilityResult.legalMaxFar}%</span>
                   </div>
                 </div>
               </div>
 
-              {/* 수용 인구 & 고용 유발 인원 지표 */}
-              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                <div className="p-1.5 rounded bg-cyan-950/40 border border-cyan-800/40">
-                  <span className="text-slate-400 block text-[9px]">예상 수용 인구</span>
-                  <span className="font-mono font-bold text-cyan-200 text-sm">
-                    {siteFeasibilityResult.residentPop.toLocaleString()} 명
-                  </span>
-                  <span className="text-[8.5px] text-slate-400 block">33㎡/인 기준</span>
-                </div>
-                <div className="p-1.5 rounded bg-emerald-950/40 border border-emerald-800/40">
-                  <span className="text-slate-400 block text-[9px]">고용 유발 인원</span>
-                  <span className="font-mono font-bold text-emerald-200 text-sm">
-                    {siteFeasibilityResult.employmentPop.toLocaleString()} 명
-                  </span>
-                  <span className="text-[8.5px] text-slate-400 block">25㎡/인(업무·연구)</span>
-                </div>
+              {/* 검토 요약 문장 */}
+              <div className="p-2 rounded bg-[#0a120d] border border-[#1d3022] text-[9.5px] text-slate-300 leading-relaxed">
+                {siteFeasibilityResult.summary}
               </div>
 
-              {/* 검토 요약 */}
-              <div className="p-1.5 rounded bg-[#0a120d] border border-[#1d3022] text-[9.5px] text-slate-300">
-                {siteFeasibilityResult.summary}
+              {/* 원클릭 도정 보고서 복사 및 슬라이드팩 PPTX 생성 버튼 */}
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCopyBriefingStatement}
+                  className="px-2.5 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-700/60 text-cyan-200 hover:text-white transition-all flex items-center justify-center gap-1.5 shadow-sm font-semibold text-[10px]"
+                >
+                  {copiedBriefing ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-300">복사 완료!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>도정 보고서 요약 복사</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => triggerSlidePackExport()}
+                  className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-900 to-teal-900 hover:from-emerald-800 hover:to-teal-800 border border-emerald-600/60 text-emerald-100 hover:text-white transition-all flex items-center justify-center gap-1.5 shadow-sm font-semibold text-[10px]"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>SlidePack PPTX 생성</span>
+                </button>
               </div>
             </div>
           )}

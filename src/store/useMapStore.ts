@@ -22,6 +22,7 @@ import {
   SunSeasonType,
   ContinuousDaylightResult,
   SiteFeasibilityResult,
+  IdleSiteScenarioType,
   SpatialPin,
   TacticalArrow,
   WaterLevelState,
@@ -448,6 +449,8 @@ interface MapStoreState {
   // [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션]
   siteFeasibilityResult: SiteFeasibilityResult | null;
   setSiteFeasibilityResult: (result: SiteFeasibilityResult | null) => void;
+  idleSiteScenario: IdleSiteScenarioType;
+  setIdleSiteScenario: (scenario: IdleSiteScenarioType) => void;
 
   // [3D 공간 주석 핀 (Billboard Pin)]
   spatialPins: SpatialPin[];
@@ -1365,6 +1368,8 @@ export const useMapStore = create<MapStoreState>()(
       // [군 유휴부지 사업성 및 용적률/건폐율 시뮬레이션]
       siteFeasibilityResult: null,
       setSiteFeasibilityResult: (siteFeasibilityResult) => set({ siteFeasibilityResult }),
+      idleSiteScenario: 'defense_valley',
+      setIdleSiteScenario: (idleSiteScenario) => set({ idleSiteScenario }),
 
       // [3D 공간 주석 핀 (Billboard Pin)]
       spatialPins: [],
