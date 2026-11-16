@@ -18,6 +18,7 @@
 import type { ExternalSpatialBuildingFeature } from '@/utils/externalSpatialData';
 import { resolveFullUrl } from '@/utils/urlHelper';
 import { realDataSpatialStore } from '@/utils/realDataGeometryInjector';
+import { isPointInMilitaryIdleSite } from '@/utils/master3DRendererManager';
 
 export interface VworldRegionManifest {
   admCode: string;
@@ -333,17 +334,30 @@ function filterFeaturesByBbox(
   const bMinLat = minLat - padLat;
   const bMaxLat = maxLat + padLat;
 
-  const filtered = bbox
-    ? features.filter((f) => {
-        const coords =
-          f.geometry.type === 'Polygon'
-            ? f.geometry.coordinates[0]?.[0]
-            : f.geometry.coordinates[0]?.[0]?.[0];
-        if (!coords) return false;
-        const [lng, lat] = coords;
-        return lng >= bMinLng && lng <= bMaxLng && lat >= bMinLat && lat <= bMaxLat;
-      })
-    : features;
+  const filtered = features.filter((f) => {
+    const ring =
+      f.geometry?.type === 'Polygon'
+        ? f.geometry.coordinates[0]
+        : f.geometry?.coordinates?.[0]?.[0];
+    if (!ring || ring.length < 3) return false;
+    let sumLng = 0, sumLat = 0;
+    for (const pt of ring) { sumLng += pt[0]; sumLat += pt[1]; }
+    const cLng = sumLng / ring.length;
+    const cLat = sumLat / ring.length;
+
+    // [군 유휴지(1군지사 310,000㎡ 등) 0동 원칙]: 부지 내부 기존 구형 건물 100% 영구 배제
+    const p = (f.properties || {}) as Record<string, any>;
+    if (p.is_user_placed !== true && p.isMasterplanFacility !== true) {
+      if (isPointInMilitaryIdleSite(cLng, cLat)) {
+        return false;
+      }
+    }
+
+    if (bbox) {
+      return cLng >= bMinLng && cLng <= bMaxLng && cLat >= bMinLat && cLat <= bMaxLat;
+    }
+    return true;
+  });
 
   // [화면 중심 밀착 정렬]: 요청 뷰포트 중심점과 가장 가까운 건물 순으로 우선 정렬하여 클라이언트 슬라이싱 시 누락 0% 보장
   if (bbox && filtered.length > 0) {

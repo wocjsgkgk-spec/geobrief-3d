@@ -192,7 +192,7 @@ export class PrecisionBuildingBuilder {
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
-    const groundElev = Math.max(0, baseElev - 1.8); // 지형 경사면 바닥 들림 방지 기초 스커트 (-1.8m 전면 적용)
+    const groundElev = Math.max(0, baseElev - 2.0); // 지형 경사면 바닥 들림 방지 정밀 기초 스커트 (-2.0m 전면 적용)
 
     // 16종 독립 스타일 배분
     const style: BuildingStyleAssignment = classifyBuildingStyle(

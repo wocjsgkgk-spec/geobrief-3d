@@ -16,6 +16,8 @@
  */
 
 import type maplibregl from 'maplibre-gl';
+import * as turf from '@turf/turf';
+import { GANGWON_18_MILITARY_SITES } from '@/constants/gangwon18MilitarySites';
 import type { RealisticKoreanCityLayer } from '@/components/Map/RealisticKoreanCityLayer';
 import type { LOD2BuildingEngine } from '@/components/Map/LOD2BuildingEngine';
 import type { RenderMode3D, Tile3DStreamState } from '@/types/map';
@@ -210,11 +212,56 @@ function getGangwonMaxMountainElev(lng: number, lat: number): number {
   return maxElev;
 }
 
+interface CachedMilitarySite {
+  id: string;
+  name: string;
+  bbox: [number, number, number, number]; // [minLng, minLat, maxLng, maxLat]
+  polygon: GeoJSON.Feature<GeoJSON.Polygon>;
+}
+
+// [강원 18개 시·군 군 유휴부지 BBOX 사전 캐싱]: 0.001ms 고속 경계 판정 지원
+const CACHED_MILITARY_SITES: CachedMilitarySite[] = GANGWON_18_MILITARY_SITES.map((site) => {
+  const coords = site.polygon.geometry.coordinates[0];
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const pt of coords) {
+    if (pt[0] < minLng) minLng = pt[0];
+    if (pt[0] > maxLng) maxLng = pt[0];
+    if (pt[1] < minLat) minLat = pt[1];
+    if (pt[1] > maxLat) maxLat = pt[1];
+  }
+  return {
+    id: site.id,
+    name: site.name,
+    bbox: [minLng, minLat, maxLng, maxLat],
+    polygon: site.polygon,
+  };
+});
+
 /**
- * [강원 18개 시·군 산속/임야 유령 건물 원천 차단 필터]
- * 1) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
- * 2) 치악산, 설악산, 오대산 등 강원 산악 능선 좌표 마스킹
- * 3) DEM 표고 분석 및 경사도 14° 필터링 (그리드 캐시 기반 무스톨 초고속 판별)
+ * 주어진 경위도 좌표가 강원 18개 시·군 군 유휴부지(1군지사 310,000㎡ 등) 경계 내부에 위치하는지 판정
+ * 0.001ms 고속 BBOX 사전 검사 후 turf.booleanPointInPolygon 정밀 판정
+ */
+export function isPointInMilitaryIdleSite(lng: number, lat: number, targetSiteId?: string): boolean {
+  for (let i = 0; i < CACHED_MILITARY_SITES.length; i++) {
+    const site = CACHED_MILITARY_SITES[i];
+    if (targetSiteId && site.id !== targetSiteId) continue;
+    const [minLng, minLat, maxLng, maxLat] = site.bbox;
+    if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
+      if (turf.booleanPointInPolygon(turf.point([lng, lat]), site.polygon)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * [강원 18개 시·군 산속/임야/하천/도로/군유휴지 유령 건물 원천 차단 필터]
+ * 1) 군 유휴지(1군지사 310,000㎡ 등) 내부 기존 구형 건물 100% 원천 배제 (0동 원칙)
+ * 2) 하천, 구거, 저수지(jimok: 천, 구, 유, 수, landuse: water, river) 및 도로/철도면 위 비정상 건물 영구 배제
+ * 3) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
+ * 4) 치악산, 설악산, 오대산 등 강원 산악 능선 좌표 마스킹
+ * 5) DEM 표고 분석 및 경사도 16° 필터링 (그리드 캐시 기반 무스톨 초고속 판별)
  */
 export function isMountainGhostBuilding(
   lng: number,
@@ -222,6 +269,16 @@ export function isMountainGhostBuilding(
   featProps: Record<string, any> = {},
   map?: any
 ): boolean {
+  // 사용자가 배치한 마스터플랜 시설물은 절대 배제하지 않음
+  if (featProps.is_user_placed === true || featProps.isMasterplanFacility === true) {
+    return false;
+  }
+
+  // [-1] 군 유휴부지 (1군지사 310,000㎡ 등 18개소) 내부 기존 구형 군사건축물 100% 원천 배제 (0동 원칙)
+  if (isPointInMilitaryIdleSite(lng, lat)) {
+    return true;
+  }
+
   // [0] 가짜/더미/절차적 생성기 태그 전수 검출
   const bldName = String(featProps.name || featProps.buld_nm || featProps.bld_nm || featProps.buildingName || '').toLowerCase();
   if (
@@ -235,6 +292,33 @@ export function isMountainGhostBuilding(
     return true;
   }
 
+  // [1] 수계/하천/저수지 지목 및 토지이용 태그 (공식 등록 여부 무관하게 영구 배제)
+  const jimok = String(featProps.jimok || featProps.jimok_nm || '').trim();
+  if (jimok === '천' || jimok === '구' || jimok === '유' || jimok === '수') {
+    return true; // 하천, 구거, 유지, 수도용지 위 건축물 영구 배제
+  }
+
+  // 도로/고속도로/철도 지목 및 속성
+  if (jimok === '도' || jimok === '철' || featProps.highway === 'motorway' || featProps.highway === 'trunk' || featProps.railway) {
+    return true; // 도로 중앙면, 고속도로, 철도 선로 위 비정상 객체 배제
+  }
+
+  // 묘지 비건물 구역
+  if (jimok === '묘' || featProps.amenity === 'grave_yard' || featProps.landuse === 'cemetery') {
+    return true;
+  }
+
+  const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
+  if (
+    landuse === 'water' ||
+    landuse === 'river' ||
+    landuse === 'basin' ||
+    landuse === 'reservoir' ||
+    featProps.waterway
+  ) {
+    return true;
+  }
+
   // 공식 공인 건축물 식별자 보유 여부 (국토교통부 전자약도 / 건축물대장)
   const hasOfficialRegistration = Boolean(
     featProps.bd_mgt_sn ||
@@ -242,19 +326,14 @@ export function isMountainGhostBuilding(
     featProps.source === 'LT_C_SPBD' ||
     featProps.mgmBldrgstPk ||
     featProps.is_real_measured === true ||
-    featProps.name ||
-    featProps.buildingName ||
-    featProps.buld_nm ||
     (featProps.pnu && (featProps.buld_nm || featProps.name || featProps.buildingName))
   );
 
-  // [1] 지목 및 토지이용 태그 검사 (산림, 임야, 전답, 하천 등 비건물 구역)
-  const jimok = String(featProps.jimok || featProps.jimok_nm || '').trim();
-  if (jimok === '임' || jimok === '임야' || jimok === '전' || jimok === '답' || jimok === '천' || jimok === '구' || jimok === '유') {
+  // [2] 지목 및 토지이용 태그 검사 (산림, 임야, 전답 등)
+  if (jimok === '임' || jimok === '임야' || jimok === '전' || jimok === '답') {
     if (!hasOfficialRegistration) return true;
   }
 
-  const landuse = String(featProps.landuse || featProps.natural || '').toLowerCase();
   if (
     landuse === 'forest' ||
     landuse === 'wood' ||
@@ -263,8 +342,6 @@ export function isMountainGhostBuilding(
     landuse === 'farmland' ||
     landuse === 'orchard' ||
     landuse === 'meadow' ||
-    landuse === 'water' ||
-    landuse === 'river' ||
     landuse === 'grass' ||
     landuse === 'bare_rock'
   ) {
@@ -368,7 +445,11 @@ export function isPermittedBuildingPolygon(
   centroid?: [number, number],
   map?: any
 ): boolean {
-  // [0단계: 산림/임야 유령 건물 필터]
+  // 사용자가 배치한 마스터플랜 시설물은 100% 허용
+  if (featProps.is_user_placed === true || featProps.isMasterplanFacility === true) {
+    return true;
+  }
+  // [0단계: 산림/임야/수계/도로/군유휴지 유령 건물 필터]
   if (centroid && isMountainGhostBuilding(centroid[0], centroid[1], featProps, map)) {
     return false;
   }

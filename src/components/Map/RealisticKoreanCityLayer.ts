@@ -100,6 +100,7 @@ import {
   isPermittedBuildingPolygon,
   sanitizeBuildingHeight,
   isMountainGhostBuilding,
+  isPointInMilitaryIdleSite,
 } from '@/utils/master3DRendererManager';
 import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
 import { DiverseBuildingGenerator } from '@/lib/vendor/diverseBuildingGenerator';
@@ -869,6 +870,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           continue; // 공인 식별자가 없는 임의 다각형은 무조건 탈락
         }
 
+        // 군 유휴지 (1군지사 310,000㎡ 등) 0동 원칙: 부지 내부 기존 구형 건물 100% 영구 배제
+        if (vp.is_user_placed !== true && vp.isMasterplanFacility !== true) {
+          if (isPointInMilitaryIdleSite(cX, cY)) continue;
+        }
+
         // 산림/임야 유령 건물 (강원 전역 산악 사면 및 능선) 100% 영구 배제
         if (isMountainGhostBuilding(cX, cY, vp, this.map)) continue;
 
@@ -1116,10 +1122,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const relH1 = Math.max(0, p1[1] - baseElev);
     const relH2 = Math.max(0, p2[1] - baseElev);
 
-    // [3단계: 건물 하단 0m ~ 3.2m 접지 앰비언트 오클루전 그라데이션 0.55 -> 1.0 적용으로 지면 밀착감 강화]
-    const ao0 = relH0 < 3.2 ? 0.55 + 0.45 * (relH0 / 3.2) : 1.0;
-    const ao1 = relH1 < 3.2 ? 0.55 + 0.45 * (relH1 / 3.2) : 1.0;
-    const ao2 = relH2 < 3.2 ? 0.55 + 0.45 * (relH2 / 3.2) : 1.0;
+    // [3단계: 건물 하단 0m ~ 3.2m 접지 앰비언트 오클루전 그라데이션 0.50 -> 1.0 적용으로 지면 밀착감 강화]
+    const ao0 = relH0 < 3.2 ? 0.50 + 0.50 * (relH0 / 3.2) : 1.0;
+    const ao1 = relH1 < 3.2 ? 0.50 + 0.50 * (relH1 / 3.2) : 1.0;
+    const ao2 = relH2 < 3.2 ? 0.50 + 0.50 * (relH2 / 3.2) : 1.0;
 
     pos[p] = p0[0]; pos[p + 1] = p0[1]; pos[p + 2] = p0[2];
     nrm[p] = norm[0]; nrm[p + 1] = norm[1]; nrm[p + 2] = norm[2];
@@ -1492,8 +1498,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      // [4중 안전 필터링 - 산림/경사 필터]: isMountainGhostBuilding을 통해 산림 및 비건물 유령 건물 고속 배제 (4500회 동기식 DEM 쿼리 프리즈 소멸)
+      // [4중 안전 필터링 - 군 유휴지 0동 원칙]: 1군지사 부지(310,000㎡) 등 군 유휴부지 내부 기존 구형 건물 100% 영구 배제
       const featProps = (feat.properties || {}) as Record<string, any>;
+      if (featProps.is_user_placed !== true && featProps.isMasterplanFacility !== true) {
+        if (isPointInMilitaryIdleSite(cLng, cLat)) {
+          continue;
+        }
+      }
+
+      // [4중 안전 필터링 - 산림/경사 필터]: isMountainGhostBuilding을 통해 산림 및 비건물 유령 건물 고속 배제 (4500회 동기식 DEM 쿼리 프리즈 소멸)
       if (isMountainGhostBuilding(cLng, cLat, featProps, this.map)) {
         continue;
       }

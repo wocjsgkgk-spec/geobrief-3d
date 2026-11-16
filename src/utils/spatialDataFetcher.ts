@@ -9,7 +9,7 @@
 
 import type maplibregl from 'maplibre-gl';
 import { fetchFusionBuildings, FusionBuildingsFetchResult } from '@/services/fusionBuildingsService';
-import { isMountainGhostBuilding } from '@/utils/master3DRendererManager';
+import { isMountainGhostBuilding, isPointInMilitaryIdleSite } from '@/utils/master3DRendererManager';
 
 export interface SpatialBuildingProperties {
   id?: string | number;
@@ -141,7 +141,12 @@ export function extractRenderedVectorBuildings(
       if (dimMin < 3.0) continue;
       if (aspectRatio > 8.0) continue;
 
-      // [4중 안전 필터링 - 산림/경사 필터]: 표고 경사도 25도 이상 및 산림 유령 건물 100% 영구 배제
+      // [4중 안전 필터링 - 군 유휴지 0동 원칙]: 1군지사 부지(310,000㎡) 등 군 유휴부지 내부 기존 구형 건물 100% 영구 배제
+      if (props.is_user_placed !== true && props.isMasterplanFacility !== true) {
+        if (isPointInMilitaryIdleSite(cLng, cLat)) continue;
+      }
+
+      // [4중 안전 필터링 - 산림/경사 필터]: 표고 경사도 16도 이상 및 산림 유령 건물 100% 영구 배제
       if (isMountainGhostBuilding(cLng, cLat, props, map)) continue;
 
       // [4중 안전 필터링 - 중복 필터]: 반경 4m 이내 동일 위치 중복 중심점 1개만 유지

@@ -126,6 +126,54 @@ function createProceduralCanvasTexture(
 // -----------------------------------------------------------------------------
 
 function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
+  // [V-World 3D 실사화] Variant 4: 한국형 아파트 측벽(Side Wall) - 창문 없는 콘크리트 + 듀얼톤 브랜드 밴드 + 고대비 야간 발광 '101동' 배지
+  if (variant === 4) {
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(0, 0, w, h);
+
+    // 브랜드 수직 밴드 (다크 네이비 & 오렌지 스트라이프)
+    ctx.fillStyle = '#1e3a8a';
+    ctx.fillRect(w * 0.38, 0, w * 0.20, h);
+    ctx.fillStyle = '#ea580c';
+    ctx.fillRect(w * 0.58, 0, w * 0.04, h);
+
+    // 수평 콘크리트 패널 줄눈
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.5);
+    ctx.lineTo(w, h * 0.5);
+    ctx.stroke();
+
+    // 대형 101동 배지 (다크 차콜 라운드 렉트 + 시안 블루 네온 글로우 테두리)
+    ctx.save();
+    const badgeW = w * 0.56;
+    const badgeH = h * 0.24;
+    const badgeX = w * 0.22;
+    const badgeY = h * 0.26;
+
+    ctx.fillStyle = 'rgba(10, 25, 47, 0.94)';
+    if (ctx.roundRect) {
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 18);
+    } else {
+      ctx.rect(badgeX, badgeY, badgeW, badgeH);
+    }
+    ctx.fill();
+
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    // 순백색 고대비 '101동' 텍스트
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 78px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('101동', w * 0.50, badgeY + badgeH * 0.5);
+    ctx.restore();
+    return;
+  }
+
   // 1-Bay (3.2m) × 1-Floor (3.0m) Korean Apartment Veranda Unit at 1024×1024
   const baseColors = ['#f8fafc', '#f5f5f0', '#e2e8f0', '#f1f5f9', '#eceae6'];
   const baseColor = baseColors[variant % baseColors.length];
@@ -336,6 +384,36 @@ function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.moveTo(wx, wy + 200);
   ctx.lineTo(wx + ww, wy + 200);
   ctx.stroke();
+
+  // [V-World 실사화] 1층 한국형 브랜드 가로 간판 패치 (편의점/베이커리/약국)
+  if (variant === 0 || variant === 3) {
+    const signH = 140;
+    const signY = wy + 10;
+    ctx.save();
+    if (variant === 0) {
+      ctx.fillStyle = '#059669';
+      ctx.fillRect(wx + 8, signY, ww - 16, signH);
+      ctx.fillStyle = '#facc15';
+      ctx.font = 'bold 50px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('24시 편의점', wx + ww * 0.5, signY + signH * 0.5);
+    } else {
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(wx + 8, signY, ww * 0.48 - 8, signH);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 40px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('BAKERY', wx + ww * 0.24, signY + signH * 0.5);
+
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(wx + ww * 0.52, signY, ww * 0.48 - 8, signH);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('약국', wx + ww * 0.76, signY + signH * 0.5);
+    }
+    ctx.restore();
+  }
 }
 
 function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
@@ -456,6 +534,54 @@ function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: numbe
     ctx.lineTo(w, y);
     ctx.stroke();
   }
+
+  // [V-World 3D 실사화] 옥상 긴급 헬리패드 (Helipad 'H') & 야간 항공장애등
+  ctx.save();
+  const cX = w * 0.5;
+  const cY = h * 0.5;
+  const radius = Math.min(w, h) * 0.32;
+
+  // 1. 외곽 노란색 실선 원형 링
+  ctx.beginPath();
+  ctx.arc(cX, cY, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 20;
+  ctx.stroke();
+
+  // 2. 내부 백색 원형 링
+  ctx.beginPath();
+  ctx.arc(cX, cY, radius * 0.75, 0, Math.PI * 2);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 10;
+  ctx.stroke();
+
+  // 3. 중앙 볼드 대형 'H' 마킹
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 180px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 12;
+  ctx.fillText('H', cX, cY);
+
+  // 4. 네 모서리 야간 항공유도등 (Night Guidance Warning Lights)
+  const pad = 48;
+  const cornerPts = [
+    [pad, pad],
+    [w - pad, pad],
+    [pad, h - pad],
+    [w - pad, h - pad],
+  ];
+  for (const [lx, ly] of cornerPts) {
+    ctx.beginPath();
+    ctx.arc(lx, ly, 16, 0, Math.PI * 2);
+    ctx.fillStyle = '#ef4444';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawTerracottaTileRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
