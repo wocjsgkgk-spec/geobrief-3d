@@ -302,6 +302,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         this.rooftopMesh = null;
       }
     }
+
+    // 원점 변경 시 3D 도로 표지판 갠트리를 새 원점 기준으로 1:1 재정합
+    if (this.roadSignGroup && this.scene && this.map) {
+      this.buildRoadSignGantries();
+    }
   }
 
   public setVisible(visible: boolean): void {
@@ -601,9 +606,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.bridgeGroup.visible = false;
       this.tunnelGroup.visible = false;
 
-      // [국토부 표준 3D 문형식 도로 이정표 씬 추가]
+      // [국토부 표준 3D 문형식 도로 이정표 씬 추가 (setOrigin 완료 후 빌드)]
       this.scene.add(this.roadSignGroup);
-      this.buildRoadSignGantries();
 
       // 3. WebGLRenderer 바인딩 및 컨텍스트 유실 복구 가드
       const canvas = map.getCanvas();
@@ -659,7 +663,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.terrainDebounceTimer = setTimeout(() => {
       this.terrainDebounceTimer = null;
       if (!this.map) return;
-      // 3D 지형 로드 또는 배율 변경 시 건물 기초 표고를 실제 지형 높이에 1:1 재정합
+      // 3D 지형 로드 또는 배율 변경 시 건물 기초 표고 및 3D 도로 표지판을 실제 지형 높이에 1:1 재정합
+      this.buildRoadSignGantries();
       this.builtBuildingKeys.clear();
       this.centroidSpatialGrid.clear();
       this.resetAccumulatedBuffers();
@@ -1445,16 +1450,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const centerMx = sumMx / ptCount;
       const centerMz = sumMz / ptCount;
 
-      // [4중 안전 필터링 - 중복 필터]: 동일 위치 반경 1.2m 이내 실제 완전 중복 형상만 제거 (밀집 주택가 이웃 건물 보존)
-      const gridX = Math.floor(centerMx / 1.2);
-      const gridZ = Math.floor(centerMz / 1.2);
+      // [4중 안전 필터링 - 중복 필터]: 반경 2.8m(기본 1개 실 규격) 이내 중복 형상 제거 (부속창고 중복 겹침 및 Z-Fighting 방지)
+      const DEDUPE_RADIUS = 2.8;
+      const gridX = Math.floor(centerMx / DEDUPE_RADIUS);
+      const gridZ = Math.floor(centerMz / DEDUPE_RADIUS);
       let isDuplicateCentroid = false;
       for (let dx = -1; dx <= 1 && !isDuplicateCentroid; dx++) {
         for (let dz = -1; dz <= 1 && !isDuplicateCentroid; dz++) {
           const nList = this.centroidSpatialGrid.get(`${gridX + dx}_${gridZ + dz}`);
           if (nList) {
             for (let k = 0; k < nList.length; k++) {
-              if (Math.hypot(nList[k][0] - centerMx, nList[k][1] - centerMz) < 1.2) {
+              if (Math.hypot(nList[k][0] - centerMx, nList[k][1] - centerMz) < DEDUPE_RADIUS) {
                 isDuplicateCentroid = true;
                 break;
               }
@@ -1466,8 +1472,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      // [정확한 위치 안착]: 인위적 축소 왜곡을 제거하고 지적도/위성 정사영상 풋프린트와 1:1 완벽 정합 (위치 오차 0m)
-      const SHRINK_SCALE = 1.0;
+      // [V-World REA 표준 Setback]: 인접 건물 간 30~40cm 시각적 골목/벽면 간격을 확보하여
+      // 건물들이 다닥다닥 붙어 거대한 하나의 덩어리로 뭉개지는 현상 완전 방지 (개별 4면 벽체 및 옥상 난간 분리)
+      const SHRINK_SCALE = 0.970;
       for (let i = 0; i < ptCount; i++) {
         pts2D[i].x = centerMx + (pts2D[i].x - centerMx) * SHRINK_SCALE;
         pts2D[i].z = centerMz + (pts2D[i].z - centerMz) * SHRINK_SCALE;
@@ -1913,30 +1920,27 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [화면 즉시 표시 및 주기적 증분 커밋]: 초기 30동 즉시 커밋 후 150동 단위로 연속 커밋
-          const commitThreshold = !this.hasInitialBuilt ? 30 : 150;
-          if (
-            this.hasAnySlotVertices() &&
-            (newlyAddedCount >= commitThreshold || (!this.masterMesh && newlyAddedCount > 0 && performance.now() - sliceStartTime > 15))
-          ) {
+          // [초기 로드 1회 즉시 커밋]: 초기 150동 빌드 완료 시에만 빠른 최초 화면 표출을 위해 1회 커밋
+          // 이후 슬라이스 중 잦은 재업로드(기존 80회 GPU 스톨)를 전면 제거하여 60fps 무지연 화면 유지
+          if (!this.hasInitialBuilt && newlyAddedCount >= 150 && this.hasAnySlotVertices()) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
             newlyAddedCount = 0;
             this.hasInitialBuilt = true;
           }
           // 뷰포트 내 건물 완료 시까지는 setTimeout(0)으로 무지연 고속 빌드
-          if (featureIdx < viewportFeatures.length || this.builtBuildingKeys.size < 12000) {
+          if (featureIdx < viewportFeatures.length || this.builtBuildingKeys.size < 4000) {
             this.activeBuildIdleId = setTimeout(executeSlice, 0);
           } else {
             this.activeBuildIdleId = setTimeout(executeSlice, 14);
           }
         } else {
-          // 전체 피처 슬라이싱 완료!
+          // 전체 피처 슬라이싱 완료! 최종 1회 커밋으로 GPU 파이프라인 정체 0% 달성
           this.activeBuildIdleId = null;
           this.isBuildingGeometry = false;
           this.hasInitialBuilt = true;
 
-          // 전체 슬라이스 완료 시 커밋 및 메트릭 갱신
+          // 전체 슬라이스 완료 시 최종 커밋 및 메트릭 갱신
           if (newlyAddedCount > 0 || !this.masterMesh) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);

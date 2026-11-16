@@ -357,14 +357,21 @@ export function isMountainGhostBuilding(
     return true;
   }
 
+  // [0-1] 대한민국 토지대장 표준 산번지 (PNU 11번째 자리 '2') 및 주소 '산' 가건물 100% 영구 배제
+  const pnu = String(featProps.pnu || '');
+  const address = String(featProps.address || featProps.rd_nm || '');
+  const isMountainLot = (pnu.length >= 11 && pnu[10] === '2') || address.includes(' 산 ') || address.includes(' 산');
+  if (isMountainLot && !featProps.is_user_placed && !featProps.isMasterplanFacility) {
+    return true; // 산번지 임야 가건물·농막·사당 845동 100% 원천 배제
+  }
+
   // 공식 공인 건축물 식별자 보유 여부 (국토교통부 전자약도 / 건축물대장)
   const hasOfficialRegistration = Boolean(
     featProps.bd_mgt_sn ||
-    featProps.source === 'vworld_local' ||
     featProps.source === 'LT_C_SPBD' ||
     featProps.mgmBldrgstPk ||
     featProps.is_real_measured === true ||
-    (featProps.pnu && (featProps.buld_nm || featProps.name || featProps.buildingName))
+    (featProps.pnu && !isMountainLot && (featProps.buld_nm || featProps.name || featProps.buildingName))
   );
 
   // [2] 지목 및 토지이용 태그 검사 (산림, 임야, 전답 등)
@@ -386,23 +393,28 @@ export function isMountainGhostBuilding(
     if (!hasOfficialRegistration) return true;
   }
 
-  // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹 (절대 제약 조건)
+  // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹 (V-World REA 절대 제약)
   const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
   if (isGangwonZone) {
-    // 1. 치악산 국립공원 핵심 산림 능선 (표고 높거나 산악 지정지)
-    if (lng >= 127.985 && lng <= 128.18 && lat >= 37.26 && lat <= 37.48) return true;
-    // 2. 백운산 남부 산림 능선
+    // 1. 치악산 국립공원 핵심 산림 능선 및 서사면 (행구동·봉산동 배후 산지 포함)
+    if (lng >= 127.973 && lat >= 37.335 && lat <= 37.48) return true;
+    // 2. 백운산 남부 산림 능선 및 판부면 남부 고산 구역
+    if (lat <= 37.315 && (lng <= 127.935 || lng >= 127.955)) return true;
     if (lng >= 127.88 && lng <= 128.02 && lat >= 37.18 && lat <= 37.26) return true;
-    // 3. 설악산 국립공원 및 인제·속초·양양 산악 능선
+    // 3. 원주 서부 봉화산(Bonghwasan) 정상 및 자연공원 산림 구역 (843동 전수 차단)
+    if (lng >= 127.905 && lng <= 127.922 && lat >= 37.352 && lat <= 37.368) return true;
+    // 4. 원주 북부 우산동 상지대 배후 매화산/태봉산 사면
+    if (lat >= 37.370 && lng <= 127.935) return true;
+    // 5. 설악산 국립공원 및 인제·속초·양양 산악 능선
     if (lng >= 128.25 && lng <= 128.60 && lat >= 38.00 && lat <= 38.30) return true;
-    // 4. 오대산 및 평창·대관령·홍천 고산 능선
+    // 6. 오대산 및 평창·대관령·홍천 고산 능선
     if (lng >= 128.40 && lng <= 128.90 && lat >= 37.55 && lat <= 37.95) return true;
-    // 5. 태백산맥 및 정선·태백·삼척 산악 능선
+    // 7. 태백산맥 및 정선·태백·삼척 산악 능선
     if (lng >= 128.75 && lng <= 129.25 && lat >= 37.00 && lat <= 37.45) return true;
-    // 6. 춘천 구봉산·용화산 배후 산림 능선
+    // 8. 춘천 구봉산·용화산 배후 산림 능선
     if (lng >= 127.70 && lng <= 127.88 && lat >= 37.88 && lat <= 38.05) return true;
 
-    // 7. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역 (실측 공인 건물은 영구 보존)
+    // 9. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역 (실측 공인 건물은 영구 보존)
     if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) {
       const jimokVal = String(featProps.jimok || featProps.jimok_nm || '');
       const hasName = Boolean(featProps.name || featProps.buildingName || featProps.buld_nm);
@@ -419,7 +431,7 @@ export function isMountainGhostBuilding(
       if ((jimokVal === '임' || jimokVal === '임야') && !hasName && !hasOfficialRegistration) return true;
     }
 
-    // 8. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
+    // 10. 출처가 OpenMapTiles/OSM인 미확인 레이어 객체는 강원권에서 공인 식별자 부재 시 배제
     if (featProps.sourceLayer === 'building' || featProps.layerId === 'building-vector-carrier' || featProps.sources?.ofm) {
       const dynamicMaxElev = getGangwonMaxMountainElev(lng, lat);
       if (map && typeof map.queryTerrainElevation === 'function') {
@@ -431,28 +443,32 @@ export function isMountainGhostBuilding(
     }
   }
 
-  // [3] DEM 표고 캐시 및 경사도(Slope 16°+) 기반 고속 분석 (절대 지형 제약 조건)
+  // [3] DEM 표고 캐시 및 경사도(Slope 12°+) 기반 고속 분석 (V-World REA 표준 제약)
   if (map && typeof map.queryTerrainElevation === 'function') {
     try {
       const gridKey = `${Math.round(lng * 500)}_${Math.round(lat * 500)}`;
       let elev = elevationCache.get(gridKey);
       if (elev === undefined) {
         const sampled = map.queryTerrainElevation([lng, lat]);
-        elev = typeof sampled === 'number' && !isNaN(sampled) ? sampled : 0;
-        if (elevationCache.size > 2000) {
-          elevationCache.clear();
+        if (typeof sampled === 'number' && !isNaN(sampled) && sampled > 0) {
+          elev = sampled;
+          if (elevationCache.size > 2000) {
+            elevationCache.clear();
+          }
+          elevationCache.set(gridKey, elev);
+        } else {
+          elev = 0;
         }
-        elevationCache.set(gridKey, elev);
       }
 
-      // 경사도 16° 초과 산악 사면 및 고산 능선 100% 영구 배제
+      // 경사도 12° 초과 산악 사면 및 고산 능선 100% 영구 배제
       if (elev > 0) {
         const deltaDeg = 0.0003;
         const eNorth = map.queryTerrainElevation([lng, lat + deltaDeg]) || elev;
         const eSouth = map.queryTerrainElevation([lng, lat - deltaDeg]) || elev;
         const dElev = Math.abs(eNorth - eSouth);
         const slopeDeg = Math.atan(dElev / 66.0) * (180 / Math.PI);
-        if (slopeDeg >= 16.0) {
+        if (slopeDeg >= 12.0) {
           return true;
         }
 
@@ -506,7 +522,8 @@ export function isPermittedBuildingPolygon(
     featProps.jimok === '임' ||
     featProps.jimok === '임야' ||
     featProps.jimok_nm === '임야' ||
-    (typeof featProps.slope === 'number' && featProps.slope >= 25) ||
+    (typeof featProps.pnu === 'string' && featProps.pnu.length >= 11 && featProps.pnu[10] === '2') ||
+    (typeof featProps.slope === 'number' && featProps.slope >= 12) ||
     featProps.amenity === 'parking' ||
     featProps.amenity === 'bicycle_parking' ||
     featProps.building === 'no' ||

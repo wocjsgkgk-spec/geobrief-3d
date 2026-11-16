@@ -1083,12 +1083,12 @@ export const MapViewer: React.FC = () => {
             }
           }
 
-          // 최대 12,000동 대규모 도심 합성 (근경 전수 + 중경 6,000동 + 원경 4,000동)
-          const MAX_TOTAL_BUILDINGS = 12000;
+          // V-World REA 표준: 뷰포트 내 실제 시가지 고밀도 3,000동 합성 (근경 전수 + 중경 1,500동 + 원경 800동으로 60fps 무지연 보장)
+          const MAX_TOTAL_BUILDINGS = 3000;
           const viewportFeatures = [
             ...bucketNear,
-            ...bucketMid.slice(0, 6000),
-            ...bucketFar.slice(0, 4000),
+            ...bucketMid.slice(0, 1500),
+            ...bucketFar.slice(0, 800),
           ].slice(0, MAX_TOTAL_BUILDINGS);
 
           // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입

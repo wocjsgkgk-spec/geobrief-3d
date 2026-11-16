@@ -180,16 +180,45 @@ export function buildPoiFeatureCollection(
       const name = String(props.name || props.name_ko || props.buld_nm || props.buildingName || props.bldNm || '').trim();
       if (!name || name.length < 2 || seenNames.has(name)) continue;
 
+      // 뷰포트 내 불필요한 번호형/용도명 가짜 라벨 원천 배제 ('1동', '2동', '단독주택' 등)
+      if (
+        name === '1동' ||
+        name === '2동' ||
+        name === '3동' ||
+        name === '4동' ||
+        name === '5동' ||
+        name === '가동' ||
+        name === '나동' ||
+        name === '다동' ||
+        name === '라동' ||
+        name === '건축물' ||
+        name === '단독주택' ||
+        name === '주건축물제1동' ||
+        name === '부속건축물' ||
+        name === '창고' ||
+        name === '창고시설' ||
+        name === '위락시설' ||
+        name === '자동차관련시설' ||
+        name.startsWith('제1종') ||
+        name.startsWith('제2종') ||
+        (name.startsWith('제') && name.endsWith('호'))
+      ) {
+        continue;
+      }
+
       const hasRealName = Boolean(props.bldNm || props.is_real_measured || props.source === 'molit_hub_api' || props.source === 'vworld_local' || props.source === 'vworld_wfs_fusion');
-      const isApt = name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
-                    name.includes('에버빌') || name.includes('청솔') || name.includes('주공') ||
-                    name.includes('휴플러스') || name.includes('아이파크') || name.includes('푸르지오') ||
-                    name.includes('골드') || name.includes('타워') || name.includes('코아루') || name.includes('동');
+      const isApt = name.length >= 3 && (
+        name.includes('아파트') || name.includes('apt') || name.includes('단지') ||
+        name.includes('에버빌') || name.includes('청솔') || name.includes('주공') ||
+        name.includes('휴플러스') || name.includes('아이파크') || name.includes('푸르지오') ||
+        name.includes('자이') || name.includes('힐스테이트') || name.includes('e편한') ||
+        name.includes('골드') || name.includes('타워') || name.includes('코아루') || name.includes('하이츠')
+      );
       const isSchool = name.includes('초등') || name.includes('중학') || name.includes('고등') || name.includes('대학') || name.includes('학교');
       const isPublic = name.includes('센터') || name.includes('시청') || name.includes('병원') || name.includes('공원') || name.includes('청사');
-      const isCommercial = name.includes('빌딩') || name.includes('상가') || name.includes('프라자') || name.includes('플라자') || name.includes('마트') || name.includes('농협') || name.includes('축협') || name.includes('은행');
+      const isCommercial = name.length >= 3 && (name.includes('빌딩') || name.includes('상가') || name.includes('프라자') || name.includes('플라자') || name.includes('마트') || name.includes('농협') || name.includes('축협') || name.includes('은행'));
 
-      if (!hasRealName && !isApt && !isSchool && !isPublic && !isCommercial) continue;
+      if (!isApt && !isSchool && !isPublic && !isCommercial) continue;
 
       // 중심점 계산
       let centerLng = 0, centerLat = 0, ptCount = 0;
@@ -343,6 +372,6 @@ export function updateVworldPoisWithBuildings(
   const src = map.getSource(VWORLD_POI_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   if (!src) return;
 
-  const updatedGeoJson = buildPoiFeatureCollection([], buildings);
+  const updatedGeoJson = buildPoiFeatureCollection(WONJU_CORE_POIS, buildings);
   src.setData(updatedGeoJson);
 }
