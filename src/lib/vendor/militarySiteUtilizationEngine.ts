@@ -64,6 +64,13 @@ export interface EnhancedSiteFeasibilityResult {
   suitabilityScorecard: SiteSuitabilityScorecard;
   earthworkCostKrw: number; // 토공량(Cut & Fill) 연동 부지정지 개략 공사비 (억원)
   briefingStatement: string; // 지자체/도정 보고서 요약문
+  solarPotential?: {
+    rooftopSolarAreaSqm: number;
+    annualGenerationMwh: number;
+    carbonReductionTons: number;
+    annualRevenueKrw: number;
+    selfSufficiencyRate: number;
+  };
 }
 
 export class MilitarySiteUtilizationEngine {
@@ -286,6 +293,22 @@ export class MilitarySiteUtilizationEngine {
       `• 경제적 파급효과: 추정 총사업비 ${activeScenarioData.estimatedCapexKrw.toLocaleString()}억원, 신규 일자리 ${activeScenarioData.jobCreation.toLocaleString()}명 창출, 연간 경제유발액 ${activeScenarioData.annualEconomicOutputKrw.toLocaleString()}억원\n` +
       `• 부지정지 토공비: 약 ${earthworkCostKrw}억원 (Cut & Fill 수평고도 정합 기준)`;
 
+    // 7. 3D 옥상 일조권 & 신재생에너지 발전 잠재량 산출
+    const plannedFootprint = safeArea * (activeScenarioData.plannedBcr / 100);
+    const rooftopSolarAreaSqm = Math.round(plannedFootprint * 0.55);
+    const annualGenerationMwh = Math.round((rooftopSolarAreaSqm * 1350 * 0.18) / 1000);
+    const carbonReductionTons = Math.round(annualGenerationMwh * 0.466);
+    const annualRevenueKrw = Math.round(((annualGenerationMwh * 165000) / 100000000) * 10) / 10;
+    const selfSufficiencyRate = Math.min(100, Math.max(15, Math.round((annualGenerationMwh / (totalGrossFloorAreaSqm * 0.08 || 1200)) * 100)));
+
+    const solarPotential = {
+      rooftopSolarAreaSqm,
+      annualGenerationMwh,
+      carbonReductionTons,
+      annualRevenueKrw,
+      selfSufficiencyRate,
+    };
+
     return {
       siteAreaSqm: safeArea,
       siteAreaPyeong,
@@ -306,6 +329,210 @@ export class MilitarySiteUtilizationEngine {
       suitabilityScorecard,
       earthworkCostKrw,
       briefingStatement,
+      solarPotential,
     };
+  }
+
+  /**
+   * [군 유휴부지 복합 3D 마스터플랜 원클릭 자동 배치 생성기]
+   * 시나리오에 맞는 핵심 3D 시설물(R&D 타워, 스마트 아파트, 물류 데포, 헬리패드 등)을
+   * 부지 경계 내부에 최적의 축선과 이격거리로 자동 배치
+   */
+  public static generateMasterplanFacilities(
+    siteId?: string | null,
+    scenario: RedevelopmentScenarioType = 'defense_valley'
+  ): PlacedFacility3D[] {
+    const site = getGangwon18MilitarySiteById(siteId || 'wj-1st-logistics');
+    const center = site?.center || [127.9258, 37.3422];
+    const now = Date.now();
+
+    const result: PlacedFacility3D[] = [];
+
+    if (scenario === 'defense_valley') {
+      // 1. 중앙 첨단 국방 R&D 타워 (본관)
+      result.push({
+        id: `mp-def-tower1-${now}`,
+        presetId: 'defense_rd_tower',
+        name: '첨단 국방 AI·드론 R&D 타워 (본관)',
+        coords: [center[0] - 0.0008, center[1] + 0.0006],
+        elevation: 142.0,
+        rotationY: 15,
+        scale: 1.2,
+        heightMeters: 38.4,
+        createdAt: now,
+      });
+
+      // 2. 민군 융합 벤처 보육타워 (별관)
+      result.push({
+        id: `mp-def-tower2-${now}`,
+        presetId: 'defense_rd_tower',
+        name: '민군 융합 방위산업 창업보육관',
+        coords: [center[0] + 0.0010, center[1] + 0.0006],
+        elevation: 142.0,
+        rotationY: 345,
+        scale: 1.1,
+        heightMeters: 35.2,
+        createdAt: now,
+      });
+
+      // 3. 국방 무인기/UAV 실증 비상 헬리패드
+      result.push({
+        id: `mp-def-helipad-${now}`,
+        presetId: 'helipad_base',
+        name: 'UAV·드론 실증 시험 이착륙장 (H)',
+        coords: [center[0] - 0.0014, center[1] - 0.0007],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.3,
+        heightMeters: 1.5,
+        createdAt: now,
+      });
+
+      // 4. 전략 국방 군수 보급 테스트 데포
+      result.push({
+        id: `mp-def-depot-${now}`,
+        presetId: 'logistics_depot',
+        name: '첨단 군수 물자 스마트 시험창고',
+        coords: [center[0] + 0.0012, center[1] - 0.0007],
+        elevation: 142.0,
+        rotationY: 105,
+        scale: 1.0,
+        heightMeters: 13.0,
+        createdAt: now,
+      });
+
+      // 5. 360도 레이더 관측 감시탑
+      result.push({
+        id: `mp-def-tower-${now}`,
+        presetId: 'watch_tower',
+        name: '외곽 대드론 레이더 감시타워',
+        coords: [center[0] + 0.0018, center[1] + 0.0012],
+        elevation: 142.0,
+        rotationY: 45,
+        scale: 1.0,
+        heightMeters: 15.0,
+        createdAt: now,
+      });
+
+      // 6. 민군 융합 종합 행정 지원센터
+      result.push({
+        id: `mp-def-hq-${now}`,
+        presetId: 'barracks_hq',
+        name: '국방벤처 종합 행정 지원센터',
+        coords: [center[0], center[1] - 0.0010],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.1,
+        heightMeters: 10.5,
+        createdAt: now,
+      });
+    } else if (scenario === 'smart_town') {
+      // 1. 공공지원 스마트아파트 주동 101동
+      result.push({
+        id: `mp-st-apt1-${now}`,
+        presetId: 'defense_rd_tower',
+        name: '스마트타운 101동 (청년·신혼 주거)',
+        coords: [center[0] - 0.0012, center[1] + 0.0008],
+        elevation: 142.0,
+        rotationY: 10,
+        scale: 1.3,
+        heightMeters: 48.0,
+        createdAt: now,
+      });
+
+      // 2. 스마트아파트 주동 102동
+      result.push({
+        id: `mp-st-apt2-${now}`,
+        presetId: 'defense_rd_tower',
+        name: '스마트타운 102동 (공공임대 주동)',
+        coords: [center[0] + 0.0010, center[1] + 0.0008],
+        elevation: 142.0,
+        rotationY: 350,
+        scale: 1.3,
+        heightMeters: 48.0,
+        createdAt: now,
+      });
+
+      // 3. 복합 행정복지타운 & 도서관
+      result.push({
+        id: `mp-st-hq-${now}`,
+        presetId: 'barracks_hq',
+        name: '영서권 복합 문화체육 커뮤니티센터',
+        coords: [center[0], center[1] - 0.0006],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.2,
+        heightMeters: 12.0,
+        createdAt: now,
+      });
+
+      // 4. 주민 비상 헬리패드
+      result.push({
+        id: `mp-st-helipad-${now}`,
+        presetId: 'helipad_base',
+        name: '응급의료 닥터헬기 전용 헬리패드',
+        coords: [center[0] - 0.0015, center[1] - 0.0009],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.2,
+        heightMeters: 1.2,
+        createdAt: now,
+      });
+    } else {
+      // eco_logistics
+      // 1. 메인 AI 스마트 풀필먼트 물류센터
+      result.push({
+        id: `mp-eco-depot1-${now}`,
+        presetId: 'logistics_depot',
+        name: '친환경 스마트 풀필먼트 물류센터 1관',
+        coords: [center[0] - 0.0010, center[1] + 0.0005],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.4,
+        heightMeters: 18.0,
+        createdAt: now,
+      });
+
+      // 2. 콜드체인 특수물류 전용창고
+      result.push({
+        id: `mp-eco-depot2-${now}`,
+        presetId: 'logistics_depot',
+        name: '영서권 의약·신선식품 콜드체인 물류센터',
+        coords: [center[0] + 0.0012, center[1] + 0.0005],
+        elevation: 142.0,
+        rotationY: 180,
+        scale: 1.3,
+        heightMeters: 16.0,
+        createdAt: now,
+      });
+
+      // 3. 관제 및 운영 통합본부 타워
+      result.push({
+        id: `mp-eco-tower-${now}`,
+        presetId: 'defense_rd_tower',
+        name: '스마트 물류 관제 & 에너지 허브 타워',
+        coords: [center[0], center[1] - 0.0007],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.0,
+        heightMeters: 28.0,
+        createdAt: now,
+      });
+
+      // 4. 항공 화물 드론 배송 헬리패드
+      result.push({
+        id: `mp-eco-helipad-${now}`,
+        presetId: 'helipad_base',
+        name: '화물 드론 라스트마일 허브 헬리패드',
+        coords: [center[0] - 0.0016, center[1] - 0.0008],
+        elevation: 142.0,
+        rotationY: 0,
+        scale: 1.2,
+        heightMeters: 1.2,
+        createdAt: now,
+      });
+    }
+
+    return result;
   }
 }

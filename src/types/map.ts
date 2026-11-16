@@ -330,6 +330,13 @@ export interface SiteFeasibilityResult {
   };
   earthworkCostKrw?: number; // 토공량(Cut & Fill) 연동 부지정지 개략 공사비 (억원)
   briefingStatement?: string; // 지자체/도정 보고서 요약문
+  solarPotential?: {
+    rooftopSolarAreaSqm: number; // 옥상 태양광 유효 설치면적 (㎡)
+    annualGenerationMwh: number; // 연간 발전량 (MWh/년)
+    carbonReductionTons: number; // 연간 온실가스 감축량 (tCO2/년)
+    annualRevenueKrw: number; // 연간 발전 전력 편익 (억원)
+    selfSufficiencyRate: number; // 단지 에너지 자립률 (%)
+  };
 }
 
 // [3D 공간 주석 핀 (Billboard Pin)]

@@ -528,7 +528,36 @@ export function drawSeoulAerialRooftopTexture(ctx: CanvasRenderingContext2D, s: 
   ctx.stroke();
   ctx.setLineDash([]); // 복원
 
-  // 9. 자연스러운 콘크리트 미세 노이즈 도포
+  // 9. 비상 헬리패드 마킹 (Emergency Helipad [ H ] Marking)
+  // 한국 건축법 기준 45m 이상 고층 건축물 옥상 헬리포트 노란색/백색 링 및 대형 H 각인
+  const heliX = s * 0.30;
+  const heliY = s * 0.32;
+  const heliR = s * 0.15;
+
+  ctx.save();
+  // 헬리패드 외곽 노란색 원형 링
+  ctx.strokeStyle = '#facc15';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(heliX, heliY, heliR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 내부 백색 원형 링
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(heliX, heliY, heliR - 8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 중앙 굵은 'H' 비상 마크
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${Math.round(heliR * 1.1)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('H', heliX, heliY);
+  ctx.restore();
+
+  // 10. 자연스러운 콘크리트 미세 노이즈 도포
   try {
     const imgData = ctx.getImageData(0, 0, s, s);
     const data = imgData.data;

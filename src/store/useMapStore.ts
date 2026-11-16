@@ -62,6 +62,7 @@ import {
 } from '@/constants/gangwon18MilitarySites';
 import { generateStrategicFacilities, STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { generateSpiralPreset, generateApproachPreset } from '@/utils/cinematicPathInterpolator';
+import { MilitarySiteUtilizationEngine } from '@/lib/vendor/militarySiteUtilizationEngine';
 import type { CloudProject } from '@/lib/supabase';
 
 export const SAMPLE_3D_TILES_PRESETS: Record<
@@ -530,6 +531,8 @@ interface MapStoreState {
   setPlacingFacilityPreset: (preset: FacilityPresetId | null) => void;
 
   addPlacedFacility: (presetId: FacilityPresetId, coords?: [number, number], elevation?: number) => string;
+  setPlacedFacilities: (facilities: PlacedFacility3D[]) => void;
+  autoDeployMasterplan: () => void;
   removePlacedFacility: (id: string) => void;
   clearAllPlacedFacilities: () => void;
   clearPlacedFacilities: () => void;
@@ -1919,6 +1922,24 @@ export const useMapStore = create<MapStoreState>()(
           placedFacilities: [],
           selectedFacilityId: null,
         }),
+
+      setPlacedFacilities: (facilities) =>
+        set({
+          placedFacilities: facilities,
+          selectedFacilityId: facilities.length > 0 ? facilities[0].id : null,
+        }),
+
+      autoDeployMasterplan: () => {
+        const state = get();
+        const facilities = MilitarySiteUtilizationEngine.generateMasterplanFacilities(
+          state.selectedIdleSiteId,
+          state.idleSiteScenario
+        );
+        set({
+          placedFacilities: facilities,
+          selectedFacilityId: facilities.length > 0 ? facilities[0].id : null,
+        });
+      },
 
       clearPlacedFacilities: () =>
         set({

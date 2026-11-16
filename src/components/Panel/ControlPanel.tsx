@@ -237,6 +237,7 @@ export const ControlPanel: React.FC = () => {
     placingFacilityPreset,
     setPlacingFacilityPreset,
     addPlacedFacility,
+    autoDeployMasterplan,
     removePlacedFacility,
     clearAllPlacedFacilities,
     selectFacility,
@@ -2304,6 +2305,18 @@ export const ControlPanel: React.FC = () => {
                 <span className="text-[9.5px] leading-tight">친환경 스마트물류</span>
               </button>
             </div>
+
+            {/* [신규] 군 유휴지 3D 마스터플랜 원클릭 자동 배치 버튼 */}
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => autoDeployMasterplan()}
+                className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-600 via-emerald-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold text-[10.5px] shadow-md shadow-cyan-950/60 border border-cyan-300/50 flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-200 animate-pulse" />
+                <span>🏗️ {idleSiteScenario === 'defense_valley' ? '첨단 국방벤처' : idleSiteScenario === 'smart_town' ? '스마트타운' : '친환경물류'} 3D 마스터플랜 원클릭 자동 배치</span>
+              </button>
+            </div>
           </div>
 
           {siteFeasibilityResult && (
@@ -2534,6 +2547,47 @@ export const ControlPanel: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* [신규] 3D 옥상 일조권 & 신재생에너지 발전 잠재량 카드 */}
+              {siteFeasibilityResult.solarPotential && (
+                <div className="p-2 rounded-lg bg-[#07160d] border border-emerald-800/40 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200 flex items-center gap-1.5 text-[10px]">
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      3D 옥상 일조권 & 신재생에너지 발전 잠재량
+                    </span>
+                    <span className="px-1.5 py-0.2 rounded text-[8.5px] font-extrabold bg-emerald-950 text-emerald-300 border border-emerald-600/60">
+                      자립률 {siteFeasibilityResult.solarPotential.selfSufficiencyRate}%
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                    <div className="p-1 rounded bg-[#0b1b11] border border-[#1b3b27]">
+                      <span className="text-slate-400 block text-[8.5px]">옥상 태양광 유효면적</span>
+                      <span className="font-mono font-bold text-cyan-300 text-xs">
+                        {siteFeasibilityResult.solarPotential.rooftopSolarAreaSqm.toLocaleString()} ㎡
+                      </span>
+                    </div>
+                    <div className="p-1 rounded bg-[#0b1b11] border border-[#1b3b27]">
+                      <span className="text-slate-400 block text-[8.5px]">연간 발전량</span>
+                      <span className="font-mono font-bold text-emerald-300 text-xs">
+                        {siteFeasibilityResult.solarPotential.annualGenerationMwh.toLocaleString()} MWh/년
+                      </span>
+                    </div>
+                    <div className="p-1 rounded bg-[#0b1b11] border border-[#1b3b27]">
+                      <span className="text-slate-400 block text-[8.5px]">온실가스 감축량</span>
+                      <span className="font-mono font-bold text-teal-300 text-xs">
+                        {siteFeasibilityResult.solarPotential.carbonReductionTons.toLocaleString()} tCO2/년
+                      </span>
+                    </div>
+                    <div className="p-1 rounded bg-[#0b1b11] border border-[#1b3b27]">
+                      <span className="text-slate-400 block text-[8.5px]">연간 전력 편익</span>
+                      <span className="font-mono font-bold text-amber-300 text-xs">
+                        약 {siteFeasibilityResult.solarPotential.annualRevenueKrw.toLocaleString()} 억원/년
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 검토 요약 문장 */}
               <div className="p-2 rounded bg-[#0a120d] border border-[#1d3022] text-[9.5px] text-slate-300 leading-relaxed">

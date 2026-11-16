@@ -86,6 +86,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   private customGltfUrl: string | null = null;
   private lodMode: Detail3DMode = 'lod2';
   private currentFacilities: PlacedFacility3D[] = [];
+  private isContextLost = false;
 
   // 60fps 무할당 렌더링용 캐시 행렬 및 벡터
   private readonly cachedRotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
@@ -292,10 +293,22 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
         VWorldWebGLShaderSpec.FOG.density
       );
 
-      // 2. WebGLRenderer 초기화 (브이월드 톤매핑 & 색공간 동기화)
+      // 2. WebGLRenderer 초기화 및 컨텍스트 유실 복구 가드
       try {
+        const canvas = map.getCanvas();
+        canvas.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault();
+          console.warn('[ThreeboxBuildingLayer] WebGL context lost detected.');
+          this.isContextLost = true;
+        });
+        canvas.addEventListener('webglcontextrestored', () => {
+          console.info('[ThreeboxBuildingLayer] WebGL context restored.');
+          this.isContextLost = false;
+          if (this.map) this.map.triggerRepaint();
+        });
+
         this.renderer = new THREE.WebGLRenderer({
-          canvas: map.getCanvas(),
+          canvas,
           context: gl,
           antialias: true,
           alpha: true,
@@ -348,7 +361,7 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.isVisible || !this.originLngLat || !this.renderer) {
+    if (this.isContextLost || !this.isVisible || !this.originLngLat || !this.renderer) {
       return;
     }
 

@@ -698,16 +698,16 @@ function drawSlot15_ResiSandBeigeBarracks(ctx: CanvasRenderingContext2D, s: numb
 }
 
 /**
- * Slot 16: 아파트 측벽 (창문 없는 매끈한 콘크리트 + 단지 브랜드 수직 줄눈)
+ * Slot 16: 아파트 측벽 (창문 없는 매끈한 콘크리트 + 단지 브랜드 수직 줄눈 + 한국형 동 번호)
  */
 function drawSlot16_AptSideWall(ctx: CanvasRenderingContext2D, s: number): void {
   // 매끈한 크림 콘크리트 바탕
   ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(0, 0, s, s);
 
-  // 중앙 굵은 브랜드 컬러 라인 (다크 네이비 & 오렌지 띠)
+  // 중앙 굵은 브랜드 컬러 라인 (다크 네이비 & 오렌지/골드 띠)
   ctx.fillStyle = '#1e3a8a';
-  ctx.fillRect(s * 0.40, 0, s * 0.16, s);
+  ctx.fillRect(s * 0.38, 0, s * 0.18, s);
   ctx.fillStyle = '#ea580c';
   ctx.fillRect(s * 0.56, 0, s * 0.04, s);
 
@@ -718,10 +718,35 @@ function drawSlot16_AptSideWall(ctx: CanvasRenderingContext2D, s: number): void 
   ctx.moveTo(0, s * 0.5);
   ctx.lineTo(s, s * 0.5);
   ctx.stroke();
+
+  // [V-World 실사화] 한국형 아파트 측벽 대형 동 번호 (101동) 배지
+  ctx.save();
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  ctx.beginPath();
+  const badgeW = s * 0.44;
+  const badgeH = s * 0.16;
+  const badgeX = s * 0.28;
+  const badgeY = s * 0.18;
+  if (ctx.roundRect) {
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 10);
+  } else {
+    ctx.rect(badgeX, badgeY, badgeW, badgeH);
+  }
+  ctx.fill();
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('101동', s * 0.50, badgeY + badgeH * 0.5);
+  ctx.restore();
 }
 
 /**
- * Slot 17: 상가 1층 기단부 (화강석 프레임 + 틴티드 쇼윈도)
+ * Slot 17: 상가 1층 기단부 (화강석 프레임 + 틴티드 쇼윈도 + 매장 입구)
  */
 function drawSlot17_CommPodium(ctx: CanvasRenderingContext2D, s: number): void {
   // 짙은 그레이 화강석 기둥 프레임
@@ -737,22 +762,25 @@ function drawSlot17_CommPodium(ctx: CanvasRenderingContext2D, s: number): void {
   ctx.fillStyle = '#090d16';
   ctx.fillRect(wx, wy, ww, wh);
 
-  // 내부 은은한 조명 반사
+  // 내부 은은한 온백색 매장 조명 반사
   const gGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-  gGrad.addColorStop(0, '#38bdf8');
-  gGrad.addColorStop(0.3, '#0369a1');
+  gGrad.addColorStop(0, '#fef08a');
+  gGrad.addColorStop(0.2, '#38bdf8');
+  gGrad.addColorStop(0.6, '#0369a1');
   gGrad.addColorStop(1, '#090d16');
   ctx.fillStyle = gGrad;
   ctx.fillRect(wx + 4, wy + 4, ww - 8, wh - 8);
 
-  // 스테인리스 스틸 출입문 프레임
+  // 스테인리스 스틸 자동문 프레임 & 유리 도어 핸들
   ctx.strokeStyle = '#cbd5e1';
   ctx.lineWidth = 3;
-  ctx.strokeRect(wx + ww * 0.5 - 25, wy + 10, 50, wh - 10);
+  ctx.strokeRect(wx + ww * 0.5 - 28, wy + 8, 56, wh - 8);
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillRect(wx + ww * 0.5 - 2, wy + wh * 0.5 - 15, 4, 30);
 }
 
 /**
- * Slot 18: 한국형 가로 간판 박스 (원색 간판 그래픽 패치)
+ * Slot 18: 한국형 가로 간판 박스 (원색 간판 그래픽 패치 - 편의점/카페/약국)
  */
 function drawSlot18_Signboard(ctx: CanvasRenderingContext2D, s: number): void {
   // 프레임
@@ -760,23 +788,32 @@ function drawSlot18_Signboard(ctx: CanvasRenderingContext2D, s: number): void {
   ctx.fillRect(0, 0, s, s);
 
   // 3개 분할 컬러풀 상가 간판
-  // 1) 붉은색 식당/카페 간판
+  // 1) 붉은색 식당/베이커리 간판
   ctx.fillStyle = '#dc2626';
   ctx.fillRect(s * 0.04, s * 0.10, s * 0.28, s * 0.80);
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(s * 0.08, s * 0.35, s * 0.20, s * 0.30);
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('BAKERY', s * 0.18, s * 0.50);
 
-  // 2) 노란색 약국/편의점 간판
-  ctx.fillStyle = '#eab308';
+  // 2) 노란색/녹색 편의점 간판 (CU/GS25 스타일)
+  ctx.fillStyle = '#059669';
   ctx.fillRect(s * 0.36, s * 0.10, s * 0.28, s * 0.80);
-  ctx.fillStyle = '#1c1917';
-  ctx.fillRect(s * 0.40, s * 0.35, s * 0.20, s * 0.30);
+  ctx.fillStyle = '#facc15';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('24시마트', s * 0.50, s * 0.50);
 
-  // 3) 파란색 병원/학원 간판
+  // 3) 파란색 약국/클리닉 간판
   ctx.fillStyle = '#2563eb';
   ctx.fillRect(s * 0.68, s * 0.10, s * 0.28, s * 0.80);
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(s * 0.72, s * 0.35, s * 0.20, s * 0.30);
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('약국', s * 0.82, s * 0.50);
 }
 
 /**
