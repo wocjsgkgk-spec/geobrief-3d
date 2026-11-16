@@ -709,24 +709,21 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
     }
-    // [인터랙션 보호]: 카메라 이동 중 빌드 타이머를 파괴하지 않고 자연스럽게 스로틀링 대기 유지
   };
 
   private handleMoveEnd = (): void => {
+    this.isMoving = false;
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
-    }
-    const checkAndComplete = () => {
       this.moveEndTimer = null;
-      if (!this.map) return;
-      if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
-        this.moveEndTimer = setTimeout(checkAndComplete, 450);
-        return;
-      }
-      this.isMoving = false;
-      this.extractAndBuildFromMap();
-    };
-    this.moveEndTimer = setTimeout(checkAndComplete, 450);
+    }
+    // [단일 마스터 동기화]: 불필요한 450ms 중복 빌드 타이머를 제거하고,
+    // 대기 중인 잔여 피처가 있는 경우에만 부드럽게 완료
+    if (this.pendingFeatures) {
+      const next = this.pendingFeatures;
+      this.pendingFeatures = null;
+      this.buildRealisticCityMesh(next);
+    }
   };
 
   public setInteracting(interacting: boolean): void {
@@ -1920,9 +1917,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [초기 로드 1회 즉시 커밋]: 초기 150동 빌드 완료 시에만 빠른 최초 화면 표출을 위해 1회 커밋
+          // [초기 로드 1회 즉시 커밋]: 초기 50동+ 빌드 완료 시에만 빠른 최초 화면 표출을 위해 1회 커밋
           // 이후 슬라이스 중 잦은 재업로드(기존 80회 GPU 스톨)를 전면 제거하여 60fps 무지연 화면 유지
-          if (!this.hasInitialBuilt && newlyAddedCount >= 150 && this.hasAnySlotVertices()) {
+          if (!this.hasInitialBuilt && newlyAddedCount >= 50 && this.hasAnySlotVertices()) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
             newlyAddedCount = 0;
@@ -2056,6 +2053,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       if (!this.masterMesh) {
         this.masterMesh = new THREE.Mesh(geo, this.buildingMaterials);
         this.masterMesh.frustumCulled = false;
+        this.masterMesh.matrixAutoUpdate = false;
+        this.masterMesh.updateMatrix();
         this.masterMesh.visible = this.isVisible;
         this.scene.add(this.masterMesh);
       } else if (!canReuse) {
@@ -2181,6 +2180,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const gMesh = buildRoadSignGantryMesh(spec, [mx, mz], elev);
       this.roadSignGroup.add(gMesh);
     }
+    this.roadSignGroup.matrixAutoUpdate = false;
+    this.roadSignGroup.updateMatrix();
 
     if (this.map) {
       this.map.triggerRepaint();
@@ -2224,12 +2225,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // GPU 파이프라인 스톨(gl.getParameter) 방지 및 FBO 상태 보존
       const prevFbo = options?.defaultFramebuffer ?? null;
 
-      if (this.renderer.info) {
-        this.renderer.info.reset();
-      }
       this.renderer.resetState();
       this.renderer.render(this.scene, this.camera);
-      this.renderer.resetState();
 
       if (gl && typeof (gl as any).bindFramebuffer === 'function') {
         (gl as any).bindFramebuffer(gl.FRAMEBUFFER, prevFbo);

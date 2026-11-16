@@ -294,6 +294,80 @@ export function isPointInMilitaryIdleSite(lng: number, lat: number, targetSiteId
 }
 
 /**
+ * 강원 18개 시·군 공식 중심 시가지 보호 구역 (Urban Settlement Protection Envelopes)
+ * - 18개 시·군 청사 및 핵심 도심지는 산악 능선 오탐 필터로부터 100% 안전하게 보호
+ */
+export function isInsideUrbanSettlementEnvelope(lng: number, lat: number): boolean {
+  // 원주 도심 (원주시청·무실동·단구동·일산동·중앙동·우산동)
+  if (lng >= 127.915 && lng <= 127.965 && lat >= 37.330 && lat <= 37.375) return true;
+  // 춘천 도심 (강원도청·춘천시청·명동·효자동·후평동·퇴계동)
+  if (lng >= 127.705 && lng <= 127.765 && lat >= 37.850 && lat <= 37.910) return true;
+  // 강릉 도심 (강릉시청·교동·홍제동·포남동·중앙동)
+  if (lng >= 128.855 && lng <= 128.925 && lat >= 37.730 && lat <= 37.785) return true;
+  // 속초 도심 (속초시청·동명동·중앙동·조양동·청호동)
+  if (lng >= 128.565 && lng <= 128.605 && lat >= 38.180 && lat <= 38.225) return true;
+  // 동해 도심 (동해시청·천곡동·북삼동·송정동)
+  if (lng >= 129.090 && lng <= 129.135 && lat >= 37.500 && lat <= 37.550) return true;
+  // 삼척 도심 (삼척시청·남양동·정라동)
+  if (lng >= 129.150 && lng <= 129.185 && lat >= 37.430 && lat <= 37.465) return true;
+  // 태백 도심 (태백시청·황지동·상장동)
+  if (lng >= 128.970 && lng <= 129.010 && lat >= 37.150 && lat <= 37.185) return true;
+  // 홍천 도심 (홍천읍·홍천군청)
+  if (lng >= 127.870 && lng <= 127.910 && lat >= 37.680 && lat <= 37.710) return true;
+  // 횡성 도심 (횡성읍·횡성군청)
+  if (lng >= 127.970 && lng <= 128.005 && lat >= 37.480 && lat <= 37.510) return true;
+  // 평창 도심 (평창읍·평창군청)
+  if (lng >= 128.375 && lng <= 128.410 && lat >= 37.360 && lat <= 37.385) return true;
+  // 정선 도심 (정선읍·정선군청)
+  if (lng >= 128.645 && lng <= 128.680 && lat >= 37.370 && lat <= 37.395) return true;
+  // 영월 도심 (영월읍·영월군청)
+  if (lng >= 128.445 && lng <= 128.480 && lat >= 37.170 && lat <= 37.198) return true;
+  // 철원 도심 (갈말읍·철원군청)
+  if (lng >= 127.295 && lng <= 127.335 && lat >= 38.135 && lat <= 38.160) return true;
+  // 화천 도심 (화천읍·화천군청)
+  if (lng >= 127.690 && lng <= 127.725 && lat >= 38.095 && lat <= 38.120) return true;
+  // 양구 도심 (양구읍·양구군청)
+  if (lng >= 127.975 && lng <= 128.005 && lat >= 38.095 && lat <= 38.125) return true;
+  // 인제 도심 (인제읍·인제군청)
+  if (lng >= 128.155 && lng <= 128.185 && lat >= 38.055 && lat <= 38.080) return true;
+  // 고성 도심 (간성읍·고성군청)
+  if (lng >= 128.450 && lng <= 128.485 && lat >= 38.365 && lat <= 38.395) return true;
+  // 양양 도심 (양양읍·양양군청)
+  if (lng >= 128.610 && lng <= 128.635 && lat >= 38.065 && lat <= 38.090) return true;
+  return false;
+}
+
+/**
+ * 강원 전역 주요 호수 및 동해 바다 수계 구역 판정 (수면 위 비정상 가상 건물 100% 영구 배제)
+ */
+export function isPointInGangwonWaterBody(lng: number, lat: number, elev?: number): boolean {
+  // [1] 동해안 해안선 밖 동해 바다 해양 구역 (수면 표고 <= 1.0m 및 동해안 외해 경도)
+  if (lng >= 128.61 && lat >= 38.18 && (elev === undefined || elev <= 1.0)) return true; // 고성·속초 외해
+  if (lng >= 128.64 && lat >= 38.02 && lat < 38.18 && (elev === undefined || elev <= 1.0)) return true; // 양양 외해
+  if (lng >= 128.93 && lat >= 37.70 && lat < 38.02 && (elev === undefined || elev <= 1.0)) return true; // 강릉 외해
+  if (lng >= 129.13 && lat >= 37.48 && lat < 37.70 && (elev === undefined || elev <= 1.0)) return true; // 동해 외해
+  if (lng >= 129.21 && lat >= 37.10 && lat < 37.48 && (elev === undefined || elev <= 1.0)) return true; // 삼척 외해
+
+  // [2] 강원 주요 내륙 호수·저수지
+  // 소양호 (Soyang Lake)
+  if (lng >= 127.810 && lng <= 128.050 && lat >= 37.940 && lat <= 38.080) return true;
+  // 의암호 (Uiam Lake in Chuncheon)
+  if (lng >= 127.685 && lng <= 127.718 && lat >= 37.855 && lat <= 37.915) return true;
+  // 춘천호 (Chuncheon Lake)
+  if (lng >= 127.640 && lng <= 127.680 && lat >= 37.930 && lat <= 37.980) return true;
+  // 파로호 (Paroho in Hwacheon/Yanggu)
+  if (lng >= 127.760 && lng <= 127.930 && lat >= 38.105 && lat <= 38.170) return true;
+  // 경포호 (Gyeongpo Lake in Gangneung)
+  if (lng >= 128.892 && lng <= 128.915 && lat >= 37.794 && lat <= 37.808) return true;
+  // 영랑호 (Yeongnang Lake in Sokcho)
+  if (lng >= 128.578 && lng <= 128.595 && lat >= 38.213 && lat <= 38.225) return true;
+  // 청초호 (Cheongcho Lake in Sokcho)
+  if (lng >= 128.580 && lng <= 128.595 && lat >= 38.195 && lat <= 38.206) return true;
+
+  return false;
+}
+
+/**
  * [강원 18개 시·군 산속/임야/하천/도로/군유휴지 유령 건물 원천 차단 필터]
  * 1) 군 유휴지(1군지사 310,000㎡ 등) 내부 기존 구형 건물 100% 원천 배제 (0동 원칙)
  * 2) 하천, 구거, 저수지(jimok: 천, 구, 유, 수, landuse: water, river) 및 도로/철도면 위 비정상 건물 영구 배제
@@ -314,6 +388,18 @@ export function isMountainGhostBuilding(
 
   // [-1] 군 유휴부지 (1군지사 310,000㎡ 등 18개소) 내부 기존 구형 군사건축물 100% 원천 배제 (0동 원칙)
   if (isPointInMilitaryIdleSite(lng, lat)) {
+    return true;
+  }
+
+  // [-0.5] 강원 전역 호수·수계 및 동해 바다 위 비정상 건물 100% 원천 차단
+  let terrainElev: number | undefined;
+  if (map && typeof map.queryTerrainElevation === 'function') {
+    const q = map.queryTerrainElevation([lng, lat]);
+    if (typeof q === 'number' && Number.isFinite(q)) {
+      terrainElev = q;
+    }
+  }
+  if (isPointInGangwonWaterBody(lng, lat, terrainElev)) {
     return true;
   }
 
@@ -360,7 +446,12 @@ export function isMountainGhostBuilding(
   // [0-1] 대한민국 토지대장 표준 산번지 (PNU 11번째 자리 '2') 및 주소 '산' 가건물 100% 영구 배제
   const pnu = String(featProps.pnu || '');
   const address = String(featProps.address || featProps.rd_nm || '');
-  const isMountainLot = (pnu.length >= 11 && pnu[10] === '2') || address.includes(' 산 ') || address.includes(' 산');
+  const isMountainLot =
+    (pnu.length >= 11 && pnu[10] === '2') ||
+    address.includes(' 산 ') ||
+    address.includes(' 산') ||
+    address.startsWith('산 ') ||
+    address.startsWith('산');
   if (isMountainLot && !featProps.is_user_placed && !featProps.isMasterplanFacility) {
     return true; // 산번지 임야 가건물·농막·사당 845동 100% 원천 배제
   }
@@ -393,7 +484,10 @@ export function isMountainGhostBuilding(
     if (!hasOfficialRegistration) return true;
   }
 
-  // [2] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 구역 마스킹 (V-World REA 절대 제약)
+  // [2-B] 강원 18개 시·군 공식 중심 시가지 보호: 도심 봉의산 정상 등 국소 산지를 제외하고 핵심 시가지 실측 건물은 보존
+  const isProtectedUrban = isInsideUrbanSettlementEnvelope(lng, lat);
+
+  // [2-C] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 능선 정밀 마스킹 (V-World REA 제약)
   const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
   if (isGangwonZone) {
     // 1. 치악산 국립공원 핵심 산림 능선 및 서사면 (행구동·봉산동 배후 산지 포함)
@@ -405,14 +499,23 @@ export function isMountainGhostBuilding(
     if (lng >= 127.905 && lng <= 127.922 && lat >= 37.352 && lat <= 37.368) return true;
     // 4. 원주 북부 우산동 상지대 배후 매화산/태봉산 사면
     if (lat >= 37.370 && lng <= 127.935) return true;
-    // 5. 설악산 국립공원 및 인제·속초·양양 산악 능선
-    if (lng >= 128.25 && lng <= 128.60 && lat >= 38.00 && lat <= 38.30) return true;
-    // 6. 오대산 및 평창·대관령·홍천 고산 능선
-    if (lng >= 128.40 && lng <= 128.90 && lat >= 37.55 && lat <= 37.95) return true;
-    // 7. 태백산맥 및 정선·태백·삼척 산악 능선
-    if (lng >= 128.75 && lng <= 129.25 && lat >= 37.00 && lat <= 37.45) return true;
-    // 8. 춘천 구봉산·용화산 배후 산림 능선
-    if (lng >= 127.70 && lng <= 127.88 && lat >= 37.88 && lat <= 38.05) return true;
+
+    // 5. 설악산 국립공원 내륙 고산 능선 (속초 도심 128.57~128.60 제외, 내륙 설악 능선만 한정)
+    if (lng >= 128.25 && lng <= 128.52 && lat >= 38.05 && lat <= 38.28) {
+      if (!isProtectedUrban) return true;
+    }
+    // 6. 오대산 및 평창·대관령 서부 고산 능선 (강릉 도심 128.85~128.92 제외, 대관령 서부만 한정)
+    if (lng >= 128.40 && lng <= 128.78 && lat >= 37.55 && lat <= 37.95) {
+      if (!isProtectedUrban) return true;
+    }
+    // 7. 태백산맥 핵심 고산 능선 (동해/삼척 해안 시가지 제외, 내륙 산맥만 한정)
+    if (lng >= 128.75 && lng <= 129.08 && lat >= 37.00 && lat <= 37.45) {
+      if (!isProtectedUrban) return true;
+    }
+    // 8. 춘천 구봉산·용화산 배후 산림 능선 (춘천 도심 127.70~127.76 제외, 동부 능선만 한정)
+    if (lng >= 127.78 && lng <= 127.88 && lat >= 37.89 && lat <= 38.05) {
+      if (!isProtectedUrban) return true;
+    }
 
     // 9. 원주 1군지사 배후 산림 능선 및 도심 외곽 산림 구역 (실측 공인 건물은 영구 보존)
     if (lng >= 127.9250 && lng <= 127.9350 && lat >= 37.3520 && lat <= 37.3630) {

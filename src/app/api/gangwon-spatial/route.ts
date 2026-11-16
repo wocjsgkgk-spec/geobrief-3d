@@ -21,7 +21,7 @@ import { assertSafeUpstreamUrl } from '@/utils/securityValidator';
 import { transformFeatureToWgs84 } from '@/utils/koreanCoordTransform';
 import { findGangwonRegionByCoords, getGangwonRegionByIdOrName, GangwonRegionPreset } from '@/constants/gangwon18Regions';
 import { fetchLocalVworldBuildings } from '@/utils/vworldLocalLoader';
-import { isPointInMilitaryIdleSite } from '@/utils/master3DRendererManager';
+import { isPointInMilitaryIdleSite, isMountainGhostBuilding } from '@/utils/master3DRendererManager';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -500,10 +500,15 @@ export async function GET(req: NextRequest) {
     const coords = b.geometry.type === 'Polygon' ? b.geometry.coordinates[0] : b.geometry.coordinates[0]?.[0];
     if (!coords || coords.length < 3) continue;
 
-    let areaSum = 0;
-    const n = coords.length;
     const cLng = coords[0][0];
     const cLat = coords[0][1];
+
+    // [강원 18개 시·군 전역 유령건물·군유휴지·수계 배제]
+    if (isPointInMilitaryIdleSite(cLng, cLat)) continue;
+    if (isMountainGhostBuilding(cLng, cLat, p)) continue;
+
+    let areaSum = 0;
+    const n = coords.length;
     const cosLat = Math.cos((cLat * Math.PI) / 180);
     const mPerLng = 111320 * cosLat;
     const mPerLat = 110574;
@@ -560,10 +565,8 @@ export async function GET(req: NextRequest) {
       const cLng = coords[0][0];
       const cLat = coords[0][1];
       if (isPointInMilitaryIdleSite(cLng, cLat)) continue;
-      // 봉화산/치악산/백운산 등 산악 배제
-      if (cLng >= 127.905 && cLng <= 127.922 && cLat >= 37.352 && cLat <= 37.368) continue;
-      if (cLng >= 127.973 && cLat >= 37.335) continue;
-      if (cLat <= 37.315 && (cLng <= 127.935 || cLng >= 127.955)) continue;
+      // 강원 18개 시·군 전역 산악·수계·유령건물 전수 배제
+      if (isMountainGhostBuilding(cLng, cLat, b.properties || {})) continue;
 
       let areaSum = 0;
       const n = coords.length;

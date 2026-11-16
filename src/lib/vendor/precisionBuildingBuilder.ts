@@ -523,53 +523,141 @@ export class PrecisionBuildingBuilder {
         }
       }
 
-      // 5단 옥탑 엘리베이터 코어 (중거리 필수 실루엣)
-      if (height >= 14.0 && style.roofType !== 'gabled' && areaSqm >= 140) {
-        const coreSize = 4.2;
-        const coreH = 3.0;
-        const coreTop = topElev + coreH;
-        const ox = cx + 1.2;
-        const oz = cz + 1.2;
-        const half = coreSize * 0.5;
+      // 5단 옥상 구조물 (LOD 2 중거리 V-World REA 표준 실루엣: 옥탑방 + 물탱크 + 태양광)
+      if (style.roofType !== 'gabled') {
+        const absSeed = Math.abs(seed);
 
-        const c0: [number, number] = [ox - half, oz - half];
-        const c1: [number, number] = [ox + half, oz - half];
-        const c2: [number, number] = [ox + half, oz + half];
-        const c3: [number, number] = [ox - half, oz + half];
-        const corePts = [c0, c1, c2, c3];
+        // A. 옥탑 엘리베이터 코어 (중거리 필수 실루엣)
+        if (height >= 12.0 && areaSqm >= 110) {
+          const coreSize = 4.2;
+          const coreH = 3.0;
+          const coreTop = topElev + coreH;
+          const ox = cx + 1.2;
+          const oz = cz + 1.2;
+          const half = coreSize * 0.5;
 
-        for (let k = 0; k < 4; k++) {
-          const nextK = (k + 1) % 4;
-          const cdx = corePts[nextK][0] - corePts[k][0];
-          const cdz = corePts[nextK][1] - corePts[k][1];
-          const clen = Math.hypot(cdx, cdz) || 1;
-          const cnx = -cdz / clen;
-          const cnz = cdx / clen;
+          const c0: [number, number] = [ox - half, oz - half];
+          const c1: [number, number] = [ox + half, oz - half];
+          const c2: [number, number] = [ox + half, oz + half];
+          const c3: [number, number] = [ox - half, oz + half];
+          const corePts = [c0, c1, c2, c3];
+
+          for (let k = 0; k < 4; k++) {
+            const nextK = (k + 1) % 4;
+            const cdx = corePts[nextK][0] - corePts[k][0];
+            const cdz = corePts[nextK][1] - corePts[k][1];
+            const clen = Math.hypot(cdx, cdz) || 1;
+            const cnx = -cdz / clen;
+            const cnz = cdx / clen;
+            addRooftopQuad(
+              [corePts[k][0], topElev, corePts[k][1]],
+              [corePts[nextK][0], topElev, corePts[nextK][1]],
+              [corePts[nextK][0], coreTop, corePts[nextK][1]],
+              [corePts[k][0], coreTop, corePts[k][1]],
+              [cnx, 0, cnz],
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+              style.penthouseColorRgb
+            );
+          }
           addRooftopQuad(
-            [corePts[k][0], topElev, corePts[k][1]],
-            [corePts[nextK][0], topElev, corePts[nextK][1]],
-            [corePts[nextK][0], coreTop, corePts[nextK][1]],
-            [corePts[k][0], coreTop, corePts[k][1]],
-            [cnx, 0, cnz],
+            [c0[0], coreTop, c0[1]],
+            [c1[0], coreTop, c1[1]],
+            [c2[0], coreTop, c2[1]],
+            [c3[0], coreTop, c3[1]],
+            [0, 1, 0],
             [0, 0],
             [1, 0],
             [1, 1],
             [0, 1],
-            style.penthouseColorRgb
+            [style.penthouseColorRgb[0] * 1.1, style.penthouseColorRgb[1] * 1.1, style.penthouseColorRgb[2] * 1.1]
           );
         }
-        addRooftopQuad(
-          [c0[0], coreTop, c0[1]],
-          [c1[0], coreTop, c1[1]],
-          [c2[0], coreTop, c2[1]],
-          [c3[0], coreTop, c3[1]],
-          [0, 1, 0],
-          [0, 0],
-          [1, 0],
-          [1, 1],
-          [0, 1],
-          [style.penthouseColorRgb[0] * 1.1, style.penthouseColorRgb[1] * 1.1, style.penthouseColorRgb[2] * 1.1]
-        );
+
+        // B. 중거리 FRP 물탱크 (저층 주택 및 중소형 상가 필수 실루엣)
+        const hasWaterTank =
+          (isLowRise || (isCommercial && height <= 20.0)) &&
+          areaSqm >= 70 &&
+          areaSqm < 380 &&
+          absSeed % 3 < 2;
+
+        if (hasWaterTank) {
+          const wx = cx - 1.5;
+          const wz = cz - 1.5;
+          const tankRadius = 0.85;
+          const tankH = 1.5;
+          const tankTop = topElev + tankH;
+          const tankColor = absSeed % 2 === 0 ? ROOF_COLORS.waterTankBlue : ROOF_COLORS.waterTankSilver;
+
+          // 4각 원통 실루엣
+          const wt0: [number, number] = [wx - tankRadius, wz - tankRadius];
+          const wt1: [number, number] = [wx + tankRadius, wz - tankRadius];
+          const wt2: [number, number] = [wx + tankRadius, wz + tankRadius];
+          const wt3: [number, number] = [wx - tankRadius, wz + tankRadius];
+          const wtPts = [wt0, wt1, wt2, wt3];
+
+          for (let k = 0; k < 4; k++) {
+            const nextK = (k + 1) % 4;
+            addRooftopQuad(
+              [wtPts[k][0], topElev, wtPts[k][1]],
+              [wtPts[nextK][0], topElev, wtPts[nextK][1]],
+              [wtPts[nextK][0], tankTop, wtPts[nextK][1]],
+              [wtPts[k][0], tankTop, wtPts[k][1]],
+              [0, 0, 1],
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 1],
+              tankColor
+            );
+          }
+          addRooftopQuad(
+            [wt0[0], tankTop, wt0[1]],
+            [wt1[0], tankTop, wt1[1]],
+            [wt2[0], tankTop, wt2[1]],
+            [wt3[0], tankTop, wt3[1]],
+            [0, 1, 0],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            tankColor
+          );
+        }
+
+        // C. 중거리 태양광 발전 패널 어레이 (아파트/공공/상가 남향 경사)
+        const hasSolar =
+          ((isApartment && height >= 18.0 && areaSqm >= 160) ||
+            (isPublic && areaSqm >= 180) ||
+            (isCommercial && areaSqm >= 250)) &&
+          absSeed % 5 < 3;
+
+        if (hasSolar) {
+          const sx = cx - 2.0;
+          const sz = cz + 1.2;
+          const solW = 5.0;
+          const solL = 3.0;
+          const sHalfW = solW * 0.5;
+          const sHalfL = solL * 0.5;
+
+          const solTop = topElev + 1.7;
+          const solBot = topElev + 0.5;
+
+          addRooftopQuad(
+            [sx - sHalfW, solBot, sz + sHalfL],
+            [sx + sHalfW, solBot, sz + sHalfL],
+            [sx + sHalfW, solTop, sz - sHalfL],
+            [sx - sHalfW, solTop, sz - sHalfL],
+            [0, 0.91, 0.42],
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            ROOF_COLORS.solarCell
+          );
+        }
       }
       return;
     }
