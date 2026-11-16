@@ -35,8 +35,6 @@ export const WONJU_CORE_POIS: VWorldPoiItem[] = [
   { id: 'dong-gaeun', name: '개운동', category: 'dong', coordinates: [127.9570, 37.3380], elevationOffset: 40 },
   { id: 'dong-musil', name: '무실동', category: 'dong', coordinates: [127.9245, 37.3315], elevationOffset: 45 },
   { id: 'dong-bangok', name: '반곡동', category: 'dong', coordinates: [127.9800, 37.3250], elevationOffset: 45 },
-  { id: 'sign-bukwon-ro', name: '국도5호선 (북원로)', category: 'dong', coordinates: [127.9358, 37.3605], elevationOffset: 30 },
-  { id: 'sign-wonju-ic', name: '영동고속도로 원주IC', category: 'public', coordinates: [127.9620, 37.3780], elevationOffset: 35 },
 
   // 2. 단구동/단관공원 및 원주 주요 아파트 단지 (V-World 사진 속 랜드마크 실측 정합)
   { id: 'apt-hyunjin', name: '현진에버빌', category: 'apt', coordinates: [127.9555, 37.3275], elevationOffset: 65 },

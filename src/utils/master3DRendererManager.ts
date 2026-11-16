@@ -128,8 +128,8 @@ export function syncMaster3DRenderer(
   const bldgVisible = Boolean(isBuildingsVisible);
 
   if (renderMode3D === 'facade') {
-    // [모드 1: 브이월드 3D 실사 디지털 트윈] GPU 하드웨어 가속 5단 기하학 + Three.js 실사 결합
-    VworldGpuMasterEngine.setVisible(map, bldgVisible);
+    // [모드 1: 브이월드 3D 실사 디지털 트윈] Three.js 실사 엔진 단독 가동 (MapLibre fill-extrusion 완전 오프로 GPU 부하 및 Z-Fighting 원천 소멸)
+    VworldGpuMasterEngine.setVisible(map, false);
     if (realisticKoreanCityLayer) {
       realisticKoreanCityLayer.setVisible(bldgVisible);
     }
@@ -141,7 +141,7 @@ export function syncMaster3DRenderer(
     }
   } else {
     // [모드 3: tiles3d 고정밀 3D 타일셋 스트리밍]
-    VworldGpuMasterEngine.setVisible(map, bldgVisible);
+    VworldGpuMasterEngine.setVisible(map, false);
     if (realisticKoreanCityLayer) {
       realisticKoreanCityLayer.setVisible(false);
     }
@@ -368,12 +368,112 @@ export function isPointInGangwonWaterBody(lng: number, lat: number, elev?: numbe
 }
 
 /**
- * [강원 18개 시·군 산속/임야/하천/도로/군유휴지 유령 건물 원천 차단 필터]
+ * [강원 전역 21개 주요 종합운동장/공설운동장 트랙 및 잔디 필드 배제 구역]
+ * V-World 3D REA 역공학 표준: 축구장 잔디/육상 트랙 내부 비정상 가상 더미 건축물 100% 영구 배제
+ */
+export const GANGWON_STADIUM_PITCH_EXCLUSION_ZONES: Array<{
+  name: string;
+  minLng: number;
+  maxLng: number;
+  minLat: number;
+  maxLat: number;
+}> = [
+  // 1. 원주종합운동장 주경기장 트랙 및 축구장 잔디 필드 (명륜동 193)
+  { name: '원주종합운동장 주경기장 필드', minLng: 127.9426, maxLng: 127.9453, minLat: 37.3355, maxLat: 37.3372 },
+  // 2. 춘천 송암스포츠타운 주경기장 트랙 및 필드
+  { name: '춘천 송암 주경기장 필드', minLng: 127.6900, maxLng: 127.6950, minLat: 37.8535, maxLat: 37.8580 },
+  // 3. 춘천 송암스포츠타운 보조경기장
+  { name: '춘천 송암 보조경기장 필드', minLng: 127.6950, maxLng: 127.6990, minLat: 37.8520, maxLat: 37.8560 },
+  // 4. 춘천 공지천 축구장
+  { name: '춘천 공지천 축구장', minLng: 127.7120, maxLng: 127.7185, minLat: 37.8680, maxLat: 37.8735 },
+  // 5. 강릉종합운동장 주경기장 트랙 및 잔디 필드
+  { name: '강릉종합운동장 주경기장 필드', minLng: 128.8960, maxLng: 128.9030, minLat: 37.7720, maxLat: 37.7770 },
+  // 6. 강릉 강남축구공원
+  { name: '강릉 강남축구공원', minLng: 128.9080, maxLng: 128.9165, minLat: 37.7375, maxLat: 37.7445 },
+  // 7. 속초종합운동장 트랙 및 필드
+  { name: '속초종합운동장 필드', minLng: 128.5655, maxLng: 128.5720, minLat: 38.1975, maxLat: 38.2030 },
+  // 8. 동해 웰빙레포츠타운 종합운동장
+  { name: '동해 웰빙레포츠타운 종합운동장 필드', minLng: 129.1075, maxLng: 129.1150, minLat: 37.5195, maxLat: 37.5250 },
+  // 9. 삼척종합운동장 트랙 및 필드
+  { name: '삼척종합운동장 필드', minLng: 129.1615, maxLng: 129.1680, minLat: 37.4395, maxLat: 37.4450 },
+  // 10. 태백종합운동장 트랙 및 필드
+  { name: '태백종합운동장 필드', minLng: 128.9895, maxLng: 128.9960, minLat: 37.1715, maxLat: 37.1770 },
+  // 11. 홍천종합운동장 트랙 및 필드
+  { name: '홍천종합운동장 필드', minLng: 127.8975, maxLng: 127.9040, minLat: 37.6835, maxLat: 37.6890 },
+  // 12. 횡성종합운동장 트랙 및 필드
+  { name: '횡성종합운동장 필드', minLng: 127.9875, maxLng: 127.9940, minLat: 37.4935, maxLat: 37.4990 },
+  // 13. 철원공설운동장 트랙 및 필드
+  { name: '철원공설운동장 필드', minLng: 127.3045, maxLng: 127.3115, minLat: 38.1415, maxLat: 38.1470 },
+  // 14. 화천공설운동장 트랙 및 필드
+  { name: '화천공설운동장 필드', minLng: 127.7015, maxLng: 127.7080, minLat: 38.1015, maxLat: 38.1070 },
+  // 15. 양구종합운동장 트랙 및 필드
+  { name: '양구종합운동장 필드', minLng: 127.9875, maxLng: 127.9940, minLat: 38.1075, maxLat: 38.1130 },
+  // 16. 인제공설운동장 트랙 및 필드
+  { name: '인제공설운동장 필드', minLng: 128.1715, maxLng: 128.1780, minLat: 38.0615, maxLat: 38.0670 },
+  // 17. 고성종합운동장 트랙 및 필드
+  { name: '고성종합운동장 필드', minLng: 128.4675, maxLng: 128.4740, minLat: 38.3775, maxLat: 38.3830 },
+  // 18. 양양종합운동장 트랙 및 필드
+  { name: '양양종합운동장 필드', minLng: 128.6215, maxLng: 128.6280, minLat: 38.0775, maxLat: 38.0830 },
+  // 19. 영월공설운동장 트랙 및 필드
+  { name: '영월공설운동장 필드', minLng: 128.4715, maxLng: 128.4785, minLat: 37.1815, maxLat: 37.1875 },
+  // 20. 평창종합운동장 트랙 및 필드
+  { name: '평창종합운동장 필드', minLng: 128.3875, maxLng: 128.3945, minLat: 37.3675, maxLat: 37.3735 },
+  // 21. 정선종합운동장 트랙 및 필드
+  { name: '정선종합운동장 필드', minLng: 128.6645, maxLng: 128.6715, minLat: 37.3775, maxLat: 37.3835 },
+];
+
+/**
+ * 경기장 트랙 및 잔디 필드 내부 판정 (V-World 3D REA 역공학 표준)
+ */
+export function isPointInStadiumPitch(lng: number, lat: number, featProps: Record<string, any> = {}): boolean {
+  // 1. 강원 전역 경기장 트랙/필드 공간 좌표 검사
+  for (let i = 0; i < GANGWON_STADIUM_PITCH_EXCLUSION_ZONES.length; i++) {
+    const z = GANGWON_STADIUM_PITCH_EXCLUSION_ZONES[i];
+    if (lng >= z.minLng && lng <= z.maxLng && lat >= z.minLat && lat <= z.maxLat) {
+      return true;
+    }
+  }
+
+  // 2. 건축물대장상 종합운동장/경기장 더미 박스 속성 검사 (면적 < 2,500㎡ 지적 대표점 더미 박스 영구 제거)
+  const name = String(featProps.name || featProps.buld_nm || featProps.buildingName || featProps.bld_nm || '');
+  if (
+    name.includes('종합운동장') ||
+    name.includes('주경기장') ||
+    name.includes('보조경기장') ||
+    name.includes('공설운동장') ||
+    name.includes('축구장') ||
+    name.includes('야구장') ||
+    name.includes('육상경기장')
+  ) {
+    const area = Number(featProps.areaSqm || featProps.area || 0);
+    if (area > 0 && area < 2500) {
+      return true;
+    }
+  }
+
+  // 3. 지목 체육용지(체) 및 레저 피치 속성 검사
+  const jimok = String(featProps.jimok || featProps.jimok_nm || '');
+  const leisure = String(featProps.leisure || '').toLowerCase();
+  if (jimok === '체' || jimok === '체육용지' || leisure === 'pitch' || leisure === 'track' || leisure === 'stadium') {
+    const levels = Number(featProps.levels || featProps.grnd_flr || featProps.gro_flo_co || 1);
+    const height = Number(featProps.height || featProps.bd_hgt || featProps.hei || 8);
+    // 2층 이하 또는 12m 이하의 체육용지 내 소형 박스는 필드 가상 더미
+    if (levels <= 2 && height <= 12) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * [강원 18개 시·군 산속/임야/하천/도로/군유휴지/경기장필드 유령 건물 원천 차단 필터]
  * 1) 군 유휴지(1군지사 310,000㎡ 등) 내부 기존 구형 건물 100% 원천 배제 (0동 원칙)
- * 2) 하천, 구거, 저수지(jimok: 천, 구, 유, 수, landuse: water, river) 및 도로/철도면 위 비정상 건물 영구 배제
- * 3) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
- * 4) 치악산, 설악산, 오대산 등 강원 산악 능선 좌표 마스킹
- * 5) DEM 표고 분석 및 경사도 16° 필터링 (그리드 캐시 기반 무스톨 초고속 판별)
+ * 2) 경기장 및 공설운동장 트랙/잔디 필드 내부 지적 가상 더미 박스 100% 영구 배제
+ * 3) 하천, 구거, 저수지(jimok: 천, 구, 유, 수, landuse: water, river) 및 도로/철도면 위 비정상 건물 영구 배제
+ * 4) 임야/산림 지목 (jimok: '임', '임야', landuse: 'forest', natural: 'wood')
+ * 5) 치악산, 설악산, 오대산 등 강원 산악 능선 좌표 마스킹
+ * 6) DEM 표고 분석 및 경사도 16° 필터링 (그리드 캐시 기반 무스톨 초고속 판별)
  */
 export function isMountainGhostBuilding(
   lng: number,
@@ -388,6 +488,11 @@ export function isMountainGhostBuilding(
 
   // [-1] 군 유휴부지 (1군지사 310,000㎡ 등 18개소) 내부 기존 구형 군사건축물 100% 원천 배제 (0동 원칙)
   if (isPointInMilitaryIdleSite(lng, lat)) {
+    return true;
+  }
+
+  // [-0.8] 경기장 트랙 및 잔디 필드 내부 가상 더미 건물 100% 원천 배제 (원주종합운동장 등 0동 원칙)
+  if (isPointInStadiumPitch(lng, lat, featProps)) {
     return true;
   }
 
@@ -653,6 +758,21 @@ export function isPermittedBuildingPolygon(
     leisureVal === 'stadium' ||
     leisureVal === 'sports_centre' ||
     leisureVal === 'golf_course'
+  ) {
+    return false;
+  }
+
+  // 경기장 및 공설운동장 트랙/필드 지적 더미 박스 차단 (V-World 3D REA 역공학 표준: 면적 < 2,500㎡ 지적 대표점 더미 박스 영구 제거)
+  const bldNameCheck = String(featProps.name || featProps.buld_nm || featProps.buildingName || featProps.bld_nm || '');
+  if (
+    (bldNameCheck.includes('종합운동장') ||
+      bldNameCheck.includes('주경기장') ||
+      bldNameCheck.includes('보조경기장') ||
+      bldNameCheck.includes('공설운동장') ||
+      bldNameCheck.includes('축구장') ||
+      bldNameCheck.includes('야구장') ||
+      bldNameCheck.includes('육상경기장')) &&
+    areaSqm < 2500
   ) {
     return false;
   }

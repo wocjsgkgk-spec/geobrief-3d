@@ -317,7 +317,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.rooftopMesh) {
       this.rooftopMesh.visible = visible;
     }
-    this.roadSignGroup.visible = visible;
+    this.roadSignGroup.visible = false;
     this.bridgeGroup.visible = false;
     this.tunnelGroup.visible = false;
   }
@@ -605,9 +605,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // [1단계: 화면 중심 검은색 직사각형 7~8개 방지] 3D 가짜 교량/터널 박스 씬 추가 원천 차단
       this.bridgeGroup.visible = false;
       this.tunnelGroup.visible = false;
+      this.roadSignGroup.visible = false;
 
-      // [국토부 표준 3D 문형식 도로 이정표 씬 추가 (setOrigin 완료 후 빌드)]
-      this.scene.add(this.roadSignGroup);
+      // [사용자 지침: 확실하지 않은 3D 도로 표지판 전면 삭제] 문형식 이정표 씬 추가 원천 차단
+      // (기존 this.scene.add(this.roadSignGroup) 영구 제거)
 
       // 3. WebGLRenderer 바인딩 및 컨텍스트 유실 복구 가드
       const canvas = map.getCanvas();
@@ -2132,12 +2133,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   /**
-   * 국토교통부 및 한국도로공사 표준 문형식 3D 도로 안내 이정표 렌더링
+   * [사용자 지침: 확실하지 않은 도로 이정표 전면 영구 삭제]
+   * 도로 횡단 선형 및 지형 고도와 맞지 않는 문형식 3D 도로 안내 표지판 완전 배제
    */
   public buildRoadSignGantries(): void {
-    if (!this.map || !this.scene) return;
-
-    // 기존 표지판 메쉬 정리
+    // 기존 표지판 메쉬 완전 해제 및 삭제
     while (this.roadSignGroup.children.length > 0) {
       const child = this.roadSignGroup.children[0];
       this.roadSignGroup.remove(child);
@@ -2154,38 +2154,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       });
     }
 
-    if (!this.roadSignGroup.parent) {
-      this.scene.add(this.roadSignGroup);
+    if (this.roadSignGroup.parent) {
+      this.roadSignGroup.parent.remove(this.roadSignGroup);
     }
-    this.roadSignGroup.visible = this.isVisible;
-
-    for (let i = 0; i < GANGWON_CORE_ROAD_SIGNS.length; i++) {
-      const spec = GANGWON_CORE_ROAD_SIGNS[i];
-      const [lng, lat] = spec.coords;
-      const cCoord = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
-      const mx = (cCoord.x - this.originMercator.x) / this.originMeterScale;
-      const mz = (cCoord.y - this.originMercator.y) / this.originMeterScale;
-
-      let elev = 0;
-      if (typeof this.map.queryTerrainElevation === 'function') {
-        const q = this.map.queryTerrainElevation([lng, lat]);
-        if (typeof q === 'number' && Number.isFinite(q) && q > 0) {
-          elev = q;
-        }
-      }
-      if (elev <= 0) {
-        elev = getGangwonBaseElevation(lng, lat);
-      }
-
-      const gMesh = buildRoadSignGantryMesh(spec, [mx, mz], elev);
-      this.roadSignGroup.add(gMesh);
-    }
-    this.roadSignGroup.matrixAutoUpdate = false;
-    this.roadSignGroup.updateMatrix();
-
-    if (this.map) {
-      this.map.triggerRepaint();
-    }
+    this.roadSignGroup.visible = false;
   }
 
   public render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {

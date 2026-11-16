@@ -1091,17 +1091,23 @@ export const MapViewer: React.FC = () => {
             ...bucketFar.slice(0, 800),
           ].slice(0, MAX_TOTAL_BUILDINGS);
 
-          // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
-          const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
-          if (vworldSrc && typeof vworldSrc.setData === 'function') {
-            vworldSrc.setData({
-              type: 'FeatureCollection',
-              features: viewportFeatures.slice(0, 3000),
-            });
+          // [60fps 단일 렌더러 분리]: 모드 1(facade)과 모드 2(native) 데이터 파이프라인 단일화
+          const curMode = useMapStore.getState().renderMode3D || 'facade';
+
+          // [A] 모드 2 (MapLibre 네이티브 GPU Extrusion)일 때만 GeoJSON 소스에 실측 피처 주입
+          // (facade 모드 시 무거운 웹 워커 테셀레이션 및 중복 GPU 정점 버퍼 업로드 100% 원천 차단)
+          if (curMode === 'native') {
+            const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
+            if (vworldSrc && typeof vworldSrc.setData === 'function') {
+              vworldSrc.setData({
+                type: 'FeatureCollection',
+                features: viewportFeatures.slice(0, 3000),
+              });
+            }
           }
 
           // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입 (최대 6,500동 대규모 도심 표출)
-          if (realisticKoreanCityLayerRef.current) {
+          if (curMode === 'facade' && realisticKoreanCityLayerRef.current) {
             realisticKoreanCityLayerRef.current.updateBuildings(viewportFeatures, [center.lng, center.lat]);
           }
 
@@ -2506,15 +2512,16 @@ export const MapViewer: React.FC = () => {
         updateCompassDOM(b, p, z);
         updateScaleBarDOM(c.lat, z);
 
-        useMapStore.setState({
-          viewport: {
-            longitude: c.lng,
-            latitude: c.lat,
-            zoom: z,
-            pitch: p,
-            bearing: b,
-          },
-        });
+        // [60fps 무결점 버벅거림 제로화]: Zustand 구독자 전체 리렌더링 폭풍 방지를 위해 상태 객체 직접 갱신
+        // (get().viewport를 호출하는 북마크/내보내기/시설물 배치는 100% 최신 좌표를 유지하면서 MapViewer 통째 리렌더링 원천 차단)
+        const curStore = useMapStore.getState();
+        if (curStore.viewport) {
+          curStore.viewport.longitude = c.lng;
+          curStore.viewport.latitude = c.lat;
+          curStore.viewport.zoom = z;
+          curStore.viewport.pitch = p;
+          curStore.viewport.bearing = b;
+        }
 
         updateRealtimeMetrics();
       }, 500); // [조치 1: 500ms 디바운스 엄격 준수]
