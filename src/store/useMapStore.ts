@@ -432,6 +432,7 @@ interface MapStoreState {
   measurePoints: [number, number][];
   measureResult: Measure3DResult | null;
   toggleMeasureMode: () => void;
+  setMeasureMode: (mode: boolean | Measure3DSubtype | null) => void;
   setMeasureSubtype: (subtype: Measure3DSubtype) => void;
   setMeasurePoints: (points: [number, number][]) => void;
   addMeasurePoint: (point: [number, number]) => void;
@@ -1306,6 +1307,38 @@ export const useMapStore = create<MapStoreState>()(
           measurePoints: [],
           measureResult: null,
         })),
+      setMeasureMode: (mode) => {
+        if (typeof mode === 'boolean') {
+          set({
+            isMeasureMode: mode,
+            measurePoints: [],
+            measureResult: null,
+            ...(mode
+              ? {
+                  isViewshedMode: false,
+                  isDrawingMode: false,
+                  stampMode: false,
+                  isPinMode: false,
+                  isArrowMode: false,
+                }
+              : {}),
+          });
+        } else if (typeof mode === 'string') {
+          set({
+            isMeasureMode: true,
+            measureSubtype: mode as Measure3DSubtype,
+            measurePoints: [],
+            measureResult: null,
+            isViewshedMode: false,
+            isDrawingMode: false,
+            stampMode: false,
+            isPinMode: false,
+            isArrowMode: false,
+          });
+        } else if (mode === null) {
+          set({ isMeasureMode: false, measurePoints: [], measureResult: null });
+        }
+      },
       setMeasureSubtype: (measureSubtype) =>
         set({ measureSubtype, measurePoints: [], measureResult: null }),
       setMeasurePoints: (measurePoints) => set({ measurePoints }),

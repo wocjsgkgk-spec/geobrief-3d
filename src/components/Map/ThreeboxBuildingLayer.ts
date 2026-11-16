@@ -352,6 +352,18 @@ export class ThreeboxBuildingLayer implements maplibregl.CustomLayerInterface {
       return;
     }
 
+    // [60fps 최적화]: 배치된 모델이나 활성 시설물, 지붕/외벽이 없을 때는 불필요한 WebGL 렌더링 사이클 즉시 스킵
+    const hasRenderableContent =
+      (this.buildingGroup && this.buildingGroup.children.length > 0) ||
+      (this.facilitiesGroup && this.facilitiesGroup.children.length > 0) ||
+      (this.roofsGroup && this.roofsGroup.visible && this.roofsGroup.children.length > 0) ||
+      (this.facadesGroup && this.facadesGroup.visible && this.facadesGroup.children.length > 0) ||
+      Boolean(this.transformControls && (this.transformControls as any).object);
+
+    if (!hasRenderableContent) {
+      return;
+    }
+
     try {
       const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;

@@ -978,7 +978,8 @@ export const MapViewer: React.FC = () => {
         const dLat = (center.lat - lastSyncedStateRef.current.lat) * 111320;
         const distM = Math.hypot(dLng, dLat);
         const zoomDiff = Math.abs(zoom - lastSyncedStateRef.current.zoom);
-        if (distM < 350 && zoomDiff < 0.7) {
+        const curCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || 0;
+        if (curCount > 0 && distM < 350 && zoomDiff < 0.7) {
           return;
         }
       }
@@ -1077,12 +1078,12 @@ export const MapViewer: React.FC = () => {
             }
           }
 
-          // 최대 6,500동 대규모 도심 합성 (근경 전수 + 중경 3,000동 + 원경 1,500동)
-          const MAX_TOTAL_BUILDINGS = 6500;
+          // 최대 12,000동 대규모 도심 합성 (근경 전수 + 중경 6,000동 + 원경 4,000동)
+          const MAX_TOTAL_BUILDINGS = 12000;
           const viewportFeatures = [
             ...bucketNear,
-            ...bucketMid.slice(0, 3000),
-            ...bucketFar.slice(0, 1500),
+            ...bucketMid.slice(0, 6000),
+            ...bucketFar.slice(0, 4000),
           ].slice(0, MAX_TOTAL_BUILDINGS);
 
           // [A] GeoJSON 소스 vworld-buildings-source 에 실측 피처 주입
@@ -1181,10 +1182,8 @@ export const MapViewer: React.FC = () => {
           } catch {}
         }
 
-        // 전체 활성 레이어 수를 적정 한도(20개 이하)로 엄격 제한 (GPU 과부하 방지)
-        if (activeCount > 20) {
-          activeCount = enforceMaxActiveLayers(currentMap, 20);
-        }
+        // 레이어 카운트 집계 (강제 숨김 대신 메트릭 카운트만 유지하여 레이아웃 쓰레싱 방지)
+        // if (activeCount > 20) activeCount = enforceMaxActiveLayers(currentMap, 20);
 
         const vworldSrc = currentMap.getSource('vworld-buildings-source') as any;
         const srcFeatLen = (vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features)?.length;
@@ -3263,6 +3262,11 @@ export const MapViewer: React.FC = () => {
 
         // [국토부 브이월드 실측 3D 건물 데이터 즉시 동기화]
         syncVworldBuildingData(map);
+
+        // [초기 뷰포트 정착 후 무인 자동 동기화 2중 안전망]
+        map.once('idle', () => {
+          syncVworldBuildingData(map);
+        });
       } catch (deckErr) {
         console.warn('[MapViewer] Universal3DTilesManager initialization warning:', deckErr);
       }

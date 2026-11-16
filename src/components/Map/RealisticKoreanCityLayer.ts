@@ -236,6 +236,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private scaleVector = new THREE.Vector3();
   private rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 
+  // [60fps Zero-GC 마스터 버퍼 풀]: commitAccumulatedGeometry 호출 시 매번 새 Float32Array를 생성하지 않고 재사용
+  private masterPosBuf: Float32Array = new Float32Array(900000);
+  private masterNormBuf: Float32Array = new Float32Array(900000);
+  private masterColorBuf: Float32Array = new Float32Array(900000);
+  private masterUvBuf: Float32Array = new Float32Array(600000);
+  private masterHeightBuf: Float32Array = new Float32Array(300000);
+  private masterBufferCapacity: number = 300000;
+
   constructor(options: RealisticKoreanCityLayerOptions = {}) {
     this.options = options;
     this.buildingMaterials = VWorldReaRenderer.getAllMaterials();
@@ -1025,10 +1033,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const relH1 = Math.max(0, p1[1] - baseElev);
     const relH2 = Math.max(0, p2[1] - baseElev);
 
-    // [3단계: 건물 하단 0m ~ 3.2m 접지 앰비언트 오클루전 그라데이션 0.65 -> 1.0 적용으로 지면 밀착감 강화]
-    const ao0 = relH0 < 3.2 ? 0.65 + 0.35 * (relH0 / 3.2) : 1.0;
-    const ao1 = relH1 < 3.2 ? 0.65 + 0.35 * (relH1 / 3.2) : 1.0;
-    const ao2 = relH2 < 3.2 ? 0.65 + 0.35 * (relH2 / 3.2) : 1.0;
+    // [3단계: 건물 하단 0m ~ 3.2m 접지 앰비언트 오클루전 그라데이션 0.55 -> 1.0 적용으로 지면 밀착감 강화]
+    const ao0 = relH0 < 3.2 ? 0.55 + 0.45 * (relH0 / 3.2) : 1.0;
+    const ao1 = relH1 < 3.2 ? 0.55 + 0.45 * (relH1 / 3.2) : 1.0;
+    const ao2 = relH2 < 3.2 ? 0.55 + 0.45 * (relH2 / 3.2) : 1.0;
 
     pos[p] = p0[0]; pos[p + 1] = p0[1]; pos[p + 2] = p0[2];
     nrm[p] = norm[0]; nrm[p + 1] = norm[1]; nrm[p + 2] = norm[2];
@@ -1751,7 +1759,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = this.isMoving ? 3.0 : 12.0; // 카메라 정지 시 12ms 버짓으로 고속 빌드, 이동 시 3ms
+      const FRAME_BUDGET_MS = this.isMoving ? 2.5 : 16.0; // 카메라 정지 시 16ms 버짓으로 고속 빌드, 이동 시 2.5ms
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1774,7 +1782,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         let sliceCount = 0;
 
         while (featureIdx < features.length) {
-          if (sliceCount > 0 && sliceCount % 20 === 0) {
+          if (sliceCount > 0 && sliceCount % 50 === 0) {
             const elapsed = performance.now() - sliceStartTime;
             if (elapsed >= FRAME_BUDGET_MS) {
               break;
@@ -1797,8 +1805,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [화면 즉시 표시 및 주기적 증분 커밋]: 초기 30동 즉시 커밋 후 500동 단위로 연속 커밋
-          const commitThreshold = !this.hasInitialBuilt ? 30 : 500;
+          // [화면 즉시 표시 및 주기적 증분 커밋]: 초기 30동 즉시 커밋 후 150동 단위로 연속 커밋
+          const commitThreshold = !this.hasInitialBuilt ? 30 : 150;
           if (
             this.hasAnySlotVertices() &&
             (newlyAddedCount >= commitThreshold || (!this.masterMesh && newlyAddedCount > 0 && performance.now() - sliceStartTime > 15))
@@ -1858,19 +1866,36 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     if (totalVertices > 0 && this.buildingMaterials.length > 0) {
-      const mergedPos = new Float32Array(totalVertices * 3);
-      const mergedNorm = new Float32Array(totalVertices * 3);
-      const mergedColor = new Float32Array(totalVertices * 3);
-      const mergedUv = new Float32Array(totalVertices * 2);
-      const mergedHeight = new Float32Array(totalVertices);
-
-      const newGeometry = new THREE.BufferGeometry();
-      newGeometry.clearGroups();
+      // 1. [Zero-GC]: 마스터 버퍼 용량 부족 시에만 동적 확장하고 기존 버퍼를 재사용
+      let capacityExpanded = false;
+      if (totalVertices > this.masterBufferCapacity) {
+        const newCap = Math.max(this.masterBufferCapacity * 2, totalVertices + 60000);
+        this.masterPosBuf = new Float32Array(newCap * 3);
+        this.masterNormBuf = new Float32Array(newCap * 3);
+        this.masterColorBuf = new Float32Array(newCap * 3);
+        this.masterUvBuf = new Float32Array(newCap * 2);
+        this.masterHeightBuf = new Float32Array(newCap);
+        this.masterBufferCapacity = newCap;
+        capacityExpanded = true;
+      }
 
       let vertexOffset = 0;
       let posOffset = 0;
       let uvOffset = 0;
       let heightOffset = 0;
+
+      const canReuse = !capacityExpanded && this.masterMesh !== null && this.masterGeometry !== null;
+
+      let geo = this.masterGeometry;
+      if (!canReuse || !geo) {
+        if (geo) {
+          geo.dispose();
+        }
+        geo = new THREE.BufferGeometry();
+        this.masterGeometry = geo;
+      }
+
+      geo.clearGroups();
 
       for (let s = 0; s < RealisticKoreanCityLayer.NUM_SLOTS; s++) {
         const pCount = this.slotPosIdx[s];
@@ -1879,13 +1904,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const vCount = pCount / 3;
 
         if (vCount > 0) {
-          mergedPos.set(this.slotPosBuf[s].subarray(0, pCount), posOffset);
-          mergedNorm.set(this.slotNormBuf[s].subarray(0, pCount), posOffset);
-          mergedColor.set(this.slotColorBuf[s].subarray(0, pCount), posOffset);
-          mergedUv.set(this.slotUvBuf[s].subarray(0, uCount), uvOffset);
-          mergedHeight.set(this.slotHeightBuf[s].subarray(0, hCount), heightOffset);
+          this.masterPosBuf.set(this.slotPosBuf[s].subarray(0, pCount), posOffset);
+          this.masterNormBuf.set(this.slotNormBuf[s].subarray(0, pCount), posOffset);
+          this.masterColorBuf.set(this.slotColorBuf[s].subarray(0, pCount), posOffset);
+          this.masterUvBuf.set(this.slotUvBuf[s].subarray(0, uCount), uvOffset);
+          this.masterHeightBuf.set(this.slotHeightBuf[s].subarray(0, hCount), heightOffset);
 
-          newGeometry.addGroup(vertexOffset, vCount, s);
+          geo.addGroup(vertexOffset, vCount, s);
 
           vertexOffset += vCount;
           posOffset += pCount;
@@ -1894,32 +1919,35 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
-      newGeometry.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
-      newGeometry.setAttribute('normal', new THREE.BufferAttribute(mergedNorm, 3));
-      newGeometry.setAttribute('color', new THREE.BufferAttribute(mergedColor, 3));
-      newGeometry.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
-      newGeometry.setAttribute('aHeight', new THREE.BufferAttribute(mergedHeight, 1));
-      newGeometry.computeBoundingSphere();
+      if (!canReuse) {
+        geo.setAttribute('position', new THREE.BufferAttribute(this.masterPosBuf, 3));
+        geo.setAttribute('normal', new THREE.BufferAttribute(this.masterNormBuf, 3));
+        geo.setAttribute('color', new THREE.BufferAttribute(this.masterColorBuf, 3));
+        geo.setAttribute('uv', new THREE.BufferAttribute(this.masterUvBuf, 2));
+        geo.setAttribute('aHeight', new THREE.BufferAttribute(this.masterHeightBuf, 1));
+      } else {
+        const pAttr = geo.getAttribute('position') as THREE.BufferAttribute;
+        const nAttr = geo.getAttribute('normal') as THREE.BufferAttribute;
+        const cAttr = geo.getAttribute('color') as THREE.BufferAttribute;
+        const uAttr = geo.getAttribute('uv') as THREE.BufferAttribute;
+        const hAttr = geo.getAttribute('aHeight') as THREE.BufferAttribute;
+        if (pAttr) pAttr.needsUpdate = true;
+        if (nAttr) nAttr.needsUpdate = true;
+        if (cAttr) cAttr.needsUpdate = true;
+        if (uAttr) uAttr.needsUpdate = true;
+        if (hAttr) hAttr.needsUpdate = true;
+      }
 
-      const newMesh = new THREE.Mesh(newGeometry, this.buildingMaterials);
-      newMesh.frustumCulled = false;
-      newMesh.visible = this.isVisible;
+      geo.setDrawRange(0, totalVertices);
+      geo.computeBoundingSphere();
 
-      console.log(
-        `[GeoBrief 3D 60fps Merged] 활성 건물 수: ${this.builtBuildingKeys.size}동 / GPU Draw Call 그룹: ${newGeometry.groups.length}개 / 바인딩 재질: ${this.buildingMaterials.length}종`
-      );
-
-      // [더블 버퍼링]: 신규 메쉬를 씬에 먼저 등록한 후 이전 메쉬를 안전 해제 (빈 화면 0프레임)
-      const oldMesh = this.masterMesh;
-      const oldGeo = this.masterGeometry;
-
-      this.masterMesh = newMesh;
-      this.masterGeometry = newGeometry;
-      this.scene.add(this.masterMesh);
-
-      if (oldMesh) {
-        this.scene.remove(oldMesh);
-        oldGeo?.dispose();
+      if (!this.masterMesh) {
+        this.masterMesh = new THREE.Mesh(geo, this.buildingMaterials);
+        this.masterMesh.frustumCulled = false;
+        this.masterMesh.visible = this.isVisible;
+        this.scene.add(this.masterMesh);
+      } else if (!canReuse) {
+        this.masterMesh.geometry = geo;
       }
 
       this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);

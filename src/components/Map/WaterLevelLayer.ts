@@ -172,7 +172,7 @@ export class WaterLevelLayer implements maplibregl.CustomLayerInterface {
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.isVisible || !this.renderer || !this.map) {
+    if (!this.isVisible || !this.renderer || !this.map || !this.waterMesh || this.targetElevation <= 0) {
       return;
     }
 

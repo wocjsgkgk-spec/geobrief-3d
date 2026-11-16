@@ -115,13 +115,14 @@ export class UavSensorLayer implements maplibregl.CustomLayerInterface {
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (!this.map || !this.renderer || !this.isVisible) return;
+    if (!this.uavState.isActive && this.sensors.length === 0) return;
 
     try {
       const rawMatrix = extractCustomLayerMatrix(options, this.map);
       if (!rawMatrix) return;
 
-      // 1. MapLibre 뷰 행렬 바인딩
-      this.camera.projectionMatrix = new THREE.Matrix4().fromArray(rawMatrix);
+      // 1. MapLibre 뷰 행렬 바인딩 (사전 할당 행렬 재사용으로 GC 제거)
+      this.camera.projectionMatrix.fromArray(rawMatrix);
 
       const now = performance.now();
       const deltaSec = this.lastTimestamp ? Math.min((now - this.lastTimestamp) / 1000, 0.1) : 0.016;
