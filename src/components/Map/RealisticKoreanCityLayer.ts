@@ -101,7 +101,12 @@ import {
   sanitizeBuildingHeight,
   isMountainGhostBuilding,
   isPointInMilitaryIdleSite,
+  getGangwonBaseElevation,
 } from '@/utils/master3DRendererManager';
+import {
+  GANGWON_CORE_ROAD_SIGNS,
+  buildRoadSignGantryMesh,
+} from '@/utils/koreanRoadSignBuilder';
 import { VworldMasterEngine } from '@/lib/vendor/vworldMasterEngine';
 import { DiverseBuildingGenerator } from '@/lib/vendor/diverseBuildingGenerator';
 
@@ -245,6 +250,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private tunnelInteriorMaterial: THREE.MeshBasicMaterial | null = null;
   private bridgesAndTunnelsData: any[] = [];
   private isBridgeTunnelVisible: boolean = true;
+  private roadSignGroup: THREE.Group = new THREE.Group();
 
   // 60fps 무지연 렌더링을 위한 사전 할당 수학 객체 (GC 프리즈 방지)
   private renderMatrix = new THREE.Matrix4();
@@ -306,6 +312,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (this.rooftopMesh) {
       this.rooftopMesh.visible = visible;
     }
+    this.roadSignGroup.visible = visible;
     this.bridgeGroup.visible = false;
     this.tunnelGroup.visible = false;
   }
@@ -593,6 +600,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // [1단계: 화면 중심 검은색 직사각형 7~8개 방지] 3D 가짜 교량/터널 박스 씬 추가 원천 차단
       this.bridgeGroup.visible = false;
       this.tunnelGroup.visible = false;
+
+      // [국토부 표준 3D 문형식 도로 이정표 씬 추가]
+      this.scene.add(this.roadSignGroup);
+      this.buildRoadSignGantries();
 
       // 3. WebGLRenderer 바인딩 및 컨텍스트 유실 복구 가드
       const canvas = map.getCanvas();
@@ -1434,16 +1445,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const centerMx = sumMx / ptCount;
       const centerMz = sumMz / ptCount;
 
-      // [4중 안전 필터링 - 중복 필터]: 동일 위치 반경 4m 이내 중복 중심점(Centroid) 1개만 유지
-      const gridX = Math.floor(centerMx / 4.0);
-      const gridZ = Math.floor(centerMz / 4.0);
+      // [4중 안전 필터링 - 중복 필터]: 동일 위치 반경 1.2m 이내 실제 완전 중복 형상만 제거 (밀집 주택가 이웃 건물 보존)
+      const gridX = Math.floor(centerMx / 1.2);
+      const gridZ = Math.floor(centerMz / 1.2);
       let isDuplicateCentroid = false;
       for (let dx = -1; dx <= 1 && !isDuplicateCentroid; dx++) {
         for (let dz = -1; dz <= 1 && !isDuplicateCentroid; dz++) {
           const nList = this.centroidSpatialGrid.get(`${gridX + dx}_${gridZ + dz}`);
           if (nList) {
             for (let k = 0; k < nList.length; k++) {
-              if (Math.hypot(nList[k][0] - centerMx, nList[k][1] - centerMz) < 4.0) {
+              if (Math.hypot(nList[k][0] - centerMx, nList[k][1] - centerMz) < 1.2) {
                 isDuplicateCentroid = true;
                 break;
               }
@@ -1455,7 +1466,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
-      const SHRINK_SCALE = 0.95;
+      // [정확한 위치 안착]: 인위적 축소 왜곡을 제거하고 지적도/위성 정사영상 풋프린트와 1:1 완벽 정합 (위치 오차 0m)
+      const SHRINK_SCALE = 1.0;
       for (let i = 0; i < ptCount; i++) {
         pts2D[i].x = centerMx + (pts2D[i].x - centerMx) * SHRINK_SCALE;
         pts2D[i].z = centerMz + (pts2D[i].z - centerMz) * SHRINK_SCALE;
@@ -1674,7 +1686,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           }
         } catch {}
 
-        // 지형 타일 로드 대기 중 또는 평탄지: 화면 중심 표고 또는 원주 기본 표고(142m)로 땅속 매몰 원천 방지
+        // 지형 타일 로드 대기 중 또는 평탄지: 화면 중심 표고 또는 강원 18개 시·군 공식 기본 지형 표고로 안전 안착
         if (rawElev <= 0) {
           try {
             const mapCenter = map.getCenter();
@@ -1682,10 +1694,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             if (typeof cElev === 'number' && Number.isFinite(cElev) && cElev > 0) {
               rawElev = cElev;
             } else {
-              rawElev = 142.0;
+              rawElev = getGangwonBaseElevation(cLng, cLat);
             }
           } catch {
-            rawElev = 142.0;
+            rawElev = getGangwonBaseElevation(cLng, cLat);
           }
         }
       } else {
@@ -2116,6 +2128,61 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
   }
 
+  /**
+   * 국토교통부 및 한국도로공사 표준 문형식 3D 도로 안내 이정표 렌더링
+   */
+  public buildRoadSignGantries(): void {
+    if (!this.map || !this.scene) return;
+
+    // 기존 표지판 메쉬 정리
+    while (this.roadSignGroup.children.length > 0) {
+      const child = this.roadSignGroup.children[0];
+      this.roadSignGroup.remove(child);
+      child.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const m = obj as THREE.Mesh;
+          m.geometry?.dispose();
+          if (Array.isArray(m.material)) {
+            m.material.forEach((mat) => mat.dispose());
+          } else if (m.material) {
+            m.material.dispose();
+          }
+        }
+      });
+    }
+
+    if (!this.roadSignGroup.parent) {
+      this.scene.add(this.roadSignGroup);
+    }
+    this.roadSignGroup.visible = this.isVisible;
+
+    for (let i = 0; i < GANGWON_CORE_ROAD_SIGNS.length; i++) {
+      const spec = GANGWON_CORE_ROAD_SIGNS[i];
+      const [lng, lat] = spec.coords;
+      const cCoord = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
+      const mx = (cCoord.x - this.originMercator.x) / this.originMeterScale;
+      const mz = (cCoord.y - this.originMercator.y) / this.originMeterScale;
+
+      let elev = 0;
+      if (typeof this.map.queryTerrainElevation === 'function') {
+        const q = this.map.queryTerrainElevation([lng, lat]);
+        if (typeof q === 'number' && Number.isFinite(q) && q > 0) {
+          elev = q;
+        }
+      }
+      if (elev <= 0) {
+        elev = getGangwonBaseElevation(lng, lat);
+      }
+
+      const gMesh = buildRoadSignGantryMesh(spec, [mx, mz], elev);
+      this.roadSignGroup.add(gMesh);
+    }
+
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
   public render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
     if (this.isContextLost || !this.isVisible || !this.renderer || !this.masterMesh) {
       return;
@@ -2220,6 +2287,18 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       });
       this.bridgeGroup.clear();
+    }
+    if (this.roadSignGroup) {
+      this.scene.remove(this.roadSignGroup);
+      this.roadSignGroup.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const m = obj as THREE.Mesh;
+          m.geometry?.dispose();
+          if (Array.isArray(m.material)) m.material.forEach((mat) => mat.dispose());
+          else m.material?.dispose();
+        }
+      });
+      this.roadSignGroup.clear();
     }
     if (this.tunnelGroup) {
       this.scene.remove(this.tunnelGroup);

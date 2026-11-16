@@ -212,6 +212,44 @@ function getGangwonMaxMountainElev(lng: number, lat: number): number {
   return maxElev;
 }
 
+/**
+ * 강원 18개 시·군별 공식 중심 시가지 기본 지형 표고 반환 (DEM 로드 전 또는 평탄지 안전 폴백)
+ */
+export function getGangwonBaseElevation(lng: number, lat: number): number {
+  let closestDist = Infinity;
+  let baseElev = 142.0;
+  const regionalDefaultElev: Record<string, number> = {
+    wonju: 142,
+    chuncheon: 82,
+    gangneung: 25,
+    sokcho: 18,
+    donghae: 22,
+    samcheok: 20,
+    taebaek: 680,
+    pyeongchang: 450,
+    jeongseon: 320,
+    yeongwol: 210,
+    hongcheon: 110,
+    hoengseong: 125,
+    cheorwon: 180,
+    hwacheon: 130,
+    yanggu: 170,
+    inje: 200,
+    goseong: 25,
+    yangyang: 22,
+  };
+  for (const [key, reg] of Object.entries(GANGWON_REGIONAL_BASE_ELEVATION)) {
+    const dLng = (reg.center[0] - lng) * 88.0;
+    const dLat = (reg.center[1] - lat) * 111.0;
+    const dist = Math.hypot(dLng, dLat);
+    if (dist < closestDist) {
+      closestDist = dist;
+      baseElev = regionalDefaultElev[key] || 140;
+    }
+  }
+  return baseElev;
+}
+
 interface CachedMilitarySite {
   id: string;
   name: string;

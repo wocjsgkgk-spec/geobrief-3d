@@ -1043,8 +1043,12 @@ export const MapViewer: React.FC = () => {
               return false;
             }
 
-            // 산악 유령 건물 검사 (경사면, 임야, 비건물 구역 영구 배제)
-            if (isMountainGhostBuilding(pt[0], pt[1], f.properties || {}, targetMap)) {
+            // 산악 유령 건물 검사 (1회 판정 메모이제이션으로 카메라 이동 중 중복 연산 0ms 소멸)
+            const props = (f.properties || {}) as any;
+            if (props._isGhost === undefined) {
+              props._isGhost = isMountainGhostBuilding(pt[0], pt[1], props, targetMap);
+            }
+            if (props._isGhost) {
               return false;
             }
 

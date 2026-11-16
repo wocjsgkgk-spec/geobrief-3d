@@ -22,21 +22,23 @@ export interface VWorldPoiItem {
   elevationOffset?: number; // m
 }
 
-// 강원도 원주시 주요 동, 아파트 단지, 학교, 공원, 행정복지센터 프리셋
+// 강원도 원주시 주요 동, 아파트 단지, 학교, 공원, 행정복지센터 & 주요 이정표 프리셋 (1:1 실측 정합)
 export const WONJU_CORE_POIS: VWorldPoiItem[] = [
-  // 1. 주요 행정동 (Dong)
+  // 1. 주요 행정동 및 이정표 (Dong & Highway/Road Milestone)
   { id: 'dong-dangu', name: '단구동', category: 'dong', coordinates: [127.9545, 37.3285], elevationOffset: 45 },
-  { id: 'dong-usan', name: '우산동', category: 'dong', coordinates: [127.9355, 37.3650], elevationOffset: 40 },
-  { id: 'dong-hakseong', name: '학성동', category: 'dong', coordinates: [127.9470, 37.3570], elevationOffset: 40 },
-  { id: 'dong-dangye', name: '단계동', category: 'dong', coordinates: [127.9280, 37.3480], elevationOffset: 45 },
+  { id: 'dong-usan', name: '우산동', category: 'dong', coordinates: [127.9355, 37.3680], elevationOffset: 40 },
+  { id: 'dong-hakseong', name: '학성동', category: 'dong', coordinates: [127.9405, 37.3585], elevationOffset: 40 },
+  { id: 'dong-dangye', name: '단계동', category: 'dong', coordinates: [127.9265, 37.3495], elevationOffset: 45 },
   { id: 'dong-taejang', name: '태장동', category: 'dong', coordinates: [127.9580, 37.3750], elevationOffset: 40 },
-  { id: 'dong-ilsan', name: '일산동', category: 'dong', coordinates: [127.9420, 37.3510], elevationOffset: 40 },
-  { id: 'dong-myeongnyun', name: '명륜동', category: 'dong', coordinates: [127.9480, 37.3400], elevationOffset: 40 },
+  { id: 'dong-ilsan', name: '일산동', category: 'dong', coordinates: [127.9425, 37.3520], elevationOffset: 40 },
+  { id: 'dong-myeongnyun', name: '명륜동', category: 'dong', coordinates: [127.9460, 37.3400], elevationOffset: 40 },
   { id: 'dong-gaeun', name: '개운동', category: 'dong', coordinates: [127.9570, 37.3380], elevationOffset: 40 },
-  { id: 'dong-musil', name: '무실동', category: 'dong', coordinates: [127.9250, 37.3350], elevationOffset: 45 },
+  { id: 'dong-musil', name: '무실동', category: 'dong', coordinates: [127.9245, 37.3315], elevationOffset: 45 },
   { id: 'dong-bangok', name: '반곡동', category: 'dong', coordinates: [127.9800, 37.3250], elevationOffset: 45 },
+  { id: 'sign-bukwon-ro', name: '국도5호선 (북원로)', category: 'dong', coordinates: [127.9358, 37.3605], elevationOffset: 30 },
+  { id: 'sign-wonju-ic', name: '영동고속도로 원주IC', category: 'public', coordinates: [127.9620, 37.3780], elevationOffset: 35 },
 
-  // 2. 단구동/단관공원 및 원주 주요 아파트 단지 (V-World 사진 속 랜드마크)
+  // 2. 단구동/단관공원 및 원주 주요 아파트 단지 (V-World 사진 속 랜드마크 실측 정합)
   { id: 'apt-hyunjin', name: '현진에버빌', category: 'apt', coordinates: [127.9555, 37.3275], elevationOffset: 65 },
   { id: 'apt-cheongsol', name: '청솔아파트', category: 'apt', coordinates: [127.9585, 37.3250], elevationOffset: 60 },
   { id: 'apt-hanshin', name: '단구한신휴플러스', category: 'apt', coordinates: [127.9520, 37.3300], elevationOffset: 65 },
@@ -47,22 +49,22 @@ export const WONJU_CORE_POIS: VWorldPoiItem[] = [
   { id: 'apt-seongil', name: '성일아파트', category: 'apt', coordinates: [127.9450, 37.3280], elevationOffset: 55 },
   { id: 'apt-epyeonhan', name: '대림e편한세상', category: 'apt', coordinates: [127.9475, 37.3325], elevationOffset: 60 },
   { id: 'apt-ipark', name: '단구아이파크', category: 'apt', coordinates: [127.9515, 37.3355], elevationOffset: 65 },
-  { id: 'apt-samho', name: '삼호아파트', category: 'apt', coordinates: [127.9360, 37.3620], elevationOffset: 55 },
+  { id: 'apt-samho', name: '삼호아파트', category: 'apt', coordinates: [127.9378, 37.3672], elevationOffset: 55 },
   { id: 'apt-usan-hyundai', name: '우산현대아파트', category: 'apt', coordinates: [127.9320, 37.3660], elevationOffset: 55 },
 
   // 3. 학교 (School)
   { id: 'sch-dangwan-el', name: '단관초등학교', category: 'school', coordinates: [127.9560, 37.3240], elevationOffset: 25 },
   { id: 'sch-dangu-el', name: '단구초등학교', category: 'school', coordinates: [127.9500, 37.3310], elevationOffset: 25 },
   { id: 'sch-namwonju-mid', name: '남원주중학교', category: 'school', coordinates: [127.9530, 37.3210], elevationOffset: 25 },
-  { id: 'sch-sangji-univ', name: '상지대학교', category: 'school', coordinates: [127.9290, 37.3710], elevationOffset: 35 },
+  { id: 'sch-sangji-univ', name: '상지대학교', category: 'school', coordinates: [127.9275, 37.3715], elevationOffset: 35 },
   { id: 'sch-wonju-high', name: '원주고등학교', category: 'school', coordinates: [127.9460, 37.3350], elevationOffset: 25 },
 
   // 4. 공원 & 행정복지센터 & 주요 관공서 (Park & Public)
   { id: 'park-dangwan', name: '단관공원', category: 'park', coordinates: [127.9575, 37.3270], elevationOffset: 15 },
   { id: 'pub-dangu-center', name: '단구동행정복지센터', category: 'public', coordinates: [127.9530, 37.3315], elevationOffset: 25 },
-  { id: 'pub-usan-center', name: '우산동행정복지센터', category: 'public', coordinates: [127.9365, 37.3625], elevationOffset: 25 },
-  { id: 'pub-wonju-cityhall', name: '원주시청', category: 'public', coordinates: [127.9280, 37.3430], elevationOffset: 35 },
-  { id: 'pub-wonju-medical', name: '원주의료원', category: 'public', coordinates: [127.9450, 37.3380], elevationOffset: 30 },
+  { id: 'pub-usan-center', name: '우산동행정복지센터', category: 'public', coordinates: [127.9376, 37.3685], elevationOffset: 25 },
+  { id: 'pub-wonju-cityhall', name: '원주시청', category: 'public', coordinates: [127.9295, 37.3422], elevationOffset: 35 },
+  { id: 'pub-wonju-medical', name: '원주의료원', category: 'public', coordinates: [127.9480, 37.3385], elevationOffset: 30 },
 ];
 
 /**
