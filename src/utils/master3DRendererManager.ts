@@ -498,8 +498,9 @@ export function isMountainGhostBuilding(
   }
 
   // [-0.5] 강원 전역 호수·수계 및 동해 바다 위 비정상 건물 100% 원천 차단
+  // [초기 버벅거림 제로화]: 내륙(lng < 128.6)에서는 무거운 map.queryTerrainElevation 동기 쿼리 일체 생략 (수만 회 WebGL 스톨 방지)
   let terrainElev: number | undefined;
-  if (map && typeof map.queryTerrainElevation === 'function') {
+  if (lng >= 128.60 && map && typeof map.queryTerrainElevation === 'function') {
     const q = map.queryTerrainElevation([lng, lat]);
     if (typeof q === 'number' && Number.isFinite(q)) {
       terrainElev = q;

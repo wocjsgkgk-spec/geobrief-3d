@@ -22,48 +22,9 @@ export interface VWorldPoiItem {
   elevationOffset?: number; // m
 }
 
-// 강원도 원주시 주요 동, 아파트 단지, 학교, 공원, 행정복지센터 & 주요 이정표 프리셋 (1:1 실측 정합)
-export const WONJU_CORE_POIS: VWorldPoiItem[] = [
-  // 1. 주요 행정동 및 이정표 (Dong & Highway/Road Milestone)
-  { id: 'dong-dangu', name: '단구동', category: 'dong', coordinates: [127.9545, 37.3285], elevationOffset: 45 },
-  { id: 'dong-usan', name: '우산동', category: 'dong', coordinates: [127.9355, 37.3680], elevationOffset: 40 },
-  { id: 'dong-hakseong', name: '학성동', category: 'dong', coordinates: [127.9405, 37.3585], elevationOffset: 40 },
-  { id: 'dong-dangye', name: '단계동', category: 'dong', coordinates: [127.9265, 37.3495], elevationOffset: 45 },
-  { id: 'dong-taejang', name: '태장동', category: 'dong', coordinates: [127.9580, 37.3750], elevationOffset: 40 },
-  { id: 'dong-ilsan', name: '일산동', category: 'dong', coordinates: [127.9425, 37.3520], elevationOffset: 40 },
-  { id: 'dong-myeongnyun', name: '명륜동', category: 'dong', coordinates: [127.9460, 37.3400], elevationOffset: 40 },
-  { id: 'dong-gaeun', name: '개운동', category: 'dong', coordinates: [127.9570, 37.3380], elevationOffset: 40 },
-  { id: 'dong-musil', name: '무실동', category: 'dong', coordinates: [127.9245, 37.3315], elevationOffset: 45 },
-  { id: 'dong-bangok', name: '반곡동', category: 'dong', coordinates: [127.9800, 37.3250], elevationOffset: 45 },
-
-  // 2. 단구동/단관공원 및 원주 주요 아파트 단지 (V-World 사진 속 랜드마크 실측 정합)
-  { id: 'apt-hyunjin', name: '현진에버빌', category: 'apt', coordinates: [127.9555, 37.3275], elevationOffset: 65 },
-  { id: 'apt-cheongsol', name: '청솔아파트', category: 'apt', coordinates: [127.9585, 37.3250], elevationOffset: 60 },
-  { id: 'apt-hanshin', name: '단구한신휴플러스', category: 'apt', coordinates: [127.9520, 37.3300], elevationOffset: 65 },
-  { id: 'apt-gugok', name: '구곡주공아파트', category: 'apt', coordinates: [127.9570, 37.3220], elevationOffset: 55 },
-  { id: 'apt-segyeong', name: '세경아파트', category: 'apt', coordinates: [127.9490, 37.3330], elevationOffset: 50 },
-  { id: 'apt-dongbo', name: '동보렉스', category: 'apt', coordinates: [127.9535, 37.3245], elevationOffset: 55 },
-  { id: 'apt-heights', name: '중앙하이츠', category: 'apt', coordinates: [127.9505, 37.3265], elevationOffset: 55 },
-  { id: 'apt-seongil', name: '성일아파트', category: 'apt', coordinates: [127.9450, 37.3280], elevationOffset: 55 },
-  { id: 'apt-epyeonhan', name: '대림e편한세상', category: 'apt', coordinates: [127.9475, 37.3325], elevationOffset: 60 },
-  { id: 'apt-ipark', name: '단구아이파크', category: 'apt', coordinates: [127.9515, 37.3355], elevationOffset: 65 },
-  { id: 'apt-samho', name: '삼호아파트', category: 'apt', coordinates: [127.9378, 37.3672], elevationOffset: 55 },
-  { id: 'apt-usan-hyundai', name: '우산현대아파트', category: 'apt', coordinates: [127.9320, 37.3660], elevationOffset: 55 },
-
-  // 3. 학교 (School)
-  { id: 'sch-dangwan-el', name: '단관초등학교', category: 'school', coordinates: [127.9560, 37.3240], elevationOffset: 25 },
-  { id: 'sch-dangu-el', name: '단구초등학교', category: 'school', coordinates: [127.9500, 37.3310], elevationOffset: 25 },
-  { id: 'sch-namwonju-mid', name: '남원주중학교', category: 'school', coordinates: [127.9530, 37.3210], elevationOffset: 25 },
-  { id: 'sch-sangji-univ', name: '상지대학교', category: 'school', coordinates: [127.9275, 37.3715], elevationOffset: 35 },
-  { id: 'sch-wonju-high', name: '원주고등학교', category: 'school', coordinates: [127.9460, 37.3350], elevationOffset: 25 },
-
-  // 4. 공원 & 행정복지센터 & 주요 관공서 (Park & Public)
-  { id: 'park-dangwan', name: '단관공원', category: 'park', coordinates: [127.9575, 37.3270], elevationOffset: 15 },
-  { id: 'pub-dangu-center', name: '단구동행정복지센터', category: 'public', coordinates: [127.9530, 37.3315], elevationOffset: 25 },
-  { id: 'pub-usan-center', name: '우산동행정복지센터', category: 'public', coordinates: [127.9376, 37.3685], elevationOffset: 25 },
-  { id: 'pub-wonju-cityhall', name: '원주시청', category: 'public', coordinates: [127.9295, 37.3422], elevationOffset: 35 },
-  { id: 'pub-wonju-medical', name: '원주의료원', category: 'public', coordinates: [127.9480, 37.3385], elevationOffset: 30 },
-];
+// [사용자 지시: 부정확한 하드코딩 노란색 이정표/핀 전면 영구 삭제]
+// 확실하지 않은 좌표로 지붕이나 도로 위에 임의 표출되던 가짜 이정표 65개 완전 제거
+export const WONJU_CORE_POIS: VWorldPoiItem[] = [];
 
 /**
  * 2. 선명한 브이월드 스타일 노란 핀(Yellow Pin) 캔버스 이미지 등록
@@ -331,7 +292,7 @@ export function setupVworldPoiLayer(
         'text-ignore-placement': false,
         'text-padding': 3,
         'symbol-spacing': 120,
-        visibility: 'visible',
+        visibility: 'none', // 사용자 요청: 부정확한 노란색 핀/이정표 영구 삭제
       },
       paint: {
         'text-color': '#ffffff',           // 순백색 고시인성 한글 텍스트

@@ -1417,7 +1417,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     feat: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>,
     metersPerLng: number,
     metersPerLat: number,
-    map: maplibregl.Map
+    map: maplibregl.Map,
+    cachedCenter?: { lng: number; lat: number },
+    cachedCenterElev?: number
   ): boolean {
     if (!feat.geometry) return false;
 
@@ -1733,39 +1735,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       if (isTerrainActive) {
         try {
-          if (typeof map.queryTerrainElevation === 'function') {
-            const q = map.queryTerrainElevation([cLng, cLat]);
-            if (typeof q === 'number' && Number.isFinite(q) && q > 0) {
-              rawElev = q;
-            } else if (rawCoords && rawCoords.length > 0) {
-              // 중심점 고도 누락 시 외곽 정점 샘플링으로 최대 지형고도 획득 (땅속 매몰 원천 방지)
-              for (let k = 0; k < Math.min(rawCoords.length, 6); k++) {
-                const eq = map.queryTerrainElevation([rawCoords[k][0], rawCoords[k][1]]);
-                if (typeof eq === 'number' && Number.isFinite(eq) && eq > rawElev) {
-                  rawElev = eq;
-                }
-              }
-            }
-          }
-          if (rawElev <= 0) {
-            const cached = elevationCache.getFromMap(map, [cLng, cLat]);
-            if (cached > 0) rawElev = cached;
+          const cached = elevationCache.getFromMap(map, [cLng, cLat]);
+          if (cached > 0) {
+            rawElev = cached;
           }
         } catch {}
 
         // 지형 타일 로드 대기 중 또는 평탄지: 화면 중심 표고 또는 강원 18개 시·군 공식 기본 지형 표고로 안전 안착
         if (rawElev <= 0) {
-          try {
-            const mapCenter = map.getCenter();
-            const cElev = map.queryTerrainElevation ? map.queryTerrainElevation([mapCenter.lng, mapCenter.lat]) : null;
-            if (typeof cElev === 'number' && Number.isFinite(cElev) && cElev > 0) {
-              rawElev = cElev;
-            } else {
-              rawElev = getGangwonBaseElevation(cLng, cLat);
-            }
-          } catch {
-            rawElev = getGangwonBaseElevation(cLng, cLat);
-          }
+          rawElev = (cachedCenterElev && cachedCenterElev > 0) ? cachedCenterElev : getGangwonBaseElevation(cLng, cLat);
         }
       } else {
         // 지형 비활성화 시 해수면 0m 평면에 칼같이 밀착
@@ -1807,13 +1785,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // A. [GeoBrief 3D 2단계: V-World급 5단 분리형 초정밀 지오메트리 & 동적 3-LOD 직결]
       // -------------------------------------------------------------------
       const zoom = map.getZoom();
-      const mapCenter = map.getCenter();
-      const dLngM = (cLng - mapCenter.lng) * metersPerLng;
-      const dLatM = (cLat - mapCenter.lat) * metersPerLat;
+      const currentMapCenter = cachedCenter || map.getCenter();
+      const dLngM = (cLng - currentMapCenter.lng) * metersPerLng;
+      const dLatM = (cLat - currentMapCenter.lat) * metersPerLat;
       const distFromCenterM = Math.hypot(dLngM, dLatM);
 
       // [산악 허위 더미 방지]: 지형 고도가 카메라 중심 지면 표고보다 500m 이상 급격히 높은 산꼭대기 절벽 상자 차단
-      const centerElev = map.queryTerrainElevation ? (map.queryTerrainElevation([mapCenter.lng, mapCenter.lat]) || 0) : 0;
+      const centerElev = (cachedCenterElev !== undefined && cachedCenterElev > 0) ? cachedCenterElev : 0;
       if (rawElev - centerElev > 500) {
         continue;
       }
@@ -1934,7 +1912,23 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      const FRAME_BUDGET_MS = this.isMoving ? 2.0 : 16.0; // 카메라 정지 시 16ms 버짓으로 고속 빌드, 이동 시 2.0ms
+      // [최초 버벅거림 제로화]: 엄격한 4.0ms 프레임 버짓으로 브라우저 렌더러에 12ms+ 여유 보장
+      const FRAME_BUDGET_MS = this.isMoving ? 1.5 : 4.0;
+
+      const currentMapCenter = map.getCenter();
+      const cachedCenter = { lng: currentMapCenter.lng, lat: currentMapCenter.lat };
+      let cachedCenterElev = 0;
+      try {
+        if (typeof map.queryTerrainElevation === 'function') {
+          const q = map.queryTerrainElevation([cachedCenter.lng, cachedCenter.lat]);
+          if (typeof q === 'number' && Number.isFinite(q) && q > 0) {
+            cachedCenterElev = q;
+          }
+        }
+      } catch {}
+      if (cachedCenterElev <= 0) {
+        cachedCenterElev = getGangwonBaseElevation(cachedCenter.lng, cachedCenter.lat);
+      }
 
       const executeSlice = (deadline?: any) => {
         if (this.activeBuildTaskId !== currentTaskId) return;
@@ -1947,7 +1941,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         if (this.map && (this.map.isMoving() || this.map.isRotating() || this.map.isZooming())) {
           if (this.masterMesh) {
             this.isMoving = true;
-            this.activeBuildIdleId = setTimeout(executeSlice, 180);
+            this.activeBuildIdleId = setTimeout(executeSlice, 150);
             return;
           }
         }
@@ -1956,12 +1950,19 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const sliceStartTime = performance.now();
         let sliceCount = 0;
 
+        // [1단계 선행 커밋]: 최초 1회차에는 중심부 핵심 150동을 즉각 빌드하여 1프레임 내에 화면 즉시 표출
+        const isFirstBatch = !this.hasInitialBuilt && featureIdx === 0;
+        const batchLimit = isFirstBatch ? 150 : Infinity;
+
         while (featureIdx < features.length) {
-          if (sliceCount > 0 && sliceCount % 50 === 0) {
+          if (!isFirstBatch && sliceCount > 0 && sliceCount % 10 === 0) {
             const elapsed = performance.now() - sliceStartTime;
             if (elapsed >= FRAME_BUDGET_MS) {
               break;
             }
+          }
+          if (isFirstBatch && sliceCount >= batchLimit) {
+            break;
           }
           sliceCount++;
           const feat = features[featureIdx++];
@@ -1972,7 +1973,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             continue;
           }
 
-          const built = this.processSingleBuildingFeature(feat, metersPerLng, metersPerLat, map);
+          const built = this.processSingleBuildingFeature(feat, metersPerLng, metersPerLat, map, cachedCenter, cachedCenterElev);
           if (built) {
             this.builtBuildingKeys.add(key);
             newlyAddedCount++;
@@ -1980,17 +1981,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [초기 로드 1회 즉시 커밋]: 초기 50동+ 빌드 완료 시에만 빠른 최초 화면 표출을 위해 1회 커밋
-          // 이후 슬라이스 중 잦은 재업로드(기존 80회 GPU 스톨)를 전면 제거하여 60fps 무지연 화면 유지
-          if (!this.hasInitialBuilt && newlyAddedCount >= 50 && this.hasAnySlotVertices()) {
+          // [초기 로드 1회 즉시 커밋]: 1회차 150동 완료 시 즉시 커밋하여 화면 빈틈 0ms 해소
+          if (!this.hasInitialBuilt && newlyAddedCount > 0 && this.hasAnySlotVertices()) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
             newlyAddedCount = 0;
             this.hasInitialBuilt = true;
           }
-          // 뷰포트 내 건물 완료 시까지는 setTimeout(0)으로 무지연 고속 빌드
-          if (featureIdx < viewportFeatures.length || this.builtBuildingKeys.size < 4000) {
-            this.activeBuildIdleId = setTimeout(executeSlice, 0);
+          // 백그라운드 2단계: requestAnimationFrame + 4ms 타임슬라이싱으로 60fps 무지연 처리
+          if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
+            this.activeBuildIdleId = requestAnimationFrame(() => executeSlice());
           } else {
             this.activeBuildIdleId = setTimeout(executeSlice, 14);
           }

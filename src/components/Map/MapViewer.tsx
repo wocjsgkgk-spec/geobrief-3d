@@ -3151,6 +3151,9 @@ export const MapViewer: React.FC = () => {
         if (map.getLayer('realistic-korean-city-layer')) {
           map.removeLayer('realistic-korean-city-layer');
         }
+        if (map.getLayer('procedural-trees-3d-layer')) {
+          map.removeLayer('procedural-trees-3d-layer');
+        }
         if (map.getLayer('procedural-trees-layer')) {
           map.removeLayer('procedural-trees-layer');
         }
@@ -3185,7 +3188,6 @@ export const MapViewer: React.FC = () => {
           map.addLayer(realisticLayer, VWORLD_POI_LAYER_ID);
           realisticKoreanCityLayerRef.current = realisticLayer;
           (window as any).__realisticKoreanCityLayer = realisticLayer;
-          syncVworldBuildingData(map);
         }
 
         // [모드 2: V-World 공식 클린 화이트/아이보리 입체 모형 (강원 18개 시·군 전역 실측 GeoJSON + GPU 60fps)]
@@ -3252,8 +3254,18 @@ export const MapViewer: React.FC = () => {
         console.warn('[MapViewer] VWorld3DTileLayer registration warning:', vwTileErr);
       }
 
-      // [조치 1: 3D 수목 및 식생 InstancedMesh 비활성화]
-      proceduralTreesLayerRef.current = null;
+      // [V-World 실사 3D 고도화: 3D 입체 수목(소나무/잣나무/은행나무 InstancedMesh) 레이어 등록]
+      try {
+        if (!map.getLayer('procedural-trees-3d-layer')) {
+          const treesLayer = new ProceduralTrees3DLayer(selectedIdleSiteId || 'first-logistics-wonju');
+          treesLayer.setVisible(true);
+          map.addLayer(treesLayer, VWORLD_POI_LAYER_ID);
+          proceduralTreesLayerRef.current = treesLayer;
+          (window as any).__proceduralTreesLayer = treesLayer;
+        }
+      } catch (treesErr) {
+        console.warn('[MapViewer] ProceduralTrees3DLayer registration notice:', treesErr);
+      }
 
       // [강원 지형 특화 저류·침수 수위(Water Level) 시뮬레이션 커스텀 레이어 등록]
       try {
@@ -3352,9 +3364,12 @@ export const MapViewer: React.FC = () => {
         // [국토부 브이월드 실측 3D 건물 데이터 즉시 동기화]
         syncVworldBuildingData(map);
 
-        // [초기 뷰포트 정착 후 무인 자동 동기화 2중 안전망]
+        // [초기 뷰포트 정착 후 미로드 시에만 보조 동기화]
         map.once('idle', () => {
-          syncVworldBuildingData(map);
+          const curCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || 0;
+          if (curCount === 0) {
+            syncVworldBuildingData(map);
+          }
         });
       } catch (deckErr) {
         console.warn('[MapViewer] Universal3DTilesManager initialization warning:', deckErr);
@@ -4145,8 +4160,9 @@ export const MapViewer: React.FC = () => {
       promoteBuildingLayersToTop(map);
     }
 
+    // [사용자 지시]: 부정확한 노란색 핀/이정표 영구 삭제
     if (map.getLayer(VWORLD_POI_LAYER_ID)) {
-      map.setLayoutProperty(VWORLD_POI_LAYER_ID, 'visibility', bldgVis ? 'visible' : 'none');
+      map.setLayoutProperty(VWORLD_POI_LAYER_ID, 'visibility', 'none');
     }
 
     updateRealtimeMetrics();
@@ -5067,6 +5083,39 @@ export const MapViewer: React.FC = () => {
       duration: 600,
     });
   }, []);
+
+  // [기능 업데이트]: 3D 시네마틱 뷰포트 프리셋 핸들러 (조감 뷰 / 보행자 뷰 / 드라이브 뷰)
+  const handleApplyViewportPreset = useCallback(
+    (preset: 'birds_eye' | 'pedestrian' | 'boulevard') => {
+      const map = mapRef.current;
+      if (!map) return;
+      if (viewMode === '2D') setViewMode('3D');
+
+      if (preset === 'birds_eye') {
+        map.easeTo({
+          pitch: 58,
+          bearing: -25,
+          zoom: Math.max(map.getZoom(), 16.0),
+          duration: 1000,
+        });
+      } else if (preset === 'pedestrian') {
+        map.easeTo({
+          pitch: 78,
+          bearing: 45,
+          zoom: Math.max(map.getZoom(), 18.2),
+          duration: 1200,
+        });
+      } else if (preset === 'boulevard') {
+        map.easeTo({
+          pitch: 70,
+          bearing: 135,
+          zoom: Math.max(map.getZoom(), 17.2),
+          duration: 1100,
+        });
+      }
+    },
+    [viewMode, setViewMode]
+  );
 
   // [신규] 18. 3D 건물 클릭 인터랙션 (하이라이트 및 부동산·건축물 정보 팝업)
   useEffect(() => {
@@ -7323,13 +7372,14 @@ export const MapViewer: React.FC = () => {
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
         <BriefingHeader />
 
-        {/* [원클릭 3D 렌더러 퀵 체인저 플로팅 필 (실사 3D ↔ 클린 화이트 ↔ 3D 타일셋)] */}
+        {/* [원클릭 3D 렌더러 & 3D 시네마틱 뷰포트 프리셋 & 3D 공간 측정 퀵 체인저 플로팅 바] */}
         <div
           id="quick-3d-mode-switcher"
-          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none"
+          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none flex items-center gap-2"
         >
           <div className="flex items-center gap-1.5 bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/60 rounded-full px-2 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/30">
             <button
+              id="btn-3d-mode-facade"
               onClick={() => {
                 setRenderMode3D('facade');
                 if (viewMode === '2D') setViewMode('3D');
@@ -7339,7 +7389,7 @@ export const MapViewer: React.FC = () => {
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md ring-1 ring-emerald-300'
                   : 'text-slate-300 hover:text-white hover:bg-emerald-950/60'
               }`}
-              title="V-World 한국형 실사 3D 마스터 렌더러 (실측 파사드 + 4종 입체 옥상 우레탄 도료 + 60FPS 무결점)"
+              title="V-World 한국형 실사 3D 마스터 렌더러 (실측 파사드 + 4종 입체 옥상 우레탄 도료 + 3D 식생 + 60FPS 무결점)"
             >
               <Building2 className="w-3.5 h-3.5 text-emerald-300" />
               <span>실사 3D</span>
@@ -7349,6 +7399,7 @@ export const MapViewer: React.FC = () => {
             </button>
 
             <button
+              id="btn-3d-mode-native"
               onClick={() => {
                 setRenderMode3D('native');
                 if (viewMode === '2D') setViewMode('3D');
@@ -7368,6 +7419,7 @@ export const MapViewer: React.FC = () => {
             </button>
 
             <button
+              id="btn-3d-mode-tiles3d"
               onClick={() => {
                 setRenderMode3D('tiles3d');
                 if (viewMode === '2D') setViewMode('3D');
@@ -7384,6 +7436,54 @@ export const MapViewer: React.FC = () => {
               <span className="text-[9px] px-1 py-0.2 bg-cyan-900/80 text-cyan-200 rounded font-mono font-bold">
                 STREAM
               </span>
+            </button>
+          </div>
+
+          {/* [3D 시네마틱 뷰포트 프리셋 (조감 / 보행자 / 드라이브)] */}
+          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-cyan-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-cyan-500/20">
+            <button
+              id="btn-viewport-birds-eye"
+              onClick={() => handleApplyViewportPreset('birds_eye')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-cyan-200 hover:text-white hover:bg-cyan-900/50 transition-all cursor-pointer"
+              title="🦅 3D 시네마틱 조감 뷰 (피치 58°, 도시 전경 조망)"
+            >
+              <Eye className="w-3 h-3 text-cyan-300" />
+              <span>조감</span>
+            </button>
+            <button
+              id="btn-viewport-pedestrian"
+              onClick={() => handleApplyViewportPreset('pedestrian')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-cyan-200 hover:text-white hover:bg-cyan-900/50 transition-all cursor-pointer"
+              title="🚶 3D 보행자 눈높이 뷰 (피치 78°, 스트리트 레벨)"
+            >
+              <Navigation2 className="w-3 h-3 text-cyan-300" />
+              <span>보행자</span>
+            </button>
+            <button
+              id="btn-viewport-boulevard"
+              onClick={() => handleApplyViewportPreset('boulevard')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-cyan-200 hover:text-white hover:bg-cyan-900/50 transition-all cursor-pointer"
+              title="🚗 3D 시내 드라이브 뷰 (피치 70°, 간선도로 종단 뷰)"
+            >
+              <Truck className="w-3 h-3 text-cyan-300" />
+              <span>드라이브</span>
+            </button>
+          </div>
+
+          {/* [3D 실시간 공간 거리/표고 측정 토글 버튼] */}
+          <div className="flex items-center bg-[#0b1410]/95 backdrop-blur-md border border-amber-500/50 rounded-full p-0.5 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-amber-500/20">
+            <button
+              id="btn-quick-measure-3d"
+              onClick={() => toggleMeasureMode()}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                isMeasureMode
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300 animate-pulse'
+                  : 'text-amber-300 hover:text-white hover:bg-amber-950/60'
+              }`}
+              title="📐 3D 공간 거리 및 지형·건물 표고차(ΔH) 실시간 측정"
+            >
+              <Ruler className="w-3.5 h-3.5" />
+              <span>{isMeasureMode ? '측정 가동 중' : '3D 측정'}</span>
             </button>
           </div>
         </div>
