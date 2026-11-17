@@ -1267,16 +1267,10 @@ export const MapViewer: React.FC = () => {
           const badgeEl = document.getElementById('realtime-metrics-badge');
           if (badgeEl) {
             const curMode = useMapStore.getState().renderMode3D || 'facade';
-            const opticsMode = useMapStore.getState().reconOpticsMode || 'optical';
-            const curWeather = (useMapStore.getState() as any).weatherPreset || 'clear';
-            const weatherDef = (WEATHER_PRESETS as any)[curWeather] || WEATHER_PRESETS.clear;
-            const weatherLabel = `${weatherDef.label.split(' ')[0]} ${weatherDef.temperatureC}°C`;
-            const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : curMode === 'native' ? '클린 화이트 GPU' : '3D 타일셋 스트림';
-            const opticsTag = opticsMode === 'optical' ? '주간 실사' : opticsMode === 'nvg' ? 'NVG 야간' : opticsMode === 'flir' ? 'FLIR 열화상' : 'CRT 전술';
+            const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : '클린화이트 GPU';
             const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || realtimeMetricsRef.current.renderedBuildingCount || 3000;
             const actLayers = realtimeMetricsRef.current.activeLayersCount || 19;
-            const mgrsStr = formatMGRS(center.lng, center.lat, 5);
-            badgeEl.textContent = `[${modeLabel} (${opticsTag}) | ${weatherLabel} | MGRS: ${mgrsStr} | ${currentFps} FPS | EL. +${altM}m | ${pitch}° 틸트 | 건물: ${bldgCount.toLocaleString()}동 | 레이어: ${actLayers}개]`;
+            badgeEl.textContent = `[${modeLabel} | ${currentFps} FPS | 화면 건물: ${bldgCount.toLocaleString()}동 | EL. +${altM}m | ${pitch}° 틸트 | 레이어: ${actLayers}개]`;
           }
         }
       }
@@ -7398,284 +7392,54 @@ export const MapViewer: React.FC = () => {
           )}
         </div>
 
-        {/* [타 저장소 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 오버레이 */}
-        <TacticalScopeOverlay />
-
-        {/* [대규모 2차 벤더링]: 대기 기상 시뮬레이션 오버레이 (맑음/운무/강우/안개/강설) */}
-        <AtmosphericWeatherOverlay />
-
         {/* 16:9 브리핑 오버레이 프레임워크 */}
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
         <BriefingHeader />
 
-        {/* [통합 전술 커맨드 독: 3D 렌더러 + 정찰 광학 + 뷰포트 프리셋 + 3D 측정 + 후보지 비교] */}
+        {/* [화면 중앙 3D 마스터 모드 스위처 (실사 3D & 클린화이트 단독 유지)] */}
         <div
           id="quick-3d-mode-switcher"
-          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none flex items-center gap-2"
+          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none flex items-center bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/60 rounded-full px-2.5 py-1.5 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/30 gap-2"
         >
-          {/* 1. 3D 건축물 렌더러 모드 */}
-          <div className="flex items-center gap-1.5 bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/60 rounded-full px-2 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/30">
-            <button
-              id="btn-3d-mode-facade"
-              onClick={() => {
-                setRenderMode3D('facade');
-                if (viewMode === '2D') setViewMode('3D');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                renderMode3D === 'facade'
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md ring-1 ring-emerald-300'
-                  : 'text-slate-300 hover:text-white hover:bg-emerald-950/60'
-              }`}
-              title="V-World 한국형 실사 3D 마스터 렌더러 (실측 파사드 + 4종 입체 옥상 우레탄 도료 + 3D 식생 + 60FPS 무결점)"
-            >
-              <Building2 className="w-3.5 h-3.5 text-emerald-300" />
-              <span>실사 3D</span>
-              <span className="text-[9px] px-1 py-0.2 bg-emerald-900/80 text-emerald-200 rounded font-mono font-bold">
-                REA
-              </span>
-            </button>
+          <button
+            id="btn-3d-mode-facade"
+            onClick={() => {
+              setRenderMode3D('facade');
+              if (viewMode === '2D') setViewMode('3D');
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              renderMode3D === 'facade'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md ring-1 ring-emerald-300'
+                : 'text-slate-300 hover:text-white hover:bg-emerald-950/60'
+            }`}
+            title="V-World 한국형 실사 3D 마스터 렌더러 (실측 파사드 + 4종 옥상 우레탄 도료 + 3D 식생 + 60FPS)"
+          >
+            <Building2 className="w-3.5 h-3.5 text-emerald-300" />
+            <span>실사 3D</span>
+            <span className="text-[9px] px-1 py-0.2 bg-emerald-900/80 text-emerald-200 rounded font-mono font-bold">
+              REA
+            </span>
+          </button>
 
-            <button
-              id="btn-3d-mode-native"
-              onClick={() => {
-                setRenderMode3D('native');
-                if (viewMode === '2D') setViewMode('3D');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                renderMode3D === 'native'
-                  ? 'bg-gradient-to-r from-slate-600 to-slate-700 text-white shadow-md ring-1 ring-slate-400'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-              }`}
-              title="V-World 클린 화이트/아이보리 입체 모형 (MapLibre GPU 네이티브 Extrusion)"
-            >
-              <Boxes className="w-3.5 h-3.5 text-slate-300" />
-              <span>클린 화이트</span>
-              <span className="text-[9px] px-1 py-0.2 bg-slate-800 text-slate-300 rounded font-mono font-bold">
-                GPU
-              </span>
-            </button>
-
-            <button
-              id="btn-3d-mode-tiles3d"
-              onClick={() => {
-                setRenderMode3D('tiles3d');
-                if (viewMode === '2D') setViewMode('3D');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                renderMode3D === 'tiles3d'
-                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md ring-1 ring-cyan-300'
-                  : 'text-slate-300 hover:text-white hover:bg-cyan-950/60'
-              }`}
-              title="OGC 3D Tiles 고정밀 지형 및 건축물 스트리밍"
-            >
-              <Layers className="w-3.5 h-3.5 text-cyan-300" />
-              <span>3D 타일셋</span>
-              <span className="text-[9px] px-1 py-0.2 bg-cyan-900/80 text-cyan-200 rounded font-mono font-bold">
-                STREAM
-              </span>
-            </button>
-          </div>
-
-          {/* 2. 전술 정찰 광학 모드 (Optics: 주간 / NVG / FLIR / CRT) */}
-          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/20">
-            <button
-              id="btn-optics-optical"
-              onClick={() => setReconOpticsMode('optical')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                reconOpticsMode === 'optical'
-                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
-                  : 'text-slate-300 hover:text-white hover:bg-emerald-950/50'
-              }`}
-              title="주간 고해상도 실사 광학 뷰"
-            >
-              <Eye className="w-3 h-3" />
-              <span>주간</span>
-            </button>
-            <button
-              id="btn-optics-nvg"
-              onClick={() => setReconOpticsMode('nvg')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                reconOpticsMode === 'nvg'
-                  ? 'bg-emerald-500 text-slate-950 font-black shadow-md ring-1 ring-emerald-300 animate-pulse'
-                  : 'text-emerald-400 hover:text-white hover:bg-emerald-950/60'
-              }`}
-              title="야간 투시경 (NVG 녹색 형광 증폭 & CRT 주사선)"
-            >
-              <Moon className="w-3 h-3" />
-              <span>NVG</span>
-            </button>
-            <button
-              id="btn-optics-flir"
-              onClick={() => setReconOpticsMode('flir')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                reconOpticsMode === 'flir'
-                  ? 'bg-orange-500 text-slate-950 font-black shadow-md ring-1 ring-orange-300 animate-pulse'
-                  : 'text-orange-400 hover:text-white hover:bg-orange-950/60'
-              }`}
-              title="열화상 적외선 (FLIR False-color Ironbow 적외선 탐지)"
-            >
-              <Flame className="w-3 h-3" />
-              <span>FLIR</span>
-            </button>
-            <button
-              id="btn-optics-crt"
-              onClick={() => setReconOpticsMode('crt')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                reconOpticsMode === 'crt'
-                  ? 'bg-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300 animate-pulse'
-                  : 'text-amber-400 hover:text-white hover:bg-amber-950/60'
-              }`}
-              title="전술 지휘소 CRT 앰버 단색 모니터"
-            >
-              <Monitor className="w-3 h-3" />
-              <span>CRT</span>
-            </button>
-          </div>
-
-          {/* 3. 기상 대기 시뮬레이션 프리셋 (맑음 / 운무 / 강우 / 안개 / 강설) */}
-          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-sky-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-sky-500/20">
-            <button
-              id="btn-weather-clear"
-              onClick={() => setWeatherPreset('clear')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                weatherPreset === 'clear'
-                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm ring-1 ring-amber-300'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-              }`}
-              title="맑음 (시정 20km, 쾌청)"
-            >
-              <Sun className="w-3 h-3 text-amber-300" />
-              <span>맑음</span>
-            </button>
-            <button
-              id="btn-weather-overcast"
-              onClick={() => setWeatherPreset('overcast')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                weatherPreset === 'overcast'
-                  ? 'bg-slate-400 text-slate-950 font-black shadow-sm ring-1 ring-slate-200'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-              }`}
-              title="운무 (흐림, 운량 88%)"
-            >
-              <Cloud className="w-3 h-3 text-slate-300" />
-              <span>운무</span>
-            </button>
-            <button
-              id="btn-weather-rain"
-              onClick={() => setWeatherPreset('rain')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                weatherPreset === 'rain'
-                  ? 'bg-blue-500 text-slate-950 font-black shadow-sm ring-1 ring-blue-300 animate-pulse'
-                  : 'text-blue-300 hover:text-white hover:bg-blue-950/60'
-              }`}
-              title="강우 (비, 강수량 12.5mm/h)"
-            >
-              <CloudRain className="w-3 h-3 text-blue-300" />
-              <span>강우</span>
-            </button>
-            <button
-              id="btn-weather-fog"
-              onClick={() => setWeatherPreset('fog')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                weatherPreset === 'fog'
-                  ? 'bg-teal-500 text-slate-950 font-black shadow-sm ring-1 ring-teal-200 animate-pulse'
-                  : 'text-teal-300 hover:text-white hover:bg-teal-950/60'
-              }`}
-              title="전술 안개 (저시정 650m)"
-            >
-              <CloudFog className="w-3 h-3 text-teal-300" />
-              <span>안개</span>
-            </button>
-            <button
-              id="btn-weather-snow"
-              onClick={() => setWeatherPreset('snow')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                weatherPreset === 'snow'
-                  ? 'bg-cyan-300 text-slate-950 font-black shadow-sm ring-1 ring-cyan-100 animate-pulse'
-                  : 'text-cyan-200 hover:text-white hover:bg-cyan-950/60'
-              }`}
-              title="강설 (눈, 영하 -2.4°C)"
-            >
-              <Snowflake className="w-3 h-3 text-cyan-200" />
-              <span>강설</span>
-            </button>
-          </div>
-
-          {/* 4. 3D 시네마틱 뷰포트 프리셋 (조감 / 보행자 / 드라이브) */}
-          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-cyan-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-cyan-500/20">
-            <button
-              id="btn-viewport-birds-eye"
-              onClick={() => handleApplyViewportPreset('birds_eye')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-cyan-200 hover:text-white hover:bg-cyan-900/50 transition-all cursor-pointer"
-              title="🦅 3D 시네마틱 조감 뷰 (피치 58°, 도시 전경 조망)"
-            >
-              <Eye className="w-3 h-3 text-cyan-300" />
-              <span>조감</span>
-            </button>
-            <button
-              id="btn-viewport-pedestrian"
-              onClick={() => handleApplyViewportPreset('pedestrian')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-cyan-200 hover:text-white hover:bg-cyan-900/50 transition-all cursor-pointer"
-              title="🚶 3D 보행자 눈높이 뷰 (피치 78°, 스트리트 레벨)"
-            >
-              <Navigation2 className="w-3 h-3 text-cyan-300" />
-              <span>보행자</span>
-            </button>
-            <button
-              id="btn-viewport-boulevard"
-              onClick={() => handleApplyViewportPreset('boulevard')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-cyan-200 hover:text-white hover:bg-cyan-900/50 transition-all cursor-pointer"
-              title="🚗 3D 시내 드라이브 뷰 (피치 70°, 간선도로 종단 뷰)"
-            >
-              <Truck className="w-3 h-3 text-cyan-300" />
-              <span>드라이브</span>
-            </button>
-          </div>
-
-          {/* 5. 전술 분석 도구 (3D 측정 & 후보지 비교 & 군사보호구역 진단) */}
-          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-amber-500/50 rounded-full p-0.5 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-amber-500/20">
-            <button
-              id="btn-quick-measure-3d"
-              onClick={() => toggleMeasureMode()}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                isMeasureMode
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300 animate-pulse'
-                  : 'text-amber-300 hover:text-white hover:bg-amber-950/60'
-              }`}
-              title="📐 3D 공간 거리 및 지형·건물 표고차(ΔH) 실시간 측정"
-            >
-              <Ruler className="w-3.5 h-3.5" />
-              <span>{isMeasureMode ? '측정 가동 중' : '3D 측정'}</span>
-            </button>
-
-            <button
-              id="btn-quick-compare-matrix"
-              onClick={() => toggleCompareMatrix()}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                isCompareMatrixOpen
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-md'
-                  : 'text-emerald-300 hover:text-white hover:bg-emerald-950/60'
-              }`}
-              title="📊 강원 핵심 군 유휴지 1:1 다각적 비교 분석 매트릭스 모달 열기"
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>후보지 비교</span>
-            </button>
-
-            <button
-              id="btn-quick-border-risk"
-              onClick={() => toggleBorderRiskModal()}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                isBorderRiskModalOpen
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black shadow-md'
-                  : 'text-cyan-300 hover:text-white hover:bg-cyan-950/60'
-              }`}
-              title="🛡️ 접경·군사시설보호구역 3D 위험도 및 비행안전 심의 매트릭스 모달 열기"
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>군사보호구역 진단</span>
-            </button>
-          </div>
+          <button
+            id="btn-3d-mode-native"
+            onClick={() => {
+              setRenderMode3D('native');
+              if (viewMode === '2D') setViewMode('3D');
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              renderMode3D === 'native'
+                ? 'bg-gradient-to-r from-slate-600 to-slate-700 text-white shadow-md ring-1 ring-slate-400'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+            }`}
+            title="V-World 클린 화이트/아이보리 입체 모형 (MapLibre GPU 네이티브 Extrusion)"
+          >
+            <Boxes className="w-3.5 h-3.5 text-slate-300" />
+            <span>클린화이트</span>
+            <span className="text-[9px] px-1 py-0.2 bg-slate-800 text-slate-300 rounded font-mono font-bold">
+              GPU
+            </span>
+          </button>
         </div>
 
         {/* 좌측 상단 카메라 연동 동적 방위표 (North Arrow - React 리렌더링 차단 및 DOM 직접 조작) */}
