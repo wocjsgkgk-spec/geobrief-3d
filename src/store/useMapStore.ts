@@ -49,6 +49,9 @@ import {
   SidebarTab,
   Master3DConfig,
 } from '@/types/map';
+
+// [신규 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 모드 타입
+export type ReconOpticsMode = 'optical' | 'nvg' | 'flir' | 'crt';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
 import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
@@ -568,6 +571,15 @@ interface MapStoreState {
   // [신규] 3D 타일셋 커스텀 URL 직접 입력 및 테스트 모달 상태
   isCustom3DTilesModalOpen: boolean;
   setCustom3DTilesModalOpen: (open: boolean) => void;
+
+  // [신규 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 모드
+  reconOpticsMode: ReconOpticsMode;
+  setReconOpticsMode: (mode: ReconOpticsMode) => void;
+
+  // [신규 벤더링]: 강원 군 유휴지 후보지 다각적 비교 분석 매트릭스 모달
+  isCompareMatrixOpen: boolean;
+  setCompareMatrixOpen: (open: boolean) => void;
+  toggleCompareMatrix: () => void;
 
   // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
   threatDome: ThreatDomeState;
@@ -1882,6 +1894,15 @@ export const useMapStore = create<MapStoreState>()(
       // [신규] 3D 타일셋 커스텀 URL 직접 입력 및 테스트 모달 상태
       isCustom3DTilesModalOpen: false,
       setCustom3DTilesModalOpen: (open) => set({ isCustom3DTilesModalOpen: open }),
+
+      // [신규 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 모드 상태
+      reconOpticsMode: 'optical',
+      setReconOpticsMode: (mode) => set({ reconOpticsMode: mode }),
+
+      // [신규 벤더링]: 강원 군 유휴지 후보지 다각적 비교 분석 매트릭스 모달
+      isCompareMatrixOpen: false,
+      setCompareMatrixOpen: (open) => set({ isCompareMatrixOpen: open }),
+      toggleCompareMatrix: () => set((s) => ({ isCompareMatrixOpen: !s.isCompareMatrixOpen })),
 
       addPlacedFacility: (presetId, customCoords, customElevation) => {
         const state = get();

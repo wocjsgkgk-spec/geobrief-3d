@@ -123,7 +123,14 @@ import {
   Compass as CompassIcon,
   ShieldCheck,
   Info,
+  Award,
+  Moon,
+  Flame,
+  Monitor,
 } from 'lucide-react';
+import { TacticalScopeOverlay } from './TacticalScopeOverlay';
+import { SpatialCompareMatrixModal } from '@/components/Modal/SpatialCompareMatrixModal';
+import { formatMGRS } from '@/lib/vendor/mgrs';
 import { calculateSunLight, safeSetLight } from '@/utils/sunLightCalculator';
 import {
   runViewshedSimulation as calculateViewshed,
@@ -842,6 +849,11 @@ export const MapViewer: React.FC = () => {
     toggleViewshedMode,
     setViewshedResult,
     clearViewshed,
+    // [신규 벤더링]: 전술 정찰 광학계 및 후보지 비교 분석 모달
+    reconOpticsMode,
+    setReconOpticsMode,
+    isCompareMatrixOpen,
+    toggleCompareMatrix,
     // [신규] 3D 실측 줄자
     isMeasureMode,
     measurePoints,
@@ -1243,10 +1255,13 @@ export const MapViewer: React.FC = () => {
           const badgeEl = document.getElementById('realtime-metrics-badge');
           if (badgeEl) {
             const curMode = useMapStore.getState().renderMode3D || 'facade';
+            const opticsMode = useMapStore.getState().reconOpticsMode || 'optical';
             const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : curMode === 'native' ? '클린 화이트 GPU' : '3D 타일셋 스트림';
+            const opticsTag = opticsMode === 'optical' ? '주간 실사' : opticsMode === 'nvg' ? 'NVG 야간' : opticsMode === 'flir' ? 'FLIR 열화상' : 'CRT 전술';
             const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || realtimeMetricsRef.current.renderedBuildingCount || 3000;
             const actLayers = realtimeMetricsRef.current.activeLayersCount || 19;
-            badgeEl.textContent = `[${modeLabel} | ${currentFps} FPS | EL. +${altM}m | ${pitch}° 틸트 | 건물: ${bldgCount.toLocaleString()}동 | 레이어: ${actLayers}개]`;
+            const mgrsStr = formatMGRS(center.lng, center.lat, 5);
+            badgeEl.textContent = `[${modeLabel} (${opticsTag}) | MGRS: ${mgrsStr} | ${currentFps} FPS | EL. +${altM}m | ${pitch}° 틸트 | 건물: ${bldgCount.toLocaleString()}동 | 레이어: ${actLayers}개]`;
           }
         }
       }
@@ -7368,15 +7383,19 @@ export const MapViewer: React.FC = () => {
           )}
         </div>
 
+        {/* [타 저장소 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 오버레이 */}
+        <TacticalScopeOverlay />
+
         {/* 16:9 브리핑 오버레이 프레임워크 */}
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
         <BriefingHeader />
 
-        {/* [원클릭 3D 렌더러 & 3D 시네마틱 뷰포트 프리셋 & 3D 공간 측정 퀵 체인저 플로팅 바] */}
+        {/* [통합 전술 커맨드 독: 3D 렌더러 + 정찰 광학 + 뷰포트 프리셋 + 3D 측정 + 후보지 비교] */}
         <div
           id="quick-3d-mode-switcher"
           className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none flex items-center gap-2"
         >
+          {/* 1. 3D 건축물 렌더러 모드 */}
           <div className="flex items-center gap-1.5 bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/60 rounded-full px-2 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/30">
             <button
               id="btn-3d-mode-facade"
@@ -7439,7 +7458,63 @@ export const MapViewer: React.FC = () => {
             </button>
           </div>
 
-          {/* [3D 시네마틱 뷰포트 프리셋 (조감 / 보행자 / 드라이브)] */}
+          {/* 2. 전술 정찰 광학 모드 (Optics: 주간 / NVG / FLIR / CRT) */}
+          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/20">
+            <button
+              id="btn-optics-optical"
+              onClick={() => setReconOpticsMode('optical')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                reconOpticsMode === 'optical'
+                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
+                  : 'text-slate-300 hover:text-white hover:bg-emerald-950/50'
+              }`}
+              title="주간 고해상도 실사 광학 뷰"
+            >
+              <Eye className="w-3 h-3" />
+              <span>주간</span>
+            </button>
+            <button
+              id="btn-optics-nvg"
+              onClick={() => setReconOpticsMode('nvg')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                reconOpticsMode === 'nvg'
+                  ? 'bg-emerald-500 text-slate-950 font-black shadow-md ring-1 ring-emerald-300 animate-pulse'
+                  : 'text-emerald-400 hover:text-white hover:bg-emerald-950/60'
+              }`}
+              title="야간 투시경 (NVG 녹색 형광 증폭 & CRT 주사선)"
+            >
+              <Moon className="w-3 h-3" />
+              <span>NVG</span>
+            </button>
+            <button
+              id="btn-optics-flir"
+              onClick={() => setReconOpticsMode('flir')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                reconOpticsMode === 'flir'
+                  ? 'bg-orange-500 text-slate-950 font-black shadow-md ring-1 ring-orange-300 animate-pulse'
+                  : 'text-orange-400 hover:text-white hover:bg-orange-950/60'
+              }`}
+              title="열화상 적외선 (FLIR False-color Ironbow 적외선 탐지)"
+            >
+              <Flame className="w-3 h-3" />
+              <span>FLIR</span>
+            </button>
+            <button
+              id="btn-optics-crt"
+              onClick={() => setReconOpticsMode('crt')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                reconOpticsMode === 'crt'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300 animate-pulse'
+                  : 'text-amber-400 hover:text-white hover:bg-amber-950/60'
+              }`}
+              title="전술 지휘소 CRT 앰버 단색 모니터"
+            >
+              <Monitor className="w-3 h-3" />
+              <span>CRT</span>
+            </button>
+          </div>
+
+          {/* 3. 3D 시네마틱 뷰포트 프리셋 (조감 / 보행자 / 드라이브) */}
           <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-cyan-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-cyan-500/20">
             <button
               id="btn-viewport-birds-eye"
@@ -7470,12 +7545,12 @@ export const MapViewer: React.FC = () => {
             </button>
           </div>
 
-          {/* [3D 실시간 공간 거리/표고 측정 토글 버튼] */}
-          <div className="flex items-center bg-[#0b1410]/95 backdrop-blur-md border border-amber-500/50 rounded-full p-0.5 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-amber-500/20">
+          {/* 4. 전술 분석 도구 (3D 측정 & 후보지 비교) */}
+          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-amber-500/50 rounded-full p-0.5 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-amber-500/20">
             <button
               id="btn-quick-measure-3d"
               onClick={() => toggleMeasureMode()}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 isMeasureMode
                   ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300 animate-pulse'
                   : 'text-amber-300 hover:text-white hover:bg-amber-950/60'
@@ -7484,6 +7559,20 @@ export const MapViewer: React.FC = () => {
             >
               <Ruler className="w-3.5 h-3.5" />
               <span>{isMeasureMode ? '측정 가동 중' : '3D 측정'}</span>
+            </button>
+
+            <button
+              id="btn-quick-compare-matrix"
+              onClick={() => toggleCompareMatrix()}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                isCompareMatrixOpen
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black shadow-md'
+                  : 'text-emerald-300 hover:text-white hover:bg-emerald-950/60'
+              }`}
+              title="📊 강원 핵심 군 유휴지 1:1 다각적 비교 분석 매트릭스 모달 열기"
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>후보지 비교</span>
             </button>
           </div>
         </div>
@@ -8532,6 +8621,9 @@ export const MapViewer: React.FC = () => {
         onStopFlight={handleStopFlight}
         onStartRecordingWithFlight={handleStartRecordingWithFlight}
       />
+
+      {/* [타 저장소 벤더링]: 강원 18개 군 유휴지 6대 지표 1:1 다각적 비교 분석 매트릭스 모달 */}
+      <SpatialCompareMatrixModal />
     </div>
   );
 };
