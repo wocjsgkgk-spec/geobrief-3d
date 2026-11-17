@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
       );
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
 
       try {
         const res = await fetch(dataApiUrl, {

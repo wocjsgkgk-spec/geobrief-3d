@@ -25,6 +25,11 @@ export class ElevationCache {
     return this.isInteractionLocked;
   }
 
+  public has(coord: [number, number]): boolean {
+    if (!coord || !Number.isFinite(coord[0]) || !Number.isFinite(coord[1])) return false;
+    return this.cache.has(this.makeCoordKey(coord[0], coord[1]));
+  }
+
   /**
    * 경위도 좌표를 정밀도 5자리(약 1m 오차) 문자열 키로 변환
    */

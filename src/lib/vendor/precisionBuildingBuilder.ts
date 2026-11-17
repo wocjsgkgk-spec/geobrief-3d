@@ -192,8 +192,8 @@ export class PrecisionBuildingBuilder {
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
-    // [V-World 3D 실사화: 강원 경사지 기초 스커트 고도화] 건물 크기와 경사에 맞춰 최대 -4.5m까지 지반에 완벽 밀착
-    const skirtDepth = Math.max(3.5, Math.min(5.5, (maxEdgeLen || 20) * 0.12));
+    // [V-World 3D 실사화: 강원 경사지 기초 스커트 고도화] 건물 크기와 경사에 맞춰 최대 -8.0m까지 지반에 완벽 밀착
+    const skirtDepth = Math.max(4.5, Math.min(8.0, (maxEdgeLen || 20) * 0.22));
     const groundElev = Math.max(0, baseElev - skirtDepth);
 
     // 16종 독립 스타일 배분
@@ -259,20 +259,20 @@ export class PrecisionBuildingBuilder {
         let v0 = 0, v1 = 1;
         if (isApartment) {
           if (isSide) {
-            u0 = 0.92;
+            u0 = 0.0;
             u1 = 1.0;
-            v0 = 0;
+            v0 = 0.0;
             v1 = 1.0;
           } else {
-            u0 = 0;
-            u1 = (elen / 3.2) * 0.92;
-            v0 = 0;
+            u0 = 0.0;
+            u1 = elen / 3.2;
+            v0 = 0.0;
             v1 = height / 3.0;
           }
         } else {
-          u0 = 0;
+          u0 = 0.0;
           u1 = elen / 3.2;
-          v0 = 0;
+          v0 = 0.0;
           v1 = height / 3.0;
         }
 
@@ -378,14 +378,14 @@ export class PrecisionBuildingBuilder {
         let u0 = 0, u1 = 1;
         if (isApartment) {
           if (isSide) {
-            u0 = 0.92;
+            u0 = 0.0;
             u1 = 1.0;
           } else {
-            u0 = 0;
-            u1 = (elen / 3.2) * 0.92;
+            u0 = 0.0;
+            u1 = elen / 3.2;
           }
         } else {
-          u0 = 0;
+          u0 = 0.0;
           u1 = elen / 3.2;
         }
 
@@ -403,14 +403,16 @@ export class PrecisionBuildingBuilder {
           let vv0 = 0, vv1 = mainH / 3.0;
           if (isApartment) {
             if (isSide) {
-              vu0 = 0.92;
+              vu0 = 0.0;
               vu1 = 1.0;
+              vv0 = 0.0;
+              vv1 = 1.0;
             } else {
-              vu0 = 0;
-              vu1 = (elen / 3.2) * 0.92;
+              vu0 = 0.0;
+              vu1 = elen / 3.2;
             }
           } else {
-            vu0 = 0;
+            vu0 = 0.0;
             vu1 = elen / 3.2;
           }
 
@@ -791,14 +793,14 @@ export class PrecisionBuildingBuilder {
         let u0 = 0, u1 = 1;
         if (isApartment) {
           if (isSide) {
-            u0 = 0.92;
+            u0 = 0.0;
             u1 = 1.0;
           } else {
-            u0 = 0;
-            u1 = (elen / 3.2) * 0.92;
+            u0 = 0.0;
+            u1 = elen / 3.2;
           }
         } else {
-          u0 = 0;
+          u0 = 0.0;
           u1 = elen / 3.2;
         }
 
@@ -912,7 +914,7 @@ export class PrecisionBuildingBuilder {
         const isSide = sideWallEdgeIndices.has(i);
 
         if (isSide) {
-          // 아파트 측벽: 매끈한 콘크리트 + 단지 브랜드 수직 컬러 줄눈 전용 영역 (Slot 0..4 우측 [0.92..1.0] 스트립)
+          // 아파트 측벽: 매끈한 콘크리트 + 단지 브랜드 수직 컬러 줄눈 + "101동" 네온 배지 전면 1:1 맵핑 (Slot 4)
           addSlotQuad(
             style.sideWallSlot,
             pBL,
@@ -920,14 +922,14 @@ export class PrecisionBuildingBuilder {
             pTR,
             pTL,
             [nx, 0, nz],
-            [0.92, 0],
-            [1.0, 0],
-            [1.0, 1],
-            [0.92, 1]
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [1.0, 1.0],
+            [0.0, 1.0]
           );
         } else {
-          // 기준층 본동 외벽: 3.2m 베이 × 3.0m 층고 정밀 타일링
-          const u = (elen / 3.2) * (isApartment ? 0.92 : 1.0);
+          // 기준층 본동 외벽: 3.2m 베이 × 3.0m 층고 정밀 타일링 (왜곡 없는 1:1 종횡비)
+          const u = elen / 3.2;
           const v = mainH / 3.0;
 
           addSlotQuad(

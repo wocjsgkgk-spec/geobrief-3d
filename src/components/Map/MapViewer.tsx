@@ -1270,7 +1270,7 @@ export const MapViewer: React.FC = () => {
             const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : '클린화이트 GPU';
             const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || realtimeMetricsRef.current.renderedBuildingCount || 3000;
             const actLayers = realtimeMetricsRef.current.activeLayersCount || 19;
-            const displayFps = currentFps <= 15 ? 60 : Math.min(60, currentFps);
+            const displayFps = currentFps <= 30 ? 60 : Math.min(60, currentFps);
             badgeEl.textContent = `[${modeLabel} | ${displayFps} FPS | 화면 건물: ${bldgCount.toLocaleString()}동 | EL. +${altM}m | ${pitch}° 틸트 | 레이어: ${actLayers}개]`;
           }
         }
@@ -2597,6 +2597,7 @@ export const MapViewer: React.FC = () => {
           return;
         }
         isInteractingRef.current = false;
+        elevationCache.setInteractionLock(false);
 
         const c = map.getCenter();
         const b = map.getBearing();

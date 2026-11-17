@@ -204,6 +204,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   // [3단계 고성능 엔진] 3ms 타임슬라이싱 및 사전할당 Float32Array 버퍼
   private builtBuildingKeys: Set<string> = new Set();
+  private temporaryElevationBuildingKeys: Set<string> = new Set();
+  private reanchorDebounceTimer: any = null;
   // [4중 안전 필터링 - 중복 필터]: 반경 4m 이내 동일 위치 중복 중심점 1개만 유지하는 공간 그리드
   private centroidSpatialGrid: Map<string, [number, number][]> = new Map();
   private activeBuildIdleId: any = null;
@@ -289,6 +291,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (clearState) {
       this.persistentBuildingMap.clear();
       this.builtBuildingKeys.clear();
+      this.temporaryElevationBuildingKeys.clear();
       this.centroidSpatialGrid.clear();
       this.resetAccumulatedBuffers();
       if (this.masterMesh && this.scene) {
@@ -666,7 +669,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       map.on('idle', this.handleMapIdle);
       map.on('terrain', this.handleTerrainChange);
-      // [60fps 최적화]: 타일 스트리밍 중 메인 스레드를 멈추게 하던 sourcedata 무한 리스너 영구 제거
+      map.on('sourcedata', this.handleSourceData);
 
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
       const center = map.getCenter();
@@ -675,6 +678,30 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     } catch (err) {
       console.warn('[RealisticKoreanCityLayer] onAdd error:', err);
     }
+  }
+
+  private handleSourceData = (e: any): void => {
+    if (e && (e.sourceId === 'terrain-dem' || e.sourceId === 'terrarium-dem') && e.isSourceLoaded) {
+      if (this.temporaryElevationBuildingKeys.size > 0 && !this.isMoving) {
+        this.reanchorTemporaryElevationBuildings();
+      }
+    }
+  };
+
+  public reanchorTemporaryElevationBuildings(): void {
+    if (!this.map || this.isMoving || this.temporaryElevationBuildingKeys.size === 0) return;
+    if (this.reanchorDebounceTimer) clearTimeout(this.reanchorDebounceTimer);
+    this.reanchorDebounceTimer = setTimeout(() => {
+      this.reanchorDebounceTimer = null;
+      if (!this.map || this.isMoving || this.temporaryElevationBuildingKeys.size === 0) return;
+      for (const k of this.temporaryElevationBuildingKeys) {
+        this.builtBuildingKeys.delete(k);
+      }
+      this.temporaryElevationBuildingKeys.clear();
+      this.centroidSpatialGrid.clear();
+      this.resetAccumulatedBuffers();
+      this.extractAndBuildFromMap();
+    }, 200);
   }
 
   private terrainDebounceTimer: any = null;
@@ -688,13 +715,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // 3D 지형 로드 또는 배율 변경 시 건물 기초 표고 및 3D 도로 표지판을 실제 지형 높이에 1:1 재정합
       this.buildRoadSignGantries();
       this.builtBuildingKeys.clear();
+      this.temporaryElevationBuildingKeys.clear();
       this.centroidSpatialGrid.clear();
       this.resetAccumulatedBuffers();
       this.extractAndBuildFromMap();
     }, 250);
   };
-
-
 
   private idleDebounceTimer: any = null;
   private lastKnownCenterElev: number = 0;
@@ -706,6 +732,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         return;
       }
       this.isMoving = false;
+      if (this.temporaryElevationBuildingKeys.size > 0) {
+        this.reanchorTemporaryElevationBuildings();
+        return;
+      }
       if (this.idleDebounceTimer) clearTimeout(this.idleDebounceTimer);
       this.idleDebounceTimer = setTimeout(() => {
         this.idleDebounceTimer = null;
@@ -716,6 +746,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             this.lastKnownCenterElev = curElev;
             // DEM 타일 로드 완료로 지형 높이가 확정되었을 때 정점 버퍼 재정합
             this.builtBuildingKeys.clear();
+            this.temporaryElevationBuildingKeys.clear();
             this.centroidSpatialGrid.clear();
             this.resetAccumulatedBuffers();
           }
@@ -739,9 +770,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
     }
-    // [단일 마스터 동기화]: 불필요한 450ms 중복 빌드 타이머를 제거하고,
-    // 대기 중인 잔여 피처가 있는 경우에만 부드럽게 완료
-    if (this.pendingFeatures) {
+    if (this.temporaryElevationBuildingKeys.size > 0) {
+      this.reanchorTemporaryElevationBuildings();
+    } else if (this.pendingFeatures) {
       const next = this.pendingFeatures;
       this.pendingFeatures = null;
       this.buildRealisticCityMesh(next);
@@ -1420,8 +1451,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     map: maplibregl.Map,
     cachedCenter?: { lng: number; lat: number },
     cachedCenterElev?: number
-  ): boolean {
-    if (!feat.geometry) return false;
+  ): { built: boolean; isPrecise: boolean } {
+    if (!feat.geometry) return { built: false, isPrecise: false };
 
     interface PolyData {
       outerRing: [number, number][];
@@ -1451,8 +1482,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    if (polyList.length === 0) return false;
+    if (polyList.length === 0) return { built: false, isPrecise: false };
     let anyBuilt = false;
+    let allPrecise = true;
 
     for (let r = 0; r < polyList.length; r++) {
       const polyItem = polyList[r];
@@ -1732,22 +1764,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // MapLibre map.getTerrain() 활성화 상태 안전 검사 (지형 미적용 시 0m 평면 밀착)
       const isTerrainActive = Boolean(map.getTerrain());
       let rawElev = 0;
+      let hasPreciseElev = false;
 
       if (isTerrainActive) {
         try {
           const cached = elevationCache.getFromMap(map, [cLng, cLat]);
           if (cached > 0) {
             rawElev = cached;
+            hasPreciseElev = true;
           }
         } catch {}
 
         // 지형 타일 로드 대기 중 또는 평탄지: 화면 중심 표고 또는 강원 18개 시·군 공식 기본 지형 표고로 안전 안착
         if (rawElev <= 0) {
           rawElev = (cachedCenterElev && cachedCenterElev > 0) ? cachedCenterElev : getGangwonBaseElevation(cLng, cLat);
+          hasPreciseElev = false;
         }
       } else {
         // 지형 비활성화 시 해수면 0m 평면에 칼같이 밀착
         rawElev = 0;
+        hasPreciseElev = true;
+      }
+      if (!hasPreciseElev) {
+        allPrecise = false;
       }
 
       const baseElev = rawElev;
@@ -1833,7 +1872,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       anyBuilt = true;
     }
 
-    return anyBuilt;
+    return { built: anyBuilt, isPrecise: allPrecise };
   }
 
   /**
@@ -1973,9 +2012,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
             continue;
           }
 
-          const built = this.processSingleBuildingFeature(feat, metersPerLng, metersPerLat, map, cachedCenter, cachedCenterElev);
-          if (built) {
+          const bldgResult = this.processSingleBuildingFeature(feat, metersPerLng, metersPerLat, map, cachedCenter, cachedCenterElev);
+          if (bldgResult.built) {
             this.builtBuildingKeys.add(key);
+            if (!bldgResult.isPrecise) {
+              this.temporaryElevationBuildingKeys.add(key);
+            }
             newlyAddedCount++;
           }
         }
@@ -2278,6 +2320,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     moveEndEvents.forEach((evt) => map.off(evt, this.handleMoveEnd));
     map.off('idle', this.handleMapIdle);
     map.off('terrain', this.handleTerrainChange);
+    map.off('sourcedata', this.handleSourceData);
+
+    if (this.reanchorDebounceTimer) {
+      clearTimeout(this.reanchorDebounceTimer);
+      this.reanchorDebounceTimer = null;
+    }
 
     if (this.terrainDebounceTimer) {
       clearTimeout(this.terrainDebounceTimer);
