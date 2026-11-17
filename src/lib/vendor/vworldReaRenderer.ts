@@ -114,9 +114,11 @@ function createProceduralCanvasTexture(
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(1, 1);
+  texture.anisotropy = 16;
   texture.generateMipmaps = true;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
@@ -467,11 +469,12 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
 // -----------------------------------------------------------------------------
 
 function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ① Korean Authentic Emerald Urethane Roof (#2d6a4f, #357a5b)
-  ctx.fillStyle = '#2d6a4f';
+  // 1. 한국형 심층 에메랄드 우레탄 방수 도막 (#1e4e37, #2d6a4f, #357a5b)
+  ctx.fillStyle = '#22583b';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = '#357a5b';
+  // 미세 투톤 텍스처 (128px 우레탄 롤러 도색 결)
+  ctx.fillStyle = '#2d6a4f';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {
@@ -480,9 +483,9 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
     }
   }
 
-  // Expansion control joints
-  ctx.strokeStyle = '#1b4332';
-  ctx.lineWidth = 6;
+  // 2. 우레탄 신축줄눈 실란트 (Expansion Control Joint Sealant Lines)
+  ctx.strokeStyle = '#143525';
+  ctx.lineWidth = 8;
   for (let x = 0; x <= w; x += 256) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -495,15 +498,237 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
     ctx.lineTo(w, y);
     ctx.stroke();
   }
+  // 줄눈 엣지 하이라이트
+  ctx.strokeStyle = 'rgba(74, 222, 128, 0.15)';
+  ctx.lineWidth = 2;
+  for (let x = 0; x <= w; x += 256) {
+    ctx.beginPath();
+    ctx.moveTo(x + 4, 0);
+    ctx.lineTo(x + 4, h);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= h; y += 256) {
+    ctx.beginPath();
+    ctx.moveTo(0, y + 4);
+    ctx.lineTo(w, y + 4);
+    ctx.stroke();
+  }
 
-  // Rooftop Drain (배수구)
-  ctx.fillStyle = '#1e293b';
+  // 3. 루프 드레인 배수구 (주철 주물 거름망)
+  const drainX = w * 0.5;
+  const drainY = h * 0.5;
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
   ctx.beginPath();
-  ctx.arc(w * 0.5, h * 0.5, 42, 0, Math.PI * 2);
+  ctx.arc(drainX, drainY, 46, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 6;
   ctx.stroke();
+  // 거름망 살
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 3;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+    ctx.beginPath();
+    ctx.moveTo(drainX, drainY);
+    ctx.lineTo(drainX + Math.cos(a) * 44, drainY + Math.sin(a) * 44);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(drainX, drainY, 24, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // 4. 한국 도시 시그니처: 파란색 FRP 원형 물탱크 (Blue Cylindrical FRP Water Tank)
+  ctx.save();
+  const tankX = w * 0.74;
+  const tankY = h * 0.28;
+  const tankR = 100;
+
+  // 물탱크 콘크리트 패드 기초대 (Concrete Base Foundation) & 드롭 섀도우
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+  ctx.fillRect(tankX - tankR - 18, tankY - tankR - 10, tankR * 2 + 36, tankR * 2 + 36);
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(tankX - tankR - 14, tankY - tankR - 14, tankR * 2 + 28, tankR * 2 + 28);
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(tankX - tankR - 14, tankY - tankR - 14, tankR * 2 + 28, tankR * 2 + 28);
+
+  // 탱크 3D 원통형 음영 (Radial Gradient)
+  const tankGrad = ctx.createRadialGradient(
+    tankX - tankR * 0.35, tankY - tankR * 0.35, 12,
+    tankX, tankY, tankR
+  );
+  tankGrad.addColorStop(0, '#38bdf8'); // 밝은 하늘빛 하이라이트
+  tankGrad.addColorStop(0.3, '#0284c7'); // 한국 FRP 시그니처 코발트 시안
+  tankGrad.addColorStop(0.75, '#0369a1'); // 딥 블루 바디
+  tankGrad.addColorStop(1, '#0c4a6e'); // 섀도우 림
+  ctx.fillStyle = tankGrad;
+  ctx.beginPath();
+  ctx.arc(tankX, tankY, tankR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 수밀 보강 링 (Reinforcement Hoops)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(tankX, tankY, tankR * 0.82, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(tankX, tankY, tankR * 0.58, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 상단 스테인리스 점검구 맨홀 뚜껑 (Metallic Manhole Lid)
+  const lidGrad = ctx.createLinearGradient(tankX - 32, tankY - 32, tankX + 32, tankY + 32);
+  lidGrad.addColorStop(0, '#f8fafc');
+  lidGrad.addColorStop(0.5, '#cbd5e1');
+  lidGrad.addColorStop(1, '#64748b');
+  ctx.fillStyle = lidGrad;
+  ctx.beginPath();
+  ctx.arc(tankX, tankY, 32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // 잠금 손잡이
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(tankX - 16, tankY - 4, 32, 8);
+
+  // 급수·배수 배관 (Pipes & Valves)
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(tankX + tankR - 10, tankY + tankR * 0.4);
+  ctx.lineTo(tankX + tankR + 42, tankY + tankR * 0.4);
+  ctx.lineTo(tankX + tankR + 42, tankY + tankR + 48);
+  ctx.stroke();
+  // 붉은 밸브 휠
+  ctx.fillStyle = '#dc2626';
+  ctx.beginPath();
+  ctx.arc(tankX + tankR + 25, tankY + tankR * 0.4, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 5. 에어컨 실외기 뱅크 (Outdoor AC Condenser Units Cluster - 2대 병렬 배치)
+  ctx.save();
+  const acBankX = w * 0.20;
+  const acBankY = h * 0.68;
+  const unitW = 140;
+  const unitH = 92;
+  const unitSpacing = 28;
+
+  for (let u = 0; u < 2; u++) {
+    const ux = acBankX + u * (unitW + unitSpacing);
+    const uy = acBankY;
+
+    // 방진 고무 패드 기초 레일 & 그림자
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+    ctx.fillRect(ux + 4, uy + 6, unitW, unitH);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(ux - 4, uy + unitH - 6, unitW + 8, 10);
+    ctx.fillRect(ux - 4, uy - 4, unitW + 8, 10);
+
+    // 유닛 메인 바디 (아이보리 화이트)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillRect(ux, uy, unitW, unitH);
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(ux, uy, unitW, unitH);
+
+    // 상단 덮개 빗물 그루브
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(ux, uy, unitW, 14);
+
+    // 원형 냉각팬 그릴 (Cooling Fan Grille)
+    const fanCX = ux + unitW * 0.38;
+    const fanCY = uy + unitH * 0.56;
+    const fanR = 30;
+
+    // 팬 챔버 내부 암부
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(fanCX, fanCY, fanR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 팬 블레이드 (4엽 날개)
+    ctx.fillStyle = '#334155';
+    for (let ang = 0; ang < Math.PI * 2; ang += Math.PI / 2) {
+      ctx.beginPath();
+      ctx.arc(fanCX + Math.cos(ang) * 12, fanCY + Math.sin(ang) * 12, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 팬 전면 보호 와이어 가드 (동심원 링 및 방사형 살)
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(fanCX, fanCY, fanR * 0.72, 0, Math.PI * 2);
+    ctx.arc(fanCX, fanCY, fanR * 0.40, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(fanCX - fanR, fanCY);
+    ctx.lineTo(fanCX + fanR, fanCY);
+    ctx.moveTo(fanCX, fanCY - fanR);
+    ctx.lineTo(fanCX, fanCY + fanR);
+    ctx.stroke();
+
+    // 우측 제어반 / 단자 루버 슬릿 (Right Service Louver Slits)
+    const louverX = ux + unitW * 0.76;
+    ctx.fillStyle = '#64748b';
+    for (let ly = uy + 24; ly < uy + unitH - 18; ly += 10) {
+      ctx.fillRect(louverX, ly, 22, 4);
+    }
+  }
+
+  // 실외기 냉매 배관 다발 (Insulated Copper Pipe Harness)
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(acBankX + unitW * 2 + unitSpacing, acBankY + unitH * 0.6);
+  ctx.lineTo(acBankX + unitW * 2 + unitSpacing + 65, acBankY + unitH * 0.6);
+  ctx.lineTo(acBankX + unitW * 2 + unitSpacing + 65, acBankY + unitH * 0.6 - 120);
+  ctx.stroke();
+  // 보온재 은박 테이프 밴딩
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2;
+  for (let px = acBankX + unitW * 2 + unitSpacing + 10; px < acBankX + unitW * 2 + unitSpacing + 60; px += 14) {
+    ctx.beginPath();
+    ctx.moveTo(px, acBankY + unitH * 0.6 - 6);
+    ctx.lineTo(px, acBankY + unitH * 0.6 + 6);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 6. 옥상 출입용 방화 해치 (Stainless Steel Roof Access Hatch)
+  ctx.save();
+  const hatchX = w * 0.22;
+  const hatchY = h * 0.20;
+  const hatchW = 160;
+  const hatchH = 120;
+
+  // 턱(Curb)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+  ctx.fillRect(hatchX + 6, hatchY + 6, hatchW, hatchH);
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(hatchX, hatchY, hatchW, hatchH);
+
+  // 스테인리스 해치 덮개 (Metal Sheen)
+  const hatchGrad = ctx.createLinearGradient(hatchX, hatchY, hatchX + hatchW, hatchY + hatchH);
+  hatchGrad.addColorStop(0, '#f8fafc');
+  hatchGrad.addColorStop(0.5, '#cbd5e1');
+  hatchGrad.addColorStop(1, '#94a3b8');
+  ctx.fillStyle = hatchGrad;
+  ctx.fillRect(hatchX + 10, hatchY + 10, hatchW - 20, hatchH - 20);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(hatchX + 10, hatchY + 10, hatchW - 20, hatchH - 20);
+
+  // 손잡이
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(hatchX + hatchW * 0.5 - 18, hatchY + hatchH * 0.5 - 5, 36, 10);
+  ctx.restore();
 }
 
 function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -678,8 +903,8 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.42,
-      metalness: 0.18,
+      roughness: 0.35,
+      metalness: 0.22,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -687,13 +912,13 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     }));
   }
 
-  // Mat 5~8: 공공청사·관공서·오피스 (4종) - 화강석 포디움(1~2층) + 밝은 스카이블루(#38bdf8 ~ #0284c7)/에메랄드 반사 유리 커튼월과 은백색 알루미늄 멀리언 프레임
+  // Mat 5~8: 공공청사·관공서·오피스 (4종) - 화강석 포디움(1~2층) + 밝은 스카이블루(#38bdf8 ~ #0284c7)/에메랄드 반사 유리 커튼월과 은백색 알루미늄 멀리언 프레임 (PBR Glass Specularity)
   for (let i = 0; i < 4; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.28,
-      metalness: 0.35,
+      roughness: 0.18,
+      metalness: 0.55,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -706,8 +931,8 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.45,
-      metalness: 0.16,
+      roughness: 0.32,
+      metalness: 0.25,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -720,8 +945,8 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawVillaResidentialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.60,
-      metalness: 0.05,
+      roughness: 0.58,
+      metalness: 0.08,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -742,8 +967,8 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
     // 0: 한국형 초록색 우레탄 방수 옥상 (#2d6a4f, #3b7a57 — 상가·빌라 45%) (Mat 16)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawUrethaneGreenRoof(ctx, w, h)),
-      roughness: 0.38,
-      metalness: 0.12,
+      roughness: 0.32,
+      metalness: 0.10,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -752,8 +977,8 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
     // 1: 밝은 시멘트 회색 슬래브 (#94a3b8 + 중앙 3m 엘리베이터 옥탑방 — 아파트·청사 35%) (Mat 17)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawConcreteSlabRoof(ctx, w, h)),
-      roughness: 0.58,
-      metalness: 0.08,
+      roughness: 0.60,
+      metalness: 0.05,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -772,8 +997,8 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
     // 3: 코발트 블루 강판 (#1d4ed8 — 5%) (Mat 19)
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawCobaltSteelRoof(ctx, w, h)),
-      roughness: 0.25,
-      metalness: 0.45,
+      roughness: 0.22,
+      metalness: 0.50,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -978,7 +1203,7 @@ export function classifyVWorldReaStyle(
 
   if (isApt) {
     category = 'apartment';
-    slot = Math.abs(seed) % 5; // Mat 0~4: 아파트 단지 (5종)
+    slot = Math.abs(seed) % 4; // Mat 0~3: 아파트 전·후면 발코니 샤시 (4종)
     // 아파트 옥상: 100% 밝은 시멘트 슬래브(#cbd5e1)와 옥탑방 코어 (초록 우레탄 절대 금지!)
     roofType = 'concrete';
     roofMaterialIndex = 1;
@@ -1125,23 +1350,46 @@ export function buildVWorldRea5PartGeometry(
   }
 
   // ---------------------------------------------------------------------------
-  // [Part 1 & 2: 본동 외벽 (0 ~ H) — geometry.addGroup(start, count, style.slot)]
+  // [Part 1 & 2: 본동 외벽 (0 ~ H) — geometry.addGroup]
+  // 아파트(isApartment)인 경우:
+  // - 장변(전·후면 발코니 샤시): style.slot (0..3)
+  // - 단변(측벽 2개 변): slot 4 (순백 콘크리트 + 브랜드 스트라이프 + 101동 네온 배지)
   // ---------------------------------------------------------------------------
-  const startVertexMain = positions.length / 3;
   const n = pts2D.length;
-
+  const edgeLens: number[] = [];
+  let maxEdgeLen = 0;
   for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    const elen = Math.hypot(pts2D[next].x - pts2D[i].x, pts2D[next].z - pts2D[i].z);
+    edgeLens.push(elen);
+    if (elen > maxEdgeLen) maxEdgeLen = elen;
+  }
+
+  const sideWallIndices = new Set<number>();
+  if (style.isApartment && finalH >= 20.0 && n >= 4) {
+    const sorted = edgeLens
+      .map((elen, idx) => ({ idx, elen }))
+      .sort((a, b) => a.elen - b.elen);
+    for (const item of sorted) {
+      if (sideWallIndices.size >= 2) break;
+      if (item.elen < maxEdgeLen * 0.75) {
+        sideWallIndices.add(item.idx);
+      }
+    }
+  }
+
+  // 1) 전·후면 메인 파사드 외벽
+  const startVertexMain = positions.length / 3;
+  for (let i = 0; i < n; i++) {
+    if (sideWallIndices.has(i)) continue;
     const next = (i + 1) % n;
     const p1 = pts2D[i];
     const p2 = pts2D[next];
-
-    const dx = p2.x - p1.x;
-    const dz = p2.z - p1.z;
-    const edgeLen = Math.hypot(dx, dz);
+    const edgeLen = edgeLens[i];
     if (edgeLen < 0.001) continue;
 
-    const nx = -dz / edgeLen;
-    const nz = dx / edgeLen;
+    const nx = -(p2.z - p1.z) / edgeLen;
+    const nz = (p2.x - p1.x) / edgeLen;
 
     const uRepeat = edgeLen / 3.4;
     const vRepeat = finalH / 3.1;
@@ -1161,7 +1409,43 @@ export function buildVWorldRea5PartGeometry(
 
   const countVertexMain = positions.length / 3 - startVertexMain;
   if (countVertexMain > 0) {
-    geometry.addGroup(startVertexMain, countVertexMain, style.slot); // Mat 0..15
+    geometry.addGroup(startVertexMain, countVertexMain, style.slot); // Mat 0..15 (아파트의 경우 0..3)
+  }
+
+  // 2) 아파트 측벽 (Side Wall, Mat 4: 순백색 콘크리트 + 101동 배지)
+  if (sideWallIndices.size > 0) {
+    const startVertexSide = positions.length / 3;
+    for (const i of sideWallIndices) {
+      const next = (i + 1) % n;
+      const p1 = pts2D[i];
+      const p2 = pts2D[next];
+      const edgeLen = edgeLens[i];
+      if (edgeLen < 0.001) continue;
+
+      const nx = -(p2.z - p1.z) / edgeLen;
+      const nz = (p2.x - p1.x) / edgeLen;
+
+      // 측벽 전체 1회 맵핑 (101동 배지가 상층부에 정위치 배치)
+      const uRepeat = 1.0;
+      const vRepeat = 1.0;
+
+      addQuad(
+        [p1.x, baseElev, p1.z],
+        [p2.x, baseElev, p2.z],
+        [p2.x, topElev, p2.z],
+        [p1.x, topElev, p1.z],
+        [nx, 0, nz],
+        [0, 0],
+        [uRepeat, 0],
+        [uRepeat, vRepeat],
+        [0, vRepeat]
+      );
+    }
+
+    const countVertexSide = positions.length / 3 - startVertexSide;
+    if (countVertexSide > 0) {
+      geometry.addGroup(startVertexSide, countVertexSide, 4); // Mat 4: 아파트 측벽 배지
+    }
   }
 
   // ---------------------------------------------------------------------------

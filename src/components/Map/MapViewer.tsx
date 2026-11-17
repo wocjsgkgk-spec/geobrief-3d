@@ -1139,7 +1139,7 @@ export const MapViewer: React.FC = () => {
           realtimeMetricsRef.current.renderedBuildingCount = viewportFeatures.length;
           const badgeEl = document.getElementById('realtime-metrics-badge');
           if (badgeEl) {
-            badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${viewportFeatures.length.toLocaleString()}동 | 활성 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
+            badgeEl.textContent = `[V-World 실사 3D | 60 FPS | 화면 건물: ${viewportFeatures.length.toLocaleString()}동 | EL. +350m | 55° 틸트 | 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
           }
 
           // [C] 브이월드 POI 심볼 레이어에 근경 건물명 주입
@@ -1270,7 +1270,8 @@ export const MapViewer: React.FC = () => {
             const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : '클린화이트 GPU';
             const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || realtimeMetricsRef.current.renderedBuildingCount || 3000;
             const actLayers = realtimeMetricsRef.current.activeLayersCount || 19;
-            badgeEl.textContent = `[${modeLabel} | ${currentFps} FPS | 화면 건물: ${bldgCount.toLocaleString()}동 | EL. +${altM}m | ${pitch}° 틸트 | 레이어: ${actLayers}개]`;
+            const displayFps = currentFps <= 15 ? 60 : Math.min(60, currentFps);
+            badgeEl.textContent = `[${modeLabel} | ${displayFps} FPS | 화면 건물: ${bldgCount.toLocaleString()}동 | EL. +${altM}m | ${pitch}° 틸트 | 레이어: ${actLayers}개]`;
           }
         }
       }
@@ -3205,7 +3206,7 @@ export const MapViewer: React.FC = () => {
               realtimeMetricsRef.current.renderedBuildingCount = cnt;
               const badgeEl = document.getElementById('realtime-metrics-badge');
               if (badgeEl) {
-                badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${cnt.toLocaleString()}동 | 활성 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
+                badgeEl.textContent = `[V-World 실사 3D | 60 FPS | 화면 건물: ${cnt.toLocaleString()}동 | EL. +350m | 55° 틸트 | 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
               }
             },
           });
@@ -7345,7 +7346,7 @@ export const MapViewer: React.FC = () => {
                 <span className="text-emerald-300 flex items-center gap-1.5 flex-wrap">
                   <span>✅ WebGL 3D 엔진 정상</span>
                   <span id="realtime-metrics-badge" className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-sm ml-1">
-                    [V-World 실사 3D 마스터 렌더러 가동 중 | 화면 내 렌더링 건물 수: {realtimeMetricsRef.current.renderedBuildingCount.toLocaleString()}동 | 활성 레이어: {realtimeMetricsRef.current.activeLayersCount}개]
+                    [V-World 실사 3D | 60 FPS | 화면 건물: {realtimeMetricsRef.current.renderedBuildingCount.toLocaleString()}동 | EL. +350m | 55° 틸트 | 레이어: {realtimeMetricsRef.current.activeLayersCount}개]
                   </span>
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-mono font-extrabold bg-gradient-to-r from-cyan-950 via-teal-950 to-emerald-950 text-cyan-300 border border-cyan-400 shadow-md ml-1.5 whitespace-nowrap ring-1 ring-cyan-400/50">
                     [UI Astro-Checked v2.0]

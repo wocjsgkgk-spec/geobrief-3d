@@ -130,7 +130,7 @@ export function classifyBuildingStyle(
   return {
     category: reaStyle.category === 'apartment' ? 'apartment' : reaStyle.category === 'commercial' ? 'commercial' : reaStyle.category === 'public' ? 'public' : 'villa',
     facadeSlot: reaStyle.slot,
-    sideWallSlot: reaStyle.slot,
+    sideWallSlot: reaStyle.category === 'apartment' ? 4 : reaStyle.slot,
     podiumSlot: reaStyle.category === 'commercial' ? 9 : reaStyle.category === 'public' ? 5 : 2,
     signboardSlot: reaStyle.category === 'commercial' ? 10 : 6,
     porchSlot: 0,
