@@ -75,12 +75,13 @@ export interface Master3DRendererOptions {
  * 맵 내 모든 fill-extrusion 건축 레이어를 상호 배타적으로 숨김 처리하는 무결점 헬퍼
  */
 export function hideAllFillExtrusionLayers(map: maplibregl.Map): void {
+  if (!map || !(map as any).style || (map as any)._removed) return;
   ALL_FILL_EXTRUSION_LAYER_IDS.forEach((id) => {
-    if (map.getLayer(id)) {
-      try {
+    try {
+      if (map.getLayer(id)) {
         map.setLayoutProperty(id, 'visibility', 'none');
-      } catch {}
-    }
+      }
+    } catch {}
   });
 
   try {

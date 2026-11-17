@@ -610,7 +610,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // [사용자 지침: 확실하지 않은 3D 도로 표지판 전면 삭제] 문형식 이정표 씬 추가 원천 차단
       // (기존 this.scene.add(this.roadSignGroup) 영구 제거)
 
-      // 3. WebGLRenderer 바인딩 및 컨텍스트 유실 복구 가드
+      // 3. WebGLRenderer 바인딩 및 컨텍스트 유실 복구 가드 (Auto-Recovery Watchdog)
       const canvas = map.getCanvas();
       canvas.addEventListener('webglcontextlost', (e) => {
         e.preventDefault();
@@ -618,10 +618,31 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         this.isContextLost = true;
       });
       canvas.addEventListener('webglcontextrestored', () => {
-        console.info('[RealisticKoreanCityLayer] WebGL Context Restored! Rebuilding master city mesh.');
+        console.info('[RealisticKoreanCityLayer] WebGL Context Restored! Auto-recovering renderer and city mesh.');
         this.isContextLost = false;
+        try {
+          if (this.renderer) {
+            this.renderer.dispose();
+          }
+          this.renderer = new THREE.WebGLRenderer({
+            canvas,
+            context: gl,
+            antialias: true,
+            alpha: true,
+          });
+          this.renderer.autoClear = false;
+          this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+          this.renderer.shadowMap.enabled = false;
+          const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+          this.renderer.setPixelRatio(pr);
+        } catch (rErr) {
+          console.warn('[RealisticKoreanCityLayer] Renderer auto-recovery notice:', rErr);
+        }
         this.resetAccumulatedBuffers();
         this.extractAndBuildFromMap();
+        if (this.map) {
+          this.map.triggerRepaint();
+        }
       });
 
       this.renderer = new THREE.WebGLRenderer({
@@ -995,36 +1016,76 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     dirOrAlt: [number, number, number] | THREE.Vector3 | number,
     colorOrAz?: string | number,
     intensity: number = 1.20,
+    colorOrFog?: string,
     fogColor?: string,
     fogDensity?: number
   ): void {
     if (!this.sunLight) return;
+    let actualSunColor = '#fffdf0';
+    let actualFogColor = '#cbd5e1';
+
     if (typeof dirOrAlt === 'number' && typeof colorOrAz === 'number') {
-      const radAlt = (dirOrAlt * Math.PI) / 180;
-      const radAz = (colorOrAz * Math.PI) / 180;
-      const x = Math.sin(radAz) * Math.cos(radAlt) * 150;
-      const y = Math.sin(radAlt) * 150;
-      const z = -Math.cos(radAz) * Math.cos(radAlt) * 150;
-      this.sunLight.position.set(x, y, z).normalize();
+      // 1. (altitudeDeg, azimuthDeg, intensity, sunColor, fogColor, fogDensity)
+      const sunDir = getXDWorldSunDirection(colorOrAz, dirOrAlt);
+      this.sunLight.position.set(sunDir[0] * 300, sunDir[1] * 300, sunDir[2] * 300);
+      if (typeof colorOrFog === 'string') actualSunColor = colorOrFog;
+      if (typeof fogColor === 'string') actualFogColor = fogColor;
     } else if (Array.isArray(dirOrAlt)) {
-      this.sunLight.position.set(dirOrAlt[0], dirOrAlt[1], dirOrAlt[2]).normalize();
+      // 2. ([x, y, z], sunColor, intensity, fogColor)
+      this.sunLight.position.set(dirOrAlt[0], dirOrAlt[1], dirOrAlt[2]).normalize().multiplyScalar(300);
+      if (typeof colorOrAz === 'string') actualSunColor = colorOrAz;
+      if (typeof colorOrFog === 'string') actualFogColor = colorOrFog;
     } else if (dirOrAlt && typeof (dirOrAlt as any).x === 'number') {
-      this.sunLight.position.copy(dirOrAlt as THREE.Vector3).normalize();
+      this.sunLight.position.copy(dirOrAlt as THREE.Vector3).normalize().multiplyScalar(300);
+      if (typeof colorOrAz === 'string') actualSunColor = colorOrAz;
+      if (typeof colorOrFog === 'string') actualFogColor = colorOrFog;
     }
-    if (typeof colorOrAz === 'string') {
-      this.sunLight.color.set(colorOrAz);
+
+    this.sunLight.color.set(actualSunColor);
+    this.sunLight.intensity = Math.max(0.4, intensity);
+
+    if (this.ambientLight) {
+      this.ambientLight.intensity = Math.max(0.4, Math.min(1.2, intensity * 0.55));
     }
-    this.sunLight.intensity = Math.max(0.2, intensity);
-    if (this.ambientLight) this.ambientLight.intensity = 0.45;
     if (this.hemisphereLight) {
-      this.hemisphereLight.intensity = 0.25;
+      this.hemisphereLight.intensity = Math.max(0.2, Math.min(0.6, intensity * 0.3));
       this.hemisphereLight.color.set(0xe0f2fe);
       this.hemisphereLight.groundColor.set(0x94a3b8);
     }
 
     // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
     if (this.scene) {
-      applyAtmosphericPerspectiveFog(this.scene, fogColor || '#cbd5e1', fogDensity || 0.00018);
+      applyAtmosphericPerspectiveFog(this.scene, actualFogColor, fogDensity || 0.00018);
+    }
+  }
+
+  public updateLighting(
+    dirOrAlt: [number, number, number] | THREE.Vector3 | number,
+    colorOrAz?: string | number,
+    intensity: number = 1.20,
+    colorOrFog?: string,
+    fogColor?: string,
+    fogDensity?: number
+  ): void {
+    this.updateSunLight(dirOrAlt, colorOrAz, intensity, colorOrFog, fogColor, fogDensity);
+  }
+
+  /**
+   * 18개 시·군 전환 시 기존 지역 메쉬와 VRAM 버퍼를 깨끗이 정리하고 새 기준점으로 초기화
+   */
+  public resetForRegionChange(newCenterLngLat: [number, number]): void {
+    if (this.activeBuildIdleId) {
+      if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.activeBuildIdleId);
+      else clearTimeout(this.activeBuildIdleId);
+      this.activeBuildIdleId = null;
+    }
+    this.cachedFeatures = [];
+    this.vectorTileFeatures = [];
+    this.externalFeatures = [];
+    this.pendingFeatures = null;
+    this.setOrigin(newCenterLngLat, true);
+    if (this.map) {
+      this.map.triggerRepaint();
     }
   }
 
@@ -1037,6 +1098,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   ): void {
     if (!features || features.length === 0) return;
     this.externalFeatures = features;
+    this.cachedFeatures = features;
 
     // [강원 18개 시·군 전역 원점 재설정] 시군간 이동 시 기준 원점 동적 재앵커링
     if (newOriginLngLat && Array.isArray(newOriginLngLat) && newOriginLngLat.length === 2) {

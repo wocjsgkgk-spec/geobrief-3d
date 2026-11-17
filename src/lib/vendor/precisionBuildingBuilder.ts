@@ -192,7 +192,9 @@ export class PrecisionBuildingBuilder {
     }
     const height = clampedHeight;
     const topElev = baseElev + height;
-    const groundElev = Math.max(0, baseElev - 2.0); // 지형 경사면 바닥 들림 방지 정밀 기초 스커트 (-2.0m 전면 적용)
+    // [V-World 3D 실사화: 강원 경사지 기초 스커트 고도화] 건물 크기와 경사에 맞춰 최대 -4.5m까지 지반에 완벽 밀착
+    const skirtDepth = Math.max(3.5, Math.min(5.5, (maxEdgeLen || 20) * 0.12));
+    const groundElev = Math.max(0, baseElev - skirtDepth);
 
     // 16종 독립 스타일 배분
     const style: BuildingStyleAssignment = classifyBuildingStyle(

@@ -413,15 +413,15 @@ export class VworldGpuMasterEngine {
    * 가시성 동적 토글 (0ms 무지연 제어)
    */
   public static setVisible(map: maplibregl.Map, visible: boolean): void {
-    if (!map) return;
+    if (!map || !(map as any).style || (map as any)._removed) return;
     const visStr = visible ? 'visible' : 'none';
 
     for (const layerId of VWORLD_GPU_BUILDING_LAYER_IDS) {
-      if (map.getLayer(layerId)) {
-        try {
+      try {
+        if (map.getLayer(layerId)) {
           map.setLayoutProperty(layerId, 'visibility', visStr);
-        } catch {}
-      }
+        }
+      } catch {}
     }
   }
 }

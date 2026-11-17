@@ -1203,14 +1203,58 @@ export const MapViewer: React.FC = () => {
           (realtimeMetricsRef.current.renderedBuildingCount > 0 ? realtimeMetricsRef.current.renderedBuildingCount : 1500);
 
         realtimeMetricsRef.current = { renderedBuildingCount: bldgCount, activeLayersCount: activeCount };
-        const badgeEl = document.getElementById('realtime-metrics-badge');
-        if (badgeEl) {
-          badgeEl.textContent = `[V-World 실사 3D 마스터 가동 중 | 화면 내 렌더링 건물 수: ${bldgCount.toLocaleString()}동 | 활성 레이어: ${activeCount}개]`;
-        }
       } catch {
         // ignore
       }
     }, 500);
+  }, []);
+
+  // [2-B. 60FPS 및 카메라 고도/틸트 실시간 텔레메트리 (React 리렌더링 0회 달성)]
+  useEffect(() => {
+    let animId: number;
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let currentFps = 60;
+
+    const fpsLoop = (now: number) => {
+      frameCount++;
+      const elapsed = now - lastTime;
+      if (elapsed >= 1000) {
+        currentFps = Math.min(60, Math.round((frameCount * 1000) / elapsed));
+        frameCount = 0;
+        lastTime = now;
+
+        const map = mapRef.current;
+        if (map) {
+          const zoom = map.getZoom();
+          const pitch = Math.round(map.getPitch());
+          const center = map.getCenter();
+          const latRad = (center.lat * Math.PI) / 180;
+          const freeCam = (map as any).getFreeCameraOptions?.();
+          let altM = 350;
+          if (freeCam && freeCam.position && typeof freeCam.position.z === 'number') {
+            altM = Math.round(freeCam.position.z * 40075016.68 * Math.cos(latRad));
+          } else {
+            const groundRes = (156543.03392 * Math.cos(latRad)) / Math.pow(2, zoom);
+            altM = Math.round((map.getCanvas().height || 800) * 1.5 * groundRes);
+          }
+          if (!Number.isFinite(altM) || altM <= 0) altM = 350;
+
+          const badgeEl = document.getElementById('realtime-metrics-badge');
+          if (badgeEl) {
+            const curMode = useMapStore.getState().renderMode3D || 'facade';
+            const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : curMode === 'native' ? '클린 화이트 GPU' : '3D 타일셋 스트림';
+            const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || realtimeMetricsRef.current.renderedBuildingCount || 3000;
+            const actLayers = realtimeMetricsRef.current.activeLayersCount || 19;
+            badgeEl.textContent = `[${modeLabel} | ${currentFps} FPS | EL. +${altM}m | ${pitch}° 틸트 | 건물: ${bldgCount.toLocaleString()}동 | 레이어: ${actLayers}개]`;
+          }
+        }
+      }
+      animId = requestAnimationFrame(fpsLoop);
+    };
+
+    animId = requestAnimationFrame(fpsLoop);
+    return () => cancelAnimationFrame(animId);
   }, []);
 
   // [긴급 에러 오버레이] Window Error & Unhandled Promise Rejection 실시간 감지 리스너
@@ -2377,6 +2421,37 @@ export const MapViewer: React.FC = () => {
       touchPitch: true,
     });
 
+    // [시스템 안정화 가드: WebGL Context Loss & Style Reset 시 Uncaught TypeError 영구 차단]
+    const origGetLayer = map.getLayer.bind(map);
+    map.getLayer = (id: string) => {
+      try {
+        if (!(map as any).style || (map as any)._removed) return undefined;
+        return origGetLayer(id);
+      } catch {
+        return undefined;
+      }
+    };
+
+    const origGetSource = map.getSource.bind(map);
+    map.getSource = (id: string) => {
+      try {
+        if (!(map as any).style || (map as any)._removed) return undefined;
+        return origGetSource(id);
+      } catch {
+        return undefined;
+      }
+    };
+
+    const origGetLayoutProperty = map.getLayoutProperty.bind(map);
+    map.getLayoutProperty = (layerId: string, name: string) => {
+      try {
+        if (!(map as any).style || (map as any)._removed) return undefined;
+        return origGetLayoutProperty(layerId, name);
+      } catch {
+        return undefined;
+      }
+    };
+
     (window as any).__map = map;
     (window as any).__mapInstance = map;
     (window as any).__mapLibreMap = map;
@@ -2423,10 +2498,11 @@ export const MapViewer: React.FC = () => {
 
     // [레이어 조작 안전 방어 래퍼] 존재하지 않는 레이어 조작 시 MapLibre 런타임 오류 원천 차단
     const origSetLayoutProperty = map.setLayoutProperty.bind(map);
-    map.setLayoutProperty = function (layerId: string, name: string, value: any) {
+    map.setLayoutProperty = function (layerId: string, name: string, value: any, options?: any) {
       try {
+        if (!(this as any).style || (this as any)._removed) return this;
         if (this.getLayer(layerId)) {
-          return origSetLayoutProperty(layerId, name, value);
+          return origSetLayoutProperty(layerId, name, value, options);
         }
       } catch (err) {
         console.warn(`[MapViewer] setLayoutProperty skipped for ${layerId}:`, err);
@@ -2435,10 +2511,11 @@ export const MapViewer: React.FC = () => {
     };
 
     const origSetPaintProperty = map.setPaintProperty.bind(map);
-    map.setPaintProperty = function (layerId: string, name: string, value: any) {
+    map.setPaintProperty = function (layerId: string, name: string, value: any, options?: any) {
       try {
+        if (!(this as any).style || (this as any)._removed) return this;
         if (this.getLayer(layerId)) {
-          return origSetPaintProperty(layerId, name, value);
+          return origSetPaintProperty(layerId, name, value, options);
         }
       } catch (err) {
         console.warn(`[MapViewer] setPaintProperty skipped for ${layerId}:`, err);
@@ -4055,9 +4132,13 @@ export const MapViewer: React.FC = () => {
       realisticKoreanCityLayerRef.current.setVisible(bldgVis);
       const hasMasterMesh = Boolean(realisticKoreanCityLayerRef.current.masterMesh);
       VworldGpuMasterEngine.setVisible(map, bldgVis && !hasMasterMesh);
-    } else {
+    } else if (renderMode3D === 'native') {
       realisticKoreanCityLayerRef.current?.setVisible(false);
       VworldGpuMasterEngine.setVisible(map, bldgVis);
+    } else {
+      // tiles3d 모드: 네이티브 및 Three.js 메쉬 모두 숨기고 3D 타일셋 단독 렌더링
+      realisticKoreanCityLayerRef.current?.setVisible(false);
+      VworldGpuMasterEngine.setVisible(map, false);
     }
 
     if (bldgVis) {
@@ -4273,10 +4354,14 @@ export const MapViewer: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedFacilityId, setTransformGizmoMode, selectFacility, removePlacedFacility]);
 
-  // 8-1. [V-World 3D 실측 데이터 시·군 동적 로드]
+  // 8-1. [V-World 3D 실측 데이터 시·군 동적 로드 및 18개 시·군 VRAM 자원 정리]
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
+    const regPreset = getGangwonRegionByIdOrName(selectedRegionId || 'wonju');
+    if (regPreset && realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.resetForRegionChange([regPreset.center[0], regPreset.center[1]]);
+    }
     if (layers.buildings3D) {
       syncVworldBuildingData(map);
     }
@@ -5833,9 +5918,10 @@ export const MapViewer: React.FC = () => {
       }
       if (realisticKoreanCityLayerRef.current) {
         realisticKoreanCityLayerRef.current.updateSunLight(
-          sunConfig.directionalVector,
+          sunConfig.altitudeDeg,
+          sunConfig.azimuthDeg,
+          sunConfig.intensity * 1.8,
           sunConfig.color,
-          sunConfig.intensity,
           sunConfig.fogColor
         );
       }
@@ -7236,6 +7322,71 @@ export const MapViewer: React.FC = () => {
         {/* 16:9 브리핑 오버레이 프레임워크 */}
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
         <BriefingHeader />
+
+        {/* [원클릭 3D 렌더러 퀵 체인저 플로팅 필 (실사 3D ↔ 클린 화이트 ↔ 3D 타일셋)] */}
+        <div
+          id="quick-3d-mode-switcher"
+          className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none"
+        >
+          <div className="flex items-center gap-1.5 bg-[#0b1410]/95 backdrop-blur-md border border-emerald-500/60 rounded-full px-2 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-emerald-500/30">
+            <button
+              onClick={() => {
+                setRenderMode3D('facade');
+                if (viewMode === '2D') setViewMode('3D');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                renderMode3D === 'facade'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md ring-1 ring-emerald-300'
+                  : 'text-slate-300 hover:text-white hover:bg-emerald-950/60'
+              }`}
+              title="V-World 한국형 실사 3D 마스터 렌더러 (실측 파사드 + 4종 입체 옥상 우레탄 도료 + 60FPS 무결점)"
+            >
+              <Building2 className="w-3.5 h-3.5 text-emerald-300" />
+              <span>실사 3D</span>
+              <span className="text-[9px] px-1 py-0.2 bg-emerald-900/80 text-emerald-200 rounded font-mono font-bold">
+                REA
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setRenderMode3D('native');
+                if (viewMode === '2D') setViewMode('3D');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                renderMode3D === 'native'
+                  ? 'bg-gradient-to-r from-slate-600 to-slate-700 text-white shadow-md ring-1 ring-slate-400'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+              title="V-World 클린 화이트/아이보리 입체 모형 (MapLibre GPU 네이티브 Extrusion)"
+            >
+              <Boxes className="w-3.5 h-3.5 text-slate-300" />
+              <span>클린 화이트</span>
+              <span className="text-[9px] px-1 py-0.2 bg-slate-800 text-slate-300 rounded font-mono font-bold">
+                GPU
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setRenderMode3D('tiles3d');
+                if (viewMode === '2D') setViewMode('3D');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                renderMode3D === 'tiles3d'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md ring-1 ring-cyan-300'
+                  : 'text-slate-300 hover:text-white hover:bg-cyan-950/60'
+              }`}
+              title="OGC 3D Tiles 고정밀 지형 및 건축물 스트리밍"
+            >
+              <Layers className="w-3.5 h-3.5 text-cyan-300" />
+              <span>3D 타일셋</span>
+              <span className="text-[9px] px-1 py-0.2 bg-cyan-900/80 text-cyan-200 rounded font-mono font-bold">
+                STREAM
+              </span>
+            </button>
+          </div>
+        </div>
 
         {/* 좌측 상단 카메라 연동 동적 방위표 (North Arrow - React 리렌더링 차단 및 DOM 직접 조작) */}
         <Compass
