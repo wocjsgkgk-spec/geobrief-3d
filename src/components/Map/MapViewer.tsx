@@ -127,9 +127,16 @@ import {
   Moon,
   Flame,
   Monitor,
+  Cloud,
+  CloudRain,
+  CloudFog,
+  Snowflake,
 } from 'lucide-react';
 import { TacticalScopeOverlay } from './TacticalScopeOverlay';
+import { AtmosphericWeatherOverlay } from './AtmosphericWeatherOverlay';
 import { SpatialCompareMatrixModal } from '@/components/Modal/SpatialCompareMatrixModal';
+import { DefenseBorderRiskModal } from '@/components/Modal/DefenseBorderRiskModal';
+import { WEATHER_PRESETS } from '@/lib/vendor/weatherEffects';
 import { formatMGRS } from '@/lib/vendor/mgrs';
 import { calculateSunLight, safeSetLight } from '@/utils/sunLightCalculator';
 import {
@@ -854,6 +861,11 @@ export const MapViewer: React.FC = () => {
     setReconOpticsMode,
     isCompareMatrixOpen,
     toggleCompareMatrix,
+    // [대규모 2차 벤더링]: 기상 시뮬레이션 및 군사보호구역 위험도 분석 모달
+    weatherPreset,
+    setWeatherPreset,
+    isBorderRiskModalOpen,
+    toggleBorderRiskModal,
     // [신규] 3D 실측 줄자
     isMeasureMode,
     measurePoints,
@@ -1256,12 +1268,15 @@ export const MapViewer: React.FC = () => {
           if (badgeEl) {
             const curMode = useMapStore.getState().renderMode3D || 'facade';
             const opticsMode = useMapStore.getState().reconOpticsMode || 'optical';
+            const curWeather = (useMapStore.getState() as any).weatherPreset || 'clear';
+            const weatherDef = (WEATHER_PRESETS as any)[curWeather] || WEATHER_PRESETS.clear;
+            const weatherLabel = `${weatherDef.label.split(' ')[0]} ${weatherDef.temperatureC}°C`;
             const modeLabel = curMode === 'facade' ? 'V-World 실사 3D' : curMode === 'native' ? '클린 화이트 GPU' : '3D 타일셋 스트림';
             const opticsTag = opticsMode === 'optical' ? '주간 실사' : opticsMode === 'nvg' ? 'NVG 야간' : opticsMode === 'flir' ? 'FLIR 열화상' : 'CRT 전술';
             const bldgCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || realtimeMetricsRef.current.renderedBuildingCount || 3000;
             const actLayers = realtimeMetricsRef.current.activeLayersCount || 19;
             const mgrsStr = formatMGRS(center.lng, center.lat, 5);
-            badgeEl.textContent = `[${modeLabel} (${opticsTag}) | MGRS: ${mgrsStr} | ${currentFps} FPS | EL. +${altM}m | ${pitch}° 틸트 | 건물: ${bldgCount.toLocaleString()}동 | 레이어: ${actLayers}개]`;
+            badgeEl.textContent = `[${modeLabel} (${opticsTag}) | ${weatherLabel} | MGRS: ${mgrsStr} | ${currentFps} FPS | EL. +${altM}m | ${pitch}° 틸트 | 건물: ${bldgCount.toLocaleString()}동 | 레이어: ${actLayers}개]`;
           }
         }
       }
@@ -7386,6 +7401,9 @@ export const MapViewer: React.FC = () => {
         {/* [타 저장소 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 오버레이 */}
         <TacticalScopeOverlay />
 
+        {/* [대규모 2차 벤더링]: 대기 기상 시뮬레이션 오버레이 (맑음/운무/강우/안개/강설) */}
+        <AtmosphericWeatherOverlay />
+
         {/* 16:9 브리핑 오버레이 프레임워크 */}
         {/* 상단 인라인 편집 가능 보고서 헤더 바 */}
         <BriefingHeader />
@@ -7514,7 +7532,76 @@ export const MapViewer: React.FC = () => {
             </button>
           </div>
 
-          {/* 3. 3D 시네마틱 뷰포트 프리셋 (조감 / 보행자 / 드라이브) */}
+          {/* 3. 기상 대기 시뮬레이션 프리셋 (맑음 / 운무 / 강우 / 안개 / 강설) */}
+          <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-sky-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-sky-500/20">
+            <button
+              id="btn-weather-clear"
+              onClick={() => setWeatherPreset('clear')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                weatherPreset === 'clear'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm ring-1 ring-amber-300'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+              title="맑음 (시정 20km, 쾌청)"
+            >
+              <Sun className="w-3 h-3 text-amber-300" />
+              <span>맑음</span>
+            </button>
+            <button
+              id="btn-weather-overcast"
+              onClick={() => setWeatherPreset('overcast')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                weatherPreset === 'overcast'
+                  ? 'bg-slate-400 text-slate-950 font-black shadow-sm ring-1 ring-slate-200'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+              title="운무 (흐림, 운량 88%)"
+            >
+              <Cloud className="w-3 h-3 text-slate-300" />
+              <span>운무</span>
+            </button>
+            <button
+              id="btn-weather-rain"
+              onClick={() => setWeatherPreset('rain')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                weatherPreset === 'rain'
+                  ? 'bg-blue-500 text-slate-950 font-black shadow-sm ring-1 ring-blue-300 animate-pulse'
+                  : 'text-blue-300 hover:text-white hover:bg-blue-950/60'
+              }`}
+              title="강우 (비, 강수량 12.5mm/h)"
+            >
+              <CloudRain className="w-3 h-3 text-blue-300" />
+              <span>강우</span>
+            </button>
+            <button
+              id="btn-weather-fog"
+              onClick={() => setWeatherPreset('fog')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                weatherPreset === 'fog'
+                  ? 'bg-teal-500 text-slate-950 font-black shadow-sm ring-1 ring-teal-200 animate-pulse'
+                  : 'text-teal-300 hover:text-white hover:bg-teal-950/60'
+              }`}
+              title="전술 안개 (저시정 650m)"
+            >
+              <CloudFog className="w-3 h-3 text-teal-300" />
+              <span>안개</span>
+            </button>
+            <button
+              id="btn-weather-snow"
+              onClick={() => setWeatherPreset('snow')}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                weatherPreset === 'snow'
+                  ? 'bg-cyan-300 text-slate-950 font-black shadow-sm ring-1 ring-cyan-100 animate-pulse'
+                  : 'text-cyan-200 hover:text-white hover:bg-cyan-950/60'
+              }`}
+              title="강설 (눈, 영하 -2.4°C)"
+            >
+              <Snowflake className="w-3 h-3 text-cyan-200" />
+              <span>강설</span>
+            </button>
+          </div>
+
+          {/* 4. 3D 시네마틱 뷰포트 프리셋 (조감 / 보행자 / 드라이브) */}
           <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-cyan-500/50 rounded-full px-1.5 py-1 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-cyan-500/20">
             <button
               id="btn-viewport-birds-eye"
@@ -7545,7 +7632,7 @@ export const MapViewer: React.FC = () => {
             </button>
           </div>
 
-          {/* 4. 전술 분석 도구 (3D 측정 & 후보지 비교) */}
+          {/* 5. 전술 분석 도구 (3D 측정 & 후보지 비교 & 군사보호구역 진단) */}
           <div className="flex items-center gap-1 bg-[#0b1410]/95 backdrop-blur-md border border-amber-500/50 rounded-full p-0.5 shadow-[0_4px_25px_rgba(0,0,0,0.6)] ring-1 ring-amber-500/20">
             <button
               id="btn-quick-measure-3d"
@@ -7573,6 +7660,20 @@ export const MapViewer: React.FC = () => {
             >
               <Award className="w-3.5 h-3.5" />
               <span>후보지 비교</span>
+            </button>
+
+            <button
+              id="btn-quick-border-risk"
+              onClick={() => toggleBorderRiskModal()}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                isBorderRiskModalOpen
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black shadow-md'
+                  : 'text-cyan-300 hover:text-white hover:bg-cyan-950/60'
+              }`}
+              title="🛡️ 접경·군사시설보호구역 3D 위험도 및 비행안전 심의 매트릭스 모달 열기"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>군사보호구역 진단</span>
             </button>
           </div>
         </div>
@@ -8624,6 +8725,9 @@ export const MapViewer: React.FC = () => {
 
       {/* [타 저장소 벤더링]: 강원 18개 군 유휴지 6대 지표 1:1 다각적 비교 분석 매트릭스 모달 */}
       <SpatialCompareMatrixModal />
+
+      {/* [대규모 2차 벤더링]: 접경·군사시설보호구역 3D 위험도 및 비행안전 심의 매트릭스 모달 */}
+      <DefenseBorderRiskModal />
     </div>
   );
 };

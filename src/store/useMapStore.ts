@@ -52,6 +52,9 @@ import {
 
 // [신규 벤더링]: 전술 정찰 광학계/열화상(FLIR)/야간투시(NVG)/CRT 렌즈 모드 타입
 export type ReconOpticsMode = 'optical' | 'nvg' | 'flir' | 'crt';
+
+// [대규모 2차 벤더링]: 기상 시뮬레이션 프리셋 타입
+export type WeatherPresetType = 'clear' | 'overcast' | 'rain' | 'fog' | 'snow';
 import { analyzeDefenseRegulations } from '@/utils/defenseAnalysis';
 import { analyzeAccessibility } from '@/utils/infrastructureAnalysis';
 import { GANGWON_REGIONS, RegionPreset } from '@/constants/gangwonRegions';
@@ -580,6 +583,15 @@ interface MapStoreState {
   isCompareMatrixOpen: boolean;
   setCompareMatrixOpen: (open: boolean) => void;
   toggleCompareMatrix: () => void;
+
+  // [대규모 2차 벤더링]: 기상 시뮬레이션 프리셋 (맑음, 운무, 강우, 안개, 강설)
+  weatherPreset: WeatherPresetType;
+  setWeatherPreset: (preset: WeatherPresetType) => void;
+
+  // [대규모 2차 벤더링]: 접경·군사시설보호구역 위험도 & 비행안전 분석 매트릭스 모달
+  isBorderRiskModalOpen: boolean;
+  setBorderRiskModalOpen: (open: boolean) => void;
+  toggleBorderRiskModal: () => void;
 
   // [3단계 신규: 3D 전술 탐지 돔, 보안 펜스, 입체 가시선(LOS)]
   threatDome: ThreatDomeState;
@@ -1903,6 +1915,15 @@ export const useMapStore = create<MapStoreState>()(
       isCompareMatrixOpen: false,
       setCompareMatrixOpen: (open) => set({ isCompareMatrixOpen: open }),
       toggleCompareMatrix: () => set((s) => ({ isCompareMatrixOpen: !s.isCompareMatrixOpen })),
+
+      // [대규모 2차 벤더링]: 기상 시뮬레이션 프리셋
+      weatherPreset: 'clear',
+      setWeatherPreset: (preset) => set({ weatherPreset: preset }),
+
+      // [대규모 2차 벤더링]: 접경·군사시설보호구역 위험도 & 비행안전 분석 매트릭스 모달
+      isBorderRiskModalOpen: false,
+      setBorderRiskModalOpen: (open) => set({ isBorderRiskModalOpen: open }),
+      toggleBorderRiskModal: () => set((s) => ({ isBorderRiskModalOpen: !s.isBorderRiskModalOpen })),
 
       addPlacedFacility: (presetId, customCoords, customElevation) => {
         const state = get();
