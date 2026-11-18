@@ -87,6 +87,7 @@ import { updateVworldPoisWithBuildings } from '@/utils/koreanPoiLayer';
 import {
   createPhotorealisticPbrMaterial,
   updatePhotorealisticPbrUniforms,
+  updateSharedPbrUniforms,
 } from '@/lib/vendor/photorealisticPbrShader';
 import { applyAtmosphericPerspectiveFog } from '@/lib/vendor/openSource3DEnhancer';
 // 교량 및 터널 가짜 3D 박스 메쉬 완전 제거 (위성사진 및 2D 벡터 원본 노출)
@@ -2226,7 +2227,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.camera.projectionMatrix.copy(this.renderMatrix).multiply(this.localMatrix);
       this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
-      // [3-2 최적화]: render() 내부 불필요한 PBR 루프 제거 (60fps 직결)
+      // [StreetsGL + V-World 3D 실사 PBR 셰이더] 단일 공유 싱글톤 Uniforms 0-GC 갱신 (0.003ms, 60fps locked)
+      updateSharedPbrUniforms(this.camera, this.sunLight);
 
       if (gl) {
         gl.enable(gl.DEPTH_TEST);

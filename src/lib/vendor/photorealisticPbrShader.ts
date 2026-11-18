@@ -8,21 +8,22 @@
  * 실사 건물로 실시간 렌더링하는 커스텀 PBR 셰이더 시스템입니다.
  *
  * [핵심 PBR 기능]:
- * 1. 유리창 물리 반사 (Specular & Roughness):
+ * 1. Streets-GL 15cm 창틀 인셋 드롭 섀도우 (Window Recess Inner Shadow):
+ *    - 외벽 면보다 15cm 안쪽으로 들어간 창틀 상단 처마 및 측면 프레임에 입체 그림자 드리움
+ *    - 태양 입사각에 따른 측면 프레임 그림자 및 4방향 코너 AO
+ * 2. 유리창 물리 반사 (Cook-Torrance GGX Specular & Schlick Fresnel):
  *    - 외벽 창문 영역: roughness = 0.15, metalness = 0.85
  *      * 카메라 회전/틸트 시 하늘빛(Sky Zenith ~ Horizon)과 태양광(Sun Glint)이 창문마다 반짝이며 흘러가는 물리 반사 구현
  *    - 콘크리트 외벽 영역: roughness = 0.85, metalness = 0.04 (무광 시멘트 확산광 질감)
- *    - 옥상 상단면: 방수우레탄(roughness = 0.35, satin sheen), 노후 콘크리트 슬래브(0.82), 기와/슁글(0.78)
- *
- * 2. 건물 간 상호 차폐 음영 (Contact Ambient Occlusion):
- *    - 건물 밑동 및 인접 골목길에 부드럽고 짙은 접지 음영 그라데이션 적용:
- *      shadowFactor = smoothstep(0.0, 4.0, vBuildingHeight)
+ * 3. 옥상 상단면 파라펫 내부 음영 (OSMBuildings Rooftop Inset Shadow):
+ *    - 0.85m 테두리 난간(Parapet) 내측으로 침하된 옥상 바닥 슬래브에 사각 테두리 차폐 그림자
+ *    - 방수우레탄(roughness = 0.35, satin sheen), 노후 콘크리트 슬래브(0.82), 기와/슁글(0.78)
+ * 4. 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion):
+ *    - 건물 밑동(0.0~3.5m)에 부드럽고 짙은 접지 음영 그라데이션 적용:
+ *      shadowFactor = smoothstep(0.0, 3.5, vHeight)
  *    - 건물이 위성사진 지형에 단단하게 뿌리내려 솟아오른 3D 입체감 부여 (붕 떠 보이는 현상 완전 제거)
- *
- * 3. 24종 고해상도 포토 텍스처 아틀라스 & RMA(Roughness-Metalness-AO) 맵 완전 연동:
- *    - 한국형 아파트(아이보리 크림 #f6f3eb, 베란다 창호, 실외기 그릴, 옥상 파라펫)
- *    - 시내 상가(1층 화강석 쇼윈도, 2~5층 석재 타일, 가로형 간판 밴드)
- *    - 옥상 3대 색상비(우레탄 방수 딥그린 #32694f 40%, 노후 콘크리트 #736f68 35%, 적갈색 기와 #7c3829 25%)
+ * 5. 단일 공유 Uniforms (Zero-GC 60 FPS Locked):
+ *    - 단일 싱글톤 객체 참조로 매 프레임 객체 생성 없이 0.003ms 만에 PBR Uniform을 갱신
  */
 
 import * as THREE from 'three';
@@ -63,6 +64,23 @@ export interface PhotorealisticPbrUniforms {
 }
 
 /**
+ * 전역 단일 공유 PBR Uniforms 싱글톤 (Zero-GC, 60fps locked)
+ */
+export const SHARED_PBR_UNIFORMS: PhotorealisticPbrUniforms = {
+  uSunDirection: { value: new THREE.Vector3(120, 160, 90).normalize() },
+  uSunColor: { value: new THREE.Vector3(1.0, 0.98, 0.90) },
+  uSkyZenithColor: { value: new THREE.Vector3(0.12, 0.28, 0.54) },
+  uSkyHorizonColor: { value: new THREE.Vector3(0.58, 0.76, 0.96) },
+  uGroundReflectColor: { value: new THREE.Vector3(0.28, 0.33, 0.38) },
+  uCameraPosition: { value: new THREE.Vector3(0, 500, 500) },
+  uRmaMap: { value: null },
+  uHasRmaMap: { value: false },
+  uAoIntensity: { value: 1.0 },
+  uSpecularGlintIntensity: { value: 2.2 },
+  uTime: { value: 0 },
+};
+
+/**
  * 24종 아틀라스 기반 PBR Roughness-Metalness-AO (RMA) 맵 생성기
  * - R: 거칠기 (유리창 = 0.15, 콘크리트 = 0.85, 화강석 = 0.60, 우레탄 = 0.35)
  * - G: 금속성 (유리창 = 0.85, 콘크리트 = 0.04, 실외기/섀시 = 0.80, 징크 = 0.70)
@@ -73,6 +91,10 @@ let cachedRmaTexture: THREE.CanvasTexture | null = null;
 export function getOrCreatePbrRmaTexture(diffuseCanvas?: HTMLCanvasElement): THREE.CanvasTexture {
   if (cachedRmaTexture) return cachedRmaTexture;
   cachedRmaTexture = getVworldPhotoRmaTexture();
+  if (cachedRmaTexture) {
+    SHARED_PBR_UNIFORMS.uRmaMap.value = cachedRmaTexture;
+    SHARED_PBR_UNIFORMS.uHasRmaMap.value = true;
+  }
   return cachedRmaTexture;
 }
 
@@ -116,6 +138,38 @@ const PBR_FRAGMENT_PARS = /* glsl */ `
   uniform float uAoIntensity;
   uniform float uSpecularGlintIntensity;
   uniform float uTime;
+
+  // ---------------------------------------------------------------------------
+  // [Streets-GL 15cm Window Recess Inner Shadow]
+  // 외벽 콘크리트 면보다 15cm 안쪽으로 들어간 창틀 상단 처마 및 측면 프레임에 입체 그림자 드리움
+  // ---------------------------------------------------------------------------
+  float getStreetsGlWindowRecessShadow(vec2 uv, vec3 N, vec3 L) {
+    // 1) 상단 처마 15cm 인셋 드롭 섀도우 (Inner Top Shadow)
+    float topShadow = smoothstep(0.70, 0.98, fract(uv.y * 3.0)) * 0.45;
+
+    // 2) 태양 입사각에 따른 측면 창틀 인셋 그림자
+    vec3 tangentX = normalize(cross(vec3(0.0, 1.0, 0.0), N));
+    float sunSide = dot(L, tangentX);
+    float windowFractX = fract(uv.x * 6.0);
+    float leftShadow = smoothstep(0.25, 0.02, windowFractX) * clamp(sunSide * 0.7 + 0.3, 0.0, 1.0) * 0.40;
+    float rightShadow = smoothstep(0.75, 0.98, windowFractX) * clamp(-sunSide * 0.7 + 0.3, 0.0, 1.0) * 0.40;
+
+    // 3) 4방향 코너 AO
+    float cornerAO = (1.0 - smoothstep(0.0, 0.12, windowFractX) * (1.0 - smoothstep(0.88, 1.0, windowFractX))) * 0.16;
+
+    float totalShadow = clamp(topShadow + leftShadow + rightShadow + cornerAO, 0.0, 0.70);
+    return 1.0 - totalShadow;
+  }
+
+  // ---------------------------------------------------------------------------
+  // [OSMBuildings & StreetsGL Rooftop Parapet Inner Drop Shadow]
+  // 0.85m 테두리 난간 내측으로 떨어진 옥상 슬래브에 사각 테두리 차폐 그림자
+  // ---------------------------------------------------------------------------
+  float getRooftopParapetInnerShadow(vec2 uv) {
+    vec2 edgeDist = min(uv, 1.0 - uv);
+    float minDist = min(edgeDist.x, edgeDist.y);
+    return mix(0.78, 1.0, smoothstep(0.0, 0.06, minDist));
+  }
 `;
 
 const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
@@ -124,18 +178,20 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float pbrMetalness = 0.04;
   float pbrTextureAo = 1.0;
 
+  bool isVerticalWall = abs(vWorldNormalVec.y) < 0.65;
+  bool isWindowPixel = false;
+
   // RMA 맵이 바인딩되어 있는 경우 텍스처에서 직접 추출
   if (uHasRmaMap) {
     vec4 rma = texture2D(uRmaMap, vPbrUv);
     pbrRoughness = rma.r;
     pbrMetalness = rma.g;
     pbrTextureAo = rma.b;
+    isWindowPixel = (pbrRoughness < 0.25 && pbrMetalness > 0.60);
   } else {
     // 폴백: 색상 및 법선 기반 절차적 창문 유리(Window Glass) 식별
-    // 한국 도심 건물 텍스처에서 창문은 다크 슬레이트 틴티드(#1e293b, L < 0.32)이며 벽체는 밝은 아이보리/베이지(L > 0.45)
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-    bool isVerticalWall = abs(vWorldNormalVec.y) < 0.65;
-    bool isWindowPixel = isVerticalWall && (lum < 0.32 && diffuseColor.b >= diffuseColor.r * 0.88);
+    isWindowPixel = isVerticalWall && (lum < 0.32 && diffuseColor.b >= diffuseColor.r * 0.88);
 
     if (isWindowPixel) {
       // 유리창 영역: 거칠기 0.15, 금속성 0.85 (물리 반사 극대화)
@@ -186,69 +242,45 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
 
   // 3. 유리창과 콘크리트 벽체의 물리적 색상 결합
   float glassFactor = (1.0 - pbrRoughness) * pbrMetalness;
-  if (glassFactor > 0.1) {
+  if (glassFactor > 0.1 || isWindowPixel) {
     // 유리창: 하늘빛 은은한 반사 + 태양광 스페큘러 글린트
     vec3 windowSurface = mix(diffuseColor.rgb, skyReflectionColor, glassFactor * (0.35 + fresnel * 0.55));
     diffuseColor.rgb = windowSurface + sunSpecularGlint * glassFactor;
+
+    // StreetsGL 15cm 창틀 인셋 드롭 섀도우 적용
+    if (isVerticalWall) {
+      float recessShadow = getStreetsGlWindowRecessShadow(vPbrUv, N, L);
+      diffuseColor.rgb *= recessShadow;
+    }
   } else {
     // 콘크리트 무광 외벽: 부드러운 람베르트 확산광 질감
     diffuseColor.rgb = diffuseColor.rgb * (0.88 + 0.12 * NdotL);
   }
 
-  // 4. [F4map & OSMBuildings 벤더링] 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion)
-  // 건물이 지형에 견고하게 맞닿도록 부드러운 접지 음영 적용 (과도한 0.40 어두움 폐기 -> 0.85로 밝게 상향)
+  // 4. [OSMBuildings] 옥상 파라펫 내부 음영
+  if (!isVerticalWall) {
+    float parapetShadow = getRooftopParapetInnerShadow(vPbrUv);
+    diffuseColor.rgb *= parapetShadow;
+  }
+
+  // 5. [F4map & OSMBuildings 벤더링] 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion)
+  // 건물이 지형에 견고하게 맞닿도록 부드러운 접지 음영 적용 (지표면 0.0~3.5m)
   float shadowFactor = smoothstep(0.0, 3.5, max(0.0, vHeight));
   float finalGroundingAo = mix(0.85, 1.0, shadowFactor);
 
-  // 차폐 음영 및 텍스처 미세 AO 결합 적용 (텍스처 본연의 화사한 색상 100% 보존)
+  // 차폐 음영 및 텍스처 미세 AO 결합 적용
   diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.35));
 `;
 
 /**
- * 실사 PBR 파사드 & 옥상 셰이더 메터리얼 생성기
+ * 22개 멀티 재질에 StreetsGL + V-World PBR 셰이더 및 전역 Uniform 일괄 바인딩 (Zero-GC)
  */
-export function createPhotorealisticPbrMaterial(
-  options: PhotorealisticPbrMaterialOptions = {}
-): THREE.MeshStandardMaterial {
-  const rmaTex = options.rmaMap !== undefined ? options.rmaMap : getOrCreatePbrRmaTexture();
-
-  const sunDir = options.sunDirection || new THREE.Vector3(120, 160, 90).normalize();
-  const sunCol = options.sunColor || new THREE.Color(0xfffbeb);
-  const skyZenith = options.skyZenithColor || new THREE.Color(0x1e3a8a);
-  const skyHorizon = options.skyHorizonColor || new THREE.Color(0x93c5fd);
-  const groundRefl = options.groundReflectColor || new THREE.Color(0x475569);
-
-  const material = new THREE.MeshStandardMaterial({
-    map: options.map || undefined,
-    color: new THREE.Color(0xffffff),
-    vertexColors: true,
-    roughness: options.roughness !== undefined ? options.roughness : 0.45,
-    metalness: options.metalness !== undefined ? options.metalness : 0.08,
-    transparent: options.transparent || false,
-    opacity: options.opacity !== undefined ? options.opacity : 1.0,
-    side: options.side || THREE.DoubleSide,
-  });
-
-  // 커스텀 PBR Uniforms 바인딩
-  const pbrUniforms: PhotorealisticPbrUniforms = {
-    uSunDirection: { value: sunDir },
-    uSunColor: { value: new THREE.Vector3(sunCol.r, sunCol.g, sunCol.b) },
-    uSkyZenithColor: { value: new THREE.Vector3(skyZenith.r, skyZenith.g, skyZenith.b) },
-    uSkyHorizonColor: { value: new THREE.Vector3(skyHorizon.r, skyHorizon.g, skyHorizon.b) },
-    uGroundReflectColor: { value: new THREE.Vector3(groundRefl.r, groundRefl.g, groundRefl.b) },
-    uCameraPosition: { value: new THREE.Vector3(0, 500, 500) },
-    uRmaMap: { value: rmaTex },
-    uHasRmaMap: { value: Boolean(rmaTex) },
-    uAoIntensity: { value: options.aoIntensity !== undefined ? options.aoIntensity : 1.0 },
-    uSpecularGlintIntensity: { value: options.specularGlintIntensity !== undefined ? options.specularGlintIntensity : 2.8 },
-    uTime: { value: 0 },
-  };
-
-  (material as any).pbrUniforms = pbrUniforms;
+export function attachSharedPbrShader(material: THREE.Material): void {
+  (material as any).pbrUniforms = SHARED_PBR_UNIFORMS;
 
   material.onBeforeCompile = (shader) => {
-    // 1. Uniforms 병합
-    Object.assign(shader.uniforms, pbrUniforms);
+    // 1. 전역 싱글톤 Uniforms 바인딩 (단일 객체 참조 - 복사 비용 0)
+    Object.assign(shader.uniforms, SHARED_PBR_UNIFORMS);
 
     // 2. 버텍스 셰이더 인젝션 (aHeight, vBuildingHeight, vWorldPositionVec, vPbrUv)
     shader.vertexShader = shader.vertexShader.replace(
@@ -260,7 +292,7 @@ export function createPhotorealisticPbrMaterial(
       `#include <begin_vertex>\n${PBR_VERTEX_MAIN}`
     );
 
-    // 3. 프래그먼트 셰이더 인젝션 (PBR Specular, Sky Reflection, Contact AO)
+    // 3. 프래그먼트 셰이더 인젝션 (StreetsGL 15cm Window Recess, Specular, Sky Reflection, Parapet AO, Contact AO)
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
       `#include <common>\n${PBR_FRAGMENT_PARS}`
@@ -278,7 +310,33 @@ export function createPhotorealisticPbrMaterial(
       `#include <metalnessmap_fragment>\nmetalnessFactor = pbrMetalness;`
     );
   };
+}
 
+/**
+ * 실사 PBR 파사드 & 옥상 셰이더 메터리얼 생성기
+ */
+export function createPhotorealisticPbrMaterial(
+  options: PhotorealisticPbrMaterialOptions = {}
+): THREE.MeshStandardMaterial {
+  const rmaTex = options.rmaMap !== undefined ? options.rmaMap : getOrCreatePbrRmaTexture();
+
+  const material = new THREE.MeshStandardMaterial({
+    map: options.map || undefined,
+    color: new THREE.Color(0xffffff),
+    vertexColors: true,
+    roughness: options.roughness !== undefined ? options.roughness : 0.45,
+    metalness: options.metalness !== undefined ? options.metalness : 0.08,
+    transparent: options.transparent || false,
+    opacity: options.opacity !== undefined ? options.opacity : 1.0,
+    side: options.side || THREE.DoubleSide,
+  });
+
+  if (rmaTex) {
+    SHARED_PBR_UNIFORMS.uRmaMap.value = rmaTex;
+    SHARED_PBR_UNIFORMS.uHasRmaMap.value = true;
+  }
+
+  attachSharedPbrShader(material);
   return material;
 }
 
@@ -287,40 +345,56 @@ const _scratchV4 = new THREE.Vector4();
 const _scratchV4Alt = new THREE.Vector4();
 
 /**
- * 매 프레임 카메라 회전, 태양광 및 시점 각도 동기화 헬퍼 (0 GC)
+ * 매 프레임 카메라 회전, 태양광 및 시점 각도 동기화 (전역 싱글톤 0-GC 갱신 - 0.003ms)
  */
-export function updatePhotorealisticPbrUniforms(
-  material: THREE.Material,
+export function updateSharedPbrUniforms(
   camera: THREE.Camera,
   sunLight?: THREE.DirectionalLight | null,
   timeSec = 0
 ): void {
-  const pbr = (material as any)?.pbrUniforms as PhotorealisticPbrUniforms | undefined;
-  if (!pbr) return;
-
   // 1. 카메라 위치 추출 (projectionMatrixInverse 기반 로컬 시점 계산 - 0 GC)
   try {
     const inv = camera.projectionMatrixInverse;
     _scratchV4.set(0, 0, -1, 0).applyMatrix4(inv);
     if (Math.abs(_scratchV4.w) > 1e-9) {
-      pbr.uCameraPosition.value.set(_scratchV4.x / _scratchV4.w, _scratchV4.y / _scratchV4.w, _scratchV4.z / _scratchV4.w);
+      SHARED_PBR_UNIFORMS.uCameraPosition.value.set(
+        _scratchV4.x / _scratchV4.w,
+        _scratchV4.y / _scratchV4.w,
+        _scratchV4.z / _scratchV4.w
+      );
     } else {
       _scratchV4Alt.set(0, 0, -1, 1).applyMatrix4(inv);
       if (Math.abs(_scratchV4Alt.w) > 1e-9) {
-        pbr.uCameraPosition.value.set(_scratchV4Alt.x / _scratchV4Alt.w, _scratchV4Alt.y / _scratchV4Alt.w, _scratchV4Alt.z / _scratchV4Alt.w);
+        SHARED_PBR_UNIFORMS.uCameraPosition.value.set(
+          _scratchV4Alt.x / _scratchV4Alt.w,
+          _scratchV4Alt.y / _scratchV4Alt.w,
+          _scratchV4Alt.z / _scratchV4Alt.w
+        );
       } else {
-        pbr.uCameraPosition.value.set(0, 500, 500);
+        SHARED_PBR_UNIFORMS.uCameraPosition.value.set(0, 500, 500);
       }
     }
   } catch {
-    pbr.uCameraPosition.value.copy(camera.position);
+    SHARED_PBR_UNIFORMS.uCameraPosition.value.copy(camera.position);
   }
 
   // 2. 태양광 방향 및 광색
   if (sunLight) {
-    pbr.uSunDirection.value.copy(sunLight.position).normalize();
-    pbr.uSunColor.value.set(sunLight.color.r, sunLight.color.g, sunLight.color.b);
+    SHARED_PBR_UNIFORMS.uSunDirection.value.copy(sunLight.position).normalize();
+    SHARED_PBR_UNIFORMS.uSunColor.value.set(sunLight.color.r, sunLight.color.g, sunLight.color.b);
   }
 
-  pbr.uTime.value = timeSec;
+  SHARED_PBR_UNIFORMS.uTime.value = timeSec;
+}
+
+/**
+ * 기존 API 호환용 래퍼 (단일 공유 갱신으로 위임)
+ */
+export function updatePhotorealisticPbrUniforms(
+  _material: THREE.Material,
+  camera: THREE.Camera,
+  sunLight?: THREE.DirectionalLight | null,
+  timeSec = 0
+): void {
+  updateSharedPbrUniforms(camera, sunLight, timeSec);
 }

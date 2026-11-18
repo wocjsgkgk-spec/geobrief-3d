@@ -44,6 +44,7 @@ import {
   BUILDING_HEIGHT_EXPR,
 } from '@/utils/gpuRealisticBuildingStack';
 import { VworldMasterEngine } from './vworldMasterEngine';
+import { attachSharedPbrShader } from './photorealisticPbrShader';
 
 const Earcut = (earcut as any).default || earcut;
 
@@ -1169,6 +1170,11 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     }));
   }
 
+  // 22개 멀티 재질에 StreetsGL + V-World 실사 PBR 셰이더 (15cm 창호 인셋 드롭 섀도우 & GGX 스페큘러) 일괄 주입
+  for (let m = 0; m < materials.length; m++) {
+    attachSharedPbrShader(materials[m]);
+  }
+
   GLOBAL_VWORLD_MATERIALS = materials;
   return GLOBAL_VWORLD_MATERIALS;
 }
@@ -1225,6 +1231,10 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
     }),
   ];
 
+  for (let m = 0; m < GLOBAL_VWORLD_ROOF_MATERIALS.length; m++) {
+    attachSharedPbrShader(GLOBAL_VWORLD_ROOF_MATERIALS[m]);
+  }
+
   return GLOBAL_VWORLD_ROOF_MATERIALS;
 }
 
@@ -1240,6 +1250,7 @@ export function getGlobalParapetMaterial(): THREE.MeshStandardMaterial {
       depthTest: true,
       depthWrite: true,
     });
+    attachSharedPbrShader(GLOBAL_VWORLD_PARAPET_MATERIAL);
   }
   return GLOBAL_VWORLD_PARAPET_MATERIAL;
 }
@@ -1256,6 +1267,7 @@ export function getGlobalPenthouseMaterial(): THREE.MeshStandardMaterial {
       depthTest: true,
       depthWrite: true,
     });
+    attachSharedPbrShader(GLOBAL_VWORLD_PENTHOUSE_MATERIAL);
   }
   return GLOBAL_VWORLD_PENTHOUSE_MATERIAL;
 }
