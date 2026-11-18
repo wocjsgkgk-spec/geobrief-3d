@@ -549,27 +549,29 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     try {
-      // 1. [V-World 서울 뷰 주광(Daylight) 조명 캘리브레이션: EgisCorp/XDWorld 표준 215° SW, 45°]
-      this.sunLight = new THREE.DirectionalLight(0xfffdf0, 2.2);
+      // 1. [V-World 3D WebGL / XDWorld 역공학(VWorldWebGLShaderSpec) 사양 조명 캘리브레이션]
+      // - 주간 직사 태양광: 웜 화이트(0xfff9e6), 강도 1.25, 방위각 215°(남서향), 고도각 45°
+      this.sunLight = new THREE.DirectionalLight(0xfff9e6, 1.25);
       const sunDir = getXDWorldSunDirection(215, 45);
       this.sunLight.position.set(sunDir[0] * 300, sunDir[1] * 300, sunDir[2] * 300);
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      this.fillLight = new THREE.DirectionalLight(0xe0f2fe, 0.6);
-      this.fillLight.position.set(130, 120, -100);
+      // - 역광 음영 완화 보조광 (서쪽 반사광: 0xe2e8f0, 0.45배)
+      this.fillLight = new THREE.DirectionalLight(0xe2e8f0, 0.45);
+      this.fillLight.position.set(-100, 120, -90);
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 강도 1.1로 설정하여 양지와 음지 모두 선명하고 화사한 V-World 3D 뷰 구현
-      this.ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
+      // - AmbientLight(환경광): 브이월드 클라이언트 역공학 0xe8eff5, 0.35배
+      this.ambientLight = new THREE.AmbientLight(0xe8eff5, 0.35);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 하늘 #e0f2fe, 지면 #94a3b8, 강도 0.40로 반사광 제공
-      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0x94a3b8, 0.40);
+      // - HemisphereLight: 청명 하늘 #d9ebff, 대지 반사 #8c8273, 0.85배로 자연스러운 지면/대기 반사광 제공
+      this.hemisphereLight = new THREE.HemisphereLight(0xd9ebff, 0x8c8273, 0.85);
       this.scene.add(this.hemisphereLight);
 
-      // [V-World 3D 실사화] 대기 원근감 안개 (Aerial Perspective Fog) 주입으로 지평선 자연 융합
-      this.scene.fog = new THREE.FogExp2(0xcfd8dc, 0.00018);
+      // [V-World 3D 실사화] 대기 원근감 안개 (Distance Fog: #dbeafe, density 0.00018)
+      this.scene.fog = new THREE.FogExp2(0xdbeafe, 0.00018);
 
       // 2. [GeoBrief 3D 2단계] V-World 22종(외벽 16종 + 지붕 4종 + 난간 + 옥탑) 독립 Material 싱글톤 엔진
       this.buildingMaterials = VWorldReaRenderer.getAllMaterials() || VWorldBuildingComposer.getMaterials() || getVWorldRea16Materials() || getScenarioBuildingMaterials();
@@ -637,7 +639,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.renderer.outputColorSpace = THREE.SRGBColorSpace;
           this.renderer.shadowMap.enabled = false;
           this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-          this.renderer.toneMappingExposure = 1.05;
+          this.renderer.toneMappingExposure = 1.08;
           const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
           this.renderer.setPixelRatio(pr);
         } catch (rErr) {
@@ -660,7 +662,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.shadowMap.enabled = false;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.05;
+      this.renderer.toneMappingExposure = 1.08;
       const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
       this.renderer.setPixelRatio(pr);
 
@@ -1065,15 +1067,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     this.sunLight.color.set(actualSunColor);
-    this.sunLight.intensity = Math.max(0.4, intensity);
+    // [VWorldWebGLShaderSpec] 역공학 기반 황금비 조명 파라미터 고정 (Sun 1.25배, Ambient 0.35배, Hemi 0.85배)
+    this.sunLight.intensity = Math.max(0.4, Math.min(1.4, intensity));
 
     if (this.ambientLight) {
-      this.ambientLight.intensity = Math.max(0.4, Math.min(1.2, intensity * 0.55));
+      this.ambientLight.intensity = Math.max(0.20, Math.min(0.45, intensity * 0.28));
+      this.ambientLight.color.set(0xe8eff5);
     }
     if (this.hemisphereLight) {
-      this.hemisphereLight.intensity = Math.max(0.2, Math.min(0.6, intensity * 0.3));
-      this.hemisphereLight.color.set(0xe0f2fe);
-      this.hemisphereLight.groundColor.set(0x94a3b8);
+      this.hemisphereLight.intensity = Math.max(0.5, Math.min(0.95, intensity * 0.68));
+      this.hemisphereLight.color.set(0xd9ebff);
+      this.hemisphereLight.groundColor.set(0x8c8273);
     }
 
     // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
@@ -1348,59 +1352,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       targetSlot = 20; // Parapet (0.85m 테두리 난간)
     }
 
+    // [Zero-GC & 무지연 단일 메쉬 직결]: 옥상·난간·옥탑방 지오메트리를 masterMesh의 슬롯 16..21로 직접 주입
     this.addSlotTriangle(targetSlot, p0, p1, p2, norm, uv0, uv1, uv2, color);
-
-    this.ensureRooftopCapacity(3);
-    const p = this.accRooftopPosIdx;
-    const u = this.accRooftopUvIdx;
-    const h = this.accRooftopHeightIdx;
-    const baseElev = this.currentBuildingBaseElev;
-    const cr = color ? color[0] : 1.0;
-    const cg = color ? color[1] : 1.0;
-    const cb = color ? color[2] : 1.0;
-
-    this.accRooftopPosBuf[p] = p0[0];
-    this.accRooftopPosBuf[p + 1] = p0[1];
-    this.accRooftopPosBuf[p + 2] = p0[2];
-    this.accRooftopNormBuf[p] = norm[0];
-    this.accRooftopNormBuf[p + 1] = norm[1];
-    this.accRooftopNormBuf[p + 2] = norm[2];
-    this.accRooftopColorBuf[p] = cr;
-    this.accRooftopColorBuf[p + 1] = cg;
-    this.accRooftopColorBuf[p + 2] = cb;
-    this.accRooftopUvBuf[u] = uv0[0];
-    this.accRooftopUvBuf[u + 1] = uv0[1];
-    this.accRooftopHeightBuf[h] = Math.max(0, p0[1] - baseElev);
-
-    this.accRooftopPosBuf[p + 3] = p1[0];
-    this.accRooftopPosBuf[p + 4] = p1[1];
-    this.accRooftopPosBuf[p + 5] = p1[2];
-    this.accRooftopNormBuf[p + 3] = norm[0];
-    this.accRooftopNormBuf[p + 4] = norm[1];
-    this.accRooftopNormBuf[p + 5] = norm[2];
-    this.accRooftopColorBuf[p + 3] = cr;
-    this.accRooftopColorBuf[p + 4] = cg;
-    this.accRooftopColorBuf[p + 5] = cb;
-    this.accRooftopUvBuf[u + 2] = uv1[0];
-    this.accRooftopUvBuf[u + 3] = uv1[1];
-    this.accRooftopHeightBuf[h + 1] = Math.max(0, p1[1] - baseElev);
-
-    this.accRooftopPosBuf[p + 6] = p2[0];
-    this.accRooftopPosBuf[p + 7] = p2[1];
-    this.accRooftopPosBuf[p + 8] = p2[2];
-    this.accRooftopNormBuf[p + 6] = norm[0];
-    this.accRooftopNormBuf[p + 7] = norm[1];
-    this.accRooftopNormBuf[p + 8] = norm[2];
-    this.accRooftopColorBuf[p + 6] = cr;
-    this.accRooftopColorBuf[p + 7] = cg;
-    this.accRooftopColorBuf[p + 8] = cb;
-    this.accRooftopUvBuf[u + 4] = uv2[0];
-    this.accRooftopUvBuf[u + 5] = uv2[1];
-    this.accRooftopHeightBuf[h + 2] = Math.max(0, p2[1] - baseElev);
-
-    this.accRooftopPosIdx += 9;
-    this.accRooftopUvIdx += 6;
-    this.accRooftopHeightIdx += 3;
   };
 
   private addRooftopQuad = (
@@ -1943,8 +1896,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      // [최초 버벅거림 제로화]: 엄격한 4.0ms 프레임 버짓으로 브라우저 렌더러에 12ms+ 여유 보장
-      const FRAME_BUDGET_MS = this.isMoving ? 1.5 : 4.0;
+      // [최초 버벅거림 제로화]: 엄격한 2.5ms 프레임 버짓으로 브라우저 렌더러에 매 프레임 14ms+ 여유 보장 (60 FPS 락)
+      const FRAME_BUDGET_MS = this.isMoving ? 1.0 : 2.5;
 
       const currentMapCenter = map.getCenter();
       const cachedCenter = { lng: currentMapCenter.lng, lat: currentMapCenter.lat };
@@ -2172,15 +2125,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     // 2-C. 국토교통부 전국 교량 및 터널 3D 모델링 동기화
     this.buildBridgesAndTunnelsMesh();
 
-    // 3. 브이월드 스타일 노란 핀 + 한글 명칭 POI 라벨 실시간 갱신 및 건물 카운트 통지
+    // 3. 건물 카운트 통지 (사용자 지시: 비활성 노란 핀 레이어로의 무거운 GeoJSON 직렬화 차단으로 60fps 보장)
     this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
-    if (this.map && this.cachedFeatures && this.cachedFeatures.length > 0) {
-      try {
-        updateVworldPoisWithBuildings(this.map, this.cachedFeatures);
-      } catch {
-        // ignore
-      }
-    }
 
     if (this.map) {
       this.map.triggerRepaint();

@@ -1142,10 +1142,7 @@ export const MapViewer: React.FC = () => {
             badgeEl.textContent = `[V-World 실사 3D | 60 FPS | 화면 건물: ${viewportFeatures.length.toLocaleString()}동 | EL. +350m | 55° 틸트 | 레이어: ${realtimeMetricsRef.current.activeLayersCount || 19}개]`;
           }
 
-          // [C] 브이월드 POI 심볼 레이어에 근경 건물명 주입
-          try {
-            updateVworldPoisWithBuildings(targetMap, bucketNear.slice(0, 60));
-          } catch {}
+          // [C] 브이월드 POI 심볼 레이어 무해화 (사용자 지시: 부정확한 노란 핀 레이어 GeoJSON 스톨 차단)
 
           // [D] 공간정보 실시간 진단 상태 동기화
           setVworldDiagnostic({
@@ -5995,7 +5992,7 @@ export const MapViewer: React.FC = () => {
         realisticKoreanCityLayerRef.current.updateSunLight(
           sunConfig.altitudeDeg,
           sunConfig.azimuthDeg,
-          sunConfig.intensity * 1.8,
+          sunConfig.intensity * 1.25,
           sunConfig.color,
           sunConfig.fogColor
         );
