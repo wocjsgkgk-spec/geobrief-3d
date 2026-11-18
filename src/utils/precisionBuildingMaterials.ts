@@ -118,6 +118,7 @@ export function classifyBuildingStyle(
   centerLngLat?: [number, number]
 ): BuildingStyleAssignment {
   const reaStyle = VWorldReaRenderer.classifyBuildingStyle(featProps, seed, areaSqm, height, centerLngLat);
+  const absSeed = Math.abs(seed);
   const roofColorRgb: [number, number, number] =
     reaStyle.roofMaterialIndex === 0
       ? [0.176, 0.416, 0.310] // #2d6a4f (차분한 세이지/다크 우레탄 녹색)
@@ -127,12 +128,45 @@ export function classifyBuildingStyle(
       ? [0.424, 0.204, 0.157] // #6c3428 (차분한 적갈색 기와)
       : [0.114, 0.306, 0.847]; // #1d4ed8 (코발트 강판)
 
+  // 아파트 측벽 동 번호 배분: 101동(slot 4), 102동(slot 14), 201동(slot 15)
+  const sideWallSlots = [4, 14, 15];
+  const sideWallSlot = sideWallSlots[absSeed % 3];
+
+  // 상가 1층 포디움 간판 슬롯: 7(편의점), 8(약국/베이커리), 9(카페)
+  const commercialPodiumSlot = 7 + (absSeed % 3);
+
+  // 상가 기준층: 5(화강석), 6(적벽돌) - 간판 없음!
+  const commercialFacadeSlot = 5 + (absSeed % 2);
+
+  // 공공기관: 10(블루), 11(에메랄드) 커튼월
+  const publicFacadeSlot = 10 + (absSeed % 2);
+
+  // 빌라: 12(적벽돌), 13(스타코)
+  const villaFacadeSlot = 12 + (absSeed % 2);
+
+  let facadeSlot = reaStyle.slot;
+  let podiumSlot = 0;
+
+  if (reaStyle.category === 'apartment') {
+    facadeSlot = absSeed % 4; // 0..3 (발코니 샤시)
+    podiumSlot = facadeSlot;
+  } else if (reaStyle.category === 'commercial') {
+    facadeSlot = commercialFacadeSlot; // 5..6 (오피스 창호)
+    podiumSlot = commercialPodiumSlot; // 7..9 (1층 간판 쇼윈도)
+  } else if (reaStyle.category === 'public') {
+    facadeSlot = publicFacadeSlot; // 10..11
+    podiumSlot = 10;
+  } else {
+    facadeSlot = villaFacadeSlot; // 12..13
+    podiumSlot = 12;
+  }
+
   return {
     category: reaStyle.category === 'apartment' ? 'apartment' : reaStyle.category === 'commercial' ? 'commercial' : reaStyle.category === 'public' ? 'public' : 'villa',
-    facadeSlot: reaStyle.slot,
-    sideWallSlot: reaStyle.category === 'apartment' ? 4 : reaStyle.slot,
-    podiumSlot: reaStyle.category === 'commercial' ? 9 : reaStyle.category === 'public' ? 5 : 2,
-    signboardSlot: reaStyle.category === 'commercial' ? 10 : 6,
+    facadeSlot,
+    sideWallSlot: reaStyle.category === 'apartment' ? sideWallSlot : facadeSlot,
+    podiumSlot,
+    signboardSlot: commercialPodiumSlot,
     porchSlot: 0,
     roofType: reaStyle.roofType,
     roofColorRgb,

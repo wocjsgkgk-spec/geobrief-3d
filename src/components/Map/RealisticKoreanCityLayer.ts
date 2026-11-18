@@ -636,6 +636,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.renderer.autoClear = false;
           this.renderer.outputColorSpace = THREE.SRGBColorSpace;
           this.renderer.shadowMap.enabled = false;
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 1.05;
           const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
           this.renderer.setPixelRatio(pr);
         } catch (rErr) {
@@ -657,6 +659,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.shadowMap.enabled = false;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.05;
       const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
       this.renderer.setPixelRatio(pr);
 
@@ -694,14 +698,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.reanchorDebounceTimer = setTimeout(() => {
       this.reanchorDebounceTimer = null;
       if (!this.map || this.isMoving || this.temporaryElevationBuildingKeys.size === 0) return;
+      // DEM 타일 로드 완료 시 임시 표고 건물만 점진적 재빌드 (기존 버퍼 전체 파괴 금지)
       for (const k of this.temporaryElevationBuildingKeys) {
         this.builtBuildingKeys.delete(k);
       }
       this.temporaryElevationBuildingKeys.clear();
-      this.centroidSpatialGrid.clear();
-      this.resetAccumulatedBuffers();
       this.extractAndBuildFromMap();
-    }, 200);
+    }, 450);
   }
 
   private terrainDebounceTimer: any = null;
@@ -712,14 +715,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.terrainDebounceTimer = setTimeout(() => {
       this.terrainDebounceTimer = null;
       if (!this.map) return;
-      // 3D 지형 로드 또는 배율 변경 시 건물 기초 표고 및 3D 도로 표지판을 실제 지형 높이에 1:1 재정합
+      // 3D 지형 로드 또는 배율 변경 시 3D 도로 표지판 및 신규 건물 동기화 (전체 버퍼 파괴 금지)
       this.buildRoadSignGantries();
-      this.builtBuildingKeys.clear();
-      this.temporaryElevationBuildingKeys.clear();
-      this.centroidSpatialGrid.clear();
-      this.resetAccumulatedBuffers();
       this.extractAndBuildFromMap();
-    }, 250);
+    }, 400);
   };
 
   private idleDebounceTimer: any = null;
@@ -742,14 +741,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         if (this.map && !this.map.isMoving() && !this.map.isRotating() && !this.map.isZooming()) {
           const center = this.map.getCenter();
           const curElev = this.map.queryTerrainElevation ? (this.map.queryTerrainElevation(center) || 0) : 0;
-          if (curElev > 0 && Math.abs(curElev - this.lastKnownCenterElev) > 1.0) {
+          if (curElev > 0) {
             this.lastKnownCenterElev = curElev;
-            // DEM 타일 로드 완료로 지형 높이가 확정되었을 때 정점 버퍼 재정합
-            this.builtBuildingKeys.clear();
-            this.temporaryElevationBuildingKeys.clear();
-            this.centroidSpatialGrid.clear();
-            this.resetAccumulatedBuffers();
           }
+          // [버벅거림 제로화]: 중심 표고 변화 시 기존 건물 전체를 파괴하던 버그 원천 제거! 신규 건물만 점진 추가
           this.extractAndBuildFromMap();
         }
       }, 350);
@@ -969,20 +964,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
     this.isMoving = false;
 
-    // 1) 뷰포트 내 MapLibre 벡터 타일 피처 전체 수집 (실제 건물 100% 추출 및 비건물·대형필지 100% 필터링)
-    let candidateFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
-    try {
-      const extracted = extractRenderedVectorBuildings(this.map);
-      if (extracted && extracted.length > 0) {
-        candidateFeatures = extracted;
-      }
-    } catch {}
-
-    if (candidateFeatures.length > 0) {
-      this.vectorTileFeatures = candidateFeatures;
-    }
-
-    // [신규] 국토교통부 브이월드 실측 소스(vworld-buildings-source) 피처 자동 동기화 (MapLibre v3/v4/v5 완벽 호환)
+    // [신규] 국토교통부 브이월드 실측 소스(vworld-buildings-source) 피처 자동 동기화
     try {
       const vworldSrc = this.map.getSource('vworld-buildings-source') as any;
       const srcFeatures = vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features;
@@ -990,6 +972,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         this.externalFeatures = srcFeatures;
       }
     } catch {}
+
+    // 1) 뷰포트 내 벡터 피처 수집: 외부 실측 피처(wonju_core 등)가 없을 때만 폴백으로 추출하여 메인 스레드 60fps 유지
+    if (this.externalFeatures.length === 0) {
+      try {
+        const extracted = extractRenderedVectorBuildings(this.map);
+        if (extracted && extracted.length > 0) {
+          this.vectorTileFeatures = extracted;
+        }
+      } catch {}
+    }
 
     // 2) 외부 실측 피처와 벡터 피처 스마트 결합 (건물 탈락 0%)
     const combined = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);

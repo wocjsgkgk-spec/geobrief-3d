@@ -127,52 +127,203 @@ function createProceduralCanvasTexture(
 // [1-1] 16종 서울 V-World 실사 텍스처 드로잉 팩토리
 // -----------------------------------------------------------------------------
 
-function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // [V-World 3D 실사화] Variant 4: 한국형 아파트 측벽(Side Wall) - 창문 없는 콘크리트 + 듀얼톤 브랜드 밴드 + 고대비 야간 발광 '101동' 배지
-  if (variant === 4) {
-    ctx.fillStyle = '#f1f5f9';
-    ctx.fillRect(0, 0, w, h);
+function drawApartmentSideWall(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
+  const configs = [
+    { base: '#f1f5f9', stripeA: '#1e3a8a', stripeB: '#ea580c', dong: '101동', border: '#00e5ff' }, // Navy / Orange
+    { base: '#f4f1ea', stripeA: '#7f1d1d', stripeB: '#d97706', dong: '102동', border: '#f59e0b' }, // Burgundy / Gold
+    { base: '#e2e8f0', stripeA: '#0f766e', stripeB: '#94a3b8', dong: '201동', border: '#10b981' }, // Teal / Silver
+  ];
+  const cfg = configs[variant % configs.length];
 
-    // 브랜드 수직 밴드 (다크 네이비 & 오렌지 스트라이프)
-    ctx.fillStyle = '#1e3a8a';
-    ctx.fillRect(w * 0.38, 0, w * 0.20, h);
-    ctx.fillStyle = '#ea580c';
-    ctx.fillRect(w * 0.58, 0, w * 0.04, h);
+  ctx.fillStyle = cfg.base;
+  ctx.fillRect(0, 0, w, h);
 
-    // 수평 콘크리트 패널 줄눈
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 4;
+  // 브랜드 수직 밴드 (브랜드 컬러 스트라이프)
+  ctx.fillStyle = cfg.stripeA;
+  ctx.fillRect(w * 0.38, 0, w * 0.20, h);
+  ctx.fillStyle = cfg.stripeB;
+  ctx.fillRect(w * 0.58, 0, w * 0.04, h);
+
+  // 수평 콘크리트 패널 줄눈
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(0, h * 0.5);
+  ctx.lineTo(w, h * 0.5);
+  ctx.stroke();
+
+  // 대형 동 번호 배지
+  ctx.save();
+  const badgeW = w * 0.56;
+  const badgeH = h * 0.24;
+  const badgeX = w * 0.22;
+  const badgeY = h * 0.26;
+
+  ctx.fillStyle = 'rgba(10, 25, 47, 0.94)';
+  if (ctx.roundRect) {
+    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 18);
+  } else {
+    ctx.rect(badgeX, badgeY, badgeW, badgeH);
+  }
+  ctx.fill();
+
+  ctx.strokeStyle = cfg.border;
+  ctx.lineWidth = 6;
+  ctx.stroke();
+
+  // 순백색 고대비 동 번호 텍스트
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 78px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cfg.dong, w * 0.50, badgeY + badgeH * 0.5);
+  ctx.restore();
+}
+
+function drawCommercialUpperFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
+  const wallThemes = [
+    { base: '#d6cfc2', stone: '#cbd5e1', frame: '#475569' }, // Beige Granite
+    { base: '#7f1d1d', stone: '#991b1b', frame: '#1e293b' }, // Architectural Red Brick
+  ];
+  const theme = wallThemes[variant % wallThemes.length];
+
+  ctx.fillStyle = theme.base;
+  ctx.fillRect(0, 0, w, h);
+
+  // 석재 줄눈
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.lineWidth = 3;
+  for (let y = 0; y < h; y += 256) {
     ctx.beginPath();
-    ctx.moveTo(0, h * 0.5);
-    ctx.lineTo(w, h * 0.5);
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
     ctx.stroke();
-
-    // 대형 101동 배지 (다크 차콜 라운드 렉트 + 시안 블루 네온 글로우 테두리)
-    ctx.save();
-    const badgeW = w * 0.56;
-    const badgeH = h * 0.24;
-    const badgeX = w * 0.22;
-    const badgeY = h * 0.26;
-
-    ctx.fillStyle = 'rgba(10, 25, 47, 0.94)';
-    if (ctx.roundRect) {
-      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 18);
-    } else {
-      ctx.rect(badgeX, badgeY, badgeW, badgeH);
-    }
-    ctx.fill();
-
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = 6;
+  }
+  for (let x = 0; x < w; x += 340) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
     ctx.stroke();
+  }
 
-    // 순백색 고대비 '101동' 텍스트
+  // 창문 (간판 없이 정갈한 상가/오피스 창문)
+  const wx = 120;
+  const wy = 160;
+  const ww = w - 240;
+  const wh = 700;
+
+  ctx.fillStyle = theme.frame;
+  ctx.fillRect(wx - 14, wy - 14, ww + 28, wh + 28);
+
+  const glassGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
+  glassGrad.addColorStop(0, '#0284c7');
+  glassGrad.addColorStop(0.5, '#0369a1');
+  glassGrad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = glassGrad;
+  ctx.fillRect(wx, wy, ww, wh);
+
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(wx, wy, ww, wh);
+  ctx.beginPath();
+  ctx.moveTo(wx + ww * 0.5, wy);
+  ctx.lineTo(wx + ww * 0.5, wy + wh);
+  ctx.moveTo(wx, wy + 200);
+  ctx.lineTo(wx + ww, wy + 200);
+  ctx.stroke();
+}
+
+function drawCommercialPodiumFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
+  // 1층 다크 화강석 기단부
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(0, 0, w, h);
+
+  // 1층 상단 가로 간판 구역 (y: 60 ~ 320)
+  const signH = 240;
+  const signY = 60;
+  const signW = w - 80;
+  const signX = 40;
+
+  ctx.save();
+  if (variant === 0) {
+    // 24시 편의점 (GS25 / CU 스타일)
+    ctx.fillStyle = '#059669'; // Emerald Green
+    ctx.fillRect(signX, signY, signW, signH);
+    ctx.fillStyle = '#0284c7'; // Sky Blue accent
+    ctx.fillRect(signX, signY, 120, signH);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 78px sans-serif';
+    ctx.font = 'bold 64px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('101동', w * 0.50, badgeY + badgeH * 0.5);
-    ctx.restore();
+    ctx.fillText('24시 편의점', w * 0.5, signY + signH * 0.5);
+  } else if (variant === 1) {
+    // 베이커리 & 약국
+    ctx.fillStyle = '#dc2626';
+    ctx.fillRect(signX, signY, signW * 0.5 - 10, signH);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 52px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('BAKERY', signX + (signW * 0.5 - 10) * 0.5, signY + signH * 0.5);
+
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(signX + signW * 0.5 + 10, signY, signW * 0.5 - 10, signH);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('약 국 (十)', signX + signW * 0.5 + 10 + (signW * 0.5 - 10) * 0.5, signY + signH * 0.5);
+  } else {
+    // CAFE & BISTRO
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(signX, signY, signW, signH);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(signX + 6, signY + 6, signW - 12, signH - 12);
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 58px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('CAFE & BISTRO', w * 0.5, signY + signH * 0.5);
+  }
+  ctx.restore();
+
+  // 1층 하단 통유리 쇼윈도 및 출입문 (y: 350 ~ 980)
+  const glassY = 350;
+  const glassH = h - glassY - 30;
+  const glassX = 50;
+  const glassW = w - 100;
+
+  const glassGrad = ctx.createLinearGradient(glassX, glassY, glassX, glassY + glassH);
+  glassGrad.addColorStop(0, '#38bdf8');
+  glassGrad.addColorStop(0.3, '#0284c7');
+  glassGrad.addColorStop(0.7, '#0f172a');
+  glassGrad.addColorStop(1, '#020617');
+  ctx.fillStyle = glassGrad;
+  ctx.fillRect(glassX, glassY, glassW, glassH);
+
+  // 알루미늄 통유리 프레임 및 출입문 분할선
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(glassX, glassY, glassW, glassH);
+
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.5, glassY);
+  ctx.lineTo(w * 0.5, glassY + glassH);
+  ctx.moveTo(glassX + glassW * 0.25, glassY);
+  ctx.lineTo(glassX + glassW * 0.25, glassY + glassH);
+  ctx.moveTo(glassX + glassW * 0.75, glassY);
+  ctx.lineTo(glassX + glassW * 0.75, glassY + glassH);
+  ctx.stroke();
+
+  // 문 손잡이
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(w * 0.5 - 12, glassY + glassH * 0.45, 6, 80);
+  ctx.fillRect(w * 0.5 + 6, glassY + glassH * 0.45, 6, 80);
+}
+
+function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
+  // Variant 4: 아파트 측벽 (기본 101동)
+  if (variant === 4) {
+    drawApartmentSideWall(ctx, w, h, 0);
     return;
   }
 
@@ -898,13 +1049,14 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
 
   const materials: THREE.MeshStandardMaterial[] = [];
 
-  // Mat 0~4: 아파트 단지 (5종) - 밝은 순백색(#f8fafc), 크림 아이보리(#f4f1ea), 라이트 웜그레이(#e2e8f0) + 촘촘한 다크 차콜 발코니 유리창 격자와 백색 창틀 + 하단 3개 층 화강석 기단부 투톤 + 측벽 무창 브랜드 라인
-  for (let i = 0; i < 5; i++) {
+  // Mat 0~3: 아파트 전·후면 발코니 샤시 (4종)
+  for (let i = 0; i < 4; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
       roughness: 0.35,
       metalness: 0.22,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -912,13 +1064,59 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     }));
   }
 
-  // Mat 5~8: 공공청사·관공서·오피스 (4종) - 화강석 포디움(1~2층) + 밝은 스카이블루(#38bdf8 ~ #0284c7)/에메랄드 반사 유리 커튼월과 은백색 알루미늄 멀리언 프레임 (PBR Glass Specularity)
-  for (let i = 0; i < 4; i++) {
+  // Mat 4: 아파트 측벽 Variant A - 101동 (네이비 & 오렌지 브랜드 밴드)
+  {
+    const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentSideWall(ctx, w, h, 0));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.45,
+      metalness: 0.15,
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
+    }));
+  }
+
+  // Mat 5~6: 상가·오피스 기준층(2층+) 외벽 (간판 없이 정돈된 오피스 창호)
+  for (let i = 0; i < 2; i++) {
+    const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialUpperFacade(ctx, w, h, i));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.35,
+      metalness: 0.20,
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
+    }));
+  }
+
+  // Mat 7~9: 상가 1층 포디움 쇼윈도 & 실제 한국형 브랜드 가로 간판 (편의점, 약국/베이커리, 카페)
+  for (let i = 0; i < 3; i++) {
+    const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialPodiumFacade(ctx, w, h, i));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.28,
+      metalness: 0.30,
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
+    }));
+  }
+
+  // Mat 10~11: 공공청사·관공서·하이엔드 오피스 PBR 반사 유리 커튼월 (블루/에메랄드)
+  for (let i = 0; i < 2; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawPublicHQFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.18,
-      metalness: 0.55,
+      roughness: 0.15,
+      metalness: 0.65,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -926,27 +1124,44 @@ export function getGlobalVWorldMaterials(): THREE.MeshStandardMaterial[] {
     }));
   }
 
-  // Mat 9~12: 시내 상가·근린생활 (4종) - 1층 통유리 쇼윈도 + 1~3층 한국형 가로 간판 패치(빨강, 파랑, 노랑, 초록, 흰색) + 베이지 화강석(#d6cfc2), 적벽돌(#7f1d1d), 차콜 메탈(#334155) 외벽
-  for (let i = 0; i < 4; i++) {
-    const tex = createProceduralCanvasTexture((ctx, w, h) => drawCommercialFacade(ctx, w, h, i));
-    materials.push(new THREE.MeshStandardMaterial({
-      map: tex,
-      roughness: 0.32,
-      metalness: 0.25,
-      side: THREE.DoubleSide,
-      color: 0xffffff,
-      depthTest: true,
-      depthWrite: true,
-    }));
-  }
-
-  // Mat 13~15: 단독주택·빌라·학교 (3종) - 차분한 적벽돌(#7c2d12), 황토벽돌(#854d0e), 살구색/테라코타 학교 교사동(#d97742)
-  for (let i = 0; i < 3; i++) {
+  // Mat 12~13: 다세대 빌라·단독주택 (적벽돌 & 스타코)
+  for (let i = 0; i < 2; i++) {
     const tex = createProceduralCanvasTexture((ctx, w, h) => drawVillaResidentialFacade(ctx, w, h, i));
     materials.push(new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.58,
+      roughness: 0.55,
       metalness: 0.08,
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
+    }));
+  }
+
+  // Mat 14: 아파트 측벽 Variant B - 102동 (버건디 & 골드 티타늄 브랜드 밴드)
+  {
+    const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentSideWall(ctx, w, h, 1));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.45,
+      metalness: 0.15,
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      color: 0xffffff,
+      depthTest: true,
+      depthWrite: true,
+    }));
+  }
+
+  // Mat 15: 아파트 측벽 Variant C - 201동 (포레스트 틸 & 실버 브랜드 밴드)
+  {
+    const tex = createProceduralCanvasTexture((ctx, w, h) => drawApartmentSideWall(ctx, w, h, 2));
+    materials.push(new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.45,
+      metalness: 0.15,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -969,6 +1184,7 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
       map: createProceduralCanvasTexture((ctx, w, h) => drawUrethaneGreenRoof(ctx, w, h)),
       roughness: 0.32,
       metalness: 0.10,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -979,6 +1195,7 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
       map: createProceduralCanvasTexture((ctx, w, h) => drawConcreteSlabRoof(ctx, w, h)),
       roughness: 0.60,
       metalness: 0.05,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -989,6 +1206,7 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
       map: createProceduralCanvasTexture((ctx, w, h) => drawTerracottaTileRoof(ctx, w, h)),
       roughness: 0.55,
       metalness: 0.06,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -999,6 +1217,7 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
       map: createProceduralCanvasTexture((ctx, w, h) => drawCobaltSteelRoof(ctx, w, h)),
       roughness: 0.22,
       metalness: 0.50,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -1015,6 +1234,7 @@ export function getGlobalParapetMaterial(): THREE.MeshStandardMaterial {
       map: createProceduralCanvasTexture((ctx, w, h) => drawParapetConcrete(ctx, w, h)),
       roughness: 0.65,
       metalness: 0.05,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -1030,6 +1250,7 @@ export function getGlobalPenthouseMaterial(): THREE.MeshStandardMaterial {
       map: createProceduralCanvasTexture((ctx, w, h) => drawPenthouseLouver(ctx, w, h)),
       roughness: 0.50,
       metalness: 0.15,
+      vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,
       depthTest: true,
@@ -1212,8 +1433,8 @@ export function classifyVWorldReaStyle(
     }
   } else if (isPublic) {
     category = 'public';
-    // 혁신도시 및 공공청사: Mat 5~8 (4종 에메랄드/스카이블루/시안 커튼월)
-    slot = 5 + (Math.abs(seed) % 4); // Mat 5~8
+    // 혁신도시 및 공공청사: Mat 10~11 (2종 에메랄드/스카이블루 반사 PBR 커튼월)
+    slot = 10 + (Math.abs(seed) % 2);
     // 공공기관: 100% 밝은 콘크리트 슬래브(Mat 17)
     roofType = 'concrete';
     roofMaterialIndex = 1;
@@ -1222,19 +1443,19 @@ export function classifyVWorldReaStyle(
     }
   } else if (isCommercial) {
     category = 'commercial';
-    // 시내 상가·근린생활: Mat 9~12 (4종 베이지 화강석, 적벽돌, 다크 차콜 메탈, 브라운 파벽돌)
-    slot = 9 + (Math.abs(seed) % 4); // Mat 9~12
-    // 상가: 오직 30% 비율로만 차분한 세이지 우레탄 방수 초록(Mat 16), 나머지 70%는 콘크리트 슬래브(Mat 17)
-    roofType = (Math.abs(seed) % 100) < 30 ? 'urethane' : 'concrete';
+    // 시내 상가·오피스 기준층: Mat 5~6 (2종 베이지 화강석, 적벽돌 오피스 창호)
+    slot = 5 + (Math.abs(seed) % 2);
+    // 상가: 35% 비율로 에메랄드 우레탄 방수 초록(Mat 16), 나머지 65%는 콘크리트 슬래브(Mat 17)
+    roofType = (Math.abs(seed) % 100) < 35 ? 'urethane' : 'concrete';
     roofMaterialIndex = roofType === 'urethane' ? 0 : 1;
     if (computedHeight < 11.0 || computedHeight > 25.0) {
       computedHeight = 12.0 + (Math.abs(seed) % 10) * 1.0; // 12m ~ 21m
     }
   } else {
     category = 'residential';
-    // 단독주택·빌라: Mat 13~15 (3종 적벽돌, 황토벽돌, 크림 스타코)
-    slot = 13 + (Math.abs(seed) % 3); // Mat 13~15
-    // 단독주택: 다크브라운/적갈색 기와(Mat 18 65%), 회백색 슬래브(Mat 17 35%) — 초록 우레탄 0%
+    // 단독주택·빌라: Mat 12~13 (2종 적벽돌, 스타코)
+    slot = 12 + (Math.abs(seed) % 2);
+    // 단독주택: 다크브라운/적갈색 기와(Mat 18 65%), 회백색 슬래브(Mat 17 35%)
     const pick = Math.abs(seed) % 100;
     if (pick < 65) {
       roofType = 'gabled';
@@ -1444,7 +1665,8 @@ export function buildVWorldRea5PartGeometry(
 
     const countVertexSide = positions.length / 3 - startVertexSide;
     if (countVertexSide > 0) {
-      geometry.addGroup(startVertexSide, countVertexSide, 4); // Mat 4: 아파트 측벽 배지
+      const sideWallSlot = [4, 14, 15][Math.abs(seed) % 3];
+      geometry.addGroup(startVertexSide, countVertexSide, sideWallSlot); // Mat 4, 14, 15: 101동/102동/201동 배지
     }
   }
 
