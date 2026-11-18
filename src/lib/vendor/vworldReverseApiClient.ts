@@ -164,7 +164,11 @@ class VWorldReverseApiClient {
       }
 
       if (res.ok) {
-        const data = (await res.json()) as VWorld3DTileset;
+        let text = await res.text();
+        if (text.charCodeAt(0) === 0xfeff) {
+          text = text.slice(1);
+        }
+        const data = JSON.parse(text) as VWorld3DTileset;
         this.tilesetCache.set(targetUrl, { data, timestamp: Date.now() });
         return data;
       }

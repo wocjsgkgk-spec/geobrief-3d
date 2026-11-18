@@ -91,6 +91,7 @@ import {
 } from '@/lib/vendor/photorealisticPbrShader';
 import { vworldReverseApiClient } from '@/lib/vendor/vworldReverseApiClient';
 import { VWorldB3dmLoader } from '@/lib/vendor/vworldB3dmLoader';
+import { vworld3DTilesManager } from '@/lib/vendor/vworld3DTilesManager';
 import { applyAtmosphericPerspectiveFog } from '@/lib/vendor/openSource3DEnhancer';
 // 교량 및 터널 가짜 3D 박스 메쉬 완전 제거 (위성사진 및 2D 벡터 원본 노출)
 // import { buildAuthenticBridgeMeshGroup, WONJU_AUTHENTIC_BRIDGES } from '@/utils/authenticBridgeBuilder';
@@ -256,6 +257,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private bridgesAndTunnelsData: any[] = [];
   private isBridgeTunnelVisible: boolean = true;
   private roadSignGroup: THREE.Group = new THREE.Group();
+  // V-World 공식 LOD4 실사 3D 타일셋(.b3dm) 루트 씬 그룹
+  private vworld3DTilesGroup: THREE.Group = vworld3DTilesManager.tilesGroup;
 
   // 60fps 무지연 렌더링을 위한 사전 할당 수학 객체 (GC 프리즈 방지)
   private renderMatrix = new THREE.Matrix4();
@@ -290,6 +293,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.originMercator.x = oCoord.x;
     this.originMercator.y = oCoord.y;
     this.originMeterScale = oCoord.meterInMercatorCoordinateUnits();
+
+    if (this.map) {
+      vworld3DTilesManager.update(this.map, this.originMercator, this.originMeterScale, this.renderer);
+    }
 
     if (clearState) {
       this.persistentBuildingMap.clear();
@@ -551,9 +558,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       (window as any).__realisticKoreanCityLayer = this;
       (window as any).__vworldReverseApiClient = vworldReverseApiClient;
       (window as any).__vworldB3dmLoader = VWorldB3dmLoader;
+      (window as any).__vworld3DTilesManager = vworld3DTilesManager;
     }
 
     try {
+      // 0. [V-World 3D 실사 타일셋 Three.js 씬 직접 연동]
+      this.scene.add(this.vworld3DTilesGroup);
+      vworld3DTilesManager.initTileset('wonju');
+
       // 1. [V-World 3D WebGL / XDWorld 역공학(VWorldWebGLShaderSpec) 사양 조명 캘리브레이션]
       // - 주간 직사 태양광: 웜 화이트(0xfff9e6), 강도 1.25, 방위각 215°(남서향), 고도각 45°
       this.sunLight = new THREE.DirectionalLight(0xfff9e6, 1.25);
@@ -685,6 +697,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       // 5. 초기 건물 데이터 즉시 추출 및 빌드 시도
       const center = map.getCenter();
       this.setOrigin([center.lng, center.lat]);
+      vworld3DTilesManager.update(map, this.originMercator, this.originMeterScale, this.renderer);
       this.extractAndBuildFromMap();
     } catch (err) {
       console.warn('[RealisticKoreanCityLayer] onAdd error:', err);
@@ -751,6 +764,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           if (curElev > 0) {
             this.lastKnownCenterElev = curElev;
           }
+          // [V-World 3D 실사 타일셋 동적 스트리밍]: 뷰포트에 맞춘 LOD4 .b3dm Three.js 씬 즉시 안착
+          vworld3DTilesManager.update(this.map, this.originMercator, this.originMeterScale, this.renderer);
+
           // [버벅거림 제로화]: 중심 표고 변화 시 기존 건물 전체를 파괴하던 버그 원천 제거! 신규 건물만 점진 추가
           this.extractAndBuildFromMap();
         }
@@ -795,6 +811,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   public get builtCount(): number {
     return this.builtBuildingKeys.size;
+  }
+
+  public getVWorldTilesCount(): number {
+    return vworld3DTilesManager.getLoadedTilesCount();
+  }
+
+  public getActiveVWorldTilesCount(): number {
+    return vworld3DTilesManager.getActiveTilesCount();
   }
 
   /**
@@ -1469,6 +1493,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       const ptCount = pts2D.length;
       const cLng = sumLng / ptCount;
       const cLat = sumLat / ptCount;
+
+      // [V-World LOD4 실사 3D 타일 최우선 렌더링]:
+      // 현재 씬에 로드된 브이월드 LOD4 실사 3D 타일(.b3dm) 영역 내의 건물은
+      // 절차적 직육면체 박스 생성을 100% 억제하여 Z-Fighting 및 중복 겹침을 완전 차단
+      if (vworld3DTilesManager.isBuildingSuppressed(cLng, cLat)) {
+        continue;
+      }
 
       // 면적 및 외곽 둘레 계산 (동향 x, 북향 -z 기준 표준 평면 직교 좌표계)
       let signedArea = 0;
@@ -2216,11 +2247,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   }
 
   public render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (this.isContextLost || !this.isVisible || !this.renderer || !this.masterMesh) {
+    if (this.isContextLost || !this.isVisible || !this.renderer) {
+      return;
+    }
+    if (!this.masterMesh && this.vworld3DTilesGroup.children.length === 0) {
       return;
     }
 
     try {
+      // [V-World LOD4 실사 3D 타일셋 가시성 연동]
+      this.vworld3DTilesGroup.visible = this.isVisible;
+
       // [2단계: 옥상 메쉬 상시 렌더링 (원거리/중거리에서도 지붕 뚫림 0% 보장)]
       if (this.rooftopMesh) {
         this.rooftopMesh.visible = this.isVisible;

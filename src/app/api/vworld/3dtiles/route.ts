@@ -133,7 +133,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (upstreamRes.ok) {
-      const data = await upstreamRes.arrayBuffer();
+      let data = await upstreamRes.arrayBuffer();
+      // UTF-8 BOM (0xEF, 0xBB, 0xBF) 안전 제거
+      const u8 = new Uint8Array(data);
+      if (u8.length >= 3 && u8[0] === 0xef && u8[1] === 0xbb && u8[2] === 0xbf) {
+        data = data.slice(3);
+      }
       return new NextResponse(data, {
         status: 200,
         headers: {
