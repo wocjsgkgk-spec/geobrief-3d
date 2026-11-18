@@ -89,6 +89,8 @@ import {
   updatePhotorealisticPbrUniforms,
   updateSharedPbrUniforms,
 } from '@/lib/vendor/photorealisticPbrShader';
+import { vworldReverseApiClient } from '@/lib/vendor/vworldReverseApiClient';
+import { VWorldB3dmLoader } from '@/lib/vendor/vworldB3dmLoader';
 import { applyAtmosphericPerspectiveFog } from '@/lib/vendor/openSource3DEnhancer';
 // 교량 및 터널 가짜 3D 박스 메쉬 완전 제거 (위성사진 및 2D 벡터 원본 노출)
 // import { buildAuthenticBridgeMeshGroup, WONJU_AUTHENTIC_BRIDGES } from '@/utils/authenticBridgeBuilder';
@@ -547,6 +549,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (typeof window !== 'undefined') {
       (window as any).__mapInstance = map;
       (window as any).__realisticKoreanCityLayer = this;
+      (window as any).__vworldReverseApiClient = vworldReverseApiClient;
+      (window as any).__vworldB3dmLoader = VWorldB3dmLoader;
     }
 
     try {
@@ -1620,9 +1624,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
-      // [1단계: 전 데이터 전수 검증 및 3D 실측 속성 1:1 강제 동기화]
+      // [1단계: 전 데이터 전수 검증 및 3D 실측 속성 1:1 강제 동기화 (vworldReverseApiClient 연동)]
       if (!featProps.realHeight || !featProps.realUse) {
         stampBuildingWithMasterData(feat);
+      }
+      const vworldAttr = vworldReverseApiClient.parseBuildingAttributesFromProperties(featProps);
+      if (vworldAttr.realMeasured && vworldAttr.measuredHeightMeters) {
+        featProps.realHeight = vworldAttr.measuredHeightMeters;
+        if (vworldAttr.groundFloors > 0) {
+          featProps.gro_flo_co = vworldAttr.groundFloors;
+        }
+        featProps.is_real_measured = true;
       }
 
       // [2단계: DiverseBuildingGenerator 24대 실사 아키텍처 변주 엔진 시드 연동]
