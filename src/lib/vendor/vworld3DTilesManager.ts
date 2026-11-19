@@ -165,7 +165,6 @@ export class VWorld3DTilesManager {
     for (let i = 0; i < visibleTilesToRender.length; i++) {
       const item = visibleTilesToRender[i];
       activeUris.add(item.uri);
-      newActiveBounds.push(item.region);
 
       const cached = this.tileCache.get(item.uri);
       if (cached) {
@@ -174,6 +173,7 @@ export class VWorld3DTilesManager {
           cached.visible = true;
           cached.group.visible = true;
         }
+        newActiveBounds.push(item.region);
 
         // 기준 원점(originMercator) 이동 시 상대 좌표 갱신
         const tileMerc = maplibregl.MercatorCoordinate.fromLngLat(
@@ -298,6 +298,7 @@ export class VWorld3DTilesManager {
             lastUsedTime: Date.now(),
             visible: true,
           });
+          this.activeTileBounds.push(item.region);
 
           console.log(
             `[VWorld3DTilesManager] Loaded 3D tile ${item.uri} (vertices: ${parsed.totalVertices}, models: ${modelNames.length})`

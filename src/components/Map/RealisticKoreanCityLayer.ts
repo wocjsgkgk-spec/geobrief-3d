@@ -795,6 +795,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.pendingFeatures = null;
       this.buildRealisticCityMesh(next);
     }
+    // 카메라 이동/회전/틸트 완료 시 150ms 후 뷰포트 신규 타일 건물 점진 추가 및 3D 타일셋 갱신
+    this.moveEndTimer = setTimeout(() => {
+      this.moveEndTimer = null;
+      if (this.map && !this.map.isMoving() && !this.map.isRotating() && !this.map.isZooming()) {
+        vworld3DTilesManager.update(this.map, this.originMercator, this.originMeterScale, this.renderer);
+        this.extractAndBuildFromMap();
+      }
+    }, 150);
   };
 
   public setInteracting(interacting: boolean): void {
@@ -897,9 +905,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const approxArea = Math.max(10, wM * hM * 0.85);
         const minW = Math.max(1, Math.min(wM, hM));
 
-        // 3,800㎡ 초과 비건물 구획/필지, 폭 4.5m 미만 비건물, 산림 유령건물 100% 배제
-        if (approxArea > 3800 || approxArea < 30) continue;
-        if (minW < 4.5) continue;
+        // 4,500㎡ 초과 비건물 구획/필지, 폭 3.0m 미만 비건물, 산림 유령건물 100% 배제
+        if (approxArea > 4500 || approxArea < 20) continue;
+        if (minW < 3.0) continue;
         if (isMountainGhostBuilding(cX, cY, ef.properties || {}, this.map)) continue;
 
         if (checkCentroidDedupe(cX, cY, 4.0)) continue;
@@ -909,10 +917,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
     }
 
-    // 2단계: 베이스맵 벡터 타일 건물 중 공인 건축물대장 식별자가 검증된 실측 건물만 보강
-    // [강원 전역 산림 유령건물 영구 박멸]:
-    // - OpenMapTiles/OSM의 미검증 산림 다각형 및 임야 폴리곤은 100% 원천 배제
-    // - 국토부 공식 식별자(대장관리번호 bd_mgt_sn, 건물명 buld_nm/bld_nm, 필지 PNU)가 없는 미확인 박스 전면 탈락
+    // 2단계: 베이스맵 벡터 타일 건물 스마트 융합 (도시 전체 100% 3D 입체화)
+    // - 국토부 V-World 실측 건물이 이미 존재하는 위치(반경 12m)는 V-World 지오메트리 1순위 보존
+    // - 군 유휴지(1군지사 310,000㎡) 0동 원칙 및 산림/급경사지 유령 건물 필터링 철저 유지
+    // - 그 외 도시 전역(아파트 단지, 상가, 주택, 빌라)의 모든 건물 100% 3D 복원
     if (vecFeats && vecFeats.length > 0) {
       for (let i = 0; i < vecFeats.length; i++) {
         const vf = vecFeats[i];
@@ -943,24 +951,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const minW = Math.max(1, Math.min(wM, hM));
         const maxW = Math.max(wM, hM);
 
-        if (approxArea > 3800 || approxArea < 30) continue;
-        if (minW < 4.5) continue;
-        if (maxW / minW > 8.0) continue;
+        if (approxArea > 4500 || approxArea < 20) continue;
+        if (minW < 3.0) continue;
+        if (maxW / minW > 8.5) continue;
 
         const vp = (vf.properties || {}) as Record<string, any>;
-
-        // 국토부 공식 건축물 식별자 보유 여부 엄격 판별 (미확인 OSM 박스 차단)
-        const hasVerifiedIdentity = Boolean(
-          vp.bd_mgt_sn ||
-          vp.buld_nm ||
-          vp.bld_nm ||
-          vp.pnu ||
-          vp.source === 'vworld_local' ||
-          vp.source === 'LT_C_SPBD'
-        );
-        if (!hasVerifiedIdentity) {
-          continue; // 공인 식별자가 없는 임의 다각형은 무조건 탈락
-        }
 
         // 군 유휴지 (1군지사 310,000㎡ 등) 0동 원칙: 부지 내부 기존 구형 건물 100% 영구 배제
         if (vp.is_user_placed !== true && vp.isMasterplanFacility !== true) {
@@ -970,15 +965,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         // 산림/임야 유령 건물 (강원 전역 산악 사면 및 능선) 100% 영구 배제
         if (isMountainGhostBuilding(cX, cY, vp, this.map)) continue;
 
-        // V-World 실측 건물이 이미 존재하는 반경 20m 이내 형상은 스킵 (V-World 지오메트리 보존 및 2중 겹침 차단)
-        if (checkCentroidDedupe(cX, cY, 20.0)) continue;
+        // V-World 실측 건물이 이미 존재하는 반경 12m 이내 형상은 스킵 (V-World 실측 지오메트리 보존 및 2중 겹침 차단)
+        if (checkCentroidDedupe(cX, cY, 12.0)) continue;
 
         addCentroid(cX, cY);
         resultList.push(vf);
       }
     }
 
-    // 미검증 vecFeats로의 무조건 폴백을 영구 폐지하여 산악 유령건물 침투를 100% 방지
     return resultList;
   }
 
@@ -997,22 +991,22 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     // [신규] 국토교통부 브이월드 실측 소스(vworld-buildings-source) 피처 자동 동기화
     try {
-      const vworldSrc = this.map.getSource('vworld-buildings-source') as any;
-      const srcFeatures = vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features;
-      if (Array.isArray(srcFeatures) && srcFeatures.length > 0) {
-        this.externalFeatures = srcFeatures;
+      if (this.externalFeatures.length === 0) {
+        const vworldSrc = this.map.getSource('vworld-buildings-source') as any;
+        const srcFeatures = vworldSrc?._data?.geojson?.features || vworldSrc?._data?.features;
+        if (Array.isArray(srcFeatures) && srcFeatures.length > 0) {
+          this.externalFeatures = srcFeatures;
+        }
       }
     } catch {}
 
-    // 1) 뷰포트 내 벡터 피처 수집: 외부 실측 피처(wonju_core 등)가 없을 때만 폴백으로 추출하여 메인 스레드 60fps 유지
-    if (this.externalFeatures.length === 0) {
-      try {
-        const extracted = extractRenderedVectorBuildings(this.map);
-        if (extracted && extracted.length > 0) {
-          this.vectorTileFeatures = extracted;
-        }
-      } catch {}
-    }
+    // 1) 뷰포트 내 벡터 타일 건물 전면 수집 (화면 내 모든 건물 100% 3D 입체화 복원)
+    try {
+      const extracted = extractRenderedVectorBuildings(this.map);
+      if (extracted && extracted.length > 0) {
+        this.vectorTileFeatures = extracted;
+      }
+    } catch {}
 
     // 2) 외부 실측 피처와 벡터 피처 스마트 결합 (건물 탈락 0%)
     const combined = this.mergeBuildingFeatures(this.vectorTileFeatures, this.externalFeatures);
@@ -1940,8 +1934,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      // [최초 버벅거림 제로화]: 엄격한 2.5ms 프레임 버짓으로 브라우저 렌더러에 매 프레임 14ms+ 여유 보장 (60 FPS 락)
-      const FRAME_BUDGET_MS = this.isMoving ? 1.0 : 2.5;
+      // [최초 버벅거림 제로화 & 고속 빌드]: 8.0ms 프레임 버짓으로 브라우저 60 FPS 유지하며 고속 슬라이스 빌드
+      const FRAME_BUDGET_MS = this.isMoving ? 1.5 : 8.0;
 
       const currentMapCenter = map.getCenter();
       const cachedCenter = { lng: currentMapCenter.lng, lat: currentMapCenter.lat };
@@ -1977,21 +1971,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         const sliceStartTime = performance.now();
         let sliceCount = 0;
+        const BATCH_LIMIT = 500;
 
-        // [1단계 선행 커밋]: 최초 1회차에는 중심부 핵심 150동을 즉각 빌드하여 1프레임 내에 화면 즉시 표출
-        const isFirstBatch = !this.hasInitialBuilt && featureIdx === 0;
-        const batchLimit = isFirstBatch ? 150 : Infinity;
-
-        while (featureIdx < features.length) {
-          if (!isFirstBatch && sliceCount > 0 && sliceCount % 10 === 0) {
-            const elapsed = performance.now() - sliceStartTime;
-            if (elapsed >= FRAME_BUDGET_MS) {
-              break;
-            }
-          }
-          if (isFirstBatch && sliceCount >= batchLimit) {
-            break;
-          }
+        while (featureIdx < features.length && sliceCount < BATCH_LIMIT) {
           sliceCount++;
           const feat = features[featureIdx++];
           const key = getBuildingFeatureKey(feat);
@@ -2012,19 +1994,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [초기 로드 1회 즉시 커밋]: 1회차 150동 완료 시 즉시 커밋하여 화면 빈틈 0ms 해소
-          if (!this.hasInitialBuilt && newlyAddedCount > 0 && this.hasAnySlotVertices()) {
+          // [점진적 고속 커밋]: 각 슬라이스마다 즉각 커밋하여 화면에 건물이 번개처럼 즉시 나타나도록 함
+          if (newlyAddedCount > 0 && this.hasAnySlotVertices()) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
             newlyAddedCount = 0;
             this.hasInitialBuilt = true;
           }
-          // 백그라운드 2단계: requestAnimationFrame + 4ms 타임슬라이싱으로 60fps 무지연 처리
-          if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
-            this.activeBuildIdleId = requestAnimationFrame(() => executeSlice());
-          } else {
-            this.activeBuildIdleId = setTimeout(executeSlice, 14);
+          if (this.map) {
+            this.map.triggerRepaint();
           }
+          this.activeBuildIdleId = setTimeout(executeSlice, 0);
         } else {
           // 전체 피처 슬라이싱 완료! 최종 1회 커밋으로 GPU 파이프라인 정체 0% 달성
           this.activeBuildIdleId = null;

@@ -1118,20 +1118,17 @@ export const MapViewer: React.FC = () => {
           // [60fps 단일 렌더러 분리]: 모드 1(facade)과 모드 2(native) 데이터 파이프라인 단일화
           const curMode = useMapStore.getState().renderMode3D || 'facade';
 
-          // [A] 모드 2 (MapLibre 네이티브 GPU Extrusion)일 때만 GeoJSON 소스에 실측 피처 주입
-          // (facade 모드 시 무거운 웹 워커 테셀레이션 및 중복 GPU 정점 버퍼 업로드 100% 원천 차단)
-          if (curMode === 'native') {
-            const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
-            if (vworldSrc && typeof vworldSrc.setData === 'function') {
-              vworldSrc.setData({
-                type: 'FeatureCollection',
-                features: viewportFeatures.slice(0, 3000),
-              });
-            }
+          // [A] GeoJSON 소스에 실측 피처 주입
+          const vworldSrc = targetMap.getSource('vworld-buildings-source') as maplibregl.GeoJSONSource | undefined;
+          if (vworldSrc && typeof vworldSrc.setData === 'function') {
+            vworldSrc.setData({
+              type: 'FeatureCollection',
+              features: viewportFeatures.slice(0, 3000),
+            });
           }
 
-          // [B] 모드 1 (Three.js RealisticKoreanCityLayer) 정점 버퍼에 주입 (최대 6,500동 대규모 도심 표출)
-          if (curMode === 'facade' && realisticKoreanCityLayerRef.current) {
+          // [B] Three.js RealisticKoreanCityLayer 정점 버퍼에 주입 (최대 6,500동 대규모 도심 표출)
+          if (realisticKoreanCityLayerRef.current) {
             realisticKoreanCityLayerRef.current.updateBuildings(viewportFeatures, [center.lng, center.lat]);
           }
 

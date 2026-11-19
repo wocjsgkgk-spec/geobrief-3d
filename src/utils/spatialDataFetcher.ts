@@ -50,6 +50,11 @@ export function extractRenderedVectorBuildings(
   try {
     const targetLayers = [
       'building-vector-carrier',
+      'building',
+      'building-3d',
+      'building-extrusion',
+      'buildings',
+      'building-body',
     ].filter((l) => map.getLayer(l));
 
     const candidateFeatures: (maplibregl.MapGeoJSONFeature | maplibregl.GeoJSONFeature)[] = [];
