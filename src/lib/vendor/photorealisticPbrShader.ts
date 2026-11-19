@@ -68,10 +68,10 @@ export interface PhotorealisticPbrUniforms {
  */
 export const SHARED_PBR_UNIFORMS: PhotorealisticPbrUniforms = {
   uSunDirection: { value: new THREE.Vector3(120, 160, 90).normalize() },
-  uSunColor: { value: new THREE.Vector3(1.0, 0.98, 0.90) },
-  uSkyZenithColor: { value: new THREE.Vector3(0.12, 0.28, 0.54) },
-  uSkyHorizonColor: { value: new THREE.Vector3(0.58, 0.76, 0.96) },
-  uGroundReflectColor: { value: new THREE.Vector3(0.28, 0.33, 0.38) },
+  uSunColor: { value: new THREE.Vector3(1.0, 0.98, 0.92) },
+  uSkyZenithColor: { value: new THREE.Vector3(0.18, 0.38, 0.68) },
+  uSkyHorizonColor: { value: new THREE.Vector3(0.68, 0.82, 0.96) },
+  uGroundReflectColor: { value: new THREE.Vector3(0.24, 0.28, 0.25) },
   uCameraPosition: { value: new THREE.Vector3(0, 500, 500) },
   uRmaMap: { value: null },
   uHasRmaMap: { value: false },
@@ -266,7 +266,7 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   // 5. [F4map & OSMBuildings 벤더링] 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion)
   // 건물이 지형에 견고하게 맞닿도록 부드러운 접지 음영 적용 (지표면 0.0~3.5m)
   float shadowFactor = smoothstep(0.0, 3.5, max(0.0, vHeight));
-  float finalGroundingAo = mix(0.85, 1.0, shadowFactor);
+  float finalGroundingAo = mix(0.70, 1.0, shadowFactor);
 
   // 차폐 음영 및 텍스처 미세 AO 결합 적용
   diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.35));

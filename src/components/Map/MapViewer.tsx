@@ -41,6 +41,8 @@ import { setupBridgeLabelsLayer } from '@/utils/authenticBridgeBuilder';
 import { SmartCityComplex3DLayer } from './SmartCityComplex3D';
 import { ProceduralTrees3DLayer } from './ProceduralTrees3D';
 import { MilitarySiteVisualizer } from './MilitarySiteVisualizer';
+import { jiangshanCameraCoalescer } from '@/lib/vendor/jiangshanCameraCoalescer';
+import { UrbanChronicleTimeline, ChronicleEpoch } from './UrbanChronicleTimeline';
 import { syncMaster3DRenderer, isPermittedBuildingPolygon, hideAllFillExtrusionLayers, isMountainGhostBuilding } from '@/utils/master3DRendererManager';
 import { astryxAdapter } from '@/lib/vendor/astryxAdapter';
 import {
@@ -1352,6 +1354,39 @@ export const MapViewer: React.FC = () => {
   const [pinScreenPositions, setPinScreenPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
+  // [DeanChensj/jiangshan-map 벤더링]: 원주 구 1군지사 70년 시계열 연혁 타임라인 에포크 상태
+  const [chronicleEpoch, setChronicleEpoch] = useState<ChronicleEpoch | null>(null);
+
+  const handleChronicleEpochChange = useCallback((epoch: ChronicleEpoch) => {
+    setChronicleEpoch(epoch);
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (epoch.year === 1954 || epoch.year === 1985) {
+      if (smartCityComplexLayerRef.current) {
+        smartCityComplexLayerRef.current.setVisible(false);
+      }
+      if (militarySiteVisualizerRef.current) {
+        militarySiteVisualizerRef.current.setDisplayMode('current_military');
+      }
+    } else if (epoch.year === 2024) {
+      if (smartCityComplexLayerRef.current) {
+        smartCityComplexLayerRef.current.setVisible(false);
+      }
+      if (militarySiteVisualizerRef.current) {
+        militarySiteVisualizerRef.current.setDisplayMode('current_military');
+      }
+    } else if (epoch.year === 2026 || epoch.year === 2030) {
+      if (smartCityComplexLayerRef.current) {
+        smartCityComplexLayerRef.current.setVisible(true);
+        smartCityComplexLayerRef.current.setMode('future_masterplan');
+      }
+      if (militarySiteVisualizerRef.current) {
+        militarySiteVisualizerRef.current.setDisplayMode('future_masterplan');
+      }
+    }
+  }, []);
+
   // [2단계: React 리렌더링 차단] 지도 이동 중 리렌더링 0회 달성을 위한 카메라 텔레메트리 Ref
   const cameraTelemetryRef = useRef({
     bearing: initialViewport.bearing,
@@ -2476,6 +2511,12 @@ export const MapViewer: React.FC = () => {
     (window as any).__mapLibreMap = map;
     (window as any).__geobrief_map = map;
     (window as any).map = map;
+
+    // [DeanChensj/jiangshan-map 벤더링]: 카메라 제스처 코어레서 바인딩 (Zero-Jank 60 FPS)
+    jiangshanCameraCoalescer.attach(map);
+    const unbindJiangshanMotion = jiangshanCameraCoalescer.onMotion((isMoving) => {
+      isInteractingRef.current = isMoving;
+    });
     (window as any).__setSelectedBuilding = setSelectedBuilding;
     (window as any).__fetchCadastralAnalysis = fetchCadastralAnalysis;
     (window as any).__setRenderMode3D = setRenderMode3D;
@@ -3677,6 +3718,8 @@ export const MapViewer: React.FC = () => {
         map.off('dragend', handleInteractionEnd);
         map.off('zoomend', handleInteractionEnd);
       } catch {}
+      unbindJiangshanMotion();
+      jiangshanCameraCoalescer.detach();
       resizeObserver.disconnect();
       astryxAdapter.destroy();
       map.remove();
@@ -5170,10 +5213,11 @@ export const MapViewer: React.FC = () => {
       'building-vector-carrier',
     ].filter((layerId) => Boolean(map.getLayer(layerId)));
 
-    // 마우스 호버 커서 처리 (80ms 디바운스 스로틀링으로 마우스 이동 중 프레임 드랍 0% 완전 보장)
+    // 마우스 호버 커서 처리 (Jiangshan 코어레서 기반 제스처 중 100% 완전 정지)
     let hoverTimer: ReturnType<typeof setTimeout> | null = null;
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (
+        jiangshanCameraCoalescer.isInteracting ||
         isInteractingRef.current ||
         map.isMoving() ||
         map.isRotating() ||
@@ -5195,6 +5239,7 @@ export const MapViewer: React.FC = () => {
       if (hoverTimer) clearTimeout(hoverTimer);
       // [60fps 최적화]: 카메라 이동/회전/줌 중에는 마우스 피킹 및 쿼리 완전 정지 (Jank 원천 차단)
       if (
+        jiangshanCameraCoalescer.isInteracting ||
         isInteractingRef.current ||
         map.isMoving() ||
         map.isRotating() ||
@@ -8391,6 +8436,9 @@ export const MapViewer: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* [DeanChensj/jiangshan-map 벤더링]: 원주 구 1군지사 70년 시계열 연혁 타임라인 HUD */}
+        <UrbanChronicleTimeline onEpochChange={handleChronicleEpochChange} />
 
         {/* 도정·국방 표준 도면 표제란 (CAD Title Block) */}
         <TitleBlock siteName={metadata?.title || '강원 전략 군 유휴지'} />

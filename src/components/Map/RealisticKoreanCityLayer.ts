@@ -1069,8 +1069,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     fogDensity?: number
   ): void {
     if (!this.sunLight) return;
-    let actualSunColor = '#fffdf0';
-    let actualFogColor = '#cbd5e1';
+    let actualSunColor = '#fff9ea';
+    let actualFogColor = '#d2e3f5';
 
     if (typeof dirOrAlt === 'number' && typeof colorOrAz === 'number') {
       // 1. (altitudeDeg, azimuthDeg, intensity, sunColor, fogColor, fogDensity)
