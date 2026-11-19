@@ -567,24 +567,24 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       vworld3DTilesManager.initTileset('wonju');
 
       // 1. [V-World 3D WebGL / XDWorld 역공학(VWorldWebGLShaderSpec) 사양 조명 캘리브레이션]
-      // - 주간 직사 태양광: 웜 화이트(0xfff9e6), 강도 1.25, 방위각 215°(남서향), 고도각 45°
-      this.sunLight = new THREE.DirectionalLight(0xfff9e6, 1.25);
+      // - 주간 직사 태양광: 웜 화이트(0xfff9ea), 강도 1.35, 방위각 215°(남서향), 고도각 45°
+      this.sunLight = new THREE.DirectionalLight(0xfff9ea, 1.35);
       const sunDir = getXDWorldSunDirection(215, 45);
       this.sunLight.position.set(sunDir[0] * 300, sunDir[1] * 300, sunDir[2] * 300);
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      // - 역광 음영 완화 보조광 (서쪽 반사광: 0xe2e8f0, 0.45배)
-      this.fillLight = new THREE.DirectionalLight(0xe2e8f0, 0.45);
+      // - 역광 음영 완화 보조광 (서쪽 반사광: 0xe8eff8, 0.45배)
+      this.fillLight = new THREE.DirectionalLight(0xe8eff8, 0.45);
       this.fillLight.position.set(-100, 120, -90);
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 브이월드 클라이언트 역공학 0xe8eff5, 0.35배
-      this.ambientLight = new THREE.AmbientLight(0xe8eff5, 0.35);
+      // - AmbientLight(환경광): 브이월드 클라이언트 역공학 0xf0f6ff, 0.42배 (화사한 한낮 도심)
+      this.ambientLight = new THREE.AmbientLight(0xf0f6ff, 0.42);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 청명 하늘 #d9ebff, 대지 반사 #8c8273, 0.85배로 자연스러운 지면/대기 반사광 제공
-      this.hemisphereLight = new THREE.HemisphereLight(0xd9ebff, 0x8c8273, 0.85);
+      // - HemisphereLight: 청명 하늘 #e0f0ff, 대지 반사 #908c80, 0.90배로 자연스러운 지면/대기 반사광 제공
+      this.hemisphereLight = new THREE.HemisphereLight(0xe0f0ff, 0x908c80, 0.90);
       this.scene.add(this.hemisphereLight);
 
       // [V-World 3D 실사화] 대기 원근감 안개 (Distance Fog: #dbeafe, density 0.00018)
@@ -1129,6 +1129,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       else clearTimeout(this.activeBuildIdleId);
       this.activeBuildIdleId = null;
     }
+    this.isBuildingGeometry = false;
     this.cachedFeatures = [];
     this.vectorTileFeatures = [];
     this.externalFeatures = [];
@@ -1149,6 +1150,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     if (!features || features.length === 0) return;
     this.externalFeatures = features;
     this.cachedFeatures = features;
+    this.isBuildingGeometry = false; // 항상 잠금을 해제하여 신규 실측 피처가 즉시 빌드되도록 보장
 
     // [강원 18개 시·군 전역 원점 재설정] 시군간 이동 시 기준 원점 동적 재앵커링
     if (newOriginLngLat && Array.isArray(newOriginLngLat) && newOriginLngLat.length === 2) {
@@ -1248,10 +1250,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const relH1 = Math.max(0, p1[1] - baseElev);
     const relH2 = Math.max(0, p2[1] - baseElev);
 
-    // [3단계: 건물 하단 0m ~ 3.2m 접지 앰비언트 오클루전 그라데이션 0.50 -> 1.0 적용으로 지면 밀착감 강화]
-    const ao0 = relH0 < 3.2 ? 0.50 + 0.50 * (relH0 / 3.2) : 1.0;
-    const ao1 = relH1 < 3.2 ? 0.50 + 0.50 * (relH1 / 3.2) : 1.0;
-    const ao2 = relH2 < 3.2 ? 0.50 + 0.50 * (relH2 / 3.2) : 1.0;
+    // [V-World 3D 실사화: 건물 기저부 0m ~ 1.5m 부드러운 접지 AO (과도한 50% 감쇠 철폐)]
+    const ao0 = relH0 < 1.5 ? 0.88 + 0.12 * (relH0 / 1.5) : 1.0;
+    const ao1 = relH1 < 1.5 ? 0.88 + 0.12 * (relH1 / 1.5) : 1.0;
+    const ao2 = relH2 < 1.5 ? 0.88 + 0.12 * (relH2 / 1.5) : 1.0;
 
     pos[p] = p0[0]; pos[p + 1] = p0[1]; pos[p + 2] = p0[2];
     nrm[p] = norm[0]; nrm[p + 1] = norm[1]; nrm[p + 2] = norm[2];
@@ -1865,6 +1867,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     rawFeatures: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]
   ): void {
     if (!this.map) return;
+    if (!rawFeatures || rawFeatures.length === 0) {
+      this.isBuildingGeometry = false;
+      return;
+    }
+
     if (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()) {
       if (this.masterMesh) {
         this.pendingFeatures = rawFeatures;
@@ -1953,7 +1960,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       }
 
       const executeSlice = (deadline?: any) => {
-        if (this.activeBuildTaskId !== currentTaskId) return;
+        if (this.activeBuildTaskId !== currentTaskId) {
+          this.isBuildingGeometry = false;
+          return;
+        }
         if (!this.map) {
           this.isBuildingGeometry = false;
           return;

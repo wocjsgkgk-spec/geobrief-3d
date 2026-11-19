@@ -68,15 +68,15 @@ export interface PhotorealisticPbrUniforms {
  */
 export const SHARED_PBR_UNIFORMS: PhotorealisticPbrUniforms = {
   uSunDirection: { value: new THREE.Vector3(120, 160, 90).normalize() },
-  uSunColor: { value: new THREE.Vector3(1.0, 0.98, 0.92) },
-  uSkyZenithColor: { value: new THREE.Vector3(0.18, 0.38, 0.68) },
-  uSkyHorizonColor: { value: new THREE.Vector3(0.68, 0.82, 0.96) },
-  uGroundReflectColor: { value: new THREE.Vector3(0.24, 0.28, 0.25) },
+  uSunColor: { value: new THREE.Vector3(1.08, 1.05, 0.98) },
+  uSkyZenithColor: { value: new THREE.Vector3(0.22, 0.45, 0.78) },
+  uSkyHorizonColor: { value: new THREE.Vector3(0.70, 0.85, 0.98) },
+  uGroundReflectColor: { value: new THREE.Vector3(0.28, 0.32, 0.28) },
   uCameraPosition: { value: new THREE.Vector3(0, 500, 500) },
   uRmaMap: { value: null },
   uHasRmaMap: { value: false },
-  uAoIntensity: { value: 1.0 },
-  uSpecularGlintIntensity: { value: 2.2 },
+  uAoIntensity: { value: 0.85 },
+  uSpecularGlintIntensity: { value: 2.8 },
   uTime: { value: 0 },
 };
 
@@ -252,9 +252,6 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
       float recessShadow = getStreetsGlWindowRecessShadow(vPbrUv, N, L);
       diffuseColor.rgb *= recessShadow;
     }
-  } else {
-    // 콘크리트 무광 외벽: 부드러운 람베르트 확산광 질감
-    diffuseColor.rgb = diffuseColor.rgb * (0.88 + 0.12 * NdotL);
   }
 
   // 4. [OSMBuildings] 옥상 파라펫 내부 음영
@@ -263,13 +260,12 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
     diffuseColor.rgb *= parapetShadow;
   }
 
-  // 5. [F4map & OSMBuildings 벤더링] 건물 간 상호 차폐 접지 음영 (Contact Ambient Occlusion)
-  // 건물이 지형에 견고하게 맞닿도록 부드러운 접지 음영 적용 (지표면 0.0~3.5m)
-  float shadowFactor = smoothstep(0.0, 3.5, max(0.0, vHeight));
-  float finalGroundingAo = mix(0.70, 1.0, shadowFactor);
+  // 5. [F4map & OSMBuildings 벤더링] 건물 기저부 부드러운 접지 음영 (Contact Ambient Occlusion: 0.0~1.8m)
+  float shadowFactor = smoothstep(0.0, 1.8, max(0.0, vHeight));
+  float finalGroundingAo = mix(0.85, 1.0, shadowFactor);
 
-  // 차폐 음영 및 텍스처 미세 AO 결합 적용
-  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.35));
+  // 차폐 음영 및 텍스처 미세 AO 결합 적용 (과도한 3중 감쇠 방지)
+  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.25));
 `;
 
 /**

@@ -76,7 +76,24 @@ function registerFeaturesToRealStore(features: any[]): void {
     // ignore
   }
 }
-let cachedManifest: VworldManifest | null = null;
+export const DEFAULT_VWORLD_MANIFEST: VworldManifest = {
+  generatedAt: '2026-10-21T15:00:00.450Z',
+  regions: {
+    wonju: {
+      admCode: '51130',
+      name: '원주시',
+      file: 'wonju.geojson',
+      coreFile: 'wonju_core.geojson',
+      totalCount: 91422,
+      coreCount: 30037,
+      fileSizeMb: 65.12,
+      updatedAt: '2026-11-05T03:10:27.590Z',
+      bbox: [127.8, 37.15, 128.15, 37.55],
+    },
+  },
+};
+
+let cachedManifest: VworldManifest | null = DEFAULT_VWORLD_MANIFEST;
 let manifestFetchPromise: Promise<VworldManifest | null> | null = null;
 
 /**
@@ -241,7 +258,8 @@ export async function fetchLocalVworldBuildings(options: {
   try {
     if (bbox && Array.isArray(bbox) && bbox.length === 4) {
       const bboxStr = bbox.map((v) => Number(v).toFixed(5)).join(',');
-      const apiUrl = resolveFullUrl(`/api/gangwon-spatial?bbox=${bboxStr}&regionId=${rId}&layers=buildings`);
+      const relUrl = `/api/gangwon-spatial?bbox=${bboxStr}&regionId=${rId}&layers=buildings`;
+      const apiUrl = typeof window !== 'undefined' ? relUrl : resolveFullUrl(relUrl);
       const apiRes = await fetch(apiUrl, { headers: { Accept: 'application/json' }, cache: 'no-store' });
       if (apiRes.ok) {
         const apiJson = await apiRes.json();

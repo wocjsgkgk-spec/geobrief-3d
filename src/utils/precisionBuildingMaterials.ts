@@ -121,7 +121,7 @@ export function classifyBuildingStyle(
   const absSeed = Math.abs(seed);
   const roofColorRgb: [number, number, number] =
     reaStyle.roofMaterialIndex === 0
-      ? [0.176, 0.416, 0.310] // #2d6a4f (차분한 세이지/다크 우레탄 녹색)
+      ? [0.161, 0.490, 0.220] // #297d38 (선명하고 맑은 한국형 방수 우레탄 녹색)
       : reaStyle.roofMaterialIndex === 1
       ? [0.580, 0.639, 0.722] // #94a3b8 (밝은 콘크리트 회색 슬래브)
       : reaStyle.roofMaterialIndex === 2

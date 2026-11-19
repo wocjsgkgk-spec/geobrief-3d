@@ -1,11 +1,13 @@
 /**
  * components/Map/UrbanChronicleTimeline.tsx
  *
- * [DeanChensj/jiangshan-map 벤더링: 인터랙티브 도시·군사 시계열 연혁 타임라인 HUD]
+ * [DeanChensj/jiangshan-map 벤더링: 인터랙티브 도시·군사 시계열 연혁 타임라인]
  *
  * 깃허브 스타 7.9k의 역사 GIS 지도 'jiangshan-map'의 시계열 슬라이더를 벤더링하여,
  * 강원특별자치도 원주 구 제1군수지원사령부(1군지사) 및 군 유휴지의 70년 변천사(1954~2030+)를
  * 3차원 디지털트윈과 실시간 연동하여 탐색하는 인터랙티브 타임라인 컴포넌트입니다.
+ *
+ * - 좌측 메뉴(ControlPanel) 내 최적화 배치 모드 지원 (화면 중앙 시야 100% 개방)
  */
 
 'use client';
@@ -17,13 +19,9 @@ import {
   Pause,
   ChevronUp,
   ChevronDown,
-  Shield,
-  Building2,
-  Clock,
   Sparkles,
-  Info,
-  Maximize2,
-  Minimize2,
+  Shield,
+  Clock,
 } from 'lucide-react';
 
 export interface ChronicleEpoch {
@@ -104,11 +102,13 @@ export const CHRONICLE_EPOCHS: ChronicleEpoch[] = [
 
 interface UrbanChronicleTimelineProps {
   currentYear?: number;
+  isSidebarMode?: boolean;
   onEpochChange?: (epoch: ChronicleEpoch) => void;
 }
 
 export const UrbanChronicleTimeline: React.FC<UrbanChronicleTimelineProps> = ({
   currentYear = 2026,
+  isSidebarMode = true,
   onEpochChange,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState<number>(3); // 2026년 기본 선택
@@ -123,6 +123,12 @@ export const UrbanChronicleTimeline: React.FC<UrbanChronicleTimelineProps> = ({
     setSelectedIndex(idx);
     if (onEpochChange) {
       onEpochChange(CHRONICLE_EPOCHS[idx]);
+    }
+    // 전역 동기화 이벤트 디스패치
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('chronicle-epoch-change', { detail: CHRONICLE_EPOCHS[idx] })
+      );
     }
   };
 
@@ -143,6 +149,11 @@ export const UrbanChronicleTimeline: React.FC<UrbanChronicleTimelineProps> = ({
         if (onEpochChange) {
           onEpochChange(CHRONICLE_EPOCHS[next]);
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('chronicle-epoch-change', { detail: CHRONICLE_EPOCHS[next] })
+          );
+        }
         return next;
       });
     }, interval);
@@ -155,142 +166,137 @@ export const UrbanChronicleTimeline: React.FC<UrbanChronicleTimelineProps> = ({
     };
   }, [isPlaying, playSpeed, onEpochChange]);
 
+  const containerClassName = isSidebarMode
+    ? 'w-full bg-[#08131d]/95 border border-cyan-500/40 rounded-xl shadow-lg ring-1 ring-cyan-500/20 overflow-hidden text-slate-100'
+    : 'absolute bottom-14 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none transition-all duration-300 w-[94%] max-w-4xl bg-[#08131d]/95 backdrop-blur-md border border-cyan-500/40 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.65)] ring-1 ring-cyan-500/20 overflow-hidden text-slate-100';
+
   return (
-    <div
-      id="urban-chronicle-timeline"
-      className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 pointer-events-auto select-none transition-all duration-300 w-[94%] max-w-4xl"
-    >
-      <div className="bg-[#08131d]/95 backdrop-blur-md border border-cyan-500/40 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.65)] ring-1 ring-cyan-500/20 overflow-hidden text-slate-100">
-        {/* 상단 헤더 & 컨트롤 바 */}
-        <div className="flex items-center justify-between px-3.5 py-2 bg-gradient-to-r from-cyan-950/80 via-slate-900/90 to-blue-950/80 border-b border-cyan-500/20 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-5 h-5 rounded-md bg-cyan-500/20 text-cyan-400">
-              <Calendar className="w-3.5 h-3.5" />
-            </span>
-            <span className="font-extrabold tracking-wider text-cyan-300 uppercase text-[11px]">
-              원주 구 1군지사 70년 시계열 연혁 타임라인 (Jiangshan-Map)
-            </span>
+    <div id="urban-chronicle-timeline" className={containerClassName}>
+      {/* 상단 헤더 & 컨트롤 바 */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-cyan-950/80 via-slate-900/90 to-blue-950/80 border-b border-cyan-500/20 text-xs">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="flex items-center justify-center w-5 h-5 rounded-md bg-cyan-500/20 text-cyan-400 shrink-0">
+            <Calendar className="w-3.5 h-3.5" />
+          </span>
+          <span className="font-extrabold tracking-wider text-cyan-300 uppercase text-[11px] truncate">
+            70년 시계열 연혁 타임라인
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {/* 재생 / 일시정지 */}
+          <button
+            id="btn-timeline-play-toggle"
+            onClick={() => setIsPlaying(!isPlaying)}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-semibold transition-all ${
+              isPlaying
+                ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 font-bold animate-pulse'
+                : 'bg-cyan-900/60 text-cyan-200 hover:bg-cyan-800 border border-cyan-500/30'
+            }`}
+            title={isPlaying ? '자동 재생 일시 정지' : '시계열 연혁 자동 재생'}
+          >
+            {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+            <span>{isPlaying ? '정지' : '재생'}</span>
+          </button>
+
+          {/* 배속 토글 */}
+          <button
+            onClick={() => setPlaySpeed((s) => (s === 1 ? 2 : 1))}
+            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-cyan-300 hover:bg-slate-700 border border-white/10"
+            title="재생 속도"
+          >
+            {playSpeed}x
+          </button>
+
+          {/* 접기/펼치기 */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
+            title={isExpanded ? '접기' : '펼치기'}
+          >
+            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* 본체 컨텐츠 (접기 가능) */}
+      {isExpanded && (
+        <div className="p-2.5 space-y-2">
+          {/* 현재 선택 에포크 배지 */}
+          <div className="flex items-center justify-between text-[11px]">
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${activeEpoch.badgeColor}`}>
               {activeEpoch.year}년 · {activeEpoch.tag}
             </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {activeEpoch.urbanPhase}
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* 재생 / 일시정지 */}
-            <button
-              id="btn-timeline-play-toggle"
-              onClick={() => setIsPlaying(!isPlaying)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                isPlaying
-                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 font-bold animate-pulse'
-                  : 'bg-cyan-900/60 text-cyan-200 hover:bg-cyan-800 border border-cyan-500/30'
-              }`}
-              title={isPlaying ? '자동 재생 일시 정지' : '시계열 연혁 자동 재생'}
-            >
-              {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-              <span>{isPlaying ? '일시정지' : '자동재생'}</span>
-            </button>
+          {/* 1) 에포크 탭 버튼 그리드 (사이드바 5열 컴팩트) */}
+          <div className="grid grid-cols-5 gap-1">
+            {CHRONICLE_EPOCHS.map((epoch, idx) => {
+              const isSelected = idx === selectedIndex;
+              return (
+                <button
+                  key={epoch.id}
+                  onClick={() => handleSelectEpoch(idx)}
+                  className={`relative flex flex-col items-center justify-center py-1.5 px-0.5 rounded-lg text-center transition-all ${
+                    isSelected
+                      ? 'bg-cyan-500/25 border border-cyan-400 text-white shadow-[0_0_12px_rgba(6,182,212,0.35)] scale-[1.02]'
+                      : 'bg-slate-900/60 hover:bg-slate-800/70 border border-white/5 text-slate-400 hover:text-slate-200'
+                  }`}
+                  title={`${epoch.year}년: ${epoch.tag}`}
+                >
+                  <span className="text-[10px] font-mono font-bold text-cyan-300">
+                    {epoch.year}
+                  </span>
+                  <span className="text-[9px] font-medium truncate max-w-full">
+                    {epoch.tag.slice(0, 4)}
+                  </span>
+                  {isSelected && (
+                    <span className="absolute -bottom-0.5 w-1.5 h-1.5 bg-cyan-400 rotate-45 rounded-[1px]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-            {/* 배속 토글 */}
-            <button
-              onClick={() => setPlaySpeed((s) => (s === 1 ? 2 : 1))}
-              className="px-2 py-1 rounded-md text-[10px] font-bold bg-slate-800 text-cyan-300 hover:bg-slate-700 border border-white/10"
-              title="재생 속도"
-            >
-              {playSpeed}x
-            </button>
+          {/* 2) 시계열 슬라이더 바 (Jiangshan Scrubber) */}
+          <div className="relative pt-1 px-0.5">
+            <input
+              type="range"
+              min={0}
+              max={CHRONICLE_EPOCHS.length - 1}
+              step={1}
+              value={selectedIndex}
+              onChange={(e) => handleSelectEpoch(parseInt(e.target.value, 10))}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+            <div className="flex justify-between text-[9px] text-slate-400 font-mono mt-0.5">
+              <span>1954</span>
+              <span>1985</span>
+              <span>2024</span>
+              <span className="text-cyan-400 font-bold">2026</span>
+              <span>2030+</span>
+            </div>
+          </div>
 
-            {/* 접기/펼치기 */}
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 rounded-md text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
-              title={isExpanded ? '접기' : '펼치기'}
-            >
-              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-            </button>
+          {/* 3) 선택된 에포크 상세 해설 카드 */}
+          <div className="bg-[#0b1b2a]/80 rounded-lg p-2 border border-cyan-500/20 text-xs space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-cyan-200 text-[11px] leading-tight">
+                {activeEpoch.title}
+              </span>
+            </div>
+            <p className="text-[10.5px] text-slate-300 leading-relaxed">
+              {activeEpoch.summary}
+            </p>
+            <div className="pt-1 border-t border-cyan-500/10 flex items-center justify-between text-[9.5px] text-slate-400">
+              <span>군사 지위: <b className="text-cyan-300">{activeEpoch.militaryStatus}</b></span>
+            </div>
           </div>
         </div>
-
-        {/* 본체 컨텐츠 (접기 가능) */}
-        {isExpanded && (
-          <div className="p-3 space-y-2.5">
-            {/* 1) 에포크 탭 버튼 그리드 */}
-            <div className="grid grid-cols-5 gap-1.5">
-              {CHRONICLE_EPOCHS.map((epoch, idx) => {
-                const isSelected = idx === selectedIndex;
-                return (
-                  <button
-                    key={epoch.id}
-                    onClick={() => handleSelectEpoch(idx)}
-                    className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all ${
-                      isSelected
-                        ? 'bg-cyan-500/25 border-2 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.35)] scale-[1.02]'
-                        : 'bg-slate-900/60 hover:bg-slate-800/70 border border-white/5 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <span className="text-[10px] font-mono font-bold tracking-tight text-cyan-400/90">
-                      {epoch.year}
-                    </span>
-                    <span className="text-[11px] font-bold truncate max-w-full">
-                      {epoch.tag.replace(' (현재)', '')}
-                    </span>
-                    {isSelected && (
-                      <span className="absolute -bottom-1 w-2 h-2 bg-cyan-400 rotate-45 rounded-[1px]" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* 2) 시계열 슬라이더 바 (Jiangshan Scrubber) */}
-            <div className="relative pt-1 px-1">
-              <input
-                type="range"
-                min={0}
-                max={CHRONICLE_EPOCHS.length - 1}
-                step={1}
-                value={selectedIndex}
-                onChange={(e) => handleSelectEpoch(parseInt(e.target.value, 10))}
-                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-              />
-              <div className="flex justify-between text-[9px] text-slate-500 font-mono mt-1 px-0.5">
-                <span>1954 창설</span>
-                <span>1985 주둔</span>
-                <span>2024 이전</span>
-                <span className="text-cyan-400 font-bold">2026 실사 3D</span>
-                <span>2030+ 미래</span>
-              </div>
-            </div>
-
-            {/* 3) 선택된 에포크 상세 해설 카드 */}
-            <div className="bg-[#0b1b2a]/70 rounded-xl p-2.5 border border-cyan-500/20 text-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5">
-              <div className="space-y-0.5 flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-cyan-200 text-xs truncate">
-                    {activeEpoch.title}
-                  </span>
-                  <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-white/5">
-                    {activeEpoch.militaryStatus}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed truncate">
-                  {activeEpoch.summary}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 self-end md:self-auto shrink-0 text-[10px]">
-                <div className="text-right">
-                  <div className="text-slate-400 font-mono">도시 단계</div>
-                  <div className="text-cyan-300 font-semibold">{activeEpoch.urbanPhase}</div>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };

@@ -80,6 +80,7 @@ import { STRATEGIC_SITES_3D } from '@/constants/strategicSites3D';
 import { AddressSearch } from '@/components/Search/AddressSearch';
 import { CoordinateInputModal } from '@/components/Modal/CoordinateInputModal';
 import { Custom3DTilesModal } from '@/components/Modal/Custom3DTilesModal';
+import { UrbanChronicleTimeline } from '@/components/Map/UrbanChronicleTimeline';
 import { useMapStore } from '@/store/useMapStore';
 import {
   Bookmark as BookmarkItem,
@@ -1746,6 +1747,11 @@ export const ControlPanel: React.FC = () => {
       {/* [3D 건축/단지 탭: 3D 렌더러 단일 선택 + 시설물 카탈로그] */}
       {currentTab === 'buildings_complex' && (
         <>
+          {/* [DeanChensj/jiangshan-map 벤더링]: 원주 구 1군지사 70년 시계열 연혁 타임라인 (좌측 사이드바 메뉴) */}
+          <section className="p-3 border-b border-[#242f27] bg-[#09151e]/90">
+            <UrbanChronicleTimeline isSidebarMode={true} />
+          </section>
+
           {/* [V-World 3D 통합 렌더링 컨트롤 패널] */}
           <section className="p-4 border-b border-[#242f27] space-y-3.5 bg-gradient-to-b from-[#111c15] to-[#0d1611]">
             <div className="flex items-center justify-between gap-1.5">

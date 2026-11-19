@@ -130,9 +130,9 @@ function createProceduralCanvasTexture(
 
 function drawApartmentSideWall(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
   const configs = [
-    { base: '#f1f5f9', stripeA: '#1e3a8a', stripeB: '#ea580c', dong: '101동', border: '#00e5ff' }, // Navy / Orange
-    { base: '#f4f1ea', stripeA: '#7f1d1d', stripeB: '#d97706', dong: '102동', border: '#f59e0b' }, // Burgundy / Gold
-    { base: '#e2e8f0', stripeA: '#0f766e', stripeB: '#94a3b8', dong: '201동', border: '#10b981' }, // Teal / Silver
+    { base: '#ffffff', stripeA: '#1e3a8a', stripeB: '#ea580c', dong: '101동', border: '#00e5ff' }, // Navy / Orange
+    { base: '#fdfbf7', stripeA: '#881337', stripeB: '#d97706', dong: '102동', border: '#f59e0b' }, // Burgundy / Gold
+    { base: '#f8fafc', stripeA: '#047857', stripeB: '#64748b', dong: '201동', border: '#10b981' }, // Forest Green / Silver
   ];
   const cfg = configs[variant % configs.length];
 
@@ -329,7 +329,7 @@ function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number
   }
 
   // 1-Bay (3.2m) × 1-Floor (3.0m) Korean Apartment Veranda Unit at 1024×1024
-  const baseColors = ['#f8fafc', '#f5f5f0', '#e2e8f0', '#f1f5f9', '#eceae6'];
+  const baseColors = ['#ffffff', '#fcfbf9', '#f8fafc', '#fefce8', '#f5f7fa'];
   const baseColor = baseColors[variant % baseColors.length];
 
   ctx.fillStyle = baseColor;
@@ -621,12 +621,12 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
 // -----------------------------------------------------------------------------
 
 function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // 1. 한국형 심층 에메랄드 우레탄 방수 도막 (#1e4e37, #2d6a4f, #357a5b)
-  ctx.fillStyle = '#22583b';
+  // 1. 한국 표준 선명한 방수 에메랄드 우레탄 도막 (#296838, #2e7d32, #388e3c)
+  ctx.fillStyle = '#296838';
   ctx.fillRect(0, 0, w, h);
 
   // 미세 투톤 텍스처 (128px 우레탄 롤러 도색 결)
-  ctx.fillStyle = '#2d6a4f';
+  ctx.fillStyle = '#2e7d32';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {

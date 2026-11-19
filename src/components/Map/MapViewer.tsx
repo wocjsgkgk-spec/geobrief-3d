@@ -999,18 +999,6 @@ export const MapViewer: React.FC = () => {
       const center = targetMap.getCenter();
       const currentRegion = selectedRegionId || 'wonju';
 
-      // [공간 델타 임계값 스로틀링]: 350m 이내 미세 이동이나 0.7 이내 줌 변경 시 무거운 GeoJSON 재연산/setData 스킵
-      if (lastSyncedStateRef.current && lastSyncedStateRef.current.regionId === currentRegion) {
-        const dLng = (center.lng - lastSyncedStateRef.current.lng) * 111320 * Math.cos((center.lat * Math.PI) / 180);
-        const dLat = (center.lat - lastSyncedStateRef.current.lat) * 111320;
-        const distM = Math.hypot(dLng, dLat);
-        const zoomDiff = Math.abs(zoom - lastSyncedStateRef.current.zoom);
-        const curCount = realisticKoreanCityLayerRef.current?.getBuildingCount() || 0;
-        if (curCount > 0 && distM < 350 && zoomDiff < 0.7) {
-          return;
-        }
-      }
-
       if (isSyncingVworldRef.current) return;
       isSyncingVworldRef.current = true;
 
@@ -1386,6 +1374,17 @@ export const MapViewer: React.FC = () => {
       }
     }
   }, []);
+
+  // [좌측 패널 타임라인 연동 리스너]
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e && e.detail) {
+        handleChronicleEpochChange(e.detail);
+      }
+    };
+    window.addEventListener('chronicle-epoch-change', handler);
+    return () => window.removeEventListener('chronicle-epoch-change', handler);
+  }, [handleChronicleEpochChange]);
 
   // [2단계: React 리렌더링 차단] 지도 이동 중 리렌더링 0회 달성을 위한 카메라 텔레메트리 Ref
   const cameraTelemetryRef = useRef({
@@ -8436,9 +8435,6 @@ export const MapViewer: React.FC = () => {
             </div>
           </div>
         )}
-
-        {/* [DeanChensj/jiangshan-map 벤더링]: 원주 구 1군지사 70년 시계열 연혁 타임라인 HUD */}
-        <UrbanChronicleTimeline onEpochChange={handleChronicleEpochChange} />
 
         {/* 도정·국방 표준 도면 표제란 (CAD Title Block) */}
         <TitleBlock siteName={metadata?.title || '강원 전략 군 유휴지'} />

@@ -464,9 +464,9 @@ export async function GET(req: NextRequest) {
     promises.push(Promise.resolve([]));
   }
 
-  // (4) Overpass API 인프라
-  if (requestedLayers.includes('infrastructure') || requestedLayers.includes('buildings')) {
-    promises.push(fetchOverpassInfra(bbox, 2000));
+  // (4) Overpass API 인프라 (교량, 송전탑, 하천 등 인프라 전용 요청 시에만 비동기 호출)
+  if (requestedLayers.includes('infrastructure')) {
+    promises.push(fetchOverpassInfra(bbox, 1500));
   } else {
     promises.push(
       Promise.resolve({
