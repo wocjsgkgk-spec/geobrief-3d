@@ -216,8 +216,26 @@ export class EnvironmentRealismEngine {
       this.bridgeMasterGroup = null;
     }
 
+    // 5km 반경 내 하천 교량만 선별하여 타 지역 전환 시 원거리 부유 아티팩트 원천 차단
+    const nearbyBridges = WONJU_AUTHENTIC_BRIDGES.filter((b) => {
+      const p0 = b.path?.[0];
+      const p1 = b.path?.[b.path.length - 1];
+      if (!p0 || !p1) return false;
+      const midLng = (p0[0] + p1[0]) * 0.5;
+      const midLat = (p0[1] + p1[1]) * 0.5;
+      const dMeters = Math.hypot((midLng - originLngLat[0]) * 88900, (midLat - originLngLat[1]) * 111000);
+      return dMeters <= 5500;
+    });
+
+    if (nearbyBridges.length === 0) {
+      this.bridgeMasterGroup = new THREE.Group();
+      this.bridgeMasterGroup.name = 'RegionFilteredBridgesEmpty';
+      this.scene.add(this.bridgeMasterGroup);
+      return this.bridgeMasterGroup;
+    }
+
     this.bridgeMasterGroup = buildAuthenticBridgeMeshGroup(
-      WONJU_AUTHENTIC_BRIDGES,
+      nearbyBridges,
       originLngLat,
       getTerrainElev
     );

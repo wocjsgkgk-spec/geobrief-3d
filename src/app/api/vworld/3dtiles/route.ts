@@ -110,18 +110,36 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2. 브이월드 실사 3D Tiles OGC 1.0 표준 타일셋 프록시 (원주권 및 강원 거점)
+  // 2. 브이월드 실사 3D Tiles OGC 1.0 표준 타일셋 프록시 (강원 18개 시·군 및 전국 지원)
   const regionParam = (searchParams.get('region') || 'wonju').toLowerCase();
-  const REGION_TILES_MAP: Record<string, string> = {
-    wonju: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si/tileset.json',
-    'wonju-bridge': 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si-bridge/tileset.json',
-    chuncheon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Chuncheon-si/tileset.json',
-    gangneung: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Gangneung-si/tileset.json',
-    sokcho: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Sokcho-si/tileset.json',
-    root: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA.json',
+  const REGION_DIR_MAP: Record<string, string> = {
+    wonju: 'Gangwon-do/Wonju-si',
+    'wonju-bridge': 'Gangwon-do/Wonju-si-bridge',
+    chuncheon: 'Gangwon-do/Chuncheon-si',
+    gangneung: 'Gangwon-do/Gangneung-si',
+    donghae: 'Gangwon-do/Donghae-si',
+    taebaek: 'Gangwon-do/Taebaek-si',
+    sokcho: 'Gangwon-do/Sokcho-si',
+    samcheok: 'Gangwon-do/Samcheok-si',
+    hongcheon: 'Gangwon-do/Hongcheon-gun',
+    hoengseong: 'Gangwon-do/Hoengseong-gun',
+    yeongwol: 'Gangwon-do/Yeongwol-gun',
+    pyeongchang: 'Gangwon-do/Pyeongchang-gun',
+    jeongseon: 'Gangwon-do/Jeongseon-gun',
+    cheorwon: 'Gangwon-do/Cheorwon-gun',
+    hwacheon: 'Gangwon-do/Hwacheon-gun',
+    yanggu: 'Gangwon-do/Yanggu-gun',
+    inje: 'Gangwon-do/Inje-gun',
+    goseong: 'Gangwon-do/Goseong-gun',
+    yangyang: 'Gangwon-do/Yangyang-gun',
   };
 
-  const targetUpstreamUrl = REGION_TILES_MAP[regionParam] || REGION_TILES_MAP.wonju;
+  const targetUpstreamUrl =
+    regionParam === 'all'
+      ? 'https://cdn.vworld.kr/TDServer/services/map4/LoDALL.json'
+      : regionParam === 'root'
+      ? 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA.json'
+      : `https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/${REGION_DIR_MAP[regionParam] || 'Gangwon-do/Wonju-si'}/tileset.json`;
 
   try {
     const upstreamRes = await fetch(targetUpstreamUrl, {

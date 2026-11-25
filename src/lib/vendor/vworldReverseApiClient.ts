@@ -78,13 +78,27 @@ class VWorldReverseApiClient {
   private tilesetCache = new Map<string, CacheEntry<VWorld3DTileset>>();
   private buildingAttrCache = new Map<string, CacheEntry<VWorldBuildingAttribute>>();
 
-  // 강원도 및 주요 거점 3D 타일셋 매핑
+  // 강원 18개 시·군 및 전국 주요 거점 3D 타일셋 매핑
   public static readonly REGION_3DTILES_MAP: Record<string, string> = {
     wonju: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si/tileset.json',
     'wonju-bridge': 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si-bridge/tileset.json',
     chuncheon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Chuncheon-si/tileset.json',
     gangneung: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Gangneung-si/tileset.json',
+    donghae: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Donghae-si/tileset.json',
+    taebaek: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Taebaek-si/tileset.json',
     sokcho: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Sokcho-si/tileset.json',
+    samcheok: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Samcheok-si/tileset.json',
+    hongcheon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Hongcheon-gun/tileset.json',
+    hoengseong: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Hoengseong-gun/tileset.json',
+    yeongwol: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Yeongwol-gun/tileset.json',
+    pyeongchang: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Pyeongchang-gun/tileset.json',
+    jeongseon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Jeongseon-gun/tileset.json',
+    cheorwon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Cheorwon-gun/tileset.json',
+    hwacheon: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Hwacheon-gun/tileset.json',
+    yanggu: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Yanggu-gun/tileset.json',
+    inje: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Inje-gun/tileset.json',
+    goseong: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Goseong-gun/tileset.json',
+    yangyang: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Yangyang-gun/tileset.json',
     all: 'https://cdn.vworld.kr/TDServer/services/map4/LoDALL.json',
     root: 'https://cdn.vworld.kr/TDServer/services/map4/TG9ENA.json',
   };

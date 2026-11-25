@@ -525,34 +525,34 @@ export async function GET(req: NextRequest) {
 
     const grndFlr = Number(p.levels || p.gro_flo_co || p.grnd_flr || 0);
     const ugrndFlr = Number(p.ugrnd_flr || p.und_flo_co || 0);
-    const height = Number(p.height || p.bd_hgt || p.hei || (grndFlr > 0 ? grndFlr * 3.3 : 8.0));
+    const height = Math.round(Number(p.height || p.bd_hgt || p.hei || (grndFlr > 0 ? grndFlr * 3.3 : 8.0)) * 10) / 10;
     const levels = grndFlr > 0 ? grndFlr : Math.max(1, Math.round(height / 3.3));
+    const roundedArea = Math.round(areaSqm);
 
     const id = b.id || `vw-bld-${p.bd_mgt_sn || buildingsMap.size}`;
+    const props: Record<string, any> = {
+      id,
+      areaSqm: roundedArea,
+      name: p.name || p.buld_nm || '건축물',
+      grnd_flr: levels,
+      levels,
+      height,
+      usageType: p.usageType || p.main_purps_cd_nm || p.bdtyp_cd_nm || '일반건축물',
+      bld_category: p.bld_category || p.usageType || 'general',
+      roofType: p.roofType || 'urethane_green',
+      source: p.source || 'vworld_wfs',
+    };
+    if (p.dongName) props.dongName = p.dongName;
+    if (p.address) props.address = p.address;
+    if (p.pnu) props.pnu = p.pnu;
+    if (ugrndFlr > 0) props.ugrnd_flr = ugrndFlr;
+    if (p.main_purps_cd_nm) props.main_purps_cd_nm = p.main_purps_cd_nm;
+    if (p.structure || p.strct_cd_nm) props.structure = p.structure || p.strct_cd_nm;
+
     buildingsMap.set(String(id), {
       type: 'Feature',
       id,
-      properties: {
-        ...p,
-        id,
-        areaSqm,
-        name: p.name || p.buld_nm || '건축물',
-        buildingName: p.buildingName || p.buld_nm || '',
-        dongName: p.dongName || '',
-        address: p.address || '',
-        grnd_flr: levels,
-        ugrnd_flr: ugrndFlr,
-        levels,
-        height,
-        structure: p.structure || p.strct_cd_nm || '철근콘크리트구조',
-        usageType: p.usageType || p.main_purps_cd_nm || p.bdtyp_cd_nm || '일반건축물',
-        bld_category: p.bld_category || p.usageType || 'general',
-        color: p.color || '#e5e0d8',
-        roofColour: p.roofColour || p.roofColor || '#356854',
-        roofColor: p.roofColor || p.roofColour || '#356854',
-        roofType: p.roofType || 'urethane_green',
-        source: p.source || 'vworld_wfs',
-      },
+      properties: props,
       geometry: b.geometry,
     });
   }

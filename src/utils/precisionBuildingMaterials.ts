@@ -97,14 +97,14 @@ export const ROOF_COLORS = {
   zincBlue: SEOUL_ROOFTOP_COLORS.cobaltBlueVivid,          // #2563eb
   parapetGray: SEOUL_ROOFTOP_COLORS.parapetWhiteConcrete,  // #e2e8f0 밝은 콘크리트 난간
   penthouseCore: SEOUL_ROOFTOP_COLORS.penthouseCoreGray,   // #94a3b8 옥탑 코어
-  // 옥상 디테일(태양광 패널, 물탱크, 옥상 정원, 박공벽) 컬러
-  solarCell: SEOUL_ROOFTOP_COLORS.solarCellDeepBlue,       // 딥블루 솔라 셀
-  solarFrame: SEOUL_ROOFTOP_COLORS.solarFrameSilver,       // 아연도금 지지대 프레임
-  waterTankBlue: SEOUL_ROOFTOP_COLORS.waterTankBlue,       // FRP 파랑 물탱크
-  waterTankSilver: SEOUL_ROOFTOP_COLORS.waterTankSilver,   // 스테인리스 물탱크
-  lawnGreen: SEOUL_ROOFTOP_COLORS.roofGardenGreen,         // 옥상 조경 녹지
-  woodDeck: [0.55, 0.40, 0.26] as [number, number, number],
-  gableWall: [0.88, 0.90, 0.92] as [number, number, number], // 밝은 콘크리트 박공벽
+  // 옥상 디테일(태양광 패널, 물탱크, 옥상 정원, 박공벽) 컬러 (Mat 17 밝은 콘크리트 텍스처 승산 보정)
+  solarCell: [0.18, 0.38, 0.72] as [number, number, number],
+  solarFrame: [0.82, 0.86, 0.90] as [number, number, number],
+  waterTankBlue: [0.16, 0.62, 0.96] as [number, number, number],
+  waterTankSilver: [0.86, 0.90, 0.94] as [number, number, number],
+  lawnGreen: [0.34, 0.74, 0.42] as [number, number, number],
+  woodDeck: [0.76, 0.56, 0.38] as [number, number, number],
+  gableWall: [0.95, 0.96, 0.98] as [number, number, number], // 밝은 콘크리트 박공벽
 };
 
 /**
@@ -119,14 +119,17 @@ export function classifyBuildingStyle(
 ): BuildingStyleAssignment {
   const reaStyle = VWorldReaRenderer.classifyBuildingStyle(featProps, seed, areaSqm, height, centerLngLat);
   const absSeed = Math.abs(seed);
+  // [V-World 3D 텍스처×버텍스컬러 이중 암화 버그 제거]
+  // Mat 16..21 텍스처가 이미 고유 색상(우레탄 그린/콘크리트/기와/블루강판)을 보유하고 있으므로
+  // 정점 색상은 순백색 [1,1,1] 기반 미세 명도 차이만 부여하여 본래 색상이 100% 화사하게 발색되도록 보정
   const roofColorRgb: [number, number, number] =
     reaStyle.roofMaterialIndex === 0
-      ? [0.161, 0.490, 0.220] // #297d38 (선명하고 맑은 한국형 방수 우레탄 녹색)
+      ? [1.0, 1.0, 1.0]
       : reaStyle.roofMaterialIndex === 1
-      ? [0.580, 0.639, 0.722] // #94a3b8 (밝은 콘크리트 회색 슬래브)
+      ? [1.0, 1.0, 1.0]
       : reaStyle.roofMaterialIndex === 2
-      ? [0.424, 0.204, 0.157] // #6c3428 (차분한 적갈색 기와)
-      : [0.114, 0.306, 0.847]; // #1d4ed8 (코발트 강판)
+      ? [1.0, 1.0, 1.0]
+      : [1.0, 1.0, 1.0];
 
   // 아파트 측벽 동 번호 배분: 101동(slot 4), 102동(slot 14), 201동(slot 15)
   const sideWallSlots = [4, 14, 15];
@@ -170,8 +173,8 @@ export function classifyBuildingStyle(
     porchSlot: 0,
     roofType: reaStyle.roofType,
     roofColorRgb,
-    parapetColorRgb: [0.796, 0.835, 0.882],
-    penthouseColorRgb: [0.580, 0.639, 0.722],
+    parapetColorRgb: [0.98, 0.99, 1.0],
+    penthouseColorRgb: [0.96, 0.97, 0.99],
   };
 }
 

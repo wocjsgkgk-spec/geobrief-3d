@@ -85,6 +85,7 @@ import {
 import { extractRenderedVectorBuildings } from '@/utils/spatialDataFetcher';
 import { updateVworldPoisWithBuildings } from '@/utils/koreanPoiLayer';
 import {
+  SHARED_PBR_UNIFORMS,
   createPhotorealisticPbrMaterial,
   updatePhotorealisticPbrUniforms,
   updateSharedPbrUniforms,
@@ -267,12 +268,13 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   private rotationX = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 
   // [60fps Zero-GC 마스터 버퍼 풀]: commitAccumulatedGeometry 호출 시 매번 새 Float32Array를 생성하지 않고 재사용
-  private masterPosBuf: Float32Array = new Float32Array(900000);
-  private masterNormBuf: Float32Array = new Float32Array(900000);
-  private masterColorBuf: Float32Array = new Float32Array(900000);
-  private masterUvBuf: Float32Array = new Float32Array(600000);
-  private masterHeightBuf: Float32Array = new Float32Array(300000);
-  private masterBufferCapacity: number = 300000;
+  private static readonly INITIAL_MASTER_CAPACITY = 650000;
+  private masterPosBuf: Float32Array = new Float32Array(RealisticKoreanCityLayer.INITIAL_MASTER_CAPACITY * 3);
+  private masterNormBuf: Float32Array = new Float32Array(RealisticKoreanCityLayer.INITIAL_MASTER_CAPACITY * 3);
+  private masterColorBuf: Float32Array = new Float32Array(RealisticKoreanCityLayer.INITIAL_MASTER_CAPACITY * 3);
+  private masterUvBuf: Float32Array = new Float32Array(RealisticKoreanCityLayer.INITIAL_MASTER_CAPACITY * 2);
+  private masterHeightBuf: Float32Array = new Float32Array(RealisticKoreanCityLayer.INITIAL_MASTER_CAPACITY);
+  private masterBufferCapacity: number = RealisticKoreanCityLayer.INITIAL_MASTER_CAPACITY;
 
   constructor(options: RealisticKoreanCityLayerOptions = {}) {
     this.options = options;
@@ -419,6 +421,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   public updateSpatialFeatureGrid(features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]): void {
     this.spatialFeatureGrid.clear();
+    this.appendFeaturesToSpatialGrid(features);
+  }
+
+  public appendFeaturesToSpatialGrid(features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[]): void {
+    if (!features || features.length === 0) return;
     const CELL_SIZE = 0.001; // 약 100m 격자
     for (let fIdx = 0; fIdx < features.length; fIdx++) {
       const feat = features[fIdx];
@@ -574,17 +581,17 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      // - 역광 음영 완화 보조광 (서쪽 반사광: 0xe8eff8, 0.45배)
-      this.fillLight = new THREE.DirectionalLight(0xe8eff8, 0.45);
-      this.fillLight.position.set(-100, 120, -90);
+      // - 역광 음영 완화 보조광 (남동측 하늘 반사광: 0xf1f5f9, 0.95배 — 태양광 반대편 암부 제거)
+      this.fillLight = new THREE.DirectionalLight(0xf1f5f9, 0.95);
+      this.fillLight.position.set(160, 220, 140);
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 브이월드 클라이언트 역공학 0xf0f6ff, 0.42배 (화사한 한낮 도심)
-      this.ambientLight = new THREE.AmbientLight(0xf0f6ff, 0.42);
+      // - AmbientLight(환경광): 브이월드 화사한 한낮 전역 환경광 0xf8fafc, 0.95배
+      this.ambientLight = new THREE.AmbientLight(0xf8fafc, 0.95);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 청명 하늘 #e0f0ff, 대지 반사 #908c80, 0.90배로 자연스러운 지면/대기 반사광 제공
-      this.hemisphereLight = new THREE.HemisphereLight(0xe0f0ff, 0x908c80, 0.90);
+      // - HemisphereLight: 청명 하늘 #e0f2fe, 밝은 대지 반사 #dbe2ea, 1.15배
+      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0xdbe2ea, 1.15);
       this.scene.add(this.hemisphereLight);
 
       // [V-World 3D 실사화] 대기 원근감 안개 (Distance Fog: #dbeafe, density 0.00018)
@@ -656,7 +663,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.renderer.outputColorSpace = THREE.SRGBColorSpace;
           this.renderer.shadowMap.enabled = false;
           this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-          this.renderer.toneMappingExposure = 1.08;
+          this.renderer.toneMappingExposure = 1.18;
           const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
           this.renderer.setPixelRatio(pr);
         } catch (rErr) {
@@ -679,7 +686,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.shadowMap.enabled = false;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.08;
+      this.renderer.toneMappingExposure = 1.18;
       const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
       this.renderer.setPixelRatio(pr);
 
@@ -1013,6 +1020,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
     // [건물 ID 기반 증분 캐시 & 신규 미빌드 건물만 선별]
     let unbuiltCount = 0;
+    const newlyInsertedToMap: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
     const newFeaturesToBuild: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
     for (let i = 0; i < combined.length; i++) {
       const f = combined[i];
@@ -1020,6 +1028,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       if (!this.persistentBuildingMap.has(key)) {
         stampBuildingWithMasterData(f);
         this.persistentBuildingMap.set(key, f);
+        newlyInsertedToMap.push(f);
       }
       if (!this.builtBuildingKeys.has(key)) {
         unbuiltCount++;
@@ -1043,7 +1052,11 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     this.cachedFeatures = Array.from(this.persistentBuildingMap.values());
-    this.updateSpatialFeatureGrid(this.cachedFeatures);
+    if (this.spatialFeatureGrid.size === 0) {
+      this.updateSpatialFeatureGrid(this.cachedFeatures);
+    } else if (newlyInsertedToMap.length > 0) {
+      this.appendFeaturesToSpatialGrid(newlyInsertedToMap);
+    }
 
     if (this.isBuildingGeometry) {
       this.pendingFeatures = newFeaturesToBuild.length > 0 ? newFeaturesToBuild : this.cachedFeatures;
@@ -1090,22 +1103,49 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     this.sunLight.color.set(actualSunColor);
-    // [VWorldWebGLShaderSpec] 역공학 기반 황금비 조명 파라미터 고정 (Sun 1.25배, Ambient 0.35배, Hemi 0.85배)
-    this.sunLight.intensity = Math.max(0.4, Math.min(1.4, intensity));
+    this.sunLight.intensity = Math.max(0.45, Math.min(1.5, intensity));
 
+    const nightAtten = 1.0 - SHARED_PBR_UNIFORMS.uNightFactor.value * 0.65;
+    if (this.fillLight) {
+      this.fillLight.position.set(160, 220, 140);
+      this.fillLight.intensity = Math.max(0.25, 0.95 * nightAtten);
+    }
     if (this.ambientLight) {
-      this.ambientLight.intensity = Math.max(0.20, Math.min(0.45, intensity * 0.28));
-      this.ambientLight.color.set(0xe8eff5);
+      this.ambientLight.intensity = Math.max(0.32, Math.min(1.15, intensity * 0.85 * nightAtten));
+      this.ambientLight.color.set(0xf8fafc);
     }
     if (this.hemisphereLight) {
-      this.hemisphereLight.intensity = Math.max(0.5, Math.min(0.95, intensity * 0.68));
-      this.hemisphereLight.color.set(0xd9ebff);
-      this.hemisphereLight.groundColor.set(0x8c8273);
+      this.hemisphereLight.intensity = Math.max(0.42, Math.min(1.35, intensity * 1.05 * nightAtten));
+      this.hemisphereLight.color.set(0xe0f2fe);
+      this.hemisphereLight.groundColor.set(0xdbe2ea);
     }
 
     // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
     if (this.scene) {
       applyAtmosphericPerspectiveFog(this.scene, actualFogColor, fogDensity || 0.00018);
+    }
+  }
+
+  public setNightFactor(val: number): void {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(val) ? val : 0));
+    SHARED_PBR_UNIFORMS.uNightFactor.value = clamped;
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
+  public setThemeMode(mode: 'photorealistic' | 'landuse' | 'usage' | 'height_spectrum' | 'height' | number): void {
+    let modeNum = 0;
+    if (typeof mode === 'number') {
+      modeNum = mode;
+    } else if (mode === 'usage' || mode === 'landuse') {
+      modeNum = 1;
+    } else if (mode === 'height' || mode === 'height_spectrum') {
+      modeNum = 2;
+    }
+    SHARED_PBR_UNIFORMS.uThemeMode.value = modeNum;
+    if (this.map) {
+      this.map.triggerRepaint();
     }
   }
 
@@ -1123,18 +1163,23 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
   /**
    * 18개 시·군 전환 시 기존 지역 메쉬와 VRAM 버퍼를 깨끗이 정리하고 새 기준점으로 초기화
    */
-  public resetForRegionChange(newCenterLngLat: [number, number]): void {
+  public resetForRegionChange(newCenterLngLat: [number, number], regionId?: string): void {
     if (this.activeBuildIdleId) {
       if (typeof cancelIdleCallback === 'function') cancelIdleCallback(this.activeBuildIdleId);
       else clearTimeout(this.activeBuildIdleId);
       this.activeBuildIdleId = null;
     }
     this.isBuildingGeometry = false;
+    this.hasInitialBuilt = false;
     this.cachedFeatures = [];
     this.vectorTileFeatures = [];
     this.externalFeatures = [];
     this.pendingFeatures = null;
+    this.spatialFeatureGrid.clear();
     this.setOrigin(newCenterLngLat, true);
+    if (regionId) {
+      vworld3DTilesManager.switchRegion(regionId);
+    }
     if (this.map) {
       this.map.triggerRepaint();
     }
@@ -1246,9 +1291,28 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     const uvs = this.slotUvBuf[s];
     const hts = this.slotHeightBuf[s];
 
+    // [V-World 삼각형 Front-Face 와인딩 자동 보정]
+    // Earcut/시계방향 폴리곤에서 gl_FrontFacing이 false가 되어 DoubleSide 법선이 뒤집혀 지붕·외벽이 검게 변하는 버그 완전 방지
+    const ax = p1[0] - p0[0], ay = p1[1] - p0[1], az = p1[2] - p0[2];
+    const bx = p2[0] - p0[0], by = p2[1] - p0[1], bz = p2[2] - p0[2];
+    const cxN = ay * bz - az * by;
+    const cyN = az * bx - ax * bz;
+    const czN = ax * by - ay * bx;
+    const dotN = cxN * norm[0] + cyN * norm[1] + czN * norm[2];
+    let rp1 = p1;
+    let rp2 = p2;
+    let ruv1 = uv1;
+    let ruv2 = uv2;
+    if (dotN < -1e-6) {
+      rp1 = p2;
+      rp2 = p1;
+      ruv1 = uv2;
+      ruv2 = uv1;
+    }
+
     const relH0 = Math.max(0, p0[1] - baseElev);
-    const relH1 = Math.max(0, p1[1] - baseElev);
-    const relH2 = Math.max(0, p2[1] - baseElev);
+    const relH1 = Math.max(0, rp1[1] - baseElev);
+    const relH2 = Math.max(0, rp2[1] - baseElev);
 
     // [V-World 3D 실사화: 건물 기저부 0m ~ 1.5m 부드러운 접지 AO (과도한 50% 감쇠 철폐)]
     const ao0 = relH0 < 1.5 ? 0.88 + 0.12 * (relH0 / 1.5) : 1.0;
@@ -1261,16 +1325,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     uvs[u] = uv0[0]; uvs[u + 1] = uv0[1];
     hts[h] = relH0;
 
-    pos[p + 3] = p1[0]; pos[p + 4] = p1[1]; pos[p + 5] = p1[2];
+    pos[p + 3] = rp1[0]; pos[p + 4] = rp1[1]; pos[p + 5] = rp1[2];
     nrm[p + 3] = norm[0]; nrm[p + 4] = norm[1]; nrm[p + 5] = norm[2];
     col[p + 3] = cr * ao1; col[p + 4] = cg * ao1; col[p + 5] = cb * ao1;
-    uvs[u + 2] = uv1[0]; uvs[u + 3] = uv1[1];
+    uvs[u + 2] = ruv1[0]; uvs[u + 3] = ruv1[1];
     hts[h + 1] = relH1;
 
-    pos[p + 6] = p2[0]; pos[p + 7] = p2[1]; pos[p + 8] = p2[2];
+    pos[p + 6] = rp2[0]; pos[p + 7] = rp2[1]; pos[p + 8] = rp2[2];
     nrm[p + 6] = norm[0]; nrm[p + 7] = norm[1]; nrm[p + 8] = norm[2];
     col[p + 6] = cr * ao2; col[p + 7] = cg * ao2; col[p + 8] = cb * ao2;
-    uvs[u + 4] = uv2[0]; uvs[u + 5] = uv2[1];
+    uvs[u + 4] = ruv2[0]; uvs[u + 5] = ruv2[1];
     hts[h + 2] = relH2;
 
     this.slotPosIdx[s] += 9;
@@ -2004,15 +2068,15 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [점진적 고속 커밋]: 각 슬라이스마다 즉각 커밋하여 화면에 건물이 번개처럼 즉시 나타나도록 함
-          if (newlyAddedCount > 0 && this.hasAnySlotVertices()) {
+          // [무정지 1차 프리뷰 + 최종 일괄 업로드]: 초기 프리뷰 1회만 즉시 커밋하고, 이후에는 최종 완료 시 한 번에 업로드하여 버벅임 제거
+          if (!this.hasInitialBuilt && newlyAddedCount > 0 && this.hasAnySlotVertices()) {
             this.commitAccumulatedGeometry();
             this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
             newlyAddedCount = 0;
             this.hasInitialBuilt = true;
-          }
-          if (this.map) {
-            this.map.triggerRepaint();
+            if (this.map) {
+              this.map.triggerRepaint();
+            }
           }
           this.activeBuildIdleId = setTimeout(executeSlice, 0);
         } else {
@@ -2377,6 +2441,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     this.tunnelInteriorMaterial?.dispose();
     this.cachedFeatures = [];
     this.persistentBuildingMap.clear();
+    this.spatialFeatureGrid.clear();
     this.resetAccumulatedBuffers();
   }
 }

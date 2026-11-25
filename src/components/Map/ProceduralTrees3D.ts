@@ -629,6 +629,30 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
     }
   }
 
+  /**
+   * [전역 리전 수목 동적 앵커링] 지역 전환(원주·춘천·강릉·속초 등) 시 수목 분포 중심을 해당 도심으로 이동
+   */
+  public setRegionCenter(centerLngLat: [number, number], regionId?: string): void {
+    if (!Array.isArray(centerLngLat) || centerLngLat.length < 2) return;
+    const [lng, lat] = centerLngLat;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    const dLng = Math.abs(lng - this.centerLngLat[0]);
+    const dLat = Math.abs(lat - this.centerLngLat[1]);
+    if (dLng < 0.002 && dLat < 0.002 && this.currentSiteId === (regionId || this.currentSiteId)) {
+      return;
+    }
+
+    this.currentSiteId = regionId || `region_${lng.toFixed(3)}_${lat.toFixed(3)}`;
+    this.centerLngLat = [lng, lat];
+    this.rotationDeg = 0;
+
+    this.rebuildTrees();
+
+    if (this.map) {
+      this.map.triggerRepaint();
+    }
+  }
+
   onAdd(map: maplibregl.Map, gl: WebGLRenderingContext | WebGL2RenderingContext): void {
     try {
       this.map = map;
@@ -754,20 +778,24 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       this.coniferTreeMesh.castShadow = true;
       this.coniferTreeMesh.receiveShadow = true;
 
+      const metersPerLng = 111320 * Math.cos((this.centerLngLat[1] * Math.PI) / 180);
       for (let i = 0; i < coniferList.length; i++) {
         const item = coniferList[i];
         let treeY = item.y;
+        let hasGround = false;
         if (this.map) {
           const elev = elevationCache.getFromMap(this.map, [
-            this.centerLngLat[0] + (item.x / 111000) * 1.25,
-            this.centerLngLat[1] + (item.z / 111000),
+            this.centerLngLat[0] + item.x / (metersPerLng || 88900),
+            this.centerLngLat[1] - item.z / 111320,
           ]);
-          if (elev !== null && elev !== undefined && !Number.isNaN(elev)) {
-            treeY = Math.max(-15, Math.min(60, elev - this.clampedAltitude));
+          if (elev !== null && elev !== undefined && Number.isFinite(elev)) {
+            treeY = Math.max(-25, Math.min(80, elev - this.clampedAltitude));
+            hasGround = true;
           }
         }
         dummy.position.set(item.x, treeY, item.z);
-        dummy.scale.set(item.scale, item.scale, item.scale);
+        const s = hasGround ? item.scale : 0;
+        dummy.scale.set(s, s, s);
         dummy.rotation.set(0, item.rotationY, 0);
         dummy.updateMatrix();
         this.coniferTreeMesh.setMatrixAt(i, dummy.matrix);
@@ -801,20 +829,24 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
       this.deciduousTreeMesh.castShadow = true;
       this.deciduousTreeMesh.receiveShadow = true;
 
+      const metersPerLngDec = 111320 * Math.cos((this.centerLngLat[1] * Math.PI) / 180);
       for (let i = 0; i < deciduousList.length; i++) {
         const item = deciduousList[i];
         let treeY = item.y;
+        let hasGround = false;
         if (this.map) {
           const elev = elevationCache.getFromMap(this.map, [
-            this.centerLngLat[0] + (item.x / 111000) * 1.25,
-            this.centerLngLat[1] + (item.z / 111000),
+            this.centerLngLat[0] + item.x / (metersPerLngDec || 88900),
+            this.centerLngLat[1] - item.z / 111320,
           ]);
-          if (elev !== null && elev !== undefined && !Number.isNaN(elev)) {
-            treeY = Math.max(-15, Math.min(60, elev - this.clampedAltitude));
+          if (elev !== null && elev !== undefined && Number.isFinite(elev)) {
+            treeY = Math.max(-25, Math.min(80, elev - this.clampedAltitude));
+            hasGround = true;
           }
         }
         dummy.position.set(item.x, treeY, item.z);
-        dummy.scale.set(item.scale, item.scale, item.scale);
+        const s = hasGround ? item.scale : 0;
+        dummy.scale.set(s, s, s);
         dummy.rotation.set(0, item.rotationY, 0);
         dummy.updateMatrix();
         this.deciduousTreeMesh.setMatrixAt(i, dummy.matrix);

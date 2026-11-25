@@ -77,7 +77,7 @@ function registerFeaturesToRealStore(features: any[]): void {
   }
 }
 export const DEFAULT_VWORLD_MANIFEST: VworldManifest = {
-  generatedAt: '2026-10-21T15:00:00.450Z',
+  generatedAt: '2026-11-25T13:20:00.000Z',
   regions: {
     wonju: {
       admCode: '51130',
@@ -90,10 +90,27 @@ export const DEFAULT_VWORLD_MANIFEST: VworldManifest = {
       updatedAt: '2026-11-05T03:10:27.590Z',
       bbox: [127.8, 37.15, 128.15, 37.55],
     },
+    chuncheon: { admCode: '51110', name: '춘천시', file: 'chuncheon_core.geojson', coreFile: 'chuncheon_core.geojson', totalCount: 35000, coreCount: 35000, bbox: [127.50, 37.68, 127.95, 38.08] },
+    gangneung: { admCode: '51150', name: '강릉시', file: 'gangneung_core.geojson', coreFile: 'gangneung_core.geojson', totalCount: 35000, coreCount: 35000, bbox: [128.60, 37.50, 129.10, 37.95] },
+    donghae: { admCode: '51170', name: '동해시', file: 'donghae_core.geojson', coreFile: 'donghae_core.geojson', totalCount: 15000, coreCount: 15000, bbox: [128.95, 37.45, 129.15, 37.62] },
+    taebaek: { admCode: '51190', name: '태백시', file: 'taebaek_core.geojson', coreFile: 'taebaek_core.geojson', totalCount: 10000, coreCount: 10000, bbox: [128.90, 37.05, 129.08, 37.25] },
+    sokcho: { admCode: '51210', name: '속초시', file: 'sokcho_core.geojson', coreFile: 'sokcho_core.geojson', totalCount: 15000, coreCount: 15000, bbox: [128.48, 38.15, 128.62, 38.25] },
+    samcheok: { admCode: '51230', name: '삼척시', file: 'samcheok_core.geojson', coreFile: 'samcheok_core.geojson', totalCount: 20000, coreCount: 20000, bbox: [128.90, 37.00, 129.40, 37.50] },
+    hongcheon: { admCode: '51720', name: '홍천군', file: 'hongcheon_core.geojson', coreFile: 'hongcheon_core.geojson', totalCount: 20000, coreCount: 20000, bbox: [127.70, 37.55, 128.40, 38.00] },
+    hoengseong: { admCode: '51730', name: '횡성군', file: 'hoengseong_core.geojson', coreFile: 'hoengseong_core.geojson', totalCount: 20000, coreCount: 20000, bbox: [127.80, 37.40, 128.30, 37.65] },
+    yeongwol: { admCode: '51750', name: '영월군', file: 'yeongwol_core.geojson', coreFile: 'yeongwol_core.geojson', totalCount: 15000, coreCount: 15000, bbox: [128.20, 37.05, 128.80, 37.35] },
+    pyeongchang: { admCode: '51760', name: '평창군', file: 'pyeongchang_core.geojson', coreFile: 'pyeongchang_core.geojson', totalCount: 20000, coreCount: 20000, bbox: [128.20, 37.30, 128.75, 37.80] },
+    jeongseon: { admCode: '51770', name: '정선군', file: 'jeongseon_core.geojson', coreFile: 'jeongseon_core.geojson', totalCount: 15000, coreCount: 15000, bbox: [128.50, 37.15, 129.00, 37.60] },
+    cheorwon: { admCode: '51780', name: '철원군', file: 'cheorwon_core.geojson', coreFile: 'cheorwon_core.geojson', totalCount: 15000, coreCount: 15000, bbox: [127.10, 38.05, 127.60, 38.35] },
+    hwacheon: { admCode: '51790', name: '화천군', file: 'hwacheon_core.geojson', coreFile: 'hwacheon_core.geojson', totalCount: 10000, coreCount: 10000, bbox: [127.50, 38.00, 127.90, 38.25] },
+    yanggu: { admCode: '51800', name: '양구군', file: 'yanggu_core.geojson', coreFile: 'yanggu_core.geojson', totalCount: 10000, coreCount: 10000, bbox: [127.85, 38.00, 128.20, 38.35] },
+    inje: { admCode: '51810', name: '인제군', file: 'inje_core.geojson', coreFile: 'inje_core.geojson', totalCount: 12000, coreCount: 12000, bbox: [128.05, 37.90, 128.55, 38.35] },
+    goseong: { admCode: '51820', name: '고성군', file: 'goseong_core.geojson', coreFile: 'goseong_core.geojson', totalCount: 12000, coreCount: 12000, bbox: [128.30, 38.20, 128.60, 38.60] },
+    yangyang: { admCode: '51830', name: '양양군', file: 'yangyang_core.geojson', coreFile: 'yangyang_core.geojson', totalCount: 12000, coreCount: 12000, bbox: [128.45, 37.90, 128.80, 38.15] },
   },
 };
 
-let cachedManifest: VworldManifest | null = DEFAULT_VWORLD_MANIFEST;
+let cachedManifest: VworldManifest | null = null;
 let manifestFetchPromise: Promise<VworldManifest | null> | null = null;
 
 /**
@@ -113,27 +130,41 @@ export async function getVworldManifest(): Promise<VworldManifest | null> {
         const manifestPath = path.join(process.cwd(), 'public/data/vworld/converted/manifest.json');
         if (fs.existsSync(manifestPath)) {
           const raw = fs.readFileSync(manifestPath, 'utf8');
-          cachedManifest = JSON.parse(raw);
+          const parsed = JSON.parse(raw);
+          cachedManifest = {
+            generatedAt: parsed.generatedAt || DEFAULT_VWORLD_MANIFEST.generatedAt,
+            regions: { ...DEFAULT_VWORLD_MANIFEST.regions, ...(parsed.regions || {}) },
+          };
           return cachedManifest;
         }
       } catch {
         // ignore
       }
+      cachedManifest = DEFAULT_VWORLD_MANIFEST;
+      return cachedManifest;
     }
 
-    // 2) 브라우저 클라이언트 환경일 경우 fetch
+    // 2) 브라우저 클라이언트 환경일 경우 즉시 기본 매니페스트 반환 후 백그라운드 병합
     try {
-      const url = resolveFullUrl('/data/vworld/converted/manifest.json');
-      const res = await fetch(url, { cache: 'no-cache' });
+      const url = '/data/vworld/converted/manifest.json';
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(url, { cache: 'default', signal: controller.signal });
+      clearTimeout(t);
       if (res.ok) {
-        cachedManifest = await res.json();
+        const parsed = await res.json();
+        cachedManifest = {
+          generatedAt: parsed.generatedAt || DEFAULT_VWORLD_MANIFEST.generatedAt,
+          regions: { ...DEFAULT_VWORLD_MANIFEST.regions, ...(parsed.regions || {}) },
+        };
         return cachedManifest;
       }
     } catch {
       // ignore
     }
 
-    return null;
+    cachedManifest = DEFAULT_VWORLD_MANIFEST;
+    return cachedManifest;
   })();
 
   return manifestFetchPromise;
@@ -151,9 +182,34 @@ export async function hasLocalVworldData(
     return { hasData: false };
   }
 
-  // 1) BBOX 공간 겹침 매칭을 최우선으로 검사 (카메라가 타 시군으로 이동했을 때 이전 regionId의 데이터 반환 방지)
+  const normalizedReqId = regionId?.toLowerCase();
+
+  // 1) 요청된 regionId가 있고 BBOX도 해당 region과 겹치면 해당 regionId를 1순위로 선택 (인접 시군 간섭 방지)
+  if (normalizedReqId && manifest.regions[normalizedReqId]) {
+    const reqInfo = manifest.regions[normalizedReqId];
+    if (!bbox) {
+      return { hasData: true, matchedRegionId: normalizedReqId, manifestInfo: reqInfo };
+    }
+    const [minLng, minLat, maxLng, maxLat] = bbox;
+    const [rMinLng, rMinLat, rMaxLng, rMaxLat] = reqInfo.bbox;
+    const overlapsReq = !(
+      maxLng < rMinLng ||
+      minLng > rMaxLng ||
+      maxLat < rMinLat ||
+      minLat > rMaxLat
+    );
+    if (overlapsReq) {
+      return { hasData: true, matchedRegionId: normalizedReqId, manifestInfo: reqInfo };
+    }
+  }
+
+  // 2) 카메라가 다른 시군으로 패닝된 경우 BBOX 중심점 기준 최적 매칭
   if (bbox) {
     const [minLng, minLat, maxLng, maxLat] = bbox;
+    const cLng = (minLng + maxLng) * 0.5;
+    const cLat = (minLat + maxLat) * 0.5;
+
+    let bestMatch: { id: string; info: VworldRegionManifest; dist: number } | null = null;
     for (const [rId, info] of Object.entries(manifest.regions)) {
       const [rMinLng, rMinLat, rMaxLng, rMaxLat] = info.bbox;
       const overlaps = !(
@@ -163,22 +219,19 @@ export async function hasLocalVworldData(
         minLat > rMaxLat
       );
       if (overlaps) {
-        return {
-          hasData: true,
-          matchedRegionId: rId,
-          manifestInfo: info,
-        };
+        const dist = Math.hypot((rMinLng + rMaxLng) * 0.5 - cLng, (rMinLat + rMaxLat) * 0.5 - cLat);
+        if (!bestMatch || dist < bestMatch.dist) {
+          bestMatch = { id: rId, info, dist };
+        }
       }
     }
-  }
-
-  // 2) regionId 직결 매칭 (BBOX 미제공 시 또는 폴백)
-  if (regionId && manifest.regions[regionId.toLowerCase()]) {
-    return {
-      hasData: true,
-      matchedRegionId: regionId.toLowerCase(),
-      manifestInfo: manifest.regions[regionId.toLowerCase()],
-    };
+    if (bestMatch) {
+      return {
+        hasData: true,
+        matchedRegionId: bestMatch.id,
+        manifestInfo: bestMatch.info,
+      };
+    }
   }
 
   return { hasData: false };

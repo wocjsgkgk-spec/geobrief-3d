@@ -68,7 +68,6 @@ export async function GET(
   }
 
   const cacheKey = `${z}/${x}/${y}`;
-  console.log('[API terrain-dem] tile request:', cacheKey);
 
   // 1. 메모리 캐시 검사
   const cached = TILE_CACHE.get(cacheKey);

@@ -60,6 +60,8 @@ export interface PhotorealisticPbrUniforms {
   uHasRmaMap: { value: boolean };
   uAoIntensity: { value: number };
   uSpecularGlintIntensity: { value: number };
+  uNightFactor: { value: number };
+  uThemeMode: { value: number };
   uTime: { value: number };
 }
 
@@ -69,14 +71,16 @@ export interface PhotorealisticPbrUniforms {
 export const SHARED_PBR_UNIFORMS: PhotorealisticPbrUniforms = {
   uSunDirection: { value: new THREE.Vector3(120, 160, 90).normalize() },
   uSunColor: { value: new THREE.Vector3(1.08, 1.05, 0.98) },
-  uSkyZenithColor: { value: new THREE.Vector3(0.22, 0.45, 0.78) },
-  uSkyHorizonColor: { value: new THREE.Vector3(0.70, 0.85, 0.98) },
-  uGroundReflectColor: { value: new THREE.Vector3(0.28, 0.32, 0.28) },
+  uSkyZenithColor: { value: new THREE.Vector3(0.28, 0.56, 0.88) },
+  uSkyHorizonColor: { value: new THREE.Vector3(0.76, 0.89, 0.99) },
+  uGroundReflectColor: { value: new THREE.Vector3(0.36, 0.40, 0.36) },
   uCameraPosition: { value: new THREE.Vector3(0, 500, 500) },
   uRmaMap: { value: null },
   uHasRmaMap: { value: false },
-  uAoIntensity: { value: 0.85 },
-  uSpecularGlintIntensity: { value: 2.8 },
+  uAoIntensity: { value: 0.75 },
+  uSpecularGlintIntensity: { value: 2.6 },
+  uNightFactor: { value: 0.0 },
+  uThemeMode: { value: 0 },
   uTime: { value: 0 },
 };
 
@@ -137,6 +141,8 @@ const PBR_FRAGMENT_PARS = /* glsl */ `
   uniform bool uHasRmaMap;
   uniform float uAoIntensity;
   uniform float uSpecularGlintIntensity;
+  uniform float uNightFactor;
+  uniform float uThemeMode;
   uniform float uTime;
 
   // ---------------------------------------------------------------------------
@@ -189,15 +195,16 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
     pbrTextureAo = rma.b;
     isWindowPixel = (pbrRoughness < 0.25 && pbrMetalness > 0.60);
   } else {
-    // 폴백: 색상 및 법선 기반 절차적 창문 유리(Window Glass) 식별
+    // 폴백: 색상 및 법선 기반 절차적 창문 유리(Window Glass) 식별 (밝은 V-World 하늘반사 창문 포함)
     float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-    isWindowPixel = isVerticalWall && (lum < 0.32 && diffuseColor.b >= diffuseColor.r * 0.88);
+    bool isBlueSkyGlass = (diffuseColor.b > diffuseColor.r * 1.12 && diffuseColor.b > 0.30);
+    isWindowPixel = isVerticalWall && (isBlueSkyGlass || (lum < 0.32 && diffuseColor.b >= diffuseColor.r * 0.88));
 
     if (isWindowPixel) {
       // 유리창 영역: 거칠기 0.15, 금속성 0.85 (물리 반사 극대화)
       pbrRoughness = 0.15;
       pbrMetalness = 0.85;
-      pbrTextureAo = 0.90;
+      pbrTextureAo = 0.92;
     } else if (!isVerticalWall) {
       // 옥상 상단면: 초록색 우레탄 방수재 판별
       bool isGreenUrethane = diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.05;
@@ -205,7 +212,7 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
         pbrRoughness = 0.35; // 우레탄 광택
         pbrMetalness = 0.08;
       } else {
-        pbrRoughness = 0.82; // 노후 콘크리트 슬래브
+        pbrRoughness = 0.82; // 콘크리트 슬래브
         pbrMetalness = 0.02;
       }
     }
@@ -244,13 +251,22 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float glassFactor = (1.0 - pbrRoughness) * pbrMetalness;
   if (glassFactor > 0.1 || isWindowPixel) {
     // 유리창: 하늘빛 은은한 반사 + 태양광 스페큘러 글린트
-    vec3 windowSurface = mix(diffuseColor.rgb, skyReflectionColor, glassFactor * (0.35 + fresnel * 0.55));
-    diffuseColor.rgb = windowSurface + sunSpecularGlint * glassFactor;
+    vec3 windowSurface = mix(diffuseColor.rgb, skyReflectionColor, glassFactor * (0.30 + fresnel * 0.50));
+    diffuseColor.rgb = windowSurface + sunSpecularGlint * glassFactor * (1.0 - uNightFactor * 0.7);
+
+    // [야간 실내 점등 효과] 저녁·야간 시뮬레이션 시 창문 셀별 따뜻한 실내 조명 발광
+    if (uNightFactor > 0.01) {
+      vec2 winCell = floor(vPbrUv * vec2(2.0, 1.0) + vWorldPositionVec.xz * 0.15);
+      float cellRand = fract(sin(dot(winCell, vec2(12.9898, 78.233))) * 43758.5453);
+      float litMask = smoothstep(0.30, 0.72, cellRand);
+      vec3 warmGlow = mix(vec3(1.0, 0.78, 0.42), vec3(0.95, 0.92, 0.75), fract(cellRand * 7.13));
+      diffuseColor.rgb = mix(diffuseColor.rgb, warmGlow * 1.15, uNightFactor * litMask * 0.82);
+    }
 
     // StreetsGL 15cm 창틀 인셋 드롭 섀도우 적용
     if (isVerticalWall) {
       float recessShadow = getStreetsGlWindowRecessShadow(vPbrUv, N, L);
-      diffuseColor.rgb *= recessShadow;
+      diffuseColor.rgb *= mix(recessShadow, 1.0, uNightFactor * 0.35);
     }
   }
 
@@ -262,10 +278,29 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
 
   // 5. [F4map & OSMBuildings 벤더링] 건물 기저부 부드러운 접지 음영 (Contact Ambient Occlusion: 0.0~1.8m)
   float shadowFactor = smoothstep(0.0, 1.8, max(0.0, vHeight));
-  float finalGroundingAo = mix(0.85, 1.0, shadowFactor);
+  float finalGroundingAo = mix(0.86, 1.0, shadowFactor);
 
   // 차폐 음영 및 텍스처 미세 AO 결합 적용 (과도한 3중 감쇠 방지)
-  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.25));
+  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.22));
+
+  // 6. [V-World 시각화 테마] (uThemeMode: 0=실사, 1=용도 색상, 2=층고 스펙트럼)
+  if (uThemeMode > 1.5) {
+    // 층고 스카이라인 히트맵 (저층: 청록 -> 중층: 스카이블루 -> 고층: 앰버/코랄)
+    float hNorm = clamp(vBuildingHeight / 65.0, 0.0, 1.0);
+    vec3 lowCol = vec3(0.22, 0.74, 0.78);
+    vec3 midCol = vec3(0.24, 0.56, 0.94);
+    vec3 highCol = vec3(0.96, 0.45, 0.28);
+    vec3 hTint = hNorm < 0.45
+      ? mix(lowCol, midCol, hNorm / 0.45)
+      : mix(midCol, highCol, (hNorm - 0.45) / 0.55);
+    float facetShading = isVerticalWall ? (0.85 + 0.15 * max(0.0, NdotL)) : 1.0;
+    diffuseColor.rgb = mix(diffuseColor.rgb, hTint * facetShading, 0.72);
+  } else if (uThemeMode > 0.5) {
+    // 용도별 파스텔 분류 강조 (고층/주거/업무 대비 극대화)
+    float luma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 pastelTint = normalize(diffuseColor.rgb + vec3(0.08)) * (0.65 + luma * 0.35);
+    diffuseColor.rgb = mix(diffuseColor.rgb, pastelTint, 0.45);
+  }
 `;
 
 /**

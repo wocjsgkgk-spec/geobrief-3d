@@ -12,6 +12,8 @@ import * as THREE from 'three';
 import maplibregl from 'maplibre-gl';
 import { VWorldB3dmLoader, ParsedB3dmResult } from '@/lib/vendor/vworldB3dmLoader';
 import { vworldReverseApiClient, VWorld3DTileset, VWorld3DTilesetRoot } from '@/lib/vendor/vworldReverseApiClient';
+import { jiangshanCameraCoalescer } from '@/lib/vendor/jiangshanCameraCoalescer';
+import { elevationCache } from '@/utils/elevationCache';
 
 export interface TileBoundingRegion {
   westDeg: number;
@@ -93,26 +95,52 @@ export class VWorld3DTilesManager {
   }
 
   /**
+   * 지역 전환 시 기존 타일셋 메쉬 및 캐시를 깨끗이 초기화하고 신규 지역 타일셋 로드
+   */
+  public switchRegion(region: string = 'wonju'): void {
+    const normalized = (region || 'wonju').toLowerCase();
+    if (this.currentRegion === normalized && this.rootTileset) return;
+
+    this.loadQueue = [];
+    this.activeTileBounds = [];
+    this.loadingUris.clear();
+    this.rootTileset = null;
+    this.tilesetLoading = false;
+
+    this.tileCache.forEach((entry) => {
+      this.tilesGroup.remove(entry.group);
+      entry.group.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const m = obj as THREE.Mesh;
+          m.geometry?.dispose();
+          if (Array.isArray(m.material)) m.material.forEach((mat) => mat.dispose());
+          else m.material?.dispose();
+        }
+      });
+    });
+    this.tileCache.clear();
+    this.currentRegion = normalized;
+    this.initTileset(normalized);
+  }
+
+  /**
    * 브이월드 지역 타일셋(tileset.json) 메타데이터 비동기 로드
    */
   public async initTileset(region: string = 'wonju'): Promise<void> {
-    if (this.rootTileset && this.currentRegion === region) return;
+    const normalized = (region || 'wonju').toLowerCase();
+    if (this.rootTileset && this.currentRegion === normalized) return;
     if (this.tilesetLoading) return;
 
     this.tilesetLoading = true;
-    this.currentRegion = region;
+    this.currentRegion = normalized;
 
     try {
-      console.log(`[VWorld3DTilesManager] Fetching tileset.json for region: ${region}...`);
-      const tileset = await vworldReverseApiClient.fetchRegional3DTileset(region);
+      const tileset = await vworldReverseApiClient.fetchRegional3DTileset(normalized);
       if (tileset && tileset.root) {
         this.rootTileset = tileset;
-        console.log(`[VWorld3DTilesManager] Tileset loaded successfully for ${region}!`);
-      } else {
-        console.warn(`[VWorld3DTilesManager] Failed to load tileset for ${region}`);
       }
     } catch (err) {
-      console.error('[VWorld3DTilesManager] Error initializing tileset:', err);
+      console.warn('[VWorld3DTilesManager] Error initializing tileset:', err);
     } finally {
       this.tilesetLoading = false;
     }
@@ -175,14 +203,14 @@ export class VWorld3DTilesManager {
         }
         newActiveBounds.push(item.region);
 
-        // 기준 원점(originMercator) 이동 시 상대 좌표 갱신
-        const tileMerc = maplibregl.MercatorCoordinate.fromLngLat(
-          [item.region.centerLng, item.region.centerLat],
-          0
-        );
+        // 기준 원점(originMercator) 및 지형 표고 동기화
+        const targetLng = item.region.centerLng;
+        const targetLat = item.region.centerLat;
+        const elevY = map.getTerrain() ? Math.max(0, elevationCache.getFromMap(map, [targetLng, targetLat]) || 0) : 0;
+        const tileMerc = maplibregl.MercatorCoordinate.fromLngLat([targetLng, targetLat], 0);
         const dx = (tileMerc.x - originMercator.x) / originMeterScale;
         const dz = (tileMerc.y - originMercator.y) / originMeterScale;
-        cached.group.position.set(dx, 0, dz);
+        cached.group.position.set(dx, elevY, dz);
         cached.group.updateMatrix();
       } else if (!this.loadingUris.has(item.uri)) {
         // 미캐싱 타일은 큐에 추가
@@ -201,7 +229,7 @@ export class VWorld3DTilesManager {
     this.activeTileBounds = newActiveBounds;
 
     // 3. 비동기 점진적 타일 로드 실행
-    this.processLoadQueue(originMercator, originMeterScale, renderer);
+    this.processLoadQueue(map, originMercator, originMeterScale, renderer);
     this.cleanupLruCache();
   }
 
@@ -251,38 +279,50 @@ export class VWorld3DTilesManager {
    * 점진적 비동기 타일 다운로드 및 디코딩 (프레임 스톨 방지)
    */
   private async processLoadQueue(
+    map: maplibregl.Map,
     originMercator: { x: number; y: number },
     originMeterScale: number,
     renderer?: THREE.WebGLRenderer | null
   ): Promise<void> {
     if (this.isProcessingQueue || this.loadQueue.length === 0) return;
     this.isProcessingQueue = true;
+    const activeRegionAtStart = this.currentRegion;
 
     try {
       while (this.loadQueue.length > 0) {
-        // 한 번에 최대 2개씩 순차 로딩하여 메인 스레드 60fps 보장
+        if (this.currentRegion !== activeRegionAtStart) break;
+
+        // 카메라 이동/회전/줌 중에는 3D 타일 디코딩을 양보하여 60fps 완벽 유지
+        if (jiangshanCameraCoalescer.isInteracting || map.isMoving() || map.isRotating() || map.isZooming()) {
+          await new Promise((r) => setTimeout(r, 120));
+          continue;
+        }
+
         const item = this.loadQueue.shift();
         if (!item || this.tileCache.has(item.uri) || this.loadingUris.has(item.uri)) continue;
 
         this.loadingUris.add(item.uri);
 
         try {
-          const tileUrl = `/api/vworld/3dtiles/${item.uri}`;
+          const sep = item.uri.includes('?') ? '&' : '?';
+          const tileUrl = `/api/vworld/3dtiles/${item.uri}${sep}region=${encodeURIComponent(activeRegionAtStart)}`;
           const parsed: ParsedB3dmResult = await VWorldB3dmLoader.loadFromUrl(tileUrl, renderer);
+          if (this.currentRegion !== activeRegionAtStart) break;
 
           const group = parsed.scene;
           group.name = `Tile_${item.uri}`;
           group.frustumCulled = false;
 
-          // Mercator 상대 좌표 안착
+          // Mercator 상대 좌표 및 DEM 표고 정합 안착
           const targetLng = parsed.rtcCenterWgs84?.lng ?? item.region.centerLng;
           const targetLat = parsed.rtcCenterWgs84?.lat ?? item.region.centerLat;
+          const elevY = map.getTerrain() ? Math.max(0, elevationCache.getFromMap(map, [targetLng, targetLat]) || 0) : 0;
 
           const tileMerc = maplibregl.MercatorCoordinate.fromLngLat([targetLng, targetLat], 0);
           const dx = (tileMerc.x - originMercator.x) / originMeterScale;
           const dz = (tileMerc.y - originMercator.y) / originMeterScale;
 
-          group.position.set(dx, 0, dz);
+          group.position.set(dx, elevY, dz);
           group.updateMatrix();
 
           this.tilesGroup.add(group);
@@ -299,18 +339,14 @@ export class VWorld3DTilesManager {
             visible: true,
           });
           this.activeTileBounds.push(item.region);
-
-          console.log(
-            `[VWorld3DTilesManager] Loaded 3D tile ${item.uri} (vertices: ${parsed.totalVertices}, models: ${modelNames.length})`
-          );
-        } catch (tileErr) {
-          console.warn(`[VWorld3DTilesManager] Failed to load tile ${item.uri}:`, tileErr);
+        } catch {
+          // 타일 미제공 영역에서는 절차적 실사 3D 메쉬가 자동으로 대체 표출되므로 무음 처리
         } finally {
           this.loadingUris.delete(item.uri);
         }
 
-        // 5ms 대기하여 브라우저 렌더링 프레임 확보
-        await new Promise((r) => setTimeout(r, 5));
+        // 8ms 대기하여 브라우저 렌더링 프레임 확보
+        await new Promise((r) => setTimeout(r, 8));
       }
     } finally {
       this.isProcessingQueue = false;

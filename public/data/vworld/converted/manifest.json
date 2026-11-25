@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T15:00:00.450Z",
+  "generatedAt": "2026-11-25T13:23:11.869Z",
   "regions": {
     "wonju": {
       "admCode": "51130",
@@ -7,14 +7,286 @@
       "file": "wonju.geojson",
       "coreFile": "wonju_core.geojson",
       "totalCount": 91422,
-      "coreCount": 30037,
-      "fileSizeMb": 65.12,
-      "updatedAt": "2026-11-05T03:10:27.590Z",
+      "coreCount": 35000,
+      "fileSizeMb": 22.13,
+      "updatedAt": "2026-11-25T13:23:06.159Z",
       "bbox": [
         127.8,
         37.15,
         128.15,
         37.55
+      ]
+    },
+    "chuncheon": {
+      "admCode": "51110",
+      "name": "춘천시",
+      "file": "chuncheon_core.geojson",
+      "coreFile": "chuncheon_core.geojson",
+      "totalCount": 67042,
+      "coreCount": 35000,
+      "fileSizeMb": 25.26,
+      "updatedAt": "2026-11-25T13:23:05.910Z",
+      "bbox": [
+        127.5,
+        37.68,
+        127.95,
+        38.08
+      ]
+    },
+    "gangneung": {
+      "admCode": "51150",
+      "name": "강릉시",
+      "file": "gangneung_core.geojson",
+      "coreFile": "gangneung_core.geojson",
+      "totalCount": 62106,
+      "coreCount": 35000,
+      "fileSizeMb": 25.31,
+      "updatedAt": "2026-11-25T13:23:06.677Z",
+      "bbox": [
+        128.6,
+        37.5,
+        129.1,
+        37.95
+      ]
+    },
+    "donghae": {
+      "admCode": "51170",
+      "name": "동해시",
+      "file": "donghae_core.geojson",
+      "coreFile": "donghae_core.geojson",
+      "totalCount": 42296,
+      "coreCount": 35000,
+      "fileSizeMb": 24.65,
+      "updatedAt": "2026-11-25T13:23:07.091Z",
+      "bbox": [
+        128.95,
+        37.45,
+        129.15,
+        37.62
+      ]
+    },
+    "taebaek": {
+      "admCode": "51190",
+      "name": "태백시",
+      "file": "taebaek_core.geojson",
+      "coreFile": "taebaek_core.geojson",
+      "totalCount": 17449,
+      "coreCount": 17449,
+      "fileSizeMb": 11.94,
+      "updatedAt": "2026-11-25T13:23:07.249Z",
+      "bbox": [
+        128.9,
+        37.05,
+        129.08,
+        37.25
+      ]
+    },
+    "sokcho": {
+      "admCode": "51210",
+      "name": "속초시",
+      "file": "sokcho_core.geojson",
+      "coreFile": "sokcho_core.geojson",
+      "totalCount": 29874,
+      "coreCount": 29874,
+      "fileSizeMb": 21.29,
+      "updatedAt": "2026-11-25T13:23:07.551Z",
+      "bbox": [
+        128.48,
+        38.15,
+        128.62,
+        38.25
+      ]
+    },
+    "samcheok": {
+      "admCode": "51230",
+      "name": "삼척시",
+      "file": "samcheok_core.geojson",
+      "coreFile": "samcheok_core.geojson",
+      "totalCount": 46737,
+      "coreCount": 35000,
+      "fileSizeMb": 23.93,
+      "updatedAt": "2026-11-25T13:23:08.036Z",
+      "bbox": [
+        128.9,
+        37,
+        129.4,
+        37.5
+      ]
+    },
+    "hongcheon": {
+      "admCode": "51720",
+      "name": "홍천군",
+      "file": "hongcheon_core.geojson",
+      "coreFile": "hongcheon_core.geojson",
+      "totalCount": 63342,
+      "coreCount": 35000,
+      "fileSizeMb": 25.02,
+      "updatedAt": "2026-11-25T13:23:08.631Z",
+      "bbox": [
+        127.7,
+        37.55,
+        128.4,
+        38
+      ]
+    },
+    "hoengseong": {
+      "admCode": "51730",
+      "name": "횡성군",
+      "file": "hoengseong_core.geojson",
+      "coreFile": "hoengseong_core.geojson",
+      "totalCount": 58475,
+      "coreCount": 35000,
+      "fileSizeMb": 24.5,
+      "updatedAt": "2026-11-25T13:23:09.169Z",
+      "bbox": [
+        127.8,
+        37.4,
+        128.3,
+        37.65
+      ]
+    },
+    "yeongwol": {
+      "admCode": "51750",
+      "name": "영월군",
+      "file": "yeongwol_core.geojson",
+      "coreFile": "yeongwol_core.geojson",
+      "totalCount": 40536,
+      "coreCount": 35000,
+      "fileSizeMb": 24.23,
+      "updatedAt": "2026-11-25T13:23:09.564Z",
+      "bbox": [
+        128.2,
+        37.05,
+        128.8,
+        37.35
+      ]
+    },
+    "pyeongchang": {
+      "admCode": "51760",
+      "name": "평창군",
+      "file": "pyeongchang_core.geojson",
+      "coreFile": "pyeongchang_core.geojson",
+      "totalCount": 37332,
+      "coreCount": 35000,
+      "fileSizeMb": 25.32,
+      "updatedAt": "2026-11-25T13:23:09.983Z",
+      "bbox": [
+        128.2,
+        37.3,
+        128.75,
+        37.8
+      ]
+    },
+    "jeongseon": {
+      "admCode": "51770",
+      "name": "정선군",
+      "file": "jeongseon_core.geojson",
+      "coreFile": "jeongseon_core.geojson",
+      "totalCount": 27560,
+      "coreCount": 27560,
+      "fileSizeMb": 18.74,
+      "updatedAt": "2026-11-25T13:23:10.270Z",
+      "bbox": [
+        128.5,
+        37.15,
+        129,
+        37.6
+      ]
+    },
+    "cheorwon": {
+      "admCode": "51780",
+      "name": "철원군",
+      "file": "cheorwon_core.geojson",
+      "coreFile": "cheorwon_core.geojson",
+      "totalCount": 32715,
+      "coreCount": 32715,
+      "fileSizeMb": 22.66,
+      "updatedAt": "2026-11-25T13:23:10.586Z",
+      "bbox": [
+        127.1,
+        38.05,
+        127.6,
+        38.35
+      ]
+    },
+    "hwacheon": {
+      "admCode": "51790",
+      "name": "화천군",
+      "file": "hwacheon_core.geojson",
+      "coreFile": "hwacheon_core.geojson",
+      "totalCount": 26899,
+      "coreCount": 26899,
+      "fileSizeMb": 18.63,
+      "updatedAt": "2026-11-25T13:23:10.882Z",
+      "bbox": [
+        127.5,
+        38,
+        127.9,
+        38.25
+      ]
+    },
+    "yanggu": {
+      "admCode": "51800",
+      "name": "양구군",
+      "file": "yanggu_core.geojson",
+      "coreFile": "yanggu_core.geojson",
+      "totalCount": 22085,
+      "coreCount": 22085,
+      "fileSizeMb": 15.36,
+      "updatedAt": "2026-11-25T13:23:11.097Z",
+      "bbox": [
+        127.85,
+        38,
+        128.2,
+        38.35
+      ]
+    },
+    "inje": {
+      "admCode": "51810",
+      "name": "인제군",
+      "file": "inje_core.geojson",
+      "coreFile": "inje_core.geojson",
+      "totalCount": 22307,
+      "coreCount": 22307,
+      "fileSizeMb": 16.18,
+      "updatedAt": "2026-11-25T13:23:11.301Z",
+      "bbox": [
+        128.05,
+        37.9,
+        128.55,
+        38.35
+      ]
+    },
+    "goseong": {
+      "admCode": "51820",
+      "name": "고성군",
+      "file": "goseong_core.geojson",
+      "coreFile": "goseong_core.geojson",
+      "totalCount": 27986,
+      "coreCount": 27986,
+      "fileSizeMb": 19.73,
+      "updatedAt": "2026-11-25T13:23:11.563Z",
+      "bbox": [
+        128.3,
+        38.2,
+        128.6,
+        38.6
+      ]
+    },
+    "yangyang": {
+      "admCode": "51830",
+      "name": "양양군",
+      "file": "yangyang_core.geojson",
+      "coreFile": "yangyang_core.geojson",
+      "totalCount": 34137,
+      "coreCount": 34137,
+      "fileSizeMb": 23.88,
+      "updatedAt": "2026-11-25T13:23:11.869Z",
+      "bbox": [
+        128.45,
+        37.9,
+        128.8,
+        38.15
       ]
     }
   }

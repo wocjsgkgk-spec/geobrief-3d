@@ -547,17 +547,281 @@ export async function convertVworldShp(shpPath, dbfPath, shxPath, prjPath, optio
   }
 }
 
+/**
+ * 강원 18개 시·군 전체 단일 패스 일괄 변환 (--all-regions)
+ */
+export async function convertAllGangwonRegions(shpPath, dbfPath, shxPath, prjPath, options = {}) {
+  const {
+    limit = Infinity,
+    outputDir = path.join(ROOT_DIR, 'public/data/vworld/converted'),
+  } = options;
+
+  console.log(`\n============================================================`);
+  console.log(`🚀 [V-World 전 지역 일괄 인제스트] 강원 18개 시·군 단일 패스 변환 시작`);
+  console.log(`============================================================\n`);
+
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  let prjContent = '';
+  if (prjPath && fs.existsSync(prjPath)) {
+    prjContent = fs.readFileSync(prjPath, 'utf8');
+  }
+
+  const fdDbf = fs.openSync(dbfPath, 'r');
+  const fdShp = fs.openSync(shpPath, 'r');
+  const fdShx = fs.openSync(shxPath, 'r');
+
+  try {
+    const dbfHeaderBuf = Buffer.alloc(32);
+    fs.readSync(fdDbf, dbfHeaderBuf, 0, 32, 0);
+    const numRecords = dbfHeaderBuf.readUInt32LE(4);
+    const headerLen = dbfHeaderBuf.readUInt16LE(8);
+    const recordLen = dbfHeaderBuf.readUInt16LE(10);
+
+    const numFields = Math.floor((headerLen - 33) / 32);
+    const fieldBuf = Buffer.alloc(32 * numFields);
+    fs.readSync(fdDbf, fieldBuf, 0, 32 * numFields, 32);
+
+    const fields = [];
+    let currentPos = 1;
+    let a23Pos = -1;
+    let a2Pos = -1;
+
+    for (let f = 0; f < numFields; f++) {
+      const fStart = f * 32;
+      const name = fieldBuf.toString('ascii', fStart, fStart + 11).replace(/\0/g, '').trim();
+      const length = fieldBuf.readUInt8(fStart + 16);
+      if (name === 'A23' || name.toUpperCase() === 'SIG_CD') a23Pos = currentPos;
+      if (name === 'A2' || name.toUpperCase() === 'PNU') a2Pos = currentPos;
+      fields.push({ name, length, pos: currentPos });
+      currentPos += length;
+    }
+
+    const testShxBuf = Buffer.alloc(8);
+    fs.readSync(fdShx, testShxBuf, 0, 8, 100);
+    const firstOffset = testShxBuf.readUInt32BE(0) * 2;
+    const testShpHeader = Buffer.alloc(44);
+    fs.readSync(fdShp, testShpHeader, 0, 44, firstOffset + 8);
+    const firstX = testShpHeader.readDoubleLE(4);
+    const firstY = testShpHeader.readDoubleLE(12);
+    const detectedCrs = detectCrs(prjContent, firstX, firstY);
+
+    console.log(`📊 DBF 레코드: ${numRecords.toLocaleString()}건 | 좌표계: ${detectedCrs}`);
+
+    const buckets = new Map();
+    for (const [admCode, info] of Object.entries(GANGWON_ADM_CODES)) {
+      buckets.set(admCode, { info, features: [] });
+    }
+
+    const recBuf = Buffer.alloc(recordLen);
+    const shxBuf = Buffer.alloc(8);
+    const startTime = Date.now();
+    let totalExtracted = 0;
+
+    for (let i = 0; i < numRecords && totalExtracted < limit; i++) {
+      if ((i + 1) % 100000 === 0) {
+        console.log(`  ... 스캔 중: ${(i + 1).toLocaleString()} / ${numRecords.toLocaleString()} (누적 추출: ${totalExtracted.toLocaleString()}동)`);
+      }
+
+      fs.readSync(fdDbf, recBuf, 0, recordLen, headerLen + i * recordLen);
+      if (recBuf[0] === 0x2A) continue;
+
+      let admCode = '';
+      if (a23Pos !== -1) {
+        admCode = recBuf.toString('ascii', a23Pos, a23Pos + 5).trim();
+      }
+      // 구 강원 코드(42xxx) -> 신 강원특별자치도 코드(51xxx) 매핑
+      if (admCode.startsWith('42')) {
+        admCode = '51' + admCode.slice(2);
+      }
+      if (!buckets.has(admCode) && a2Pos !== -1) {
+        const pnuHead = recBuf.toString('ascii', a2Pos, a2Pos + 5).trim();
+        const mappedPnu = pnuHead.startsWith('42') ? '51' + pnuHead.slice(2) : pnuHead;
+        if (buckets.has(mappedPnu)) admCode = mappedPnu;
+      }
+
+      const bucket = buckets.get(admCode);
+      if (!bucket) continue;
+
+      fs.readSync(fdShx, shxBuf, 0, 8, 100 + i * 8);
+      const shpOffset = shxBuf.readUInt32BE(0) * 2;
+      const shpLength = shxBuf.readUInt32BE(4) * 2;
+      const shpContent = Buffer.alloc(shpLength);
+      fs.readSync(fdShp, shpContent, 0, shpLength, shpOffset + 8);
+
+      const shapeType = shpContent.readInt32LE(0);
+      if (shapeType !== 5) continue;
+
+      const numParts = shpContent.readInt32LE(36);
+      const numPoints = shpContent.readInt32LE(40);
+      if (numPoints < 3) continue;
+
+      const parts = [];
+      for (let p = 0; p < numParts; p++) {
+        parts.push(shpContent.readInt32LE(44 + p * 4));
+      }
+
+      let ptOffset = 44 + numParts * 4;
+      const allPoints = [];
+      for (let p = 0; p < numPoints; p++) {
+        const x = shpContent.readDoubleLE(ptOffset);
+        const y = shpContent.readDoubleLE(ptOffset + 8);
+        const [lng, lat] = proj4(detectedCrs, 'EPSG:4326', [x, y]);
+        allPoints.push([Number(lng.toFixed(6)), Number(lat.toFixed(6))]);
+        ptOffset += 16;
+      }
+
+      const rings = [];
+      for (let p = 0; p < numParts; p++) {
+        const sIdx = parts[p];
+        const eIdx = p + 1 < numParts ? parts[p + 1] : numPoints;
+        const ring = allPoints.slice(sIdx, eIdx);
+        if (ring.length >= 3) {
+          const first = ring[0];
+          const last = ring[ring.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            ring.push([first[0], first[1]]);
+          }
+          rings.push(ring);
+        }
+      }
+      if (rings.length === 0) continue;
+
+      const rawProps = {};
+      for (const f of fields) {
+        const bytes = recBuf.subarray(f.pos, f.pos + f.length);
+        const str = iconv.decode(bytes, 'euc-kr').replace(/\0/g, '').trim();
+        if (str && str !== '0.000000000000000') {
+          rawProps[f.name] = str;
+        }
+      }
+
+      const grndFlr = Number(rawProps.GRND_FLR || rawProps.gro_flo_co || rawProps.A26 || 0);
+      const ugrndFlr = Number(rawProps.UGRND_FLR || rawProps.und_flo_co || rawProps.A27 || 0);
+      const rawHei = Number(rawProps.HEI || rawProps.bd_hgt || rawProps.hei || rawProps.A16 || 0);
+      const buldNm = rawProps.BULD_NM || rawProps.buld_nm || rawProps.A24 || '';
+      const buldNmDc = rawProps.BULD_NM_DC || rawProps.dong_nm || rawProps.A25 || '';
+      const bdtypCd = rawProps.BDTYP_CD || rawProps.MAIN_PURPS || rawProps.main_purps_cd || rawProps.A8 || '';
+      const bdtypNm = rawProps.MAIN_PURPS_NM || rawProps.main_purps_cd_nm || rawProps.A9 || '';
+      const address = `${rawProps.A4 || ''} ${rawProps.A5 || ''}`.trim();
+      const pnu = rawProps.A2 || rawProps.pnu || '';
+
+      const classified = classifyBuilding(bdtypCd, bdtypNm, buldNm, grndFlr, rawHei);
+      let displayName = buldNm;
+      if (buldNmDc) {
+        displayName = buldNm ? `${buldNm} ${buldNmDc}` : buldNmDc;
+      }
+      if (!displayName) {
+        displayName = bdtypNm || '건축물';
+      }
+
+      const rawId = rawProps.A1 || rawProps.A0 || `vw_loc_${admCode}_${bucket.features.length}`;
+      const featureId = String(rawId).startsWith('bld_') ? String(rawId) : `bld_${rawId}`;
+
+      bucket.features.push({
+        type: 'Feature',
+        id: featureId,
+        properties: {
+          id: featureId,
+          name: displayName,
+          buildingName: buldNm || displayName,
+          dongName: buldNmDc,
+          address,
+          pnu,
+          levels: classified.levels,
+          height: classified.height,
+          grnd_flr: classified.levels,
+          ugrnd_flr: ugrndFlr,
+          bdtyp_cd: bdtypCd,
+          main_purps_cd_nm: bdtypNm,
+          usageType: classified.usageType,
+          bld_category: classified.category,
+          color: classified.facadeColor,
+          roofColour: classified.roofColor,
+          roofColor: classified.roofColor,
+          roofType: classified.roofType,
+          source: 'vworld_local',
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: rings,
+        },
+      });
+      totalExtracted++;
+    }
+
+    const manifestPath = path.join(outputDir, 'manifest.json');
+    let manifest = { generatedAt: new Date().toISOString(), regions: {} };
+    if (fs.existsSync(manifestPath)) {
+      try {
+        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      } catch {}
+    }
+
+    for (const [admCode, { info, features }] of buckets.entries()) {
+      if (features.length === 0) continue;
+      const rId = info.id;
+      const coreFileName = `${rId}_core.geojson`;
+      const coreFilePath = path.join(outputDir, coreFileName);
+
+      // 기존 wonju_core.geojson은 수동 정제본 보존 가능하나, 없을 시 또는 타 지역은 도심 중심 우선 최대 35,000동 저장
+      const cLng = (info.bbox[0] + info.bbox[2]) * 0.5;
+      const cLat = (info.bbox[1] + info.bbox[3]) * 0.5;
+      let coreFeatures = features;
+      if (features.length > 35000) {
+        coreFeatures = [...features]
+          .sort((a, b) => {
+            const pa = a.geometry.coordinates[0][0];
+            const pb = b.geometry.coordinates[0][0];
+            const da = Math.hypot(pa[0] - cLng, pa[1] - cLat);
+            const db = Math.hypot(pb[0] - cLng, pb[1] - cLat);
+            return da - db;
+          })
+          .slice(0, 35000);
+      }
+
+      if (rId !== 'wonju' || !fs.existsSync(coreFilePath)) {
+        fs.writeFileSync(coreFilePath, JSON.stringify({ type: 'FeatureCollection', features: coreFeatures }));
+      }
+      const sizeMb = (fs.statSync(coreFilePath).size / (1024 * 1024)).toFixed(2);
+      console.log(`  💾 [${info.name}] ${coreFileName}: 전체 ${features.length.toLocaleString()}동 / 코어 ${coreFeatures.length.toLocaleString()}동 (${sizeMb} MB)`);
+
+      manifest.regions[rId] = {
+        admCode,
+        name: info.name,
+        file: fs.existsSync(path.join(outputDir, `${rId}.geojson`)) ? `${rId}.geojson` : coreFileName,
+        coreFile: coreFileName,
+        totalCount: features.length,
+        coreCount: coreFeatures.length,
+        fileSizeMb: Number(sizeMb),
+        updatedAt: new Date().toISOString(),
+        bbox: info.bbox,
+      };
+    }
+
+    manifest.generatedAt = new Date().toISOString();
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    console.log(`\n🎉 강원 ${Object.keys(manifest.regions).length}개 시·군 일괄 인제스트 완료 (${((Date.now() - startTime) / 1000).toFixed(1)}초)!`);
+  } finally {
+    fs.closeSync(fdDbf);
+    fs.closeSync(fdShp);
+    fs.closeSync(fdShx);
+  }
+}
+
 // -----------------------------------------------------------------------------
 // [6. CLI 진입점]
 // -----------------------------------------------------------------------------
 async function main() {
   const args = process.argv.slice(2);
   let regionArg = 'wonju';
+  let allRegionsMode = false;
   let limitArg = Infinity;
   let inputDir = path.join(ROOT_DIR, 'public/data/vworld');
   let outputDir = path.join(ROOT_DIR, 'public/data/vworld/converted');
 
   for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--all-regions') allRegionsMode = true;
     if (args[i] === '--region' && args[i + 1]) regionArg = args[++i];
     if (args[i] === '--limit' && args[i + 1]) limitArg = parseInt(args[++i], 10);
     if (args[i] === '--input' && args[i + 1]) inputDir = path.resolve(args[++i]);
@@ -628,9 +892,13 @@ async function main() {
     }
   }
 
-  if (regionArg.toLowerCase() === 'all') {
-    targetAdmCode = 'all';
-    targetRegionId = 'gangwon_all';
+  if (allRegionsMode || regionArg.toLowerCase() === 'all') {
+    await convertAllGangwonRegions(activeShp, activeDbf, activeShx, activePrj, {
+      limit: limitArg,
+      outputDir,
+    });
+    console.log(`\n🎉 강원 18개 시·군 전체 브이월드 인제스트 완료!`);
+    return;
   }
 
   await convertVworldShp(activeShp, activeDbf, activeShx, activePrj, {

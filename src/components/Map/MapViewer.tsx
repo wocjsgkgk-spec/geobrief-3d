@@ -989,17 +989,34 @@ export const MapViewer: React.FC = () => {
   const isSyncingVworldRef = useRef(false);
   const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedStateRef = useRef<{ lng: number; lat: number; zoom: number; regionId: string } | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const pendingSyncMapRef = useRef<maplibregl.Map | null>(null);
 
   const syncVworldBuildingData = useCallback(
     async (targetMap: maplibregl.Map) => {
-      if (!targetMap) return;
+      if (!targetMap || !isMountedRef.current) return;
       const zoom = targetMap.getZoom();
       if (zoom < 10.5) return;
 
       const center = targetMap.getCenter();
       const currentRegion = selectedRegionId || 'wonju';
 
-      if (isSyncingVworldRef.current) return;
+      // [버벅거림 제로화] 350m / 0.7 줌 델타 이내 미세 카메라 이동 시 불필요한 재동기화 차단
+      const prev = lastSyncedStateRef.current;
+      if (prev && prev.regionId === currentRegion && persistentBuildingCacheRef.current.size > 0) {
+        const distMeters = Math.hypot(
+          (center.lng - prev.lng) * 88900,
+          (center.lat - prev.lat) * 111000
+        );
+        if (distMeters < 350 && Math.abs(zoom - prev.zoom) < 0.7) {
+          return;
+        }
+      }
+
+      if (isSyncingVworldRef.current) {
+        pendingSyncMapRef.current = targetMap;
+        return;
+      }
       isSyncingVworldRef.current = true;
 
       try {
@@ -1014,9 +1031,10 @@ export const MapViewer: React.FC = () => {
 
         let features: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>[] = [];
 
-        // 1. 국토부 공식 로컬 변환 데이터(wonju_core.geojson 30,037동) 최우선 로드
+        // 1. 국토부 공식 로컬 변환 데이터(18개 시·군 *_core.geojson) 최우선 로드
         try {
           const localRes = await fetchLocalVworldBuildings({ bbox, regionId: currentRegion, useCoreOnly: true });
+          if (!isMountedRef.current) return;
           if (localRes && localRes.hasLocalData && localRes.features && localRes.features.length > 0) {
             features = localRes.features;
           }
@@ -1028,12 +1046,18 @@ export const MapViewer: React.FC = () => {
         if (features.length === 0) {
           try {
             const wfsRes = await fetchVworldBuildings(bbox);
+            if (!isMountedRef.current) return;
             if (wfsRes && wfsRes.success && wfsRes.features?.features) {
               features = wfsRes.features.features as any;
             }
           } catch (wfsErr) {
             console.warn('[V-World 3D Sync] Live WFS notice:', wfsErr);
           }
+        }
+
+        // 3. 전국 3차 폴백: 지도 렌더러 내 벡터 타일 건물 윤곽 직접 추출 (강원 외 타 시도 무중단 표출)
+        if (features.length === 0 && targetMap) {
+          features = extractRenderedVectorBuildings(targetMap);
         }
 
         if (features.length > 0 && targetMap) {
@@ -1153,6 +1177,13 @@ export const MapViewer: React.FC = () => {
         console.warn('[V-World 3D Sync] error:', syncErr);
       } finally {
         isSyncingVworldRef.current = false;
+        const queuedMap = pendingSyncMapRef.current;
+        if (queuedMap && isMountedRef.current) {
+          pendingSyncMapRef.current = null;
+          setTimeout(() => {
+            if (isMountedRef.current) syncVworldBuildingData(queuedMap);
+          }, 50);
+        }
       }
     },
     [selectedRegionId, renderMode3D]
@@ -3618,12 +3649,25 @@ export const MapViewer: React.FC = () => {
       (window as any).map = map;
     }
 
+    isMountedRef.current = true;
+    let resizeRafId: number | null = null;
     const resizeObserver = new ResizeObserver(() => {
-      map.resize();
+      if (resizeRafId !== null) return;
+      resizeRafId = requestAnimationFrame(() => {
+        resizeRafId = null;
+        if (isMountedRef.current && mapRef.current) {
+          mapRef.current.resize();
+        }
+      });
     });
     resizeObserver.observe(mapContainerRef.current);
 
     return () => {
+      isMountedRef.current = false;
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+        resizeRafId = null;
+      }
       if (orbitAnimRef.current) {
         cancelAnimationFrame(orbitAnimRef.current);
       }
@@ -4437,11 +4481,30 @@ export const MapViewer: React.FC = () => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
     const regPreset = getGangwonRegionByIdOrName(selectedRegionId || 'wonju');
-    if (regPreset && realisticKoreanCityLayerRef.current) {
-      realisticKoreanCityLayerRef.current.resetForRegionChange([regPreset.center[0], regPreset.center[1]]);
+    if (regPreset) {
+      if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.resetForRegionChange(
+          [regPreset.center[0], regPreset.center[1]],
+          regPreset.id
+        );
+      }
+      if (proceduralTreesLayerRef.current) {
+        proceduralTreesLayerRef.current.setRegionCenter(
+          [regPreset.center[0], regPreset.center[1]],
+          regPreset.id
+        );
+      }
     }
-    if (layers.buildings3D) {
-      syncVworldBuildingData(map);
+    if (layers.buildings3D && regPreset) {
+      const c = map.getCenter();
+      const distToRegionM = Math.hypot(
+        (c.lng - regPreset.center[0]) * 88900,
+        (c.lat - regPreset.center[1]) * 111000
+      );
+      // 이미 해당 리전 영역 내에 카메라가 있을 때만 즉시 동기화 (타 지역 flyTo 이동 중에는 도착 후 moveend에서 실행)
+      if (distToRegionM < 12000) {
+        syncVworldBuildingData(map);
+      }
     }
   }, [isMapLoaded, layers.buildings3D, selectedRegionId, syncVworldBuildingData]);
 
@@ -5398,6 +5461,7 @@ export const MapViewer: React.FC = () => {
           // [즉시 오픈] 연속지적도 및 필지 분석 대상 지정
           const clickCoords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
           const projected = map.project(clickCoords);
+          const clickRegion = getGangwonRegionByIdOrName(selectedRegionId || 'wonju');
           setSelectedBuilding({
             name: '토지·연속지적 필지',
             category: '연속지적도 및 용도지역',
@@ -5408,7 +5472,7 @@ export const MapViewer: React.FC = () => {
             rawProperties: {
               '위도': e.lngLat.lat.toFixed(6),
               '경도': e.lngLat.lng.toFixed(6),
-              '소재지': '강원특별자치도 원주시',
+              '소재지': `강원특별자치도 ${clickRegion?.name || '원주시'}`,
             },
           });
         }
@@ -5730,11 +5794,13 @@ export const MapViewer: React.FC = () => {
   }, [selectedBuilding, cadastralReport, applyStampAt]);
 
   // [신규] 1인칭 보행자(스트리트) 뷰 모드 감지 및 시점 이동
+  const wasStreetViewRef = useRef<boolean>(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
 
     if (isStreetView) {
+      wasStreetViewRef.current = true;
       const target = streetViewTarget || (polygonCenter ? [polygonCenter[0], polygonCenter[1]] : map.getCenter().toArray());
       map.easeTo({
         center: target as [number, number],
@@ -5742,7 +5808,8 @@ export const MapViewer: React.FC = () => {
         zoom: 18.2,
         duration: 1500,
       });
-    } else {
+    } else if (wasStreetViewRef.current) {
+      wasStreetViewRef.current = false;
       map.easeTo({
         pitch: 55,
         zoom: 16,
@@ -5921,6 +5988,8 @@ export const MapViewer: React.FC = () => {
       ? map.getCenter().lng
       : initialViewport.longitude;
     const sunConfig = calculateSunLight(sunHour, lat, lng, sunSeason);
+    const nightFactor =
+      sunHour >= 20 || sunHour < 5 ? 1.0 : sunHour >= 18 ? (sunHour - 18) / 2.0 : 0.0;
 
     try {
       if (sunHour === 14) {
@@ -5934,8 +6003,8 @@ export const MapViewer: React.FC = () => {
       } else {
         safeSetLight(map, {
           anchor: 'viewport',
-          color: sunConfig.color,
-          intensity: sunConfig.intensity,
+          color: nightFactor > 0.6 ? '#3b4f78' : sunConfig.color,
+          intensity: nightFactor > 0.6 ? 0.35 : sunConfig.intensity,
           position: sunConfig.position,
         });
       }
@@ -5947,10 +6016,10 @@ export const MapViewer: React.FC = () => {
       if (typeof (map as any).setFog === 'function') {
         (map as any).setFog({
           range: [1.2, 11],
-          color: sunConfig.fogColor || '#cbd5e1',
+          color: nightFactor > 0.5 ? '#1e293b' : (sunConfig.fogColor || '#cbd5e1'),
           'horizon-blend': 0.22,
-          'high-color': '#1e3a8a',
-          'space-color': '#0f172a',
+          'high-color': nightFactor > 0.5 ? '#090d16' : '#1e3a8a',
+          'space-color': '#090d16',
         });
       }
     } catch (e) {
@@ -5968,17 +6037,17 @@ export const MapViewer: React.FC = () => {
         map.setPaintProperty(
           'sky-atmosphere',
           'sky-atmosphere-sun-intensity',
-          sunConfig.skySunIntensity
+          nightFactor > 0.6 ? 1.5 : sunConfig.skySunIntensity
         );
         map.setPaintProperty(
           'sky-atmosphere',
           'sky-atmosphere-halo-color',
-          sunConfig.skyHaloColor
+          nightFactor > 0.6 ? '#1e293b' : sunConfig.skyHaloColor
         );
         map.setPaintProperty(
           'sky-atmosphere',
           'sky-atmosphere-color',
-          sunConfig.skyAtmosphereColor
+          nightFactor > 0.6 ? '#0f172a' : sunConfig.skyAtmosphereColor
         );
       }
     } catch (e) {
@@ -5996,20 +6065,6 @@ export const MapViewer: React.FC = () => {
       }
     } catch (e) {
       console.warn('[MapLibre] Failed to update hillshade illumination direction:', e);
-    }
-
-    // 4-B. [모드 2 GPU 네이티브 렌더러] MapLibre Native Light 지향성 음영 실시간 연동
-    try {
-      const azim = sunConfig.azimuthDeg || 210;
-      const polar = Math.max(15, Math.min(80, 90 - (sunConfig.altitudeDeg || 45)));
-      map.setLight({
-        anchor: 'map',
-        color: sunConfig.color || '#ffffff',
-        intensity: Math.max(0.3, Math.min(1.0, sunConfig.intensity || 0.6)),
-        position: [1.3, azim, polar],
-      });
-    } catch (lightErr) {
-      console.warn('[MapLibre] Failed to update native map light:', lightErr);
     }
 
     // 5. [PBR 3D 건축물] Threebox 및 Three.js Directional Light 위치, 그림자 및 심도 안개 실시간 연동
@@ -6030,12 +6085,13 @@ export const MapViewer: React.FC = () => {
         );
       }
       if (realisticKoreanCityLayerRef.current) {
+        realisticKoreanCityLayerRef.current.setNightFactor(nightFactor);
         realisticKoreanCityLayerRef.current.updateSunLight(
           sunConfig.altitudeDeg,
           sunConfig.azimuthDeg,
-          sunConfig.intensity * 1.25,
-          sunConfig.color,
-          sunConfig.fogColor
+          nightFactor > 0.6 ? 0.55 : sunConfig.intensity * 1.25,
+          nightFactor > 0.6 ? '#93c5fd' : sunConfig.color,
+          nightFactor > 0.6 ? '#1e293b' : sunConfig.fogColor
         );
       }
       if (threeDLayerRef.current) {
@@ -6147,6 +6203,9 @@ export const MapViewer: React.FC = () => {
 
     setTerrainClampedBuildingsVisible(map, Boolean(layers.buildings3D));
     setTerrainClampedBuildingTheme(map, buildingTheme);
+    if (realisticKoreanCityLayerRef.current) {
+      realisticKoreanCityLayerRef.current.setThemeMode(buildingTheme);
+    }
   }, [buildingTheme, layers.buildings3D, isMapLoaded]);
 
   // 21. [3D 다목적 실측 줄자 (3D Ruler & Area) 인터랙션 & GeoJSON 동기화]

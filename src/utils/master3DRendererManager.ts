@@ -613,19 +613,22 @@ export function isMountainGhostBuilding(
     if (lng >= 128.75 && lng <= 129.08 && lat >= 37.00 && lat <= 37.45) {
       if (!isProtectedUrban) return true;
     }
-    // 8. 춘천 구봉산·용화산 배후 산림 능선 (춘천 도심 127.70~127.76 제외, 동부 능선만 한정)
+    // 8. 춘천 구봉산·용화산 배후 산림 능선 및 도심 봉의산 산림 정상부
     if (lng >= 127.78 && lng <= 127.88 && lat >= 37.89 && lat <= 38.05) {
       if (!isProtectedUrban) return true;
     }
+    if (lng >= 127.724 && lng <= 127.734 && lat >= 37.882 && lat <= 37.889) {
+      if (!featProps.bd_mgt_sn && !featProps.buld_nm) return true;
+    }
   }
 
-  // [3] 원주 및 강원 표고 기반 산악 사면 필터 (원주 평지 표고 135m ~ 152m, 표고 165m+ 산악 100% 영구 배제)
+  // [3] 원주 및 강원 표고 기반 산악 사면 필터 (각 시·군 maxMountainElev 초과 고산 능선 100% 영구 배제)
   if (map && typeof map.queryTerrainElevation === 'function') {
     try {
       const sampled = map.queryTerrainElevation([lng, lat]);
       if (typeof sampled === 'number' && !isNaN(sampled) && sampled > 0) {
         const dynamicMaxElev = getGangwonMaxMountainElev(lng, lat);
-        if (sampled >= dynamicMaxElev || (lng >= 127.88 && lng <= 128.02 && lat >= 37.30 && lat <= 37.40 && sampled > 165)) {
+        if (sampled >= dynamicMaxElev) {
           return true; // 산악 사면 및 고산 능선 100% 영구 배제
         }
       }

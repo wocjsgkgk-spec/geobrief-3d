@@ -459,7 +459,7 @@ export const ControlPanel: React.FC = () => {
           const vp = useMapStore.getState().viewport;
           const centerLat = polygonCenter ? polygonCenter[1] : (vp?.latitude ?? 37.342);
           const centerLng = polygonCenter ? polygonCenter[0] : (vp?.longitude ?? 127.925);
-          const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(6, Math.min(19, sunHour)) : 12;
+          const safeHour = typeof sunHour === 'number' && Number.isFinite(sunHour) ? Math.max(6, Math.min(23, sunHour)) : 12;
           const sunInfo = calculateSunLight(safeHour, centerLat, centerLng);
 
           return (
@@ -527,13 +527,13 @@ export const ControlPanel: React.FC = () => {
                     {Math.round((safeHour % 1) * 60).toString().padStart(2, '0')}
                   </span>
                   <span className="font-semibold flex items-center gap-1 text-[10.5px]">
-                    19:00 <Sunset className="w-3 h-3 text-rose-400" />
+                    22:00 <Sunset className="w-3 h-3 text-rose-400" />
                   </span>
                 </div>
                 <input
                   type="range"
                   min="6"
-                  max="19"
+                  max="22"
                   step="0.25"
                   value={sunHour}
                   onChange={(e) => setSunHour(parseFloat(e.target.value))}
@@ -1750,6 +1750,115 @@ export const ControlPanel: React.FC = () => {
           {/* [DeanChensj/jiangshan-map 벤더링]: 원주 구 1군지사 70년 시계열 연혁 타임라인 (좌측 사이드바 메뉴) */}
           <section className="p-3 border-b border-[#242f27] bg-[#09151e]/90">
             <UrbanChronicleTimeline isSidebarMode={true} />
+          </section>
+
+          {/* [V-World 실사 스튜디오: 시간대 야간 점등 · 3D 시각화 테마 · 강원 거점 드론 투어] */}
+          <section
+            id="sidebar-vworld-studio"
+            className="p-3.5 border-b border-[#242f27] space-y-3 bg-gradient-to-b from-[#0d1922] to-[#0b1510]"
+          >
+            {/* 1. 시간대/야간 조명 프리셋 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span>시간대 · 야간 실내 점등</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-300">{Math.floor(sunHour)}:00</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { id: 'noon', hour: 12, label: '☀️ 12시 정오', active: sunHour >= 10 && sunHour < 16.5 },
+                  { id: 'sunset', hour: 18, label: '🌅 18시 노을', active: sunHour >= 16.5 && sunHour < 19.5 },
+                  { id: 'night', hour: 21, label: '🌙 21시 야간', active: sunHour >= 19.5 || sunHour < 6 },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    data-testid={`time-preset-${preset.id}`}
+                    onClick={() => setSunHour(preset.hour)}
+                    className={`py-1.5 px-1.5 rounded-lg text-[10.5px] font-bold border transition-all whitespace-nowrap ${
+                      preset.active
+                        ? 'bg-amber-500/25 border-amber-400 text-amber-100 shadow-sm'
+                        : 'bg-[#13201b] border-[#25362d] text-slate-300 hover:bg-[#1a2b24]'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. 3D 건물 시각화 테마 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-cyan-300 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>3D 건물 시각화 테마</span>
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { id: 'photorealistic' as const, label: 'V-World 실사' },
+                  { id: 'landuse' as const, label: '용도지구 분류' },
+                  { id: 'height_spectrum' as const, label: '층고 스카이라인' },
+                ].map((theme) => (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    data-testid={`theme-mode-${theme.id}`}
+                    onClick={() => setBuildingTheme(theme.id)}
+                    className={`py-1.5 px-1.5 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${
+                      buildingTheme === theme.id
+                        ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100 shadow-sm'
+                        : 'bg-[#13201b] border-[#25362d] text-slate-300 hover:bg-[#1a2b24]'
+                    }`}
+                  >
+                    {theme.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. 강원 도심 거점 원클릭 드론 3D 투어 */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-emerald-400" />
+                <span>강원 주요 도심 3D 랜드마크 투어</span>
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { regionId: 'wonju', label: '원주 혁신도시', lng: 127.977, lat: 37.322, zoom: 15.8 },
+                  { regionId: 'chuncheon', label: '춘천 시청·명동', lng: 127.7295, lat: 37.8813, zoom: 15.8 },
+                  { regionId: 'gangneung', label: '강릉 교동·KTX', lng: 128.899, lat: 37.764, zoom: 15.8 },
+                  { regionId: 'sokcho', label: '속초 청초호', lng: 128.5918, lat: 38.2044, zoom: 15.6 },
+                ].map((spot) => (
+                  <button
+                    key={spot.regionId}
+                    type="button"
+                    data-testid={`landmark-tour-${spot.regionId}`}
+                    onClick={() => {
+                      selectRegion(spot.regionId);
+                      flyToLocation({
+                        longitude: spot.lng,
+                        latitude: spot.lat,
+                        zoom: spot.zoom,
+                        pitch: 56,
+                        bearing: -25,
+                      }, 1200);
+                    }}
+                    className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold border text-left flex items-center justify-between transition-all ${
+                      selectedRegionId === spot.regionId
+                        ? 'bg-emerald-500/25 border-emerald-400 text-emerald-100'
+                        : 'bg-[#13201b] border-[#25362d] text-slate-300 hover:bg-[#1a2b24]'
+                    }`}
+                  >
+                    <span className="truncate">{spot.label}</span>
+                    <Navigation2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
 
           {/* [V-World 3D 통합 렌더링 컨트롤 패널] */}

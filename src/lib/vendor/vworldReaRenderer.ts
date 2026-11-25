@@ -183,16 +183,16 @@ function drawApartmentSideWall(ctx: CanvasRenderingContext2D, w: number, h: numb
 
 function drawCommercialUpperFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
   const wallThemes = [
-    { base: '#d6cfc2', stone: '#cbd5e1', frame: '#475569' }, // Beige Granite
-    { base: '#7f1d1d', stone: '#991b1b', frame: '#1e293b' }, // Architectural Red Brick
+    { base: '#ece6da', stone: '#dce1e7', frame: '#64748b' }, // Sunlit Beige Limestone
+    { base: '#c97b63', stone: '#d98f76', frame: '#334155' }, // Warm Sunlit Terracotta Brick
   ];
   const theme = wallThemes[variant % wallThemes.length];
 
   ctx.fillStyle = theme.base;
   ctx.fillRect(0, 0, w, h);
 
-  // 석재 줄눈
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  // 정갈한 석재 줄눈 (연한 명암)
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.14)';
   ctx.lineWidth = 3;
   for (let y = 0; y < h; y += 256) {
     ctx.beginPath();
@@ -207,7 +207,7 @@ function drawCommercialUpperFacade(ctx: CanvasRenderingContext2D, w: number, h: 
     ctx.stroke();
   }
 
-  // 창문 (간판 없이 정갈한 상가/오피스 창문)
+  // 상가/오피스 창문 (화사한 스카이 블루 반사 유리)
   const wx = 120;
   const wy = 160;
   const ww = w - 240;
@@ -217,13 +217,13 @@ function drawCommercialUpperFacade(ctx: CanvasRenderingContext2D, w: number, h: 
   ctx.fillRect(wx - 14, wy - 14, ww + 28, wh + 28);
 
   const glassGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-  glassGrad.addColorStop(0, '#0284c7');
-  glassGrad.addColorStop(0.5, '#0369a1');
-  glassGrad.addColorStop(1, '#0f172a');
+  glassGrad.addColorStop(0, '#7dd3fc');
+  glassGrad.addColorStop(0.5, '#0284c7');
+  glassGrad.addColorStop(1, '#1e3a8a');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(wx, wy, ww, wh);
 
-  ctx.strokeStyle = '#cbd5e1';
+  ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 4;
   ctx.strokeRect(wx, wy, ww, wh);
   ctx.beginPath();
@@ -484,20 +484,20 @@ function drawPublicHQFacade(ctx: CanvasRenderingContext2D, w: number, h: number,
 }
 
 function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // 1-Bay (3.2m) × 1-Floor (3.0m) Commercial/Office Module at 1024×1024
+  // 1-Bay (3.2m) × 1-Floor (3.0m) Clean V-World Commercial/Office Module at 1024×1024
   const wallThemes = [
-    { base: '#d6cfc2', stone: '#cbd5e1', frame: '#475569' }, // 0: Beige Granite
-    { base: '#7f1d1d', stone: '#991b1b', frame: '#1e293b' }, // 1: Architectural Red Brick
-    { base: '#334155', stone: '#1e293b', frame: '#0f172a' }, // 2: Charcoal Metal Panel
-    { base: '#78350f', stone: '#92400e', frame: '#451a03' }, // 3: Brown Travertine
+    { base: '#ece6da', stone: '#dfd7c8', frame: '#475569', accent: '#10b981' }, // 0: Sunlit Ivory Granite
+    { base: '#d8dee6', stone: '#cbd5e1', frame: '#334155', accent: '#2563eb' }, // 1: Cool Silver-Gray Stone
+    { base: '#c97b63', stone: '#b86850', frame: '#475569', accent: '#dc2626' }, // 2: Warm Terracotta Brick
+    { base: '#e2d7c5', stone: '#d4c5ae', frame: '#64748b', accent: '#d97706' }, // 3: Champagne Limestone
   ];
   const theme = wallThemes[variant % wallThemes.length];
 
   ctx.fillStyle = theme.base;
   ctx.fillRect(0, 0, w, h);
 
-  // Stone cladding joints (줄눈)
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  // Subtle architectural stone cladding joints (줄눈)
+  ctx.strokeStyle = 'rgba(71, 85, 105, 0.16)';
   ctx.lineWidth = 3;
   for (let y = 0; y < h; y += 256) {
     ctx.beginPath();
@@ -512,70 +512,57 @@ function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: numbe
     ctx.stroke();
   }
 
-  // Commercial Office/Clinic Window (x: 120px to 904px, y: 160px to 860px)
-  const wx = 120;
-  const wy = 160;
-  const ww = w - 240;
-  const wh = 700;
+  // Commercial Office/Retail Glazing (x: 112px to 912px, y: 150px to 870px)
+  const wx = 112;
+  const wy = 150;
+  const ww = w - 224;
+  const wh = 720;
 
   ctx.fillStyle = theme.frame;
-  ctx.fillRect(wx - 14, wy - 14, ww + 28, wh + 28);
+  ctx.fillRect(wx - 12, wy - 12, ww + 24, wh + 24);
 
   const glassGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-  glassGrad.addColorStop(0, '#0284c7');
-  glassGrad.addColorStop(0.5, '#0369a1');
-  glassGrad.addColorStop(1, '#0f172a');
+  glassGrad.addColorStop(0, '#7dd3fc');
+  glassGrad.addColorStop(0.45, '#38bdf8');
+  glassGrad.addColorStop(1, '#0284c7');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(wx, wy, ww, wh);
 
-  // Aluminum sash profile
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 4;
+  // Clean sunlit sky glint & vertical mullion sash
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
+  ctx.beginPath();
+  ctx.moveTo(wx, wy);
+  ctx.lineTo(wx + ww * 0.55, wy);
+  ctx.lineTo(wx + ww * 0.20, wy + wh);
+  ctx.lineTo(wx, wy + wh);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 5;
   ctx.strokeRect(wx, wy, ww, wh);
   ctx.beginPath();
   ctx.moveTo(wx + ww * 0.5, wy);
   ctx.lineTo(wx + ww * 0.5, wy + wh);
-  ctx.moveTo(wx, wy + 200);
-  ctx.lineTo(wx + ww, wy + 200);
+  ctx.moveTo(wx, wy + 220);
+  ctx.lineTo(wx + ww, wy + 220);
   ctx.stroke();
 
-  // [V-World 실사화] 1층 한국형 브랜드 가로 간판 패치 (편의점/베이커리/약국)
+  // Clean architectural transom accent bar (no repeating text artifacts)
   if (variant === 0 || variant === 3) {
-    const signH = 140;
-    const signY = wy + 10;
-    ctx.save();
-    if (variant === 0) {
-      ctx.fillStyle = '#059669';
-      ctx.fillRect(wx + 8, signY, ww - 16, signH);
-      ctx.fillStyle = '#facc15';
-      ctx.font = 'bold 50px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('24시 편의점', wx + ww * 0.5, signY + signH * 0.5);
-    } else {
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(wx + 8, signY, ww * 0.48 - 8, signH);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 40px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('BAKERY', wx + ww * 0.24, signY + signH * 0.5);
-
-      ctx.fillStyle = '#2563eb';
-      ctx.fillRect(wx + ww * 0.52, signY, ww * 0.48 - 8, signH);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('약국', wx + ww * 0.76, signY + signH * 0.5);
-    }
-    ctx.restore();
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(wx + 6, wy + 6, ww - 12, 54);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+    ctx.fillRect(wx + 6, wy + 6, ww - 12, 12);
   }
 }
 
 function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // 1-Bay (3.2m) × 1-Floor (3.0m) Residential Villa/School Module at 1024×1024
+  // 1-Bay (3.2m) × 1-Floor (3.0m) Clean V-World Residential Villa/School Module at 1024×1024
   const brickThemes = [
-    { base: '#7c2d12', mortar: '#d6d3d1' },
-    { base: '#854d0e', mortar: '#e7e5e4' },
-    { base: '#d97742', mortar: '#fed7aa' },
+    { base: '#c46d4c', mortar: '#efe9e0' }, // Sunlit Terracotta Brick
+    { base: '#d9c3a5', mortar: '#f5efe6' }, // Warm Beige Brick
+    { base: '#dfd8cc', mortar: '#f8fafc' }, // Clean Limestone Brick
   ];
   const theme = brickThemes[variant % brickThemes.length];
 
@@ -583,8 +570,8 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
   ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = theme.base;
-  const bW = 68;
-  const bH = 26;
+  const bW = 72;
+  const bH = 28;
   for (let y = 0; y < h; y += bH + 4) {
     const offset = (Math.floor(y / bH) % 2) * (bW / 2);
     for (let x = -offset; x < w; x += bW + 4) {
@@ -592,11 +579,11 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
     }
   }
 
-  // Residential Casement Window (x: 200 to 824, y: 180 to 820)
-  const wx = 200;
-  const wy = 180;
-  const ww = w - 400;
-  const wh = 640;
+  // Residential Casement Window (x: 190 to 834, y: 170 to 830)
+  const wx = 190;
+  const wy = 170;
+  const ww = w - 380;
+  const wh = 660;
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(wx - 16, wy - 16, ww + 32, wh + 32);
@@ -605,8 +592,9 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
   ctx.strokeRect(wx - 16, wy - 16, ww + 32, wh + 32);
 
   const gGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-  gGrad.addColorStop(0, '#38bdf8');
-  gGrad.addColorStop(1, '#0f172a');
+  gGrad.addColorStop(0, '#7dd3fc');
+  gGrad.addColorStop(0.5, '#38bdf8');
+  gGrad.addColorStop(1, '#0284c7');
   ctx.fillStyle = gGrad;
   ctx.fillRect(wx, wy, ww, wh);
 
@@ -621,12 +609,11 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
 // -----------------------------------------------------------------------------
 
 function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // 1. 한국 표준 선명한 방수 에메랄드 우레탄 도막 (#296838, #2e7d32, #388e3c)
-  ctx.fillStyle = '#296838';
+  // Seamless clean V-World emerald waterproof urethane coating (real 3D rooftop objects handle details)
+  ctx.fillStyle = '#389151';
   ctx.fillRect(0, 0, w, h);
 
-  // 미세 투톤 텍스처 (128px 우레탄 롤러 도색 결)
-  ctx.fillStyle = '#2e7d32';
+  ctx.fillStyle = '#409c5a';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {
@@ -635,9 +622,9 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
     }
   }
 
-  // 2. 우레탄 신축줄눈 실란트 (Expansion Control Joint Sealant Lines)
-  ctx.strokeStyle = '#143525';
-  ctx.lineWidth = 8;
+  // Clean subtle expansion control joint seams
+  ctx.strokeStyle = 'rgba(20, 62, 34, 0.28)';
+  ctx.lineWidth = 4;
   for (let x = 0; x <= w; x += 256) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -650,245 +637,28 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
     ctx.lineTo(w, y);
     ctx.stroke();
   }
-  // 줄눈 엣지 하이라이트
-  ctx.strokeStyle = 'rgba(74, 222, 128, 0.15)';
+  ctx.strokeStyle = 'rgba(134, 239, 172, 0.22)';
   ctx.lineWidth = 2;
   for (let x = 0; x <= w; x += 256) {
     ctx.beginPath();
-    ctx.moveTo(x + 4, 0);
-    ctx.lineTo(x + 4, h);
+    ctx.moveTo(x + 3, 0);
+    ctx.lineTo(x + 3, h);
     ctx.stroke();
   }
   for (let y = 0; y <= h; y += 256) {
     ctx.beginPath();
-    ctx.moveTo(0, y + 4);
-    ctx.lineTo(w, y + 4);
+    ctx.moveTo(0, y + 3);
+    ctx.lineTo(w, y + 3);
     ctx.stroke();
   }
-
-  // 3. 루프 드레인 배수구 (주철 주물 거름망)
-  const drainX = w * 0.5;
-  const drainY = h * 0.5;
-  ctx.save();
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.arc(drainX, drainY, 46, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 6;
-  ctx.stroke();
-  // 거름망 살
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 3;
-  for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
-    ctx.beginPath();
-    ctx.moveTo(drainX, drainY);
-    ctx.lineTo(drainX + Math.cos(a) * 44, drainY + Math.sin(a) * 44);
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.arc(drainX, drainY, 24, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-
-  // 4. 한국 도시 시그니처: 파란색 FRP 원형 물탱크 (Blue Cylindrical FRP Water Tank)
-  ctx.save();
-  const tankX = w * 0.74;
-  const tankY = h * 0.28;
-  const tankR = 100;
-
-  // 물탱크 콘크리트 패드 기초대 (Concrete Base Foundation) & 드롭 섀도우
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
-  ctx.fillRect(tankX - tankR - 18, tankY - tankR - 10, tankR * 2 + 36, tankR * 2 + 36);
-  ctx.fillStyle = '#64748b';
-  ctx.fillRect(tankX - tankR - 14, tankY - tankR - 14, tankR * 2 + 28, tankR * 2 + 28);
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(tankX - tankR - 14, tankY - tankR - 14, tankR * 2 + 28, tankR * 2 + 28);
-
-  // 탱크 3D 원통형 음영 (Radial Gradient)
-  const tankGrad = ctx.createRadialGradient(
-    tankX - tankR * 0.35, tankY - tankR * 0.35, 12,
-    tankX, tankY, tankR
-  );
-  tankGrad.addColorStop(0, '#38bdf8'); // 밝은 하늘빛 하이라이트
-  tankGrad.addColorStop(0.3, '#0284c7'); // 한국 FRP 시그니처 코발트 시안
-  tankGrad.addColorStop(0.75, '#0369a1'); // 딥 블루 바디
-  tankGrad.addColorStop(1, '#0c4a6e'); // 섀도우 림
-  ctx.fillStyle = tankGrad;
-  ctx.beginPath();
-  ctx.arc(tankX, tankY, tankR, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 수밀 보강 링 (Reinforcement Hoops)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.arc(tankX, tankY, tankR * 0.82, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(tankX, tankY, tankR * 0.58, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // 상단 스테인리스 점검구 맨홀 뚜껑 (Metallic Manhole Lid)
-  const lidGrad = ctx.createLinearGradient(tankX - 32, tankY - 32, tankX + 32, tankY + 32);
-  lidGrad.addColorStop(0, '#f8fafc');
-  lidGrad.addColorStop(0.5, '#cbd5e1');
-  lidGrad.addColorStop(1, '#64748b');
-  ctx.fillStyle = lidGrad;
-  ctx.beginPath();
-  ctx.arc(tankX, tankY, 32, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 4;
-  ctx.stroke();
-
-  // 잠금 손잡이
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(tankX - 16, tankY - 4, 32, 8);
-
-  // 급수·배수 배관 (Pipes & Valves)
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(tankX + tankR - 10, tankY + tankR * 0.4);
-  ctx.lineTo(tankX + tankR + 42, tankY + tankR * 0.4);
-  ctx.lineTo(tankX + tankR + 42, tankY + tankR + 48);
-  ctx.stroke();
-  // 붉은 밸브 휠
-  ctx.fillStyle = '#dc2626';
-  ctx.beginPath();
-  ctx.arc(tankX + tankR + 25, tankY + tankR * 0.4, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // 5. 에어컨 실외기 뱅크 (Outdoor AC Condenser Units Cluster - 2대 병렬 배치)
-  ctx.save();
-  const acBankX = w * 0.20;
-  const acBankY = h * 0.68;
-  const unitW = 140;
-  const unitH = 92;
-  const unitSpacing = 28;
-
-  for (let u = 0; u < 2; u++) {
-    const ux = acBankX + u * (unitW + unitSpacing);
-    const uy = acBankY;
-
-    // 방진 고무 패드 기초 레일 & 그림자
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
-    ctx.fillRect(ux + 4, uy + 6, unitW, unitH);
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(ux - 4, uy + unitH - 6, unitW + 8, 10);
-    ctx.fillRect(ux - 4, uy - 4, unitW + 8, 10);
-
-    // 유닛 메인 바디 (아이보리 화이트)
-    ctx.fillStyle = '#f1f5f9';
-    ctx.fillRect(ux, uy, unitW, unitH);
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(ux, uy, unitW, unitH);
-
-    // 상단 덮개 빗물 그루브
-    ctx.fillStyle = '#cbd5e1';
-    ctx.fillRect(ux, uy, unitW, 14);
-
-    // 원형 냉각팬 그릴 (Cooling Fan Grille)
-    const fanCX = ux + unitW * 0.38;
-    const fanCY = uy + unitH * 0.56;
-    const fanR = 30;
-
-    // 팬 챔버 내부 암부
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.arc(fanCX, fanCY, fanR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 팬 블레이드 (4엽 날개)
-    ctx.fillStyle = '#334155';
-    for (let ang = 0; ang < Math.PI * 2; ang += Math.PI / 2) {
-      ctx.beginPath();
-      ctx.arc(fanCX + Math.cos(ang) * 12, fanCY + Math.sin(ang) * 12, 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 팬 전면 보호 와이어 가드 (동심원 링 및 방사형 살)
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(fanCX, fanCY, fanR * 0.72, 0, Math.PI * 2);
-    ctx.arc(fanCX, fanCY, fanR * 0.40, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(fanCX - fanR, fanCY);
-    ctx.lineTo(fanCX + fanR, fanCY);
-    ctx.moveTo(fanCX, fanCY - fanR);
-    ctx.lineTo(fanCX, fanCY + fanR);
-    ctx.stroke();
-
-    // 우측 제어반 / 단자 루버 슬릿 (Right Service Louver Slits)
-    const louverX = ux + unitW * 0.76;
-    ctx.fillStyle = '#64748b';
-    for (let ly = uy + 24; ly < uy + unitH - 18; ly += 10) {
-      ctx.fillRect(louverX, ly, 22, 4);
-    }
-  }
-
-  // 실외기 냉매 배관 다발 (Insulated Copper Pipe Harness)
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(acBankX + unitW * 2 + unitSpacing, acBankY + unitH * 0.6);
-  ctx.lineTo(acBankX + unitW * 2 + unitSpacing + 65, acBankY + unitH * 0.6);
-  ctx.lineTo(acBankX + unitW * 2 + unitSpacing + 65, acBankY + unitH * 0.6 - 120);
-  ctx.stroke();
-  // 보온재 은박 테이프 밴딩
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 2;
-  for (let px = acBankX + unitW * 2 + unitSpacing + 10; px < acBankX + unitW * 2 + unitSpacing + 60; px += 14) {
-    ctx.beginPath();
-    ctx.moveTo(px, acBankY + unitH * 0.6 - 6);
-    ctx.lineTo(px, acBankY + unitH * 0.6 + 6);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // 6. 옥상 출입용 방화 해치 (Stainless Steel Roof Access Hatch)
-  ctx.save();
-  const hatchX = w * 0.22;
-  const hatchY = h * 0.20;
-  const hatchW = 160;
-  const hatchH = 120;
-
-  // 턱(Curb)
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
-  ctx.fillRect(hatchX + 6, hatchY + 6, hatchW, hatchH);
-  ctx.fillStyle = '#64748b';
-  ctx.fillRect(hatchX, hatchY, hatchW, hatchH);
-
-  // 스테인리스 해치 덮개 (Metal Sheen)
-  const hatchGrad = ctx.createLinearGradient(hatchX, hatchY, hatchX + hatchW, hatchY + hatchH);
-  hatchGrad.addColorStop(0, '#f8fafc');
-  hatchGrad.addColorStop(0.5, '#cbd5e1');
-  hatchGrad.addColorStop(1, '#94a3b8');
-  ctx.fillStyle = hatchGrad;
-  ctx.fillRect(hatchX + 10, hatchY + 10, hatchW - 20, hatchH - 20);
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(hatchX + 10, hatchY + 10, hatchW - 20, hatchH - 20);
-
-  // 손잡이
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(hatchX + hatchW * 0.5 - 18, hatchY + hatchH * 0.5 - 5, 36, 10);
-  ctx.restore();
 }
 
 function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ② Light Concrete Slab (#94a3b8, #cbd5e1)
-  ctx.fillStyle = '#94a3b8';
+  // Seamless clean V-World bright concrete slab surface
+  ctx.fillStyle = '#d6dde6';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = '#cbd5e1';
+  ctx.fillStyle = '#e2e8f0';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {
@@ -897,8 +667,8 @@ function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: numbe
     }
   }
 
-  ctx.strokeStyle = '#64748b';
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(100, 116, 139, 0.30)';
+  ctx.lineWidth = 3;
   for (let x = 0; x <= w; x += 256) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -911,81 +681,33 @@ function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: numbe
     ctx.lineTo(w, y);
     ctx.stroke();
   }
-
-  // [V-World 3D 실사화] 옥상 긴급 헬리패드 (Helipad 'H') & 야간 항공장애등
-  ctx.save();
-  const cX = w * 0.5;
-  const cY = h * 0.5;
-  const radius = Math.min(w, h) * 0.32;
-
-  // 1. 외곽 노란색 실선 원형 링
-  ctx.beginPath();
-  ctx.arc(cX, cY, radius, 0, Math.PI * 2);
-  ctx.strokeStyle = '#facc15';
-  ctx.lineWidth = 20;
-  ctx.stroke();
-
-  // 2. 내부 백색 원형 링
-  ctx.beginPath();
-  ctx.arc(cX, cY, radius * 0.75, 0, Math.PI * 2);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 10;
-  ctx.stroke();
-
-  // 3. 중앙 볼드 대형 'H' 마킹
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 180px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-  ctx.shadowBlur = 12;
-  ctx.fillText('H', cX, cY);
-
-  // 4. 네 모서리 야간 항공유도등 (Night Guidance Warning Lights)
-  const pad = 48;
-  const cornerPts = [
-    [pad, pad],
-    [w - pad, pad],
-    [pad, h - pad],
-    [w - pad, h - pad],
-  ];
-  for (const [lx, ly] of cornerPts) {
-    ctx.beginPath();
-    ctx.arc(lx, ly, 16, 0, Math.PI * 2);
-    ctx.fillStyle = '#ef4444';
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 function drawTerracottaTileRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ③ Terracotta Spanish Clay Tile (#6c3428, #5c2c20)
-  ctx.fillStyle = '#6c3428';
+  // Bright sunlit Korean clay terracotta tile (#b85d43, #cc7256)
+  ctx.fillStyle = '#b85d43';
   ctx.fillRect(0, 0, w, h);
 
   const tileSpacing = 42;
   for (let y = 0; y < h; y += tileSpacing) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.fillRect(0, y, w, 8);
-    ctx.fillStyle = '#854234';
-    ctx.fillRect(0, y + 8, w, 12);
+    ctx.fillStyle = 'rgba(67, 20, 7, 0.24)';
+    ctx.fillRect(0, y, w, 6);
+    ctx.fillStyle = '#cc7256';
+    ctx.fillRect(0, y + 6, w, 14);
   }
 }
 
 function drawCobaltSteelRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // ④ Industrial Cobalt Blue Corrugated Steel (#1d4ed8)
-  ctx.fillStyle = '#1d4ed8';
+  // Bright Korean cobalt blue corrugated steel (#3b76d8, #558ae8)
+  ctx.fillStyle = '#3b76d8';
   ctx.fillRect(0, 0, w, h);
 
   const ribW = 32;
   for (let x = 0; x < w; x += ribW * 2) {
-    ctx.fillStyle = '#2563eb';
+    ctx.fillStyle = '#558ae8';
     ctx.fillRect(x, 0, ribW, h);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.fillRect(x + ribW - 4, 0, 4, h);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+    ctx.fillRect(x + ribW - 3, 0, 3, h);
   }
 }
 

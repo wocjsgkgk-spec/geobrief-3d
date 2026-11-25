@@ -22,9 +22,31 @@ export async function GET(
     return getTileset(request);
   }
 
-  // 2. 경로 정규화 및 상류 원천 URL 매핑
+  // 2. 경로 정규화 및 지역 기반 상류 원천 URL 동적 매핑
   const cleanSegments = path.map((seg) => seg.replace(/[^a-zA-Z0-9._$-]/g, ''));
   const joinedPath = cleanSegments.join('/');
+  const regionParam = (new URL(request.url).searchParams.get('region') || 'wonju').toLowerCase();
+  const REGION_BASE_DIR: Record<string, string> = {
+    wonju: 'Gangwon-do/Wonju-si',
+    'wonju-bridge': 'Gangwon-do/Wonju-si-bridge',
+    chuncheon: 'Gangwon-do/Chuncheon-si',
+    gangneung: 'Gangwon-do/Gangneung-si',
+    donghae: 'Gangwon-do/Donghae-si',
+    taebaek: 'Gangwon-do/Taebaek-si',
+    sokcho: 'Gangwon-do/Sokcho-si',
+    samcheok: 'Gangwon-do/Samcheok-si',
+    hongcheon: 'Gangwon-do/Hongcheon-gun',
+    hoengseong: 'Gangwon-do/Hoengseong-gun',
+    yeongwol: 'Gangwon-do/Yeongwol-gun',
+    pyeongchang: 'Gangwon-do/Pyeongchang-gun',
+    jeongseon: 'Gangwon-do/Jeongseon-gun',
+    cheorwon: 'Gangwon-do/Cheorwon-gun',
+    hwacheon: 'Gangwon-do/Hwacheon-gun',
+    yanggu: 'Gangwon-do/Yanggu-gun',
+    inje: 'Gangwon-do/Inje-gun',
+    goseong: 'Gangwon-do/Goseong-gun',
+    yangyang: 'Gangwon-do/Yangyang-gun',
+  };
 
   let remoteTileUrl = '';
   if (joinedPath.startsWith('TG9ENA/')) {
@@ -32,8 +54,8 @@ export async function GET(
   } else if (joinedPath.startsWith('Gangwon-do/')) {
     remoteTileUrl = `https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/${joinedPath}`;
   } else {
-    // 상대 경로 파일 (.b3dm, sub-tileset.json 등) -> 기본 강원 원주권 타일 매핑
-    remoteTileUrl = `https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/Gangwon-do/Wonju-si/${joinedPath}`;
+    const baseDir = REGION_BASE_DIR[regionParam] || 'Gangwon-do/Wonju-si';
+    remoteTileUrl = `https://cdn.vworld.kr/TDServer/services/map4/TG9ENA/${baseDir}/${joinedPath}`;
   }
 
   try {
