@@ -335,17 +335,17 @@ function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillStyle = baseColor;
   ctx.fillRect(0, 0, w, h);
 
-  // 1) Upper floor slab dividing band (0 ~ 110px) with dark concrete coping groove
-  ctx.fillStyle = '#e2e8f0';
+  // 1) Upper floor slab dividing band (0 ~ 90px) - 부드러운 V-World 실사 톤
+  ctx.fillStyle = '#e8edf2';
   ctx.fillRect(0, 0, w, 90);
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.40)';
-  ctx.fillRect(0, 85, w, 12); // horizontal shadow groove
+  ctx.fillStyle = 'rgba(100, 116, 139, 0.22)';
+  ctx.fillRect(0, 85, w, 8);
 
-  // 2) Lower floor slab dividing band (920 ~ 1024px)
-  ctx.fillStyle = '#e2e8f0';
+  // 2) Lower floor slab dividing band (930 ~ 1024px)
+  ctx.fillStyle = '#e8edf2';
   ctx.fillRect(0, 930, w, 94);
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.30)';
-  ctx.fillRect(0, 925, w, 8);
+  ctx.fillStyle = 'rgba(100, 116, 139, 0.16)';
+  ctx.fillRect(0, 925, w, 6);
 
   // 3) Left and Right Concrete Structural Pier Columns
   ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
@@ -609,11 +609,11 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
 // -----------------------------------------------------------------------------
 
 function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Seamless clean V-World emerald waterproof urethane coating (real 3D rooftop objects handle details)
-  ctx.fillStyle = '#389151';
+  // Seamless clean V-World sage-emerald waterproof urethane coating
+  ctx.fillStyle = '#4b9c68';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = '#409c5a';
+  ctx.fillStyle = '#54a872';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {
@@ -654,11 +654,11 @@ function drawUrethaneGreenRoof(ctx: CanvasRenderingContext2D, w: number, h: numb
 }
 
 function drawConcreteSlabRoof(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Seamless clean V-World bright concrete slab surface
-  ctx.fillStyle = '#d6dde6';
+  // Seamless clean V-World bright warm concrete slab surface
+  ctx.fillStyle = '#dfe5ec';
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = '#e2e8f0';
+  ctx.fillStyle = '#e8edf3';
   for (let y = 0; y < h; y += 128) {
     for (let x = 0; x < w; x += 128) {
       if ((x + y) % 256 === 0) {

@@ -163,18 +163,18 @@ const PBR_FRAGMENT_PARS = /* glsl */ `
     // 3) 4방향 코너 AO
     float cornerAO = (1.0 - smoothstep(0.0, 0.12, windowFractX) * (1.0 - smoothstep(0.88, 1.0, windowFractX))) * 0.16;
 
-    float totalShadow = clamp(topShadow + leftShadow + rightShadow + cornerAO, 0.0, 0.70);
+    float totalShadow = clamp((topShadow + leftShadow + rightShadow + cornerAO) * 0.22, 0.0, 0.14);
     return 1.0 - totalShadow;
   }
 
   // ---------------------------------------------------------------------------
   // [OSMBuildings & StreetsGL Rooftop Parapet Inner Drop Shadow]
-  // 0.85m 테두리 난간 내측으로 떨어진 옥상 슬래브에 사각 테두리 차폐 그림자
+  // 0.85m 테두리 난간 내측으로 떨어진 옥상 슬래브에 부드러운 미세 음영
   // ---------------------------------------------------------------------------
   float getRooftopParapetInnerShadow(vec2 uv) {
     vec2 edgeDist = min(uv, 1.0 - uv);
     float minDist = min(edgeDist.x, edgeDist.y);
-    return mix(0.78, 1.0, smoothstep(0.0, 0.06, minDist));
+    return mix(0.90, 1.0, smoothstep(0.0, 0.06, minDist));
   }
 `;
 
@@ -278,7 +278,7 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
 
   // 5. [F4map & OSMBuildings 벤더링] 건물 기저부 부드러운 접지 음영 (Contact Ambient Occlusion: 0.0~1.8m)
   float shadowFactor = smoothstep(0.0, 1.8, max(0.0, vHeight));
-  float finalGroundingAo = mix(0.86, 1.0, shadowFactor);
+  float finalGroundingAo = mix(0.92, 1.0, shadowFactor);
 
   // 차폐 음영 및 텍스처 미세 AO 결합 적용 (과도한 3중 감쇠 방지)
   diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.22));

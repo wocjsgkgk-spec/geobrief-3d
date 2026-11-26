@@ -662,8 +662,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.renderer.autoClear = false;
           this.renderer.outputColorSpace = THREE.SRGBColorSpace;
           this.renderer.shadowMap.enabled = false;
-          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-          this.renderer.toneMappingExposure = 1.18;
+          this.renderer.toneMapping = THREE.LinearToneMapping;
+          this.renderer.toneMappingExposure = 1.02;
           const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
           this.renderer.setPixelRatio(pr);
         } catch (rErr) {
@@ -685,8 +685,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.shadowMap.enabled = false;
-      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.18;
+      this.renderer.toneMapping = THREE.LinearToneMapping;
+      this.renderer.toneMappingExposure = 1.02;
       const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
       this.renderer.setPixelRatio(pr);
 
