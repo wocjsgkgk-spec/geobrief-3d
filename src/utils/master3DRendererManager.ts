@@ -184,16 +184,16 @@ const GANGWON_REGIONAL_BASE_ELEVATION: { [key: string]: { name: string; center: 
   sokcho: { name: '속초', center: [128.5918, 38.2070], maxMountainElev: 50 },
   donghae: { name: '동해', center: [129.1143, 37.5247], maxMountainElev: 65 },
   samcheok: { name: '삼척', center: [129.1658, 37.4498], maxMountainElev: 65 },
-  taebaek: { name: '태백', center: [128.9889, 37.1641], maxMountainElev: 840 },
-  pyeongchang: { name: '평창', center: [128.3904, 37.3705], maxMountainElev: 720 },
-  jeongseon: { name: '정선', center: [128.6608, 37.3806], maxMountainElev: 460 },
-  yeongwol: { name: '영월', center: [128.4620, 37.1837], maxMountainElev: 295 },
-  hongcheon: { name: '홍천', center: [127.8887, 37.6970], maxMountainElev: 170 },
-  hoengseong: { name: '횡성', center: [127.9850, 37.4916], maxMountainElev: 190 },
-  cheorwon: { name: '철원', center: [127.3134, 38.1468], maxMountainElev: 240 },
-  hwacheon: { name: '화천', center: [127.7082, 38.1062], maxMountainElev: 180 },
-  yanggu: { name: '양구', center: [127.9897, 38.1095], maxMountainElev: 250 },
-  inje: { name: '인제', center: [128.1704, 38.0697], maxMountainElev: 285 },
+  taebaek: { name: '태백', center: [128.9889, 37.1641], maxMountainElev: 960 },
+  pyeongchang: { name: '평창', center: [128.3904, 37.3705], maxMountainElev: 880 },
+  jeongseon: { name: '정선', center: [128.6608, 37.3806], maxMountainElev: 650 },
+  yeongwol: { name: '영월', center: [128.4620, 37.1837], maxMountainElev: 450 },
+  hongcheon: { name: '홍천', center: [127.8887, 37.6970], maxMountainElev: 350 },
+  hoengseong: { name: '횡성', center: [127.9850, 37.4916], maxMountainElev: 350 },
+  cheorwon: { name: '철원', center: [127.3134, 38.1468], maxMountainElev: 450 },
+  hwacheon: { name: '화천', center: [127.7082, 38.1062], maxMountainElev: 420 },
+  yanggu: { name: '양구', center: [127.9897, 38.1095], maxMountainElev: 450 },
+  inje: { name: '인제', center: [128.1704, 38.0697], maxMountainElev: 520 },
   goseong: { name: '고성', center: [128.4678, 38.3806], maxMountainElev: 75 },
   yangyang: { name: '양양', center: [128.6285, 38.0754], maxMountainElev: 65 },
 };
@@ -584,8 +584,8 @@ export function isMountainGhostBuilding(
   // [2-C] 강원권 전역(원주, 춘천, 강릉, 속초, 인제, 평창 등) 산악·국립공원 능선 정밀 마스킹 (V-World REA 제약)
   const isGangwonZone = lng >= 127.0 && lng <= 129.5 && lat >= 37.0 && lat <= 38.6;
   if (isGangwonZone) {
-    // 1. 치악산 국립공원 핵심 산림 능선 및 서사면 (행구동·봉산동 배후 산지 포함: 127.958 동쪽 전역 차단)
-    if (lng >= 127.958 && lat >= 37.330 && lat <= 37.48) return true;
+    // 1. 치악산 국립공원 핵심 산림 능선 및 서사면 (원주 동쪽 치악산 능선 127.958~128.080 한정, 보호 도심 제외)
+    if (lng >= 127.958 && lng <= 128.080 && lat >= 37.330 && lat <= 37.48 && !isProtectedUrban) return true;
 
     // 2. 백운산 남부 산림 능선 및 판부면 남부 고산 구역 (37.320 남쪽 전역 차단)
     if (lat <= 37.320 && lng >= 127.88 && lng <= 128.02) return true;
@@ -622,8 +622,8 @@ export function isMountainGhostBuilding(
     }
   }
 
-  // [3] 원주 및 강원 표고 기반 산악 사면 필터 (각 시·군 maxMountainElev 초과 고산 능선 100% 영구 배제)
-  if (map && typeof map.queryTerrainElevation === 'function') {
+  // [3] 원주 및 강원 표고 기반 산악 사면 필터 (각 시·군 maxMountainElev 초과 고산 능선 100% 영구 배제, 보호 도심 제외)
+  if (!isProtectedUrban && map && typeof map.queryTerrainElevation === 'function') {
     try {
       const sampled = map.queryTerrainElevation([lng, lat]);
       if (typeof sampled === 'number' && !isNaN(sampled) && sampled > 0) {

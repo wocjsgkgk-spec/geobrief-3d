@@ -377,10 +377,12 @@ export async function GET(req: NextRequest) {
   const cLng = (minLng + maxLng) / 2;
   const cLat = (minLat + maxLat) / 2;
 
-  // 1. 강원도 18개 시·군 판별 (카메라 BBOX 중심 좌표를 최우선으로 감지하여 전역 동기화)
-  let currentRegion: GangwonRegionPreset | undefined = findGangwonRegionByCoords(cLng, cLat);
-  if (!currentRegion && regionId) {
-    currentRegion = getGangwonRegionByIdOrName(regionId);
+  // 1. 강원도 18개 시·군 판별 (명시적 regionId 최우선, 미지정 시 BBOX 중심 좌표로 자동 감지)
+  let currentRegion: GangwonRegionPreset | undefined = regionId
+    ? getGangwonRegionByIdOrName(regionId)
+    : undefined;
+  if (!currentRegion) {
+    currentRegion = findGangwonRegionByCoords(cLng, cLat);
   }
   if (!currentRegion) {
     currentRegion = getGangwonRegionByIdOrName('wonju')!;

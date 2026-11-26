@@ -1820,18 +1820,39 @@ export const ControlPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* 3. 강원 도심 거점 원클릭 드론 3D 투어 */}
+            {/* 3. 강원 18개 전 시·군 도심 원클릭 드론 3D 투어 */}
             <div className="space-y-1.5">
-              <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
-                <Compass className="w-3.5 h-3.5 text-emerald-400" />
-                <span>강원 주요 도심 3D 랜드마크 투어</span>
-              </span>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>강원 18개 시·군 3D 랜드마크 투어</span>
+                </span>
+                <span className="text-[9.5px] font-bold text-emerald-400/90 bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                  18/18
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-0.5">
                 {[
+                  // 강원 7개 시
                   { regionId: 'wonju', label: '원주 혁신도시', lng: 127.977, lat: 37.322, zoom: 15.8 },
                   { regionId: 'chuncheon', label: '춘천 시청·명동', lng: 127.7295, lat: 37.8813, zoom: 15.8 },
                   { regionId: 'gangneung', label: '강릉 교동·KTX', lng: 128.899, lat: 37.764, zoom: 15.8 },
                   { regionId: 'sokcho', label: '속초 청초호', lng: 128.5918, lat: 38.2044, zoom: 15.6 },
+                  { regionId: 'donghae', label: '동해 천곡·시청', lng: 129.1143, lat: 37.5247, zoom: 15.6 },
+                  { regionId: 'taebaek', label: '태백 황지·시청', lng: 128.9888, lat: 37.1640, zoom: 15.6 },
+                  { regionId: 'samcheok', label: '삼척 정라·시청', lng: 129.1658, lat: 37.4498, zoom: 15.6 },
+                  // 강원 11개 군
+                  { regionId: 'hongcheon', label: '홍천 홍천읍', lng: 127.8886, lat: 37.6972, zoom: 15.6 },
+                  { regionId: 'hoengseong', label: '횡성 횡성읍', lng: 127.9852, lat: 37.4915, zoom: 15.6 },
+                  { regionId: 'yeongwol', label: '영월 영월읍', lng: 128.4615, lat: 37.1835, zoom: 15.6 },
+                  { regionId: 'pyeongchang', label: '평창 평창읍', lng: 128.3905, lat: 37.3705, zoom: 15.6 },
+                  { regionId: 'jeongseon', label: '정선 정선읍', lng: 128.6605, lat: 37.3805, zoom: 15.6 },
+                  { regionId: 'cheorwon', label: '철원 갈말·신철원', lng: 127.3135, lat: 38.1468, zoom: 15.6 },
+                  { regionId: 'hwacheon', label: '화천 화천읍', lng: 127.7082, lat: 38.1062, zoom: 15.6 },
+                  { regionId: 'yanggu', label: '양구 양구읍', lng: 127.9885, lat: 38.1092, zoom: 15.6 },
+                  { regionId: 'inje', label: '인제 인제읍', lng: 128.1704, lat: 38.0695, zoom: 15.6 },
+                  { regionId: 'goseong', label: '고성 간성읍', lng: 128.4678, lat: 38.3805, zoom: 15.6 },
+                  { regionId: 'yangyang', label: '양양 양양읍', lng: 128.6285, lat: 38.0754, zoom: 15.6 },
                 ].map((spot) => (
                   <button
                     key={spot.regionId}

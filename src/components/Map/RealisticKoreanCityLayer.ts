@@ -301,6 +301,12 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     if (clearState) {
+      if (this.activeBuildIdleId) {
+        clearTimeout(this.activeBuildIdleId);
+        this.activeBuildIdleId = null;
+      }
+      this.isBuildingGeometry = false;
+      this.hasInitialBuilt = false;
       this.persistentBuildingMap.clear();
       this.builtBuildingKeys.clear();
       this.temporaryElevationBuildingKeys.clear();

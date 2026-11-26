@@ -4477,11 +4477,18 @@ export const MapViewer: React.FC = () => {
   }, [selectedFacilityId, setTransformGizmoMode, selectFacility, removePlacedFacility]);
 
   // 8-1. [V-World 3D 실측 데이터 시·군 동적 로드 및 18개 시·군 VRAM 자원 정리]
+  const prevResetRegionRef = useRef<string | null>(null);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapLoaded) return;
     const regPreset = getGangwonRegionByIdOrName(selectedRegionId || 'wonju');
-    if (regPreset) {
+    const regionChanged = prevResetRegionRef.current !== (regPreset?.id || selectedRegionId);
+    if (regPreset && regionChanged) {
+      prevResetRegionRef.current = regPreset.id;
+      lastSyncedStateRef.current = null;
+      if (isSyncingVworldRef.current) {
+        pendingSyncMapRef.current = map;
+      }
       if (realisticKoreanCityLayerRef.current) {
         realisticKoreanCityLayerRef.current.resetForRegionChange(
           [regPreset.center[0], regPreset.center[1]],
@@ -4502,7 +4509,7 @@ export const MapViewer: React.FC = () => {
         (c.lat - regPreset.center[1]) * 111000
       );
       // 이미 해당 리전 영역 내에 카메라가 있을 때만 즉시 동기화 (타 지역 flyTo 이동 중에는 도착 후 moveend에서 실행)
-      if (distToRegionM < 12000) {
+      if (distToRegionM < 15000) {
         syncVworldBuildingData(map);
       }
     }
