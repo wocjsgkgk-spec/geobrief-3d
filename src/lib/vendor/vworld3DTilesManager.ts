@@ -167,6 +167,14 @@ export class VWorld3DTilesManager {
       return;
     }
 
+    // 강원 18개 시·군 전역 패닝 시 현재 카메라 좌표에 맞는 지역 3D Tiles로 자동 전환
+    const mapCenter = map.getCenter();
+    const detectedRegion = vworldReverseApiClient.getBest3DTilesRegion(mapCenter.lng, mapCenter.lat);
+    if (detectedRegion && detectedRegion !== this.currentRegion) {
+      this.switchRegion(detectedRegion);
+      return;
+    }
+
     const bounds = map.getBounds();
     const viewWest = bounds.getWest() - 0.002;
     const viewEast = bounds.getEast() + 0.002;

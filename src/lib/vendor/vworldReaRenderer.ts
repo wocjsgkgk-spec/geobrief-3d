@@ -421,49 +421,40 @@ function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number
 }
 
 function drawPublicHQFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
-  // 1-Bay (3.2m) × 1-Floor (3.0m) High-Grade Curtain Wall Module at 1024×1024
+  // 1-Bay (3.2m) × 1-Floor (3.0m) V-World Bright Curtain Wall Module at 1024×1024
   const glassThemes = [
-    { start: '#042f2e', mid: '#0f766e', end: '#14b8a6', mullion: '#e2e8f0' }, // 0: Emerald Reflective Glass
-    { start: '#082f49', mid: '#0284c7', end: '#38bdf8', mullion: '#f8fafc' }, // 1: Sky Blue Reflective Glass
-    { start: '#0f172a', mid: '#0369a1', end: '#7dd3fc', mullion: '#cbd5e1' }, // 2: Cyan Silver Mirror
-    { start: '#1c1917', mid: '#44403c', end: '#78716c', mullion: '#94a3b8' }, // 3: Vivid Emerald Glass
+    { start: '#99f6e4', mid: '#2dd4bf', end: '#0d9488', mullion: '#f1f5f9' }, // 0: Bright Emerald Sky Glass
+    { start: '#bae6fd', mid: '#38bdf8', end: '#0284c7', mullion: '#f8fafc' }, // 1: V-World Sky Blue Glass
+    { start: '#e0f2fe', mid: '#7dd3fc', end: '#0369a1', mullion: '#e2e8f0' }, // 2: Silver Mirror Curtain Wall
+    { start: '#cbd5e1', mid: '#94a3b8', end: '#475569', mullion: '#f8fafc' }, // 3: Modern Titanium Glass
   ];
   const theme = glassThemes[variant % glassThemes.length];
 
-  // Base Reflective Glass
   const grad = ctx.createLinearGradient(0, 0, w, h);
   grad.addColorStop(0, theme.start);
-  grad.addColorStop(0.4, theme.mid);
+  grad.addColorStop(0.5, theme.mid);
   grad.addColorStop(1, theme.end);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // Interior venetian blind simulation (top 35% of vision glass)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-  for (let by = 30; by < 320; by += 18) {
-    ctx.fillRect(15, by, w - 30, 8);
-  }
+  // Diagonal sky cloud reflection highlight
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
+  ctx.beginPath();
+  ctx.moveTo(w * 0.1, 0);
+  ctx.lineTo(w * 0.45, 0);
+  ctx.lineTo(w * 0.25, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fill();
 
-  // Aluminum Mullion & Transom Architecture (Silver profile)
+  // Clean Aluminum Mullion & Spandrel Profile
   ctx.fillStyle = theme.mullion;
-  // Outer perimeter frames
-  ctx.fillRect(0, 0, 16, h); // left mullion
-  ctx.fillRect(w - 16, 0, 16, h); // right mullion
-  ctx.fillRect(0, 0, w, 22); // top transom
-  ctx.fillRect(0, h - 22, w, 22); // bottom transom
-
-  // Center vertical mullion (dividing 3.2m bay into two 1.6m panes)
-  ctx.fillRect(w * 0.5 - 12, 0, 24, h);
-
-  // Horizontal mid-transom (vision vs spandrel)
-  ctx.fillRect(0, 320, w, 18);
-
-  // Bevel shadow on mullions
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-  ctx.fillRect(16, 0, 4, h);
-  ctx.fillRect(w * 0.5 + 12, 0, 4, h);
-  ctx.fillRect(0, 22, w, 4);
-  ctx.fillRect(0, 338, w, 4);
+  ctx.fillRect(0, 0, 12, h);
+  ctx.fillRect(w - 12, 0, 12, h);
+  ctx.fillRect(0, 0, w, 18);
+  ctx.fillRect(0, h - 18, w, 18);
+  ctx.fillRect(w * 0.5 - 8, 0, 16, h);
+  ctx.fillRect(0, 320, w, 16);
 }
 
 function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
@@ -1190,19 +1181,50 @@ export function classifyVWorldReaStyle(
     category = 'residential';
     // 단독주택·빌라: Mat 12~13 (2종 적벽돌, 스타코)
     slot = 12 + (Math.abs(seed) % 2);
+    const isEastCoast = coordsLngLat ? coordsLngLat[0] >= 128.45 : false;
+    const isHighland = coordsLngLat ? (coordsLngLat[1] < 37.45 && coordsLngLat[0] >= 128.15) : false;
     const pick = Math.abs(seed) % 100;
-    if (pick < 55) {
-      roofType = 'gabled';
-      roofMaterialIndex = 2; // Mat 18 (기와)
-    } else if (pick < 80) {
-      roofType = 'concrete';
-      roofMaterialIndex = 1; // Mat 17 (슬래브)
-    } else if (pick < 90) {
-      roofType = 'urethane';
-      roofMaterialIndex = 0; // Mat 16 (우레탄)
+    if (isEastCoast) {
+      // 강원 영동 해안권(강릉·속초·동해·삼척·고성·양양): 코발트/징크 강판 및 밝은 슬래브 비중 상향
+      if (pick < 35) {
+        roofType = 'gabled';
+        roofMaterialIndex = 2;
+      } else if (pick < 65) {
+        roofType = 'concrete';
+        roofMaterialIndex = 1;
+      } else if (pick < 88) {
+        roofType = 'zinc';
+        roofMaterialIndex = 3;
+      } else {
+        roofType = 'urethane';
+        roofMaterialIndex = 0;
+      }
+    } else if (isHighland) {
+      // 강원 고원권(태백·평창·정선·영월): 경사 박공 및 강판 지붕 비중 상향
+      if (pick < 65) {
+        roofType = 'gabled';
+        roofMaterialIndex = 2;
+      } else if (pick < 85) {
+        roofType = 'zinc';
+        roofMaterialIndex = 3;
+      } else {
+        roofType = 'concrete';
+        roofMaterialIndex = 1;
+      }
     } else {
-      roofType = 'zinc';
-      roofMaterialIndex = 3; // Mat 19 (징크/코발트)
+      if (pick < 55) {
+        roofType = 'gabled';
+        roofMaterialIndex = 2; // Mat 18 (기와)
+      } else if (pick < 80) {
+        roofType = 'concrete';
+        roofMaterialIndex = 1; // Mat 17 (슬래브)
+      } else if (pick < 90) {
+        roofType = 'urethane';
+        roofMaterialIndex = 0; // Mat 16 (우레탄)
+      } else {
+        roofType = 'zinc';
+        roofMaterialIndex = 3; // Mat 19 (징크/코발트)
+      }
     }
     if (computedHeight < 6.0 || computedHeight > 11.0) {
       computedHeight = 6.5 + (Math.abs(seed) % 36) * 0.1; // 6.5m ~ 10.0m
