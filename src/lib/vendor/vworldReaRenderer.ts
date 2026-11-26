@@ -109,6 +109,22 @@ function createProceduralCanvasTexture(
   const ctx = canvas.getContext('2d');
   if (ctx) {
     drawFn(ctx, 1024, 1024);
+    // [V-World 실사 자재 미세 그레인] 단색 플라스틱 느낌을 제거하고 실제 콘크리트/석재/방수 입자감 부여
+    try {
+      const imgData = ctx.getImageData(0, 0, 1024, 1024);
+      const d = imgData.data;
+      let seed = 1337;
+      for (let i = 0; i < d.length; i += 4) {
+        seed = (seed * 1664525 + 1013904223) | 0;
+        const grain = ((seed >>> 24) & 0xf) - 7; // -7 .. +8 미세 입자
+        d[i] = Math.min(255, Math.max(0, d[i] + grain));
+        d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + grain));
+        d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + grain));
+      }
+      ctx.putImageData(imgData, 0, 0);
+    } catch {
+      // ignore if canvas tainted
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas);

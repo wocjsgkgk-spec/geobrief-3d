@@ -280,6 +280,12 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float shadowFactor = smoothstep(0.0, 1.8, max(0.0, vHeight));
   float finalGroundingAo = mix(0.92, 1.0, shadowFactor);
 
+  // [V-World 실사 림 라이트] 수직 외벽에 하늘빛 림 라이트(Sky Rim Fill)를 더해 입체감 극대화
+  if (isVerticalWall) {
+    float rim = pow(1.0 - NdotV, 2.2) * 0.12 * (1.0 - uNightFactor);
+    diffuseColor.rgb += uSkyHorizonColor * rim;
+  }
+
   // 차폐 음영 및 텍스처 미세 AO 결합 적용 (과도한 3중 감쇠 방지)
   diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.22));
 
