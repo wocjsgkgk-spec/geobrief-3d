@@ -496,19 +496,13 @@ function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.fillStyle = theme.base;
   ctx.fillRect(0, 0, w, h);
 
-  // Subtle architectural stone cladding joints (줄눈)
-  ctx.strokeStyle = 'rgba(71, 85, 105, 0.16)';
-  ctx.lineWidth = 3;
-  for (let y = 0; y < h; y += 256) {
+  // Subtle architectural stone cladding joints (저주파 연회색 줄눈으로 원경 모아레 방지)
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+  ctx.lineWidth = 2;
+  for (let y = 0; y < h; y += 512) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(w, y);
-    ctx.stroke();
-  }
-  for (let x = 0; x < w; x += 340) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
     ctx.stroke();
   }
 
@@ -518,13 +512,13 @@ function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: numbe
   const ww = w - 224;
   const wh = 720;
 
-  ctx.fillStyle = theme.frame;
-  ctx.fillRect(wx - 12, wy - 12, ww + 24, wh + 24);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillRect(wx - 6, wy - 6, ww + 12, wh + 12);
 
   const glassGrad = ctx.createLinearGradient(wx, wy, wx, wy + wh);
-  glassGrad.addColorStop(0, '#7dd3fc');
-  glassGrad.addColorStop(0.45, '#38bdf8');
-  glassGrad.addColorStop(1, '#0284c7');
+  glassGrad.addColorStop(0, '#bae6fd');
+  glassGrad.addColorStop(0.5, '#7dd3fc');
+  glassGrad.addColorStop(1, '#38bdf8');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(wx, wy, ww, wh);
 
@@ -566,17 +560,12 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
   ];
   const theme = brickThemes[variant % brickThemes.length];
 
-  ctx.fillStyle = theme.mortar;
-  ctx.fillRect(0, 0, w, h);
-
   ctx.fillStyle = theme.base;
-  const bW = 72;
-  const bH = 28;
-  for (let y = 0; y < h; y += bH + 4) {
-    const offset = (Math.floor(y / bH) % 2) * (bW / 2);
-    for (let x = -offset; x < w; x += bW + 4) {
-      ctx.fillRect(x, y, bW, bH);
-    }
+  ctx.fillRect(0, 0, w, h);
+  // 옅은 수평 마감선만 배치해 원경 노이즈 제거
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  for (let y = 0; y < h; y += 256) {
+    ctx.fillRect(0, y, w, 6);
   }
 
   // Residential Casement Window (x: 190 to 834, y: 170 to 830)

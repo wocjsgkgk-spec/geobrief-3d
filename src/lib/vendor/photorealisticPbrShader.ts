@@ -287,6 +287,13 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float blockHash = fract(sin(dot(floor(vWorldPositionVec.xz * 0.08), vec2(12.9898, 78.233))) * 43758.5453);
   diffuseColor.rgb *= mix(0.95, 1.04, blockHash);
 
+  // [V-World dtkmap.do 대기 원근감 (Aerial Perspective)]
+  // 원경 건물이 지평선 하늘색(#d6eaf8)과 자연스럽게 어우러져 항공사진 지면과 이질감 해소
+  float camDist = length(uCameraPosition - vWorldPositionVec);
+  float aerialFog = smoothstep(750.0, 2800.0, camDist) * (1.0 - uNightFactor * 0.65);
+  vec3 vworldHorizon = mix(vec3(0.84, 0.92, 0.98), vec3(0.08, 0.12, 0.22), uNightFactor);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vworldHorizon, aerialFog * 0.55);
+
   // 6. [V-World 시각화 테마] (uThemeMode: 0=실사, 1=용도 색상, 2=층고 스펙트럼)
   if (uThemeMode > 1.5) {
     // 층고 스카이라인 히트맵 (저층: 청록 -> 중층: 스카이블루 -> 고층: 앰버/코랄)

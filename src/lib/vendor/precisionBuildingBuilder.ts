@@ -270,10 +270,11 @@ export class PrecisionBuildingBuilder {
             v1 = height / 3.0;
           }
         } else {
+          // [V-World 원경 모아레 제거] LOD 1에서는 UV 밀도를 절반으로 완화해 창문이 검게 뭉치지 않도록 보정
           u0 = 0.0;
-          u1 = elen / 3.2;
+          u1 = Math.max(1.0, elen / 6.4);
           v0 = 0.0;
-          v1 = height / 3.0;
+          v1 = Math.max(1.0, height / 6.0);
         }
 
         addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, v0], [u1, v0], [u1, v1], [u0, v1], style.wallColorRgb);
