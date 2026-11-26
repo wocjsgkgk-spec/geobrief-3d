@@ -309,10 +309,9 @@ function drawCommercialPodiumFacade(ctx: CanvasRenderingContext2D, w: number, h:
   const glassW = w - 100;
 
   const glassGrad = ctx.createLinearGradient(glassX, glassY, glassX, glassY + glassH);
-  glassGrad.addColorStop(0, '#38bdf8');
-  glassGrad.addColorStop(0.3, '#0284c7');
-  glassGrad.addColorStop(0.7, '#0f172a');
-  glassGrad.addColorStop(1, '#020617');
+  glassGrad.addColorStop(0, '#bae6fd');
+  glassGrad.addColorStop(0.5, '#7dd3fc');
+  glassGrad.addColorStop(1, '#38bdf8');
   ctx.fillStyle = glassGrad;
   ctx.fillRect(glassX, glassY, glassW, glassH);
 

@@ -783,6 +783,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleMoveStart = (): void => {
     this.isMoving = true;
+    if (this.renderer) {
+      this.renderer.setPixelRatio(1.0);
+    }
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
@@ -791,6 +794,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleMoveEnd = (): void => {
     this.isMoving = false;
+    if (this.renderer) {
+      const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+      this.renderer.setPixelRatio(pr);
+    }
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
@@ -2045,9 +2052,9 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         const sliceStartTime = performance.now();
         let sliceCount = 0;
-        const BATCH_LIMIT = 500;
+        const TIME_BUDGET_MS = 10.0;
 
-        while (featureIdx < features.length && sliceCount < BATCH_LIMIT) {
+        while (featureIdx < features.length && (sliceCount === 0 || (performance.now() - sliceStartTime) < TIME_BUDGET_MS)) {
           sliceCount++;
           const feat = features[featureIdx++];
           const key = getBuildingFeatureKey(feat);
