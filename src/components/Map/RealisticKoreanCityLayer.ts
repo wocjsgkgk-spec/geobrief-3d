@@ -1847,7 +1847,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         allPrecise = false;
       }
 
-      const baseElev = rawElev;
+      const baseElev = isTerrainActive ? Math.max(0, rawElev - 0.6) : 0;
       this.currentBuildingBaseElev = baseElev;
       const topElev = baseElev + height;
 
@@ -2210,15 +2210,14 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         const cAttr = geo.getAttribute('color') as THREE.BufferAttribute;
         const uAttr = geo.getAttribute('uv') as THREE.BufferAttribute;
         const hAttr = geo.getAttribute('aHeight') as THREE.BufferAttribute;
-        if (pAttr) pAttr.needsUpdate = true;
-        if (nAttr) nAttr.needsUpdate = true;
-        if (cAttr) cAttr.needsUpdate = true;
-        if (uAttr) uAttr.needsUpdate = true;
-        if (hAttr) hAttr.needsUpdate = true;
+        if (pAttr) { pAttr.clearUpdateRanges(); pAttr.addUpdateRange(0, posOffset); pAttr.needsUpdate = true; }
+        if (nAttr) { nAttr.clearUpdateRanges(); nAttr.addUpdateRange(0, posOffset); nAttr.needsUpdate = true; }
+        if (cAttr) { cAttr.clearUpdateRanges(); cAttr.addUpdateRange(0, posOffset); cAttr.needsUpdate = true; }
+        if (uAttr) { uAttr.clearUpdateRanges(); uAttr.addUpdateRange(0, uvOffset); uAttr.needsUpdate = true; }
+        if (hAttr) { hAttr.clearUpdateRanges(); hAttr.addUpdateRange(0, heightOffset); hAttr.needsUpdate = true; }
       }
 
       geo.setDrawRange(0, totalVertices);
-      geo.computeBoundingSphere();
 
       if (!this.masterMesh) {
         this.masterMesh = new THREE.Mesh(geo, this.buildingMaterials);

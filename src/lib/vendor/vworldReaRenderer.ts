@@ -347,12 +347,20 @@ function drawApartmentFacade(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillRect(winX, winY, winW, winH);
 
   // 6) Diagonal Glass Sheen Reflection
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
   ctx.beginPath();
   ctx.moveTo(winX + 40, winY);
-  ctx.lineTo(winX + 260, winY);
-  ctx.lineTo(winX + 160, winY + winH);
+  ctx.lineTo(winX + 300, winY);
+  ctx.lineTo(winX + 180, winY + winH);
   ctx.lineTo(winX, winY + winH);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(186, 230, 253, 0.18)';
+  ctx.beginPath();
+  ctx.moveTo(winX + 380, winY);
+  ctx.lineTo(winX + 520, winY);
+  ctx.lineTo(winX + 420, winY + winH);
+  ctx.lineTo(winX + 280, winY + winH);
   ctx.closePath();
   ctx.fill();
 

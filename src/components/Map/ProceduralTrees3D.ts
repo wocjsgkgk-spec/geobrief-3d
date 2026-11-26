@@ -1028,7 +1028,6 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
         .multiply(this.cachedRotationZ);
 
       this.camera.projectionMatrix.copy(this.cachedRawMatrix).multiply(this.cachedLocalMatrix);
-      this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
       // 3. WebGL 상태 보존 및 렌더링 (GPU 파이프라인 스톨 방지)
       const prevFbo = (options as any)?.defaultFramebuffer ?? null;

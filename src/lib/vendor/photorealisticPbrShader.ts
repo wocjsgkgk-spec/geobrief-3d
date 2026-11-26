@@ -282,8 +282,10 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float shadowFactor = smoothstep(0.0, 1.8, max(0.0, vHeight));
   float finalGroundingAo = mix(0.92, 1.0, shadowFactor);
 
-  // [V-World 실사 림 라이트] 수직 외벽에 하늘빛 림 라이트(Sky Rim Fill)를 더해 입체감 극대화 (pow 제거 최적화)
+  // [V-World 실사 방향성 외벽 음영 & 림 라이트] 양지 웜화이트 vs 음지 쿨스카이 대비로 입체감 극대화
   if (isVerticalWall) {
+    float wallSunShade = mix(0.84, 1.06, clamp(NdotL * 0.6 + 0.4, 0.0, 1.0));
+    diffuseColor.rgb *= mix(wallSunShade, 1.0, uNightFactor * 0.7);
     float rim = oneMinusNdotV2 * 0.12 * (1.0 - uNightFactor);
     diffuseColor.rgb += uSkyHorizonColor * rim;
   }
