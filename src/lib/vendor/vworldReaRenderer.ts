@@ -92,6 +92,31 @@ export let GLOBAL_ALL_VWORLD_REA_MATERIALS: THREE.MeshStandardMaterial[] | null 
 /**
  * 1024x1024 고해상도 CanvasTexture 생성 헬퍼
  */
+let cachedGrainPattern: CanvasPattern | null = null;
+function getMicroGrainPattern(ctx: CanvasRenderingContext2D): CanvasPattern | null {
+  if (cachedGrainPattern) return cachedGrainPattern;
+  if (typeof document === 'undefined') return null;
+  const gCanvas = document.createElement('canvas');
+  gCanvas.width = 128;
+  gCanvas.height = 128;
+  const gCtx = gCanvas.getContext('2d');
+  if (!gCtx) return null;
+  const img = gCtx.createImageData(128, 128);
+  const d = img.data;
+  let seed = 1337;
+  for (let i = 0; i < d.length; i += 4) {
+    seed = (seed * 1664525 + 1013904223) | 0;
+    const v = (seed >>> 24) & 1;
+    d[i] = v ? 255 : 0;
+    d[i + 1] = v ? 255 : 0;
+    d[i + 2] = v ? 255 : 0;
+    d[i + 3] = 7; // 아주 은은한 2.7% 미세 입자감 (CPU 부하 0ms)
+  }
+  gCtx.putImageData(img, 0, 0);
+  cachedGrainPattern = ctx.createPattern(gCanvas, 'repeat');
+  return cachedGrainPattern;
+}
+
 function createProceduralCanvasTexture(
   drawFn: (ctx: CanvasRenderingContext2D, width: number, height: number) => void
 ): THREE.CanvasTexture {
@@ -109,21 +134,12 @@ function createProceduralCanvasTexture(
   const ctx = canvas.getContext('2d');
   if (ctx) {
     drawFn(ctx, 1024, 1024);
-    // [V-World 실사 자재 미세 그레인] 단색 플라스틱 느낌을 제거하고 실제 콘크리트/석재/방수 입자감 부여
-    try {
-      const imgData = ctx.getImageData(0, 0, 1024, 1024);
-      const d = imgData.data;
-      let seed = 1337;
-      for (let i = 0; i < d.length; i += 4) {
-        seed = (seed * 1664525 + 1013904223) | 0;
-        const grain = ((seed >>> 24) & 0xf) - 7; // -7 .. +8 미세 입자
-        d[i] = Math.min(255, Math.max(0, d[i] + grain));
-        d[i + 1] = Math.min(255, Math.max(0, d[i + 1] + grain));
-        d[i + 2] = Math.min(255, Math.max(0, d[i + 2] + grain));
-      }
-      ctx.putImageData(imgData, 0, 0);
-    } catch {
-      // ignore if canvas tainted
+    const pat = getMicroGrainPattern(ctx);
+    if (pat) {
+      ctx.save();
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, 1024, 1024);
+      ctx.restore();
     }
   }
 

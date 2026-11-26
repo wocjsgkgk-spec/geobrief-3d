@@ -719,19 +719,27 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
   };
 
+  private hasReanchoredForRegion = false;
+
   public reanchorTemporaryElevationBuildings(): void {
-    if (!this.map || this.isMoving || this.temporaryElevationBuildingKeys.size === 0) return;
+    if (!this.map || this.isMoving || this.isBuildingGeometry || this.hasReanchoredForRegion || this.temporaryElevationBuildingKeys.size === 0) return;
     if (this.reanchorDebounceTimer) clearTimeout(this.reanchorDebounceTimer);
     this.reanchorDebounceTimer = setTimeout(() => {
       this.reanchorDebounceTimer = null;
-      if (!this.map || this.isMoving || this.temporaryElevationBuildingKeys.size === 0) return;
-      // DEM 타일 로드 완료 시 임시 표고 건물만 점진적 재빌드 (기존 버퍼 전체 파괴 금지)
+      if (!this.map || this.isMoving || this.isBuildingGeometry || this.hasReanchoredForRegion || this.temporaryElevationBuildingKeys.size === 0) return;
+      const centerElev = typeof this.map.queryTerrainElevation === 'function'
+        ? this.map.queryTerrainElevation(this.map.getCenter())
+        : null;
+      if (centerElev === null || centerElev === undefined || !Number.isFinite(centerElev) || centerElev <= 0) {
+        return; // DEM 아직 미로드 시 무의미한 재빌드 루프 차단
+      }
+      this.hasReanchoredForRegion = true;
       for (const k of this.temporaryElevationBuildingKeys) {
         this.builtBuildingKeys.delete(k);
       }
       this.temporaryElevationBuildingKeys.clear();
       this.extractAndBuildFromMap();
-    }, 450);
+    }, 1200);
   }
 
   private terrainDebounceTimer: any = null;
@@ -783,9 +791,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleMoveStart = (): void => {
     this.isMoving = true;
-    if (this.renderer) {
-      this.renderer.setPixelRatio(1.0);
-    }
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
@@ -794,10 +799,6 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
   private handleMoveEnd = (): void => {
     this.isMoving = false;
-    if (this.renderer) {
-      const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
-      this.renderer.setPixelRatio(pr);
-    }
     if (this.moveEndTimer) {
       clearTimeout(this.moveEndTimer);
       this.moveEndTimer = null;
@@ -1178,6 +1179,7 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
     this.isBuildingGeometry = false;
     this.hasInitialBuilt = false;
+    this.hasReanchoredForRegion = false;
     this.cachedFeatures = [];
     this.vectorTileFeatures = [];
     this.externalFeatures = [];
@@ -2007,16 +2009,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
       }
 
+      const currentMapCenter = map.getCenter();
+      const cachedCenter = { lng: currentMapCenter.lng, lat: currentMapCenter.lat };
+
+      // [카메라 중심 우선 빌드] 화면 한가운데 건물이 0.1초 내 가장 먼저 렌더링되도록 거리순 정렬
+      viewportFeatures.sort((a, b) => {
+        const ga = a.geometry;
+        const gb = b.geometry;
+        const ca = ga.type === 'Polygon' ? ga.coordinates[0]?.[0] : ga.coordinates[0]?.[0]?.[0];
+        const cb = gb.type === 'Polygon' ? gb.coordinates[0]?.[0] : gb.coordinates[0]?.[0]?.[0];
+        if (!ca || !cb) return 0;
+        const da = (ca[0] - cachedCenter.lng) ** 2 + (ca[1] - cachedCenter.lat) ** 2;
+        const db = (cb[0] - cachedCenter.lng) ** 2 + (cb[1] - cachedCenter.lat) ** 2;
+        return da - db;
+      });
+
       // [강제 집행] 특정 개수로 건물을 자르는 코드(slice/limit) 완전 제거: 뷰포트 내 실제 건물 100% 렌더링
       const features = viewportFeatures;
 
       let featureIdx = 0;
       let newlyAddedCount = 0;
-      // [최초 버벅거림 제로화 & 고속 빌드]: 8.0ms 프레임 버짓으로 브라우저 60 FPS 유지하며 고속 슬라이스 빌드
-      const FRAME_BUDGET_MS = this.isMoving ? 1.5 : 8.0;
-
-      const currentMapCenter = map.getCenter();
-      const cachedCenter = { lng: currentMapCenter.lng, lat: currentMapCenter.lat };
       let cachedCenterElev = 0;
       try {
         if (typeof map.queryTerrainElevation === 'function') {
@@ -2052,9 +2064,10 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
 
         const sliceStartTime = performance.now();
         let sliceCount = 0;
-        const TIME_BUDGET_MS = 10.0;
+        const TIME_BUDGET_MS = this.hasInitialBuilt ? 22.0 : 45.0;
+        const MIN_SLICE_COUNT = this.hasInitialBuilt ? 80 : 250;
 
-        while (featureIdx < features.length && (sliceCount === 0 || (performance.now() - sliceStartTime) < TIME_BUDGET_MS)) {
+        while (featureIdx < features.length && (sliceCount < MIN_SLICE_COUNT || (performance.now() - sliceStartTime) < TIME_BUDGET_MS)) {
           sliceCount++;
           const feat = features[featureIdx++];
           const key = getBuildingFeatureKey(feat);
@@ -2075,14 +2088,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [무정지 1차 프리뷰 + 최종 일괄 업로드]: 초기 프리뷰 1회만 즉시 커밋하고, 이후에는 최종 완료 시 한 번에 업로드하여 버벅임 제거
-          if (!this.hasInitialBuilt && newlyAddedCount > 0 && this.hasAnySlotVertices()) {
-            this.commitAccumulatedGeometry();
-            this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
-            newlyAddedCount = 0;
-            this.hasInitialBuilt = true;
-            if (this.map) {
-              this.map.triggerRepaint();
+          // [즉각 표출 + 무버벅거림 점진 커밋]: 120동마다 즉시 GPU 버퍼 갱신으로 도심 3D가 빠르게 채워짐
+          if ((!this.hasInitialBuilt && newlyAddedCount >= 40) || newlyAddedCount >= 120) {
+            if (this.hasAnySlotVertices()) {
+              this.commitAccumulatedGeometry();
+              this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
+              newlyAddedCount = 0;
+              this.hasInitialBuilt = true;
+              if (this.map) {
+                this.map.triggerRepaint();
+              }
             }
           }
           this.activeBuildIdleId = setTimeout(executeSlice, 0);
