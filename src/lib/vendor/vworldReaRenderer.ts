@@ -146,55 +146,28 @@ function createProceduralCanvasTexture(
 
 function drawApartmentSideWall(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
   const configs = [
-    { base: '#ffffff', stripeA: '#1e3a8a', stripeB: '#ea580c', dong: '101동', border: '#00e5ff' }, // Navy / Orange
-    { base: '#fdfbf7', stripeA: '#881337', stripeB: '#d97706', dong: '102동', border: '#f59e0b' }, // Burgundy / Gold
-    { base: '#f8fafc', stripeA: '#047857', stripeB: '#64748b', dong: '201동', border: '#10b981' }, // Forest Green / Silver
+    { base: '#f4f2ed', stripeA: '#cbd5e1', stripeB: '#94a3b8' }, // 웜 아이보리 & 쿨 그레이
+    { base: '#f2efe9', stripeA: '#d6d3d1', stripeB: '#a8a29e' }, // 샌드스톤 & 웜 그레이
+    { base: '#f1f5f9', stripeA: '#cbd5e1', stripeB: '#64748b' }, // 클린 실버 화이트
   ];
   const cfg = configs[variant % configs.length];
 
   ctx.fillStyle = cfg.base;
   ctx.fillRect(0, 0, w, h);
 
-  // 브랜드 수직 밴드 (브랜드 컬러 스트라이프)
+  // 차분한 건축 수직 포인트 라인 (원색 2D 스티커 제거)
   ctx.fillStyle = cfg.stripeA;
-  ctx.fillRect(w * 0.38, 0, w * 0.20, h);
+  ctx.fillRect(w * 0.40, 0, w * 0.16, h);
   ctx.fillStyle = cfg.stripeB;
-  ctx.fillRect(w * 0.58, 0, w * 0.04, h);
+  ctx.fillRect(w * 0.56, 0, w * 0.03, h);
 
   // 수평 콘크리트 패널 줄눈
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(0, h * 0.5);
   ctx.lineTo(w, h * 0.5);
   ctx.stroke();
-
-  // 대형 동 번호 배지
-  ctx.save();
-  const badgeW = w * 0.56;
-  const badgeH = h * 0.24;
-  const badgeX = w * 0.22;
-  const badgeY = h * 0.26;
-
-  ctx.fillStyle = 'rgba(10, 25, 47, 0.94)';
-  if (ctx.roundRect) {
-    ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 18);
-  } else {
-    ctx.rect(badgeX, badgeY, badgeW, badgeH);
-  }
-  ctx.fill();
-
-  ctx.strokeStyle = cfg.border;
-  ctx.lineWidth = 6;
-  ctx.stroke();
-
-  // 순백색 고대비 동 번호 텍스트
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 78px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(cfg.dong, w * 0.50, badgeY + badgeH * 0.5);
-  ctx.restore();
 }
 
 function drawCommercialUpperFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
@@ -263,42 +236,13 @@ function drawCommercialPodiumFacade(ctx: CanvasRenderingContext2D, w: number, h:
 
   ctx.save();
   if (variant === 0) {
-    // 24시 편의점 (GS25 / CU 스타일)
-    ctx.fillStyle = '#059669'; // Emerald Green
+    // 차분한 V-World 실사 상가 기단부 간판 바 (원색 2D 스티커 제거)
+    ctx.fillStyle = variant === 0 ? '#475569' : variant === 1 ? '#57534e' : '#334155';
     ctx.fillRect(signX, signY, signW, signH);
-    ctx.fillStyle = '#0284c7'; // Sky Blue accent
-    ctx.fillRect(signX, signY, 120, signH);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 64px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('24시 편의점', w * 0.5, signY + signH * 0.5);
-  } else if (variant === 1) {
-    // 베이커리 & 약국
-    ctx.fillStyle = '#dc2626';
-    ctx.fillRect(signX, signY, signW * 0.5 - 10, signH);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 52px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('BAKERY', signX + (signW * 0.5 - 10) * 0.5, signY + signH * 0.5);
-
-    ctx.fillStyle = '#2563eb';
-    ctx.fillRect(signX + signW * 0.5 + 10, signY, signW * 0.5 - 10, signH);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('약 국 (十)', signX + signW * 0.5 + 10 + (signW * 0.5 - 10) * 0.5, signY + signH * 0.5);
-  } else {
-    // CAFE & BISTRO
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(signX, signY, signW, signH);
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(signX + 6, signY + 6, signW - 12, signH - 12);
-    ctx.fillStyle = '#f59e0b';
-    ctx.font = 'bold 58px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('CAFE & BISTRO', w * 0.5, signY + signH * 0.5);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.fillRect(signX, signY, signW, 12);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(signX + 36, signY + signH * 0.42, signW * 0.45, 18);
   }
   ctx.restore();
 

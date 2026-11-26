@@ -586,8 +586,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.fillLight.position.set(160, 220, 140);
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): 브이월드 화사한 한낮 전역 환경광 0xf8fafc, 0.95배
-      this.ambientLight = new THREE.AmbientLight(0xf8fafc, 0.95);
+      // - AmbientLight(환경광): V-World 항공사진과 어우러지는 자연 주간광 0xfbfaf6
+      this.ambientLight = new THREE.AmbientLight(0xfbfaf6, 0.95);
       this.scene.add(this.ambientLight);
 
       // - HemisphereLight: 청명 하늘 #e0f2fe, 밝은 대지 반사 #dbe2ea, 1.15배
