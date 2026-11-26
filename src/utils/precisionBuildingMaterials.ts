@@ -20,6 +20,7 @@ export interface BuildingStyleAssignment {
   signboardSlot: number; // 18
   porchSlot: number; // 19
   roofType: 'urethane' | 'concrete' | 'gabled' | 'zinc';
+  wallColorRgb: [number, number, number];
   roofColorRgb: [number, number, number];
   parapetColorRgb: [number, number, number];
   penthouseColorRgb: [number, number, number];
@@ -164,6 +165,43 @@ export function classifyBuildingStyle(
     podiumSlot = 12;
   }
 
+  // [craft-anything 기반 건물별 고유 외벽 파스텔/스톤 틴트 팔레트]
+  // 동일 슬롯 내에서도 건물마다 색온도와 명도가 자연스럽게 달라져 획일화된 박스군 해소
+  const APT_TINTS: [number, number, number][] = [
+    [1.00, 0.99, 0.97], // 크림 화이트
+    [0.95, 0.96, 0.98], // 쿨 실버
+    [0.98, 0.94, 0.89], // 웜 베이지
+    [0.91, 0.95, 0.96], // 스카이 민트 그레이
+    [0.96, 0.94, 0.92], // 라이트 샌드스톤
+  ];
+  const COM_TINTS: [number, number, number][] = [
+    [1.00, 0.98, 0.95], // 아이보리 화강석
+    [0.92, 0.94, 0.98], // 블루 스틸 그레이
+    [0.98, 0.91, 0.86], // 웜 테라코타 틴트
+    [0.90, 0.92, 0.90], // 모던 슬레이트
+  ];
+  const VILLA_TINTS: [number, number, number][] = [
+    [1.00, 0.96, 0.92], // 웜 브릭
+    [0.96, 0.95, 0.90], // 라임스톤 크림
+    [0.94, 0.96, 0.98], // 화이트 스타코
+    [0.99, 0.92, 0.86], // 살구빛 테라코타
+  ];
+  const PUB_TINTS: [number, number, number][] = [
+    [0.96, 0.99, 1.00], // 클린 글래스 블루
+    [0.94, 0.98, 0.96], // 에메랄드 글래스
+    [0.98, 0.98, 0.99], // 실버 커튼월
+  ];
+
+  const wallTintPool =
+    reaStyle.category === 'apartment'
+      ? APT_TINTS
+      : reaStyle.category === 'commercial'
+      ? COM_TINTS
+      : reaStyle.category === 'public'
+      ? PUB_TINTS
+      : VILLA_TINTS;
+  const wallColorRgb = wallTintPool[absSeed % wallTintPool.length];
+
   return {
     category: reaStyle.category === 'apartment' ? 'apartment' : reaStyle.category === 'commercial' ? 'commercial' : reaStyle.category === 'public' ? 'public' : 'villa',
     facadeSlot,
@@ -172,6 +210,7 @@ export function classifyBuildingStyle(
     signboardSlot: commercialPodiumSlot,
     porchSlot: 0,
     roofType: reaStyle.roofType,
+    wallColorRgb,
     roofColorRgb,
     parapetColorRgb: [0.98, 0.99, 1.0],
     penthouseColorRgb: [0.96, 0.97, 0.99],

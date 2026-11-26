@@ -283,6 +283,10 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   // 차폐 음영 및 텍스처 미세 AO 결합 적용 (과도한 3중 감쇠 방지)
   diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.22));
 
+  // [craft-anything 절차적 미세 웨더링] 월드 좌표 기반 건물/블록별 미세 명도 변주(0.95~1.04)로 기계적 반복감 제거
+  float blockHash = fract(sin(dot(floor(vWorldPositionVec.xz * 0.08), vec2(12.9898, 78.233))) * 43758.5453);
+  diffuseColor.rgb *= mix(0.95, 1.04, blockHash);
+
   // 6. [V-World 시각화 테마] (uThemeMode: 0=실사, 1=용도 색상, 2=층고 스펙트럼)
   if (uThemeMode > 1.5) {
     // 층고 스카이라인 히트맵 (저층: 청록 -> 중층: 스카이블루 -> 고층: 앰버/코랄)

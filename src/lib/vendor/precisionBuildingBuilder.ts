@@ -276,7 +276,7 @@ export class PrecisionBuildingBuilder {
           v1 = height / 3.0;
         }
 
-        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, v0], [u1, v0], [u1, v1], [u0, v1]);
+        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, v0], [u1, v0], [u1, v1], [u0, v1], style.wallColorRgb);
       }
 
       // 4단: 단일 솔리드 옥상 바닥 캡 (절대 지붕 뚫림 없음)
@@ -389,7 +389,7 @@ export class PrecisionBuildingBuilder {
           u1 = elen / 3.2;
         }
 
-        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, 0], [u1, 0], [u1, 1], [u0, 1]);
+        addSlotQuad(slot, pBL, pBR, pTR, pTL, [nx, 0, nz], [u0, 0], [u1, 0], [u1, 1], [u0, 1], style.wallColorRgb);
 
         // 2단 본동 외벽
         if (mainH > 0.5) {
@@ -416,7 +416,7 @@ export class PrecisionBuildingBuilder {
             vu1 = elen / 3.2;
           }
 
-          addSlotQuad(mainSlot, wBL, wBR, wTR, wTL, [nx, 0, nz], [vu0, vv0], [vu1, vv0], [vu1, vv1], [vu0, vv1]);
+          addSlotQuad(mainSlot, wBL, wBR, wTR, wTL, [nx, 0, nz], [vu0, vv0], [vu1, vv0], [vu1, vv1], [vu0, vv1], style.wallColorRgb);
         }
 
         // 3단 단일 옥상 난간 (내벽 인셋 생략)
@@ -518,6 +518,60 @@ export class PrecisionBuildingBuilder {
             [pA.x, topElev, pA.z],
             [pB.x, topElev, pB.z],
             [pC.x, topElev, pC.z],
+            [0, 1, 0],
+            getRoofUv(pA.x, pA.z),
+            getRoofUv(pB.x, pB.z),
+            getRoofUv(pC.x, pC.z),
+            style.roofColorRgb
+          );
+        }
+      }
+
+      // [craft-anything 기반 고층 건물 상층부 셋백(Setback) 타워형 매스 변주]
+      if (style.roofType !== 'gabled' && height >= 24.0 && areaSqm >= 380 && (Math.abs(seed) % 100) < 35) {
+        const setbackH = Math.min(9.0, Math.max(4.5, height * 0.18));
+        const sbTop = topElev + setbackH;
+        const sbScale = 0.78;
+        const sbPts = pts2D.map((p) => ({
+          x: cx + (p.x - cx) * sbScale,
+          z: cz + (p.z - cz) * sbScale,
+        }));
+        for (let i = 0; i < sbPts.length; i++) {
+          const j = (i + 1) % sbPts.length;
+          const p0 = sbPts[i];
+          const p1 = sbPts[j];
+          const dx = p1.x - p0.x;
+          const dz = p1.z - p0.z;
+          const elen = Math.hypot(dx, dz);
+          if (elen < 0.1) continue;
+          const nx = -dz / elen;
+          const nz = dx / elen;
+          addSlotQuad(
+            style.facadeSlot,
+            [p0.x, topElev, p0.z],
+            [p1.x, topElev, p1.z],
+            [p1.x, sbTop, p1.z],
+            [p0.x, sbTop, p0.z],
+            [nx, 0, nz],
+            [0, 0],
+            [elen / 3.2, 0],
+            [elen / 3.2, setbackH / 3.0],
+            [0, setbackH / 3.0],
+            style.wallColorRgb
+          );
+        }
+        const sbFlat: number[] = [];
+        for (const p of sbPts) sbFlat.push(p.x, p.z);
+        const sbTris = Earcut(sbFlat, holeIndices, 2);
+        for (let k = 0; k < sbTris.length; k += 3) {
+          const pA = sbPts[sbTris[k]];
+          const pB = sbPts[sbTris[k + 1]];
+          const pC = sbPts[sbTris[k + 2]];
+          if (!pA || !pB || !pC) continue;
+          addRooftopTriangle(
+            [pA.x, sbTop, pA.z],
+            [pB.x, sbTop, pB.z],
+            [pC.x, sbTop, pC.z],
             [0, 1, 0],
             getRoofUv(pA.x, pA.z),
             getRoofUv(pB.x, pB.z),

@@ -18,6 +18,7 @@
 import type { ExternalSpatialBuildingFeature } from '@/utils/externalSpatialData';
 import { resolveFullUrl } from '@/utils/urlHelper';
 import { realDataSpatialStore } from '@/utils/realDataGeometryInjector';
+import { ghostDownloaderEngine } from '@/lib/vendor/ghostDownloaderEngine';
 import { isPointInMilitaryIdleSite } from '@/utils/master3DRendererManager';
 
 export interface VworldRegionManifest {
@@ -331,16 +332,26 @@ export async function fetchLocalVworldBuildings(options: {
       }
     }
 
-    // BBOX 미지정 시에만 정적 파일 로드 (최소 필요 시)
+    // BBOX 미지정 또는 스트리밍 폴백 시 Ghost-Downloader-3 멀티청크 분할 엔진으로 고속 수신
     const fileUrl = resolveFullUrl(`/data/vworld/converted/${fileName}`);
-    const res = await fetch(fileUrl);
-    if (!res.ok) {
-      // coreFile 실패 시 메인 파일로 폴백
+    try {
+      const json = await ghostDownloaderEngine.downloadJson<{ features?: any[] }>(fileUrl);
+      const features = json.features || [];
+      localBuildingsMemoryCache.set(cacheKey, features);
+      registerFeaturesToRealStore(features);
+      return {
+        success: true,
+        hasLocalData: true,
+        regionId: rId,
+        featureCount: features.length,
+        message: `Ghost-Downloader-3 멀티청크 로드 완료 (${features.length.toLocaleString()}동)`,
+        features: filterFeaturesByBbox(features, bbox),
+      };
+    } catch {
       if (fileName !== info.file) {
         const fallbackUrl = resolveFullUrl(`/data/vworld/converted/${info.file}`);
-        const fallbackRes = await fetch(fallbackUrl);
-        if (fallbackRes.ok) {
-          const json = await fallbackRes.json();
+        try {
+          const json = await ghostDownloaderEngine.downloadJson<{ features?: any[] }>(fallbackUrl);
           const features = json.features || [];
           localBuildingsMemoryCache.set(cacheKey, features);
           registerFeaturesToRealStore(features);
@@ -349,9 +360,11 @@ export async function fetchLocalVworldBuildings(options: {
             hasLocalData: true,
             regionId: rId,
             featureCount: features.length,
-            message: `브이월드 로컬 다운로드 데이터 로드 (${features.length.toLocaleString()}동 / 1순위 최우선 적용)`,
+            message: `Ghost-Downloader-3 폴백 멀티청크 로드 완료 (${features.length.toLocaleString()}동)`,
             features: filterFeaturesByBbox(features, bbox),
           };
+        } catch {
+          // ignore
         }
       }
       return {
@@ -362,20 +375,6 @@ export async function fetchLocalVworldBuildings(options: {
         features: [],
       };
     }
-
-    const json = await res.json();
-    const features = json.features || [];
-    localBuildingsMemoryCache.set(cacheKey, features);
-    registerFeaturesToRealStore(features);
-
-    return {
-      success: true,
-      hasLocalData: true,
-      regionId: rId,
-      featureCount: features.length,
-      message: `브이월드 로컬 다운로드 정밀 데이터 로드 (${features.length.toLocaleString()}동 / 1순위 최우선 적용)`,
-      features: filterFeaturesByBbox(features, bbox),
-    };
   } catch (err: any) {
     return {
       success: false,
