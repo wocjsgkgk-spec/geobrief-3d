@@ -537,6 +537,14 @@ function drawCommercialFacade(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.fillStyle = glassGrad;
   ctx.fillRect(wx, wy, ww, wh);
 
+  // [V-World 실사 사진급 실내 깊이감] 상단 수평 블라인드 실루엣 + 대각선 하늘 반사광
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+  ctx.fillRect(wx, wy, ww, wh * 0.28);
+  for (let by = wy + 18; by < wy + wh * 0.26; by += 24) {
+    ctx.fillStyle = 'rgba(30, 58, 138, 0.10)';
+    ctx.fillRect(wx + 8, by, ww - 16, 4);
+  }
+
   // Clean sunlit sky glint & vertical mullion sash
   ctx.fillStyle = 'rgba(255, 255, 255, 0.20)';
   ctx.beginPath();
@@ -601,6 +609,11 @@ function drawVillaResidentialFacade(ctx: CanvasRenderingContext2D, w: number, h:
   gGrad.addColorStop(1, '#0284c7');
   ctx.fillStyle = gGrad;
   ctx.fillRect(wx, wy, ww, wh);
+
+  // [V-World 실사 사진급 실내 커튼/블라인드 깊이감]
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.26)';
+  ctx.fillRect(wx, wy, ww * 0.28, wh);
+  ctx.fillRect(wx + ww * 0.72, wy, ww * 0.28, wh);
 
   // White window sash division
   ctx.fillStyle = '#ffffff';
