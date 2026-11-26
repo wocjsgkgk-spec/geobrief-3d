@@ -944,11 +944,11 @@ export function getGlobalVWorldRoofMaterials(): THREE.MeshStandardMaterial[] {
       depthTest: true,
       depthWrite: true,
     }),
-    // 3: 코발트 블루 강판 (#1d4ed8 — 5%) (Mat 19)
+    // 3: 코발트 블루 강판 (#3b76d8 — 5%) (Mat 19) - envMap 없는 씬 암화 방지를 위해 저금속성 적용
     new THREE.MeshStandardMaterial({
       map: createProceduralCanvasTexture((ctx, w, h) => drawCobaltSteelRoof(ctx, w, h)),
-      roughness: 0.22,
-      metalness: 0.50,
+      roughness: 0.45,
+      metalness: 0.08,
       vertexColors: true,
       side: THREE.DoubleSide,
       color: 0xffffff,

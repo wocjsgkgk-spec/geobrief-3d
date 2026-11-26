@@ -201,10 +201,10 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
     isWindowPixel = isVerticalWall && (isBlueSkyGlass || (lum < 0.32 && diffuseColor.b >= diffuseColor.r * 0.88));
 
     if (isWindowPixel) {
-      // 유리창 영역: 거칠기 0.15, 금속성 0.85 (물리 반사 극대화)
-      pbrRoughness = 0.15;
-      pbrMetalness = 0.85;
-      pbrTextureAo = 0.92;
+      // 유리창 영역: 거칠기 0.22, 저금속성 0.25 (envMap 없는 씬에서 어둡게 죽지 않고 맑은 V-World 하늘빛 유지)
+      pbrRoughness = 0.22;
+      pbrMetalness = 0.25;
+      pbrTextureAo = 0.96;
     } else if (!isVerticalWall) {
       // 옥상 상단면: 초록색 우레탄 방수재 판별
       bool isGreenUrethane = diffuseColor.g > diffuseColor.r * 1.15 && diffuseColor.g > diffuseColor.b * 1.05;
@@ -229,9 +229,11 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float NdotL = max(0.0, dot(N, L));
   float NdotH = max(0.0, dot(N, H));
 
-  // Schlick Fresnel 반사율 계산 (유리창 사각에서 반사율 최대화)
-  float F0 = mix(0.04, 0.95, pbrMetalness);
-  float fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 4.0);
+  // Schlick Fresnel 반사율 계산 (고비용 pow 대신 빠른 다항식 곱셈 사용)
+  float F0 = mix(0.04, 0.45, pbrMetalness);
+  float oneMinusNdotV = clamp(1.0 - NdotV, 0.0, 1.0);
+  float oneMinusNdotV2 = oneMinusNdotV * oneMinusNdotV;
+  float fresnel = F0 + (1.0 - F0) * (oneMinusNdotV2 * oneMinusNdotV2);
 
   // Cook-Torrance GGX 스페큘러 계산 (창문 태양광 반짝임)
   float alpha = pbrRoughness * pbrRoughness;
@@ -242,10 +244,10 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float specStrength = D * fresnel * (NdotL > 0.0 ? 1.0 : 0.0);
   vec3 sunSpecularGlint = uSunColor * specStrength * uSpecularGlintIntensity * (1.0 - pbrRoughness);
 
-  // 대기 스카이 돔 반사 (반사 벡터 R에 따른 Zenith ~ Horizon 그라데이션)
+  // 대기 스카이 돔 반사 (어두운 지면 반사 배제, 맑은 V-World 하늘색 그라데이션)
   vec3 R = reflect(-V, N);
   float skyGradient = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
-  vec3 skyReflectionColor = mix(uGroundReflectColor, mix(uSkyHorizonColor, uSkyZenithColor, skyGradient), step(0.0, R.y));
+  vec3 skyReflectionColor = mix(uSkyHorizonColor, uSkyZenithColor, skyGradient * 0.65);
 
   // 3. 유리창과 콘크리트 벽체의 물리적 색상 결합
   float glassFactor = (1.0 - pbrRoughness) * pbrMetalness;
@@ -280,9 +282,9 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   float shadowFactor = smoothstep(0.0, 1.8, max(0.0, vHeight));
   float finalGroundingAo = mix(0.92, 1.0, shadowFactor);
 
-  // [V-World 실사 림 라이트] 수직 외벽에 하늘빛 림 라이트(Sky Rim Fill)를 더해 입체감 극대화
+  // [V-World 실사 림 라이트] 수직 외벽에 하늘빛 림 라이트(Sky Rim Fill)를 더해 입체감 극대화 (pow 제거 최적화)
   if (isVerticalWall) {
-    float rim = pow(1.0 - NdotV, 2.2) * 0.12 * (1.0 - uNightFactor);
+    float rim = oneMinusNdotV2 * 0.12 * (1.0 - uNightFactor);
     diffuseColor.rgb += uSkyHorizonColor * rim;
   }
 
