@@ -963,7 +963,15 @@ export class ProceduralTrees3DLayer implements maplibregl.CustomLayerInterface {
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, options: any): void {
-    if (!this.isVisible || !this.renderer) return;
+    // [버벅거림 제로화] 카메라 이동·회전 중에는 2,000그루 수목 WebGLRenderer 상태 전환을 즉시 스킵
+    if (
+      !this.isVisible ||
+      !this.renderer ||
+      this.isInteracting ||
+      (this.map && (this.map.isMoving() || this.map.isRotating() || this.map.isZooming()))
+    ) {
+      return;
+    }
 
     // [근접 상세 뷰] 3D 수목(Zoom >= 15.2) 및 가로시설물(가로등/신호등, Zoom >= 15.5)
     if (this.map) {

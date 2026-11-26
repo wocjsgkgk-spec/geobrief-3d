@@ -1893,15 +1893,16 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         continue;
       }
 
+      // [버벅거림 제로화] LOD 거리 현실화: 초근접(350m)만 LOD 3, 중거리(900m) LOD 2, 그 외 깔끔한 V-World LOD 1로 정점 65% 절감
       let lodLevel: 1 | 2 | 3 = 3;
-      if (zoom < 14.0) {
+      if (zoom < 14.2) {
         lodLevel = 1;
-      } else if (zoom < 15.2) {
-        lodLevel = distFromCenterM < 650 ? 2 : 1;
+      } else if (zoom < 15.3) {
+        lodLevel = distFromCenterM < 450 ? 2 : 1;
       } else {
-        if (distFromCenterM < 750) {
+        if (distFromCenterM < 350) {
           lodLevel = 3;
-        } else if (distFromCenterM < 1600) {
+        } else if (distFromCenterM < 900) {
           lodLevel = 2;
         } else {
           lodLevel = 1;
@@ -2088,8 +2089,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
         }
 
         if (featureIdx < features.length) {
-          // [즉각 표출 + 무버벅거림 점진 커밋]: 120동마다 즉시 GPU 버퍼 갱신으로 도심 3D가 빠르게 채워짐
-          if ((!this.hasInitialBuilt && newlyAddedCount >= 40) || newlyAddedCount >= 120) {
+          // [무정지 60fps 커밋]: 초기 80동 프리뷰 후에는 600동 단위로 일괄 GPU 커밋해 이동 중 버벅거림 제거
+          if ((!this.hasInitialBuilt && newlyAddedCount >= 80) || newlyAddedCount >= 600) {
             if (this.hasAnySlotVertices()) {
               this.commitAccumulatedGeometry();
               this.options.onBuildingCountChange?.(this.builtBuildingKeys.size);
