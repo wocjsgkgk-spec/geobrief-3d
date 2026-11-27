@@ -1860,13 +1860,15 @@ export const ControlPanel: React.FC = () => {
                     data-testid={`landmark-tour-${spot.regionId}`}
                     onClick={() => {
                       selectRegion(spot.regionId);
-                      flyToLocation({
-                        longitude: spot.lng,
-                        latitude: spot.lat,
-                        zoom: spot.zoom,
-                        pitch: 56,
-                        bearing: -25,
-                      }, 1200);
+                      requestAnimationFrame(() => {
+                        flyToLocation({
+                          longitude: spot.lng,
+                          latitude: spot.lat,
+                          zoom: spot.zoom,
+                          pitch: 56,
+                          bearing: -25,
+                        }, 1200);
+                      });
                     }}
                     className={`py-1.5 px-2 rounded-lg text-[10.5px] font-bold border text-left flex items-center justify-between transition-all ${
                       selectedRegionId === spot.regionId

@@ -248,12 +248,16 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
   vec3 R = reflect(-V, N);
   float skyGradient = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
   vec3 skyReflectionColor = mix(uSkyHorizonColor, uSkyZenithColor, skyGradient * 0.65);
+  // [구름 반사 합성] 유리창 반사 벡터(R) 기반 소프트 구름 밴드
+  float cloudWave = sin(R.x * 7.5 + R.z * 5.2 + vWorldPositionVec.x * 0.008) * cos(R.z * 6.3 - R.x * 4.1 + vWorldPositionVec.z * 0.008);
+  float cloudMask = smoothstep(0.18, 0.78, cloudWave) * (1.0 - uNightFactor);
+  skyReflectionColor = mix(skyReflectionColor, vec3(0.96, 0.98, 1.0), cloudMask * 0.42);
 
   // 3. 유리창과 콘크리트 벽체의 물리적 색상 결합
   float glassFactor = (1.0 - pbrRoughness) * pbrMetalness;
   if (glassFactor > 0.1 || isWindowPixel) {
-    // 유리창: 하늘빛 은은한 반사 + 태양광 스페큘러 글린트
-    vec3 windowSurface = mix(diffuseColor.rgb, skyReflectionColor, glassFactor * (0.30 + fresnel * 0.50));
+    // 유리창: 하늘·구름 반사 + 태양광 스페큘러 글린트
+    vec3 windowSurface = mix(diffuseColor.rgb, skyReflectionColor, glassFactor * (0.38 + fresnel * 0.52));
     diffuseColor.rgb = windowSurface + sunSpecularGlint * glassFactor * (1.0 - uNightFactor * 0.7);
 
     // [야간 실내 점등 효과] 저녁·야간 시뮬레이션 시 창문 셀별 따뜻한 실내 조명 발광
@@ -284,25 +288,25 @@ const PBR_FRAGMENT_DIFFUSE = /* glsl */ `
 
   // [V-World 실사 방향성 외벽 음영 & 림 라이트] 양지 웜화이트 vs 음지 쿨스카이 대비로 입체감 극대화
   if (isVerticalWall) {
-    float wallSunShade = mix(0.84, 1.06, clamp(NdotL * 0.6 + 0.4, 0.0, 1.0));
+    float wallSunShade = mix(0.68, 1.08, clamp(NdotL * 0.65 + 0.35, 0.0, 1.0));
     diffuseColor.rgb *= mix(wallSunShade, 1.0, uNightFactor * 0.7);
-    float rim = oneMinusNdotV2 * 0.12 * (1.0 - uNightFactor);
+    float rim = oneMinusNdotV2 * 0.10 * (1.0 - uNightFactor);
     diffuseColor.rgb += uSkyHorizonColor * rim;
   }
 
   // 차폐 음영 및 텍스처 미세 AO 결합 적용 (과도한 3중 감쇠 방지)
-  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.22));
+  diffuseColor.rgb *= (finalGroundingAo * mix(1.0, pbrTextureAo, uAoIntensity * 0.28));
 
-  // [craft-anything 절차적 미세 웨더링] 월드 좌표 기반 건물/블록별 미세 명도 변주(0.95~1.04)로 기계적 반복감 제거
+  // [craft-anything 절차적 미세 웨더링] 월드 좌표 기반 건물/블록별 미세 명도 변주(0.92~1.05)로 기계적 반복감 제거
   float blockHash = fract(sin(dot(floor(vWorldPositionVec.xz * 0.08), vec2(12.9898, 78.233))) * 43758.5453);
-  diffuseColor.rgb *= mix(0.95, 1.04, blockHash);
+  diffuseColor.rgb *= mix(0.92, 1.05, blockHash);
 
   // [V-World dtkmap.do 대기 원근감 (Aerial Perspective)]
-  // 원경 건물이 지평선 하늘색(#d6eaf8)과 자연스럽게 어우러져 항공사진 지면과 이질감 해소
+  // 중경 선명도를 보존하면서 원경 건물(1.4km~4.2km)만 자연스럽게 대기색과 블렌딩
   float camDist = length(uCameraPosition - vWorldPositionVec);
-  float aerialFog = smoothstep(750.0, 2800.0, camDist) * (1.0 - uNightFactor * 0.65);
+  float aerialFog = smoothstep(1400.0, 4200.0, camDist) * (1.0 - uNightFactor * 0.65);
   vec3 vworldHorizon = mix(vec3(0.84, 0.92, 0.98), vec3(0.08, 0.12, 0.22), uNightFactor);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vworldHorizon, aerialFog * 0.55);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vworldHorizon, aerialFog * 0.38);
 
   // 6. [V-World 시각화 테마] (uThemeMode: 0=실사, 1=용도 색상, 2=층고 스펙트럼)
   if (uThemeMode > 1.5) {

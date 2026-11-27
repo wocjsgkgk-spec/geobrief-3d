@@ -57,6 +57,12 @@ export class VWorld3DTilesManager {
   private loadingUris = new Set<string>();
   private loadQueue: { uri: string; region: TileBoundingRegion }[] = [];
   private isProcessingQueue = false;
+  private lastUpdateCtx: {
+    map: maplibregl.Map;
+    originMercator: { x: number; y: number };
+    originMeterScale: number;
+    renderer?: THREE.WebGLRenderer | null;
+  } | null = null;
 
   private constructor() {
     this.tilesGroup.name = 'VWorld3DTilesRootGroup';
@@ -136,13 +142,17 @@ export class VWorld3DTilesManager {
 
     try {
       const tileset = await vworldReverseApiClient.fetchRegional3DTileset(normalized);
-      if (tileset && tileset.root) {
+      if (tileset && tileset.root && this.currentRegion === normalized) {
         this.rootTileset = tileset;
       }
     } catch (err) {
       console.warn('[VWorld3DTilesManager] Error initializing tileset:', err);
     } finally {
       this.tilesetLoading = false;
+      if (this.rootTileset && this.lastUpdateCtx) {
+        const ctx = this.lastUpdateCtx;
+        this.update(ctx.map, ctx.originMercator, ctx.originMeterScale, ctx.renderer);
+      }
     }
   }
 
@@ -155,6 +165,7 @@ export class VWorld3DTilesManager {
     originMeterScale: number,
     renderer?: THREE.WebGLRenderer | null
   ): void {
+    this.lastUpdateCtx = { map, originMercator, originMeterScale, renderer };
     if (!this.rootTileset || !this.rootTileset.root) {
       if (!this.tilesetLoading) {
         this.initTileset(this.currentRegion);

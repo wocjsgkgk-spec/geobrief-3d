@@ -580,28 +580,28 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       vworld3DTilesManager.initTileset('wonju');
 
       // 1. [V-World 3D WebGL / XDWorld 역공학(VWorldWebGLShaderSpec) 사양 조명 캘리브레이션]
-      // - 주간 직사 태양광: 웜 화이트(0xfff9ea), 강도 1.35, 방위각 215°(남서향), 고도각 45°
-      this.sunLight = new THREE.DirectionalLight(0xfff9ea, 1.35);
+      // - ACESFilmic 톤매핑 기준 백화 현상(Overexposure) 제거 및 양지/음지 실사 음영 대비 복원
+      this.sunLight = new THREE.DirectionalLight(0xfff6e3, 1.55);
       const sunDir = getXDWorldSunDirection(215, 45);
       this.sunLight.position.set(sunDir[0] * 300, sunDir[1] * 300, sunDir[2] * 300);
       this.sunLight.castShadow = false;
       this.scene.add(this.sunLight);
 
-      // - 역광 음영 완화 보조광 (남동측 하늘 반사광: 0xf1f5f9, 0.95배 — 태양광 반대편 암부 제거)
-      this.fillLight = new THREE.DirectionalLight(0xf1f5f9, 0.95);
+      // - 역광 음영 완화 보조광 (남동측 쿨 스카이 바운스: 0.36배로 양지-음지 입체 대비 유지)
+      this.fillLight = new THREE.DirectionalLight(0xdbeafe, 0.36);
       this.fillLight.position.set(160, 220, 140);
       this.scene.add(this.fillLight);
 
-      // - AmbientLight(환경광): V-World 항공사진과 어우러지는 자연 주간광 0xfbfaf6
-      this.ambientLight = new THREE.AmbientLight(0xfbfaf6, 0.95);
+      // - AmbientLight(환경광): 과노출 방지 0.34배
+      this.ambientLight = new THREE.AmbientLight(0xf1f5f9, 0.34);
       this.scene.add(this.ambientLight);
 
-      // - HemisphereLight: 청명 하늘 #e0f2fe, 밝은 대지 반사 #dbe2ea, 1.15배
-      this.hemisphereLight = new THREE.HemisphereLight(0xe0f2fe, 0xdbe2ea, 1.15);
+      // - HemisphereLight: 청명 하늘 #bae6fd, 대지 반사 #94a3b8, 0.48배
+      this.hemisphereLight = new THREE.HemisphereLight(0xbae6fd, 0x94a3b8, 0.48);
       this.scene.add(this.hemisphereLight);
 
-      // [V-World 3D 실사화] 대기 원근감 안개 (Distance Fog: #dbeafe, density 0.00018)
-      this.scene.fog = new THREE.FogExp2(0xdbeafe, 0.00018);
+      // [V-World 3D 실사화] 원거리 대기 원근감 안개 (선명한 근·중경 유지)
+      this.scene.fog = new THREE.FogExp2(0xdbeafe, 0.00009);
 
       // 2. [GeoBrief 3D 2단계] V-World 22종(외벽 16종 + 지붕 4종 + 난간 + 옥탑) 독립 Material 싱글톤 엔진
       this.buildingMaterials = VWorldReaRenderer.getAllMaterials() || VWorldBuildingComposer.getMaterials() || getVWorldRea16Materials() || getScenarioBuildingMaterials();
@@ -668,8 +668,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
           this.renderer.autoClear = false;
           this.renderer.outputColorSpace = THREE.SRGBColorSpace;
           this.renderer.shadowMap.enabled = false;
-          this.renderer.toneMapping = THREE.LinearToneMapping;
-          this.renderer.toneMappingExposure = 1.02;
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 0.96;
           const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
           this.renderer.setPixelRatio(pr);
         } catch (rErr) {
@@ -691,8 +691,8 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
       this.renderer.autoClear = false;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.shadowMap.enabled = false;
-      this.renderer.toneMapping = THREE.LinearToneMapping;
-      this.renderer.toneMappingExposure = 1.02;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 0.96;
       const pr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
       this.renderer.setPixelRatio(pr);
 
@@ -1117,26 +1117,26 @@ export class RealisticKoreanCityLayer implements maplibregl.CustomLayerInterface
     }
 
     this.sunLight.color.set(actualSunColor);
-    this.sunLight.intensity = Math.max(0.45, Math.min(1.5, intensity));
+    this.sunLight.intensity = Math.max(0.25, Math.min(1.65, intensity * 1.1));
 
     const nightAtten = 1.0 - SHARED_PBR_UNIFORMS.uNightFactor.value * 0.65;
     if (this.fillLight) {
       this.fillLight.position.set(160, 220, 140);
-      this.fillLight.intensity = Math.max(0.25, 0.95 * nightAtten);
+      this.fillLight.intensity = Math.max(0.14, 0.38 * nightAtten);
     }
     if (this.ambientLight) {
-      this.ambientLight.intensity = Math.max(0.32, Math.min(1.15, intensity * 0.85 * nightAtten));
-      this.ambientLight.color.set(0xf8fafc);
+      this.ambientLight.intensity = Math.max(0.18, Math.min(0.40, intensity * 0.25 * nightAtten));
+      this.ambientLight.color.set(0xf1f5f9);
     }
     if (this.hemisphereLight) {
-      this.hemisphereLight.intensity = Math.max(0.42, Math.min(1.35, intensity * 1.05 * nightAtten));
-      this.hemisphereLight.color.set(0xe0f2fe);
-      this.hemisphereLight.groundColor.set(0xdbe2ea);
+      this.hemisphereLight.intensity = Math.max(0.22, Math.min(0.52, intensity * 0.35 * nightAtten));
+      this.hemisphereLight.color.set(0xbae6fd);
+      this.hemisphereLight.groundColor.set(0x94a3b8);
     }
 
     // [3단계: mourner/suncalc & 브이월드 원경 대기 원근감(Aerial Perspective Fog)]
     if (this.scene) {
-      applyAtmosphericPerspectiveFog(this.scene, actualFogColor, fogDensity || 0.00018);
+      applyAtmosphericPerspectiveFog(this.scene, actualFogColor, fogDensity || 0.00009);
     }
   }
 

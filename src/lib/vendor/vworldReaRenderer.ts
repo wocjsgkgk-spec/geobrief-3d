@@ -162,9 +162,9 @@ function createProceduralCanvasTexture(
 
 function drawApartmentSideWall(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
   const configs = [
-    { base: '#f4f2ed', stripeA: '#cbd5e1', stripeB: '#94a3b8' }, // 웜 아이보리 & 쿨 그레이
-    { base: '#f2efe9', stripeA: '#d6d3d1', stripeB: '#a8a29e' }, // 샌드스톤 & 웜 그레이
-    { base: '#f1f5f9', stripeA: '#cbd5e1', stripeB: '#64748b' }, // 클린 실버 화이트
+    { base: '#dcd6cc', stripeA: '#475569', stripeB: '#c2410c' }, // 웜 샌드스톤 & 네이비/테라코타 브랜드 포인트
+    { base: '#d4cdc3', stripeA: '#64748b', stripeB: '#1e3a8a' }, // 스톤 그레이 & 딥 블루
+    { base: '#cfd8e3', stripeA: '#334155', stripeB: '#0f766e' }, // 쿨 콘크리트 & 에메랄드
   ];
   const cfg = configs[variant % configs.length];
 
@@ -188,8 +188,8 @@ function drawApartmentSideWall(ctx: CanvasRenderingContext2D, w: number, h: numb
 
 function drawCommercialUpperFacade(ctx: CanvasRenderingContext2D, w: number, h: number, variant: number) {
   const wallThemes = [
-    { base: '#ece6da', stone: '#dce1e7', frame: '#64748b' }, // Sunlit Beige Limestone
-    { base: '#c97b63', stone: '#d98f76', frame: '#334155' }, // Warm Sunlit Terracotta Brick
+    { base: '#cfc6b8', stone: '#b8c0c8', frame: '#334155' }, // Warm Beige Limestone
+    { base: '#b5634b', stone: '#c97b63', frame: '#1e293b' }, // Rich Terracotta Brick
   ];
   const theme = wallThemes[variant % wallThemes.length];
 
